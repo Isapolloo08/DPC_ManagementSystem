@@ -865,38 +865,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </>
           )}
 
-          {/* Coordinator Scoped Ministry Summary Card (Shown when Coordinator logs in) */}
-          {isCoordinator && activeMinistry && (
-            <div className="bg-gradient-to-br from-indigo-900 via-indigo to-indigo-800 text-white rounded-2xl p-5 shadow-xs space-y-3.5 border border-indigo-700/60">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber text-charcoal px-2.5 py-0.5 rounded-full">
-                  Designated Ministry
-                </span>
-                <span className="text-xs font-semibold text-indigo-200">
-                  {activeMinistry.min_age ? `${activeMinistry.min_age}-${activeMinistry.max_age || '+'} yrs` : "All Ages"}
-                </span>
-              </div>
-
-              <div>
-                <h4 className="text-lg font-black tracking-tight">{activeMinistry.name} Ministry</h4>
-                <p className="text-xs text-indigo-200/80 mt-0.5 line-clamp-2">{activeMinistry.description}</p>
-              </div>
-
-              <div className="p-3 bg-white/10 rounded-xl border border-white/10 flex items-center justify-between text-xs">
-                <span>Active Disciples:</span>
-                <strong className="text-base text-amber-300 font-bold">{scopedMemberCount} Members</strong>
-              </div>
-
-              <button
-                onClick={() => onNavigate("members")}
-                className="w-full bg-amber hover:bg-amber-400 text-charcoal font-bold text-xs py-2.5 px-3 rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-              >
-                <span>Manage {activeMinistry.name} Members</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
           {/* WIDGET 3: Birthday Celebrations */}
           <div className="bg-gradient-to-br from-amber-500/10 via-rose-500/5 to-indigo-500/10 rounded-2xl p-4 sm:p-5 border border-amber-200/80 shadow-xs space-y-3.5">
             <div className="flex items-center justify-between gap-2">
