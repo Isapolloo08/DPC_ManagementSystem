@@ -434,57 +434,185 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             )}
           </div>
 
-          {/* 7 Ministries Overview Grid */}
-          <div className="bg-white rounded-2xl p-5 border border-indigo-100/80 shadow-2xs space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
-                  <span>7 Ministries Directory & Status</span>
-                  <span className="text-xs font-normal text-charcoal/50">(Age-Bracketed Discipleship)</span>
-                </h2>
-                <p className="text-xs text-charcoal/60">Live headcount, age rules, and today's Sunday attendance</p>
-              </div>
-              <button
-                onClick={() => onNavigate("members")}
-                className="text-xs font-semibold text-indigo hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
-              >
-                View All Members <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-              {ministries.map((m) => (
-                <div
-                  key={m.id}
-                  onClick={() => onNavigate("members")}
-                  className="p-3.5 rounded-xl border border-gray-100 hover:border-indigo-200 bg-ivory-light/40 hover:bg-white transition-all cursor-pointer shadow-2xs flex flex-col justify-between"
-                >
+          {/* ==================================================== */}
+          {/* MINISTRIES SECTION: 7 Ministries for Admin, Dedicated Command Center for Coordinator */}
+          {/* ==================================================== */}
+          {isCoordinator ? (
+            /* COORDINATOR ALTERNATE VIEW: Dedicated Ministry Discipleship & Care Hub */
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-indigo-100/80 shadow-2xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md font-bold text-lg shrink-0"
+                    style={{ backgroundColor: activeMinistry?.color || "#2C3968" }}
+                  >
+                    {activeMinistry?.name?.[0] || coordinatorMinistryName?.[0] || "M"}
+                  </div>
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span
-                        className="w-3 h-3 rounded-full shadow-inner"
-                        style={{ backgroundColor: m.color }}
-                      ></span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-charcoal/70 border border-gray-200">
-                        {m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All ages'}
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-black text-charcoal">
+                        {activeMinistry ? `${activeMinistry.name} Ministry` : `${coordinatorMinistryName} Ministry`}
+                      </h2>
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber text-charcoal shadow-2xs">
+                        {activeMinistry?.min_age ? `${activeMinistry.min_age}-${activeMinistry.max_age || '+'} yrs` : "Designated"}
                       </span>
                     </div>
-                    <h3 className="font-bold text-sm text-charcoal">{m.name}</h3>
-                    <p className="text-[11px] text-charcoal/60 line-clamp-2 mt-1 leading-snug">
-                      {m.description}
+                    <p className="text-xs text-charcoal/60">
+                      {activeMinistry?.description || "Designated age-bracket discipleship, small groups, and member care."}
                     </p>
                   </div>
+                </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs">
-                    <span className="text-charcoal/60 font-medium">Members:</span>
-                    <span className="font-bold text-indigo bg-indigo-50 px-2 py-0.5 rounded-full">
-                      {m.active_members_count ?? 0}
+                <button
+                  onClick={() => onNavigate("members")}
+                  className="self-start sm:self-auto bg-indigo hover:bg-indigo-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <span>View Ministry Disciples</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* 3 Focused Ministry Feature Cards for Coordinator */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* CARD 1: Member Roster & Demographic Focus */}
+                <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50/60 to-white border border-indigo-100/90 shadow-2xs flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-charcoal/60 uppercase tracking-wider">Disciples Roster</span>
+                    <span className="p-1.5 rounded-lg bg-indigo text-white shadow-2xs">
+                      <Users className="w-3.5 h-3.5" />
                     </span>
                   </div>
+                  <div>
+                    <div className="text-2xl font-black text-indigo">{scopedMemberCount}</div>
+                    <p className="text-xs text-charcoal/60 font-medium mt-0.5">Enrolled members in your age bracket</p>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("members")}
+                    className="w-full text-left text-xs font-bold text-indigo hover:text-indigo-800 flex items-center justify-between pt-2 border-t border-indigo-50 cursor-pointer"
+                  >
+                    <span>Manage Members</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
                 </div>
-              ))}
+
+                {/* CARD 2: Active LifeGroups in this Ministry */}
+                <div className="p-4 rounded-xl bg-gradient-to-br from-amber-50/60 to-white border border-amber-200/60 shadow-2xs flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-charcoal/60 uppercase tracking-wider">Bible Study Groups</span>
+                    <span className="p-1.5 rounded-lg bg-amber text-charcoal shadow-2xs">
+                      <BookOpen className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black text-amber-900">
+                      {bibleStudyGroups.filter(g => !coordinatorMinistryId || g.ministry_id === coordinatorMinistryId).length}
+                    </div>
+                    <p className="text-xs text-charcoal/60 font-medium mt-0.5">Active small groups meeting weekly</p>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("biblestudy")}
+                    className="w-full text-left text-xs font-bold text-amber-900 hover:text-amber-950 flex items-center justify-between pt-2 border-t border-amber-100 cursor-pointer"
+                  >
+                    <span>Open Group Schedule</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* CARD 3: Aging-Out / Transition Watch */}
+                <div className="p-4 rounded-xl bg-gradient-to-br from-rose-50/60 to-white border border-rose-200/60 shadow-2xs flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-charcoal/60 uppercase tracking-wider">Age-Bracket Transition</span>
+                    <span className="p-1.5 rounded-lg bg-rose-500 text-white shadow-2xs">
+                      <Clock className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black text-rose-700">{agingOutMembers.length}</div>
+                    <p className="text-xs text-charcoal/60 font-medium mt-0.5">
+                      {agingOutMembers.length > 0 ? "Members nearing promotion threshold" : "All members within age range"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("members")}
+                    className="w-full text-left text-xs font-bold text-rose-700 hover:text-rose-900 flex items-center justify-between pt-2 border-t border-rose-100 cursor-pointer"
+                  >
+                    <span>Review Promotions</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* If there are aging-out members in coordinator's ministry, show their transition alert strip */}
+              {agingOutMembers.length > 0 && (
+                <div className="p-3.5 bg-amber-50/80 rounded-xl border border-amber-200/80 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-amber-950">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      <strong>{agingOutMembers.length} member(s)</strong> are eligible to transition to the next ministry bracket soon.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("members")}
+                    className="text-amber-900 font-bold hover:underline shrink-0 cursor-pointer"
+                  >
+                    View Disciples →
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            /* ADMIN VIEW: Complete 7 Ministries Overview Grid */
+            <div className="bg-white rounded-2xl p-5 border border-indigo-100/80 shadow-2xs space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
+                    <span>7 Ministries Directory & Status</span>
+                    <span className="text-xs font-normal text-charcoal/50">(Age-Bracketed Discipleship)</span>
+                  </h2>
+                  <p className="text-xs text-charcoal/60">Live headcount, age rules, and today's Sunday attendance</p>
+                </div>
+                <button
+                  onClick={() => onNavigate("members")}
+                  className="text-xs font-semibold text-indigo hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
+                >
+                  View All Members <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                {ministries.map((m) => (
+                  <div
+                    key={m.id}
+                    onClick={() => onNavigate("members")}
+                    className="p-3.5 rounded-xl border border-gray-100 hover:border-indigo-200 bg-ivory-light/40 hover:bg-white transition-all cursor-pointer shadow-2xs flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span
+                          className="w-3 h-3 rounded-full shadow-inner"
+                          style={{ backgroundColor: m.color }}
+                        ></span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-charcoal/70 border border-gray-200">
+                          {m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All ages'}
+                        </span>
+                      </div>
+                      <h3 className="font-bold text-sm text-charcoal">{m.name}</h3>
+                      <p className="text-[11px] text-charcoal/60 line-clamp-2 mt-1 leading-snug">
+                        {m.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs">
+                      <span className="text-charcoal/60 font-medium">Members:</span>
+                      <span className="font-bold text-indigo bg-indigo-50 px-2 py-0.5 rounded-full">
+                        {m.active_members_count ?? 0}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Side-by-Side: Announcements & Upcoming Events */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
