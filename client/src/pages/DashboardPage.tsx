@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { DashboardMetrics, Ministry, Announcement, EventItem, Member, BirthdayCelebrant, BirthdaySummary, BibleStudyGroup, SaturdayDutyScheduleResponse, DishwashingResponse } from "../types";
-import { 
-  Users, UserCheck, Heart, MessageSquare, Calendar, 
+import {
+  Users, UserCheck, Heart, MessageSquare, Calendar,
   AlertTriangle, ArrowRight, Sparkles, PlusCircle, CheckCircle2, Clock,
   Cake, Gift, PartyPopper, Send, X, Check, Share2, BookOpen, MapPin, ShieldCheck, Layers,
   Utensils
@@ -22,7 +22,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [agingOutMembers, setAgingOutMembers] = useState<(Member & { current_age: number; suggested_next_ministry: Ministry })[]>([]);
   const [birthdaySummary, setBirthdaySummary] = useState<BirthdaySummary | null>(null);
   const [bibleStudyGroups, setBibleStudyGroups] = useState<BibleStudyGroup[]>([]);
-  const [ministryDisciples, setMinistryDisciples] = useState<Member[]>([]);
   const [dutySchedule, setDutySchedule] = useState<SaturdayDutyScheduleResponse | null>(null);
   const [dishwashingData, setDishwashingData] = useState<DishwashingResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -34,11 +33,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [sendingGreeting, setSendingGreeting] = useState<boolean>(false);
 
   const isCoordinator = user?.role_name === "Coordinator";
-  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0 
-    ? user.ministries[0].id 
+  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
+    ? user.ministries[0].id
     : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
   const coordinatorMinistryName = user?.ministries && user.ministries.length > 0 ? user.ministries[0].name : "Youth";
-  const scopedMemberCount = coordinatorMinistryId 
+  const scopedMemberCount = coordinatorMinistryId
     ? (metrics?.ministry_breakdown?.find(m => m.id === coordinatorMinistryId)?.member_count ?? 2)
     : (metrics?.metrics.total_active_members ?? "...");
 
@@ -50,7 +49,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     try {
       setLoading(true);
       const activeScope = coordinatorMinistryId ?? selectedMinistryId ?? undefined;
-      const [m, a, e, ao, b, grps, dutyRes, dishRes, disciplesRes] = await Promise.all([
+      const [m, a, e, ao, b, grps, dutyRes, dishRes] = await Promise.all([
         api.getDashboardMetrics(activeScope).catch((err) => {
           console.error("Metrics error:", err);
           return null;
@@ -61,8 +60,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         api.getBirthdays({ ministry_id: activeScope, timeframe: "all" }).catch(() => null),
         api.getGroups({ ministry_id: activeScope }).catch(() => []),
         api.getDutySchedule({ ministry_id: activeScope }).catch(() => null),
-        api.getDishwashingDuties().catch(() => null),
-        api.getMembers({ ministry_id: activeScope }).catch(() => [])
+        api.getDishwashingDuties().catch(() => null)
       ]);
       if (m) setMetrics(m);
       setAnnouncements(a.slice(0, 3));
@@ -72,7 +70,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       setBibleStudyGroups(grps);
       if (dutyRes) setDutySchedule(dutyRes);
       if (dishRes) setDishwashingData(dishRes);
-      if (disciplesRes) setMinistryDisciples(disciplesRes);
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
     } finally {
@@ -228,7 +225,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         {[
           {
             title: "Sunday Attendance",
-            value: coordinatorMinistryId 
+            value: coordinatorMinistryId
               ? (metrics?.ministry_breakdown?.find(m => m.id === coordinatorMinistryId)?.today_checkins ?? "0")
               : (metrics?.metrics.today_checkins ?? "0"),
             subtitle: coordinatorMinistryId ? `${coordinatorMinistryName} present` : "Marked present today",
@@ -239,8 +236,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           {
             title: coordinatorMinistryId ? `${coordinatorMinistryName} Members` : "Active Members",
             value: scopedMemberCount,
-            subtitle: coordinatorMinistryId 
-              ? `${metrics?.metrics.total_active_members ?? 12} church-wide` 
+            subtitle: coordinatorMinistryId
+              ? `${metrics?.metrics.total_active_members ?? 12} church-wide`
               : "Across 7 ministries",
             icon: <Users className="w-4 h-4 text-indigo" />,
             bgColor: "bg-indigo-50",
@@ -249,8 +246,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           {
             title: "Bible Study Groups",
             value: `${bibleStudyGroups.length || 6} Groups`,
-            subtitle: todayBibleStudyGroups.length > 0 
-              ? `${todayBibleStudyGroups.length} meeting today! 📖` 
+            subtitle: todayBibleStudyGroups.length > 0
+              ? `${todayBibleStudyGroups.length} meeting today! 📖`
               : `Active Life Groups`,
             icon: <BookOpen className="w-4 h-4 text-indigo-600" />,
             bgColor: "bg-indigo-50",
@@ -304,12 +301,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       {/* PROFESSIONAL DASHBOARD 2-COLUMN GRID (MAIN & SIDEBAR) */}
       {/* ==================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
+
         {/* ==================================================== */}
         {/* LEFT MAIN CONTENT AREA (8 of 12 columns) */}
         {/* ==================================================== */}
         <div className="lg:col-span-8 space-y-6">
-          
+
           {/* Bible Study Groups Today Showcase */}
           <div className="bg-white rounded-2xl p-5 lg:p-6 border border-indigo-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
@@ -438,10 +435,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           </div>
 
           {/* ==================================================== */}
-          {/* MINISTRIES SECTION: 7 Ministries for Admin, Assigned Disciples Roster for Coordinator */}
+          {/* MINISTRIES SECTION: 7 Ministries Grid for Admin, Pastoral Care & Ministry Toolkit for Coordinator */}
           {/* ==================================================== */}
           {isCoordinator ? (
-            /* COORDINATOR ALTERNATE VIEW: Dedicated Ministry Discipleship & Pastoral Care Roster */
+            /* COORDINATOR ALTERNATE VIEW: Ministry Pastoral Care & Spiritual Toolkit (Non-duplicate) */
             <div className="bg-white rounded-2xl p-5 sm:p-6 border border-indigo-100/80 shadow-2xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
                 <div className="flex items-center gap-3">
@@ -449,94 +446,119 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                     className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md font-bold text-lg shrink-0"
                     style={{ backgroundColor: activeMinistry?.color || "#2C3968" }}
                   >
-                    {activeMinistry?.name?.[0] || coordinatorMinistryName?.[0] || "M"}
+                    <Heart className="w-5 h-5 text-amber-300" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-base sm:text-lg font-black text-charcoal">
-                        {activeMinistry ? `${activeMinistry.name} Ministry Disciples` : `${coordinatorMinistryName} Ministry Disciples`}
+                        {activeMinistry ? `${activeMinistry.name} Ministry Oversight` : `${coordinatorMinistryName} Ministry Oversight`}
                       </h2>
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber text-charcoal shadow-2xs">
                         {activeMinistry?.min_age ? `${activeMinistry.min_age}-${activeMinistry.max_age || '+'} yrs` : "Designated"}
                       </span>
                     </div>
                     <p className="text-xs text-charcoal/60">
-                      Assigned discipleship roster, contact directory, and member care oversight
+                      Discipleship pathway, monthly scripture theme, and pastoral care tools
                     </p>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => onNavigate("members")}
-                  className="self-start sm:self-auto text-xs font-bold text-indigo hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Open Full Member Directory</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <span className="text-xs font-semibold text-indigo bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100/80 self-start sm:self-auto">
+                  Coordinator Command Hub
+                </span>
               </div>
 
-              {/* Real Disciples List Cards */}
-              {ministryDisciples.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {ministryDisciples.map((member) => (
-                    <div
-                      key={member.id}
-                      className="p-3.5 rounded-xl border border-gray-100 hover:border-indigo-200 bg-ivory-light/40 hover:bg-white transition-all shadow-2xs flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-inner"
-                          style={{ backgroundColor: activeMinistry?.color || "#2C3968" }}
-                        >
-                          {member.first_name[0]}{member.last_name[0]}
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="font-bold text-sm text-charcoal truncate">
-                            {member.first_name} {member.last_name}
-                          </h4>
-                          <p className="text-[11px] text-charcoal/60 flex items-center gap-2 flex-wrap mt-0.5">
-                            <span>Age {member.age || "—"}</span>
-                            {member.contact_number && (
-                              <span className="font-mono text-[10px] text-charcoal/70">• {member.contact_number}</span>
-                            )}
-                          </p>
-                          {member.household_name && (
-                            <span className="inline-block text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded mt-1">
-                              🏡 {member.household_name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => onNavigate("members")}
-                        className="px-2.5 py-1.5 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 text-indigo text-xs font-bold shrink-0 transition-all cursor-pointer"
-                      >
-                        Profile
-                      </button>
+              {/* 2-Column Content: Scripture & Discipleship Pathway + Action Toolkit */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-1">
+                {/* Left (7 cols): Ministry Vision & Scripture Theme of the Month */}
+                <div className="lg:col-span-7 p-4 rounded-xl bg-gradient-to-br from-indigo-900 via-indigo to-indigo-800 text-white space-y-3 shadow-xs border border-indigo-700/60 flex flex-col justify-between">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-black tracking-widest text-amber-300">
+                        Monthly Ministry Focus
+                      </span>
+                      <span className="text-[10px] text-indigo-200 font-serif italic">
+                        Colossians 3:16
+                      </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-6 text-center text-charcoal/50 italic bg-gray-50/50 rounded-xl border border-dashed border-gray-200 text-xs">
-                  No disciples currently assigned to this ministry bracket.
-                </div>
-              )}
+                    <blockquote className="text-xs italic text-indigo-100/90 leading-relaxed pl-2.5 border-l-2 border-amber-400">
+                      "Let the message of Christ dwell among you richly as you teach and admonish one another with all wisdom through psalms, hymns, and songs from the Spirit."
+                    </blockquote>
+                  </div>
 
-              {/* If there are aging-out members in coordinator's ministry, show their transition alert strip */}
+                  <div className="pt-2 border-t border-indigo-700/60 flex items-center justify-between text-xs text-indigo-200">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>LifeGroup Discipleship & Biblical Stewardship</span>
+                    </span>
+                    <button
+                      onClick={() => onNavigate("curriculum")}
+                      className="text-amber-300 hover:text-amber-200 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      Study Topics <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right (5 cols): Coordinator Action Toolkit */}
+                <div className="lg:col-span-5 p-4 rounded-xl bg-ivory-light/60 border border-indigo-50/80 space-y-2.5 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-black text-charcoal uppercase tracking-wider mb-1">
+                      🛠️ Ministry Action Toolkit
+                    </h4>
+                    <p className="text-[11px] text-charcoal/60">Direct tools to lead and shepherd this age bracket</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => onNavigate("communications")}
+                      className="p-2 rounded-lg bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300 text-charcoal hover:text-amber-950 transition-all text-xs font-bold text-left flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span className="truncate">Post Notice</span>
+                    </button>
+
+                    <button
+                      onClick={() => onNavigate("curriculum")}
+                      className="p-2 rounded-lg bg-white hover:bg-indigo-50 border border-gray-200 hover:border-indigo-300 text-charcoal hover:text-indigo-950 transition-all text-xs font-bold text-left flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="truncate">Study Topics</span>
+                    </button>
+
+                    <button
+                      onClick={() => onNavigate("events")}
+                      className="p-2 rounded-lg bg-white hover:bg-emerald-50 border border-gray-200 hover:border-emerald-300 text-charcoal hover:text-emerald-950 transition-all text-xs font-bold text-left flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="truncate">Add Event</span>
+                    </button>
+
+                    <button
+                      onClick={() => onNavigate("members")}
+                      className="p-2 rounded-lg bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-300 text-charcoal hover:text-rose-950 transition-all text-xs font-bold text-left flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Users className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span className="truncate">Disciples</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* If there are aging-out members in coordinator's ministry, show promotion transition alert */}
               {agingOutMembers.length > 0 && (
-                <div className="p-3.5 bg-amber-50/90 rounded-xl border border-amber-200 flex items-center justify-between gap-3 text-xs">
+                <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200 flex items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2 text-amber-950">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>
-                      <strong>{agingOutMembers.length} disciple(s)</strong> are reaching the age limit and eligible for transition promotion.
+                      <strong>{agingOutMembers.length} member(s)</strong> are approaching the upper age limit of this ministry.
                     </span>
                   </div>
                   <button
                     onClick={() => onNavigate("members")}
                     className="text-amber-900 font-bold hover:underline shrink-0 cursor-pointer"
                   >
-                    Review Promotions →
+                    Review Transitions →
                   </button>
                 </div>
               )}
@@ -697,7 +719,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         {/* RIGHT SIDEBAR PANEL: DUTIES, BIRTHDAYS & SHORTCUTS (4 of 12 columns) */}
         {/* ==================================================== */}
         <div className="lg:col-span-4 space-y-5">
-          
+
           {/* Service & Fellowship Turns (Admin only; hidden from Coordinators) */}
           {!isCoordinator && (
             <>
@@ -844,6 +866,38 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                 </button>
               </div>
             </>
+          )}
+
+          {/* Coordinator Scoped Ministry Summary Card (Shown when Coordinator logs in) */}
+          {isCoordinator && activeMinistry && (
+            <div className="bg-gradient-to-br from-indigo-900 via-indigo to-indigo-800 text-white rounded-2xl p-5 shadow-xs space-y-3.5 border border-indigo-700/60">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber text-charcoal px-2.5 py-0.5 rounded-full">
+                  Designated Ministry
+                </span>
+                <span className="text-xs font-semibold text-indigo-200">
+                  {activeMinistry.min_age ? `${activeMinistry.min_age}-${activeMinistry.max_age || '+'} yrs` : "All Ages"}
+                </span>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-black tracking-tight">{activeMinistry.name} Ministry</h4>
+                <p className="text-xs text-indigo-200/80 mt-0.5 line-clamp-2">{activeMinistry.description}</p>
+              </div>
+
+              <div className="p-3 bg-white/10 rounded-xl border border-white/10 flex items-center justify-between text-xs">
+                <span>Active Disciples:</span>
+                <strong className="text-base text-amber-300 font-bold">{scopedMemberCount} Members</strong>
+              </div>
+
+              <button
+                onClick={() => onNavigate("members")}
+                className="w-full bg-amber hover:bg-amber-400 text-charcoal font-bold text-xs py-2.5 px-3 rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+              >
+                <span>Manage {activeMinistry.name} Members</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
 
           {/* WIDGET 3: Birthday Celebrations */}
