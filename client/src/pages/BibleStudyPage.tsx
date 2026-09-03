@@ -431,6 +431,7 @@ export const BibleStudyPage: React.FC = () => {
         location: "",
         category: "General",
         max_capacity: 12
+      });
       loadGroups();
     } catch (err: any) {
       alert(err.message || "Failed to save Bible study group");
@@ -581,8 +582,8 @@ export const BibleStudyPage: React.FC = () => {
               key={cat}
               onClick={() => setSelectedCategory(cat === "All" ? "all" : cat)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${(selectedCategory === "all" && cat === "All") || selectedCategory === cat
-                  ? "bg-indigo text-white shadow-2xs ring-2 ring-indigo-200"
-                  : "bg-ivory-light text-charcoal/70 hover:bg-gray-100"
+                ? "bg-indigo text-white shadow-2xs ring-2 ring-indigo-200"
+                : "bg-ivory-light text-charcoal/70 hover:bg-gray-100"
                 }`}
             >
               {cat}
@@ -906,10 +907,10 @@ export const BibleStudyPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Curriculum / Study Topic - Searchable Dropdown */}
+              {/* Book / Study Topic - Searchable Dropdown */}
               <div ref={curriculumRef} className="relative">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-charcoal/70">Curriculum / Study Topic</label>
+                  <label className="font-bold text-charcoal/70">Book / Study Topic</label>
                   {formData.curriculum && (
                     <span className="text-[10px] text-indigo-600 font-semibold">Select or type custom</span>
                   )}
@@ -970,7 +971,7 @@ export const BibleStudyPage: React.FC = () => {
                 {isCurriculumDropdownOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
                     <div className="p-2 bg-indigo-50/70 text-[10px] font-bold text-indigo-900 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
-                      <span>Available Books & Curricula ({filteredCurricula.length})</span>
+                      <span>Available Books & Topics ({filteredCurricula.length})</span>
                       <span className="text-[9px] text-indigo-600 font-normal">Click to choose</span>
                     </div>
                     {filteredCurricula.length === 0 ? (
@@ -999,8 +1000,8 @@ export const BibleStudyPage: React.FC = () => {
                             </div>
                             <div className="text-[10px] text-charcoal/60 pl-5 flex items-center gap-1.5 mt-0.5">
                               <span className={`px-1.5 py-0.2 rounded font-semibold text-[9px] ${item.type === "curriculum"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-indigo-100 text-indigo-800"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-indigo-100 text-indigo-800"
                                 }`}>
                                 {item.category || (item.type === "curriculum" ? "Study Track" : "Bible Book")}
                               </span>
@@ -1294,15 +1295,15 @@ export const BibleStudyPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Enrolled Disciples / Group Members - Searchable Multi-Select */}
+              {/* Added Members - Searchable Multi-Select */}
               <div ref={memberRef} className="relative">
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-bold text-charcoal/70 flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Enrolled Disciples / Group Members</span>
+                    <span>Added Members</span>
                   </label>
                   <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                    {selectedMemberIds.length} / {formData.max_capacity || 12} Enrolled
+                    {selectedMemberIds.length} / {formData.max_capacity || 12} Added
                   </span>
                 </div>
 
@@ -1324,7 +1325,7 @@ export const BibleStudyPage: React.FC = () => {
                             className="text-charcoal/40 hover:text-rose-600 p-0.5 rounded transition-colors cursor-pointer"
                             title="Remove member"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         </span>
                       );
@@ -1336,7 +1337,7 @@ export const BibleStudyPage: React.FC = () => {
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="Search disciples by name or ministry to add (e.g. Elena Santos)..."
+                    placeholder="Search members by name or ministry to add (e.g. Elena Santos)..."
                     value={memberQuery}
                     onFocus={() => setIsMemberDropdownOpen(true)}
                     onClick={() => setIsMemberDropdownOpen(true)}
@@ -1374,12 +1375,12 @@ export const BibleStudyPage: React.FC = () => {
                 {isMemberDropdownOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
                     <div className="p-2 bg-indigo-50/80 text-[10px] font-bold text-indigo-950 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
-                      <span>Available Disciples ({filteredMembers.length})</span>
-                      <span className="text-[9px] text-indigo-700 font-normal">Click to toggle enrollment</span>
+                      <span>Available Members ({filteredMembers.length})</span>
+                      <span className="text-[9px] text-indigo-700 font-normal">Click to add or remove</span>
                     </div>
                     {filteredMembers.length === 0 ? (
                       <div className="p-3 text-center text-charcoal/50 text-xs">
-                        No matching disciples found.
+                        No matching members found.
                       </div>
                     ) : (
                       filteredMembers.map((mem) => {
@@ -1389,14 +1390,12 @@ export const BibleStudyPage: React.FC = () => {
                             key={mem.id}
                             type="button"
                             onClick={() => handleToggleMember(mem.id)}
-                            className={`w-full text-left p-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer ${
-                              isSelected ? "bg-indigo-50/50 font-bold" : ""
-                            }`}
+                            className={`w-full text-left p-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer ${isSelected ? "bg-indigo-50/50 font-bold" : ""
+                              }`}
                           >
                             <div className="flex items-center gap-2 min-w-0 pr-2">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 ${
-                                isSelected ? "bg-indigo" : "bg-gray-400"
-                              }`}>
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 ${isSelected ? "bg-indigo" : "bg-gray-400"
+                                }`}>
                                 {mem.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
                               </div>
                               <div className="min-w-0">
@@ -1410,12 +1409,11 @@ export const BibleStudyPage: React.FC = () => {
                                 )}
                               </div>
                             </div>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${
-                              isSelected
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                : "bg-gray-100 text-charcoal/60 group-hover:bg-indigo-100 group-hover:text-indigo"
-                            }`}>
-                              {isSelected ? "✓ Enrolled" : "+ Add"}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${isSelected
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                              : "bg-gray-100 text-charcoal/60 group-hover:bg-indigo-100 group-hover:text-indigo"
+                              }`}>
+                              {isSelected ? "✓ Added" : "+ Add"}
                             </span>
                           </button>
                         );
@@ -1423,7 +1421,7 @@ export const BibleStudyPage: React.FC = () => {
                     )}
                   </div>
                 )}
-              </div>
+              </div>            </div>
 
               <div>
                 <label className="block font-bold text-charcoal/70 mb-1">Description / Group Purpose</label>
