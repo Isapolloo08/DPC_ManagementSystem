@@ -911,42 +911,44 @@ export const BibleStudyPage: React.FC = () => {
             return (
               <div
                 key={g.id}
-                className="bg-white rounded-2xl p-5 border border-indigo-100/80 shadow-2xs flex flex-col justify-between hover:border-amber/50 hover:shadow-md transition-all group"
+                className="bg-white rounded-3xl p-5 border border-indigo-100/80 shadow-xs flex flex-col justify-between hover:border-indigo-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden"
               >
+                {/* Top Accent Gradient Bar */}
+                <div
+                  className="absolute top-0 left-0 right-0 h-1.5 opacity-80 group-hover:opacity-100 transition-opacity"
+                  style={{ backgroundColor: g.ministry_color || "#2C3968" }}
+                />
+
                 <div>
-                  {/* Category & Ministry Pill */}
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="bg-indigo-50 text-indigo font-bold text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  {/* Category & Ministry Badges */}
+                  <div className="flex items-center justify-between gap-2 mb-2.5 pt-1">
+                    <span className="bg-indigo-50/90 text-indigo font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-100/60">
                       {g.category}
                     </span>
                     <span
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white shadow-2xs"
                       style={{ backgroundColor: g.ministry_color || "#2C3968" }}
                     >
                       {g.ministry_name || "All-Church"}
                     </span>
                   </div>
 
-                  {/* Group Name & Curriculum */}
-                  <h3 className="text-base font-bold text-charcoal group-hover:text-indigo transition-colors">
+                  {/* Group Name */}
+                  <h3 className="text-base font-black text-charcoal group-hover:text-indigo transition-colors leading-snug">
                     {g.name}
                   </h3>
 
-                  {g.curriculum && (
-                    <div className="mt-1.5 inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200/60 px-2.5 py-1 rounded-lg text-xs font-semibold">
-                      <BookOpen className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                      <span className="truncate max-w-[220px]">Book: {g.curriculum}</span>
-                    </div>
-                  )}
-
-                  {/* Reschedule Alert Banner (if marked as rescheduled) */}
-                  {g.is_rescheduled ? (
-                    <div className="mt-3 p-3 bg-gradient-to-r from-amber-50 via-orange-50/80 to-amber-50 rounded-xl border border-amber-300 text-xs shadow-2xs space-y-1.5 animate-in fade-in">
+                  {/* Reschedule Alert Card (if session is rescheduled) */}
+                  {g.is_rescheduled && (
+                    <div className="mt-3 p-3 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/15 rounded-2xl border border-amber-300/80 text-xs shadow-2xs space-y-1.5 animate-in fade-in">
                       <div className="flex items-center justify-between gap-1.5 flex-wrap">
                         <div className="flex items-center gap-1.5 font-black text-amber-950 text-xs">
-                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-600"></span>
+                          </span>
                           <CalendarClock className="w-4 h-4 text-amber-700 shrink-0" />
-                          <span>⚠️ Next Session Rescheduled!</span>
+                          <span>Next Session Rescheduled</span>
                         </div>
                         <button
                           type="button"
@@ -954,36 +956,44 @@ export const BibleStudyPage: React.FC = () => {
                             e.stopPropagation();
                             handleOpenRescheduleModal(g);
                           }}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/90 hover:bg-amber-300 text-amber-950 border border-amber-400 transition-colors cursor-pointer"
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/90 hover:bg-amber-300 text-amber-950 border border-amber-400 transition-all cursor-pointer active:scale-95"
                         >
-                          Manage Resched
+                          Edit Resched
                         </button>
                       </div>
                       <div className="text-[11px] text-amber-950 font-bold flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                         <span>
                           {g.rescheduled_date ? new Date(g.rescheduled_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : "Date TBD"}
-                          {g.rescheduled_time ? ` at ${g.rescheduled_time}` : ""}
+                          {g.rescheduled_time ? ` • ${g.rescheduled_time}` : ""}
                         </span>
                       </div>
                       {g.reschedule_reason && (
-                        <div className="text-[10px] text-amber-900/90 bg-white/85 p-1.5 rounded-lg border border-amber-200/70 leading-tight">
-                          <strong>Notice:</strong> {g.reschedule_reason}
+                        <div className="text-[10px] text-amber-900/90 bg-white/80 p-2 rounded-xl border border-amber-200/60 leading-tight">
+                          <span className="font-bold text-amber-950">Notice: </span>
+                          <span>{g.reschedule_reason}</span>
                         </div>
                       )}
                     </div>
-                  ) : null}
+                  )}
 
-                  {/* Study Chapter & Progress Tracking Section */}
-                  <div className="mt-3 p-3 bg-gradient-to-br from-indigo-50/70 via-ivory to-amber-50/30 rounded-xl border border-indigo-100 space-y-2">
+                  {/* UNIFIED STUDY TRACK & PACING HUB */}
+                  <div className="mt-3 p-3.5 bg-gradient-to-br from-indigo-50/70 via-ivory to-amber-50/40 rounded-2xl border border-indigo-100 space-y-2.5">
+                    {/* Header: Book & Current Chapter */}
                     <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                      <div className="flex items-center gap-1.5">
-                        <Bookmark className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
-                        <span className="text-xs font-black text-indigo-950">
-                          {g.current_chapter || "Chapter 1"}
-                        </span>
+                      <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                        <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
+                        <div className="truncate">
+                          <span className="font-black text-xs text-charcoal">
+                            {g.curriculum || "Scripture Study"}
+                          </span>
+                          <span className="text-[11px] text-indigo-900 font-bold ml-1.5">
+                            • {g.current_chapter || "Chapter 1"}
+                          </span>
+                        </div>
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${getProgressStageBadge(g.progress_stage).bg}`}>
+
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${getProgressStageBadge(g.progress_stage).bg}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${getProgressStageBadge(g.progress_stage).dot}`}></span>
                         <span>{getProgressStageBadge(g.progress_stage).label}</span>
                       </span>
@@ -991,36 +1001,36 @@ export const BibleStudyPage: React.FC = () => {
 
                     {/* Notice / Specific Location Description if available */}
                     {g.progress_notes ? (
-                      <div className="bg-white/95 p-2 rounded-lg border border-indigo-100/80 text-[11px] text-charcoal/85 flex items-start gap-1.5 shadow-2xs">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="bg-white/95 p-2.5 rounded-xl border border-indigo-100/90 text-[11px] text-charcoal/85 flex items-start gap-1.5 shadow-2xs">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                         <div className="leading-tight min-w-0">
-                          <span className="font-bold text-indigo-950 text-[10px] uppercase tracking-wider block">Notice / Details:</span>
+                          <span className="font-black text-indigo-950 text-[10px] uppercase tracking-wider block">Current Pacing Notice:</span>
                           <span className="break-words">{g.progress_notes}</span>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-[10px] text-charcoal/45 italic">
-                        No progress notice logged yet
+                      <div className="text-[10px] text-charcoal/40 italic">
+                        No custom pacing notice logged
                       </div>
                     )}
 
-                    {/* Quick Action Buttons: Update Chapter & Reschedule */}
-                    <div className="pt-1 flex items-center justify-end gap-1.5 flex-wrap">
+                    {/* Integrated Quick Actions: Update Chapter & Reschedule */}
+                    <div className="pt-1.5 flex items-center justify-end gap-1.5 border-t border-indigo-100/60 flex-wrap">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenRescheduleModal(g);
                         }}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95 ${
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 ${
                           g.is_rescheduled
-                            ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300"
-                            : "bg-white hover:bg-amber-50 text-amber-900 border border-amber-200"
+                            ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300"
+                            : "bg-white hover:bg-amber-50 text-amber-900 border border-amber-200/80"
                         }`}
                         title="Reschedule next upcoming session"
                       >
                         <CalendarClock className="w-3 h-3 text-amber-700" />
-                        <span>{g.is_rescheduled ? "Rescheduled ⚠️" : "Reschedule"}</span>
+                        <span>{g.is_rescheduled ? "Resched Active ⚠️" : "Reschedule"}</span>
                       </button>
 
                       <button
@@ -1029,7 +1039,7 @@ export const BibleStudyPage: React.FC = () => {
                           e.stopPropagation();
                           handleOpenProgressModal(g);
                         }}
-                        className="text-[10px] font-bold text-indigo hover:text-indigo-800 bg-white hover:bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95"
+                        className="text-[10px] font-bold text-indigo-900 hover:text-indigo-950 bg-white hover:bg-indigo-50 border border-indigo-200/80 px-2.5 py-1 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
                       >
                         <BookmarkCheck className="w-3 h-3 text-indigo-600" />
                         <span>Update Chapter</span>
@@ -1037,21 +1047,19 @@ export const BibleStudyPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <p className="text-xs text-charcoal/70 mt-2 line-clamp-2 leading-relaxed">
-                    {g.description || "Weekly Bible study fellowship, Scripture discussion, and prayer."}
-                  </p>
+                  {/* Overview Description */}
+                  {g.description && (
+                    <p className="text-xs text-charcoal/70 mt-2.5 line-clamp-2 leading-relaxed">
+                      {g.description}
+                    </p>
+                  )}
 
-                  {/* Schedule & Venue */}
+                  {/* Schedule & Venue Parameters */}
                   <div className="mt-3 pt-2.5 border-t border-gray-100 space-y-1.5 text-xs text-charcoal/75 font-medium">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-indigo shrink-0" />
                       <div>
-                        <span>Every <strong>{g.meeting_day}</strong> at {g.meeting_time}</span>
-                        {g.is_rescheduled && (
-                          <span className="block text-[10px] text-amber-700 font-bold">
-                            ⚡ Next meeting moved to: {g.rescheduled_date ? new Date(g.rescheduled_date).toLocaleDateString() : ""} ({g.rescheduled_time})
-                          </span>
-                        )}
+                        <span>Meets every <strong>{g.meeting_day}</strong> at {g.meeting_time}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1065,7 +1073,7 @@ export const BibleStudyPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Bottom Capacity & Actions */}
+                {/* Bottom Capacity Bar & Primary Actions */}
                 <div className="mt-4 pt-3 border-t border-gray-100 space-y-3">
                   {/* Capacity Bar */}
                   <div>
@@ -1075,8 +1083,9 @@ export const BibleStudyPage: React.FC = () => {
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all ${capacityPercent >= 90 ? "bg-rose" : capacityPercent >= 60 ? "bg-amber" : "bg-sage-500"
-                          }`}
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          capacityPercent >= 90 ? "bg-rose" : capacityPercent >= 60 ? "bg-amber" : "bg-emerald-500"
+                        }`}
                         style={{ width: `${capacityPercent}%` }}
                       ></div>
                     </div>
@@ -1086,15 +1095,15 @@ export const BibleStudyPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <button
                       onClick={() => setSelectedGroup(g)}
-                      className="flex-1 px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="flex-1 px-3 py-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-gray-200/80"
                     >
                       <Users className="w-3.5 h-3.5 text-indigo-700" />
-                      <span>View Roster</span>
+                      <span>View Roster ({memberCount})</span>
                     </button>
                     {canCreate && (
                       <button
                         onClick={() => handleOpenEditModal(g)}
-                        className="flex-1 bg-indigo hover:bg-indigo-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        className="flex-1 bg-indigo hover:bg-indigo-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                       >
                         <Edit className="w-3.5 h-3.5 text-amber-300" />
                         <span>Edit Group</span>

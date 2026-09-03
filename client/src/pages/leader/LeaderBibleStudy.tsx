@@ -358,9 +358,13 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
           {/* Attendance Checkbox List */}
           <div className="space-y-2">
             {groupDisciples.length === 0 ? (
-              <p className="text-xs text-charcoal/50 py-8 text-center italic">
-                No members in this group yet. Add members in the "Members" tab.
-              </p>
+              <div className="text-center py-10 bg-ivory-light rounded-2xl border border-dashed border-gray-200 space-y-2">
+                <Users className="w-8 h-8 text-charcoal/30 mx-auto" />
+                <p className="text-xs font-bold text-charcoal/70">No disciples enrolled yet in this group</p>
+                <p className="text-[11px] text-charcoal/50 max-w-xs mx-auto">
+                  Click on the "Members" tab to add disciples to this Small Group.
+                </p>
+              </div>
             ) : (
               groupDisciples.map((d) => {
                 const isChecked = Boolean(checkedMembers[d.id]);
@@ -406,7 +410,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
             <button
               onClick={handleSaveAttendance}
-              className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <Check className="w-4 h-4 text-amber-300" />
               <span>Save Session Attendance</span>
@@ -417,41 +421,13 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
         {/* Right 1-Col: Group Settings & Details */}
         <div className="space-y-4">
           <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-bold">
-                  <BookOpen className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-sm text-charcoal">Group Information</h4>
-                  <p className="text-[11px] text-charcoal/50">Schedule & study progress</p>
-                </div>
+            <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+              <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-bold">
+                <BookOpen className="w-4 h-4" />
               </div>
-
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {/* Reschedule Button */}
-                <button
-                  onClick={handleOpenReschedule}
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                    activeGroup?.is_rescheduled
-                      ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300"
-                      : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
-                  }`}
-                  title="Reschedule next meeting"
-                >
-                  <CalendarClock className="w-3.5 h-3.5 text-amber-700" />
-                  <span>{activeGroup?.is_rescheduled ? "Resched ⚠️" : "Reschedule"}</span>
-                </button>
-
-                {/* Edit Study & Book Button */}
-                <button
-                  onClick={() => setIsEditModalOpen(true)}
-                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Update study book, chapter progress, and meeting schedule"
-                >
-                  <Edit className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Update Book</span>
-                </button>
+              <div>
+                <h4 className="font-bold text-sm text-charcoal">Group Information</h4>
+                <p className="text-[11px] text-charcoal/50">Schedule & study progress</p>
               </div>
             </div>
 
@@ -461,24 +437,22 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 <span className="font-black text-charcoal text-sm">{activeGroup?.name || "No Assigned Group"}</span>
               </div>
 
-              <div>
-                <span className="text-charcoal/50 block text-[10px] font-bold uppercase">Active Book / Curriculum</span>
-                <div className="mt-1 inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200/70 px-2.5 py-1 rounded-xl text-xs font-bold">
-                  <BookOpen className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                  <span>{activeGroup?.curriculum || "General Scripture Study"}</span>
-                </div>
-              </div>
-
-              {/* Chapter & Progress Notice Box */}
-              <div className="p-3 bg-gradient-to-br from-indigo-50/70 to-ivory rounded-2xl border border-indigo-100 space-y-1.5">
+              {/* UNIFIED STUDY TRACK & PACING HUB */}
+              <div className="p-3.5 bg-gradient-to-br from-indigo-50/70 via-ivory to-amber-50/40 rounded-2xl border border-indigo-100 space-y-2.5">
                 <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <Bookmark className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
-                    <span className="font-black text-xs text-indigo-950">
-                      {activeGroup?.current_chapter || "Chapter 1"}
-                    </span>
+                  <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                    <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
+                    <div className="truncate">
+                      <span className="font-black text-xs text-charcoal">
+                        {activeGroup?.curriculum || "General Scripture Study"}
+                      </span>
+                      <span className="text-[11px] text-indigo-900 font-bold ml-1.5">
+                        • {activeGroup?.current_chapter || "Chapter 1"}
+                      </span>
+                    </div>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${getProgressStageBadge(activeGroup?.progress_stage).bg}`}>
+
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${getProgressStageBadge(activeGroup?.progress_stage).bg}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${getProgressStageBadge(activeGroup?.progress_stage).dot}`}></span>
                     <span>{getProgressStageBadge(activeGroup?.progress_stage).label}</span>
                   </span>
@@ -500,12 +474,36 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               <div className="pt-2 border-t border-gray-100 space-y-2">
                 <div className="flex items-center gap-2 text-charcoal font-medium">
                   <Clock className="w-3.5 h-3.5 text-indigo shrink-0" />
-                  <span>Every <strong>{activeGroup?.meeting_day}</strong> at {activeGroup?.meeting_time}</span>
+                  <span>Meets every <strong>{activeGroup?.meeting_day}</strong> at {activeGroup?.meeting_time}</span>
                 </div>
                 <div className="flex items-center gap-2 text-charcoal font-medium">
                   <MapPin className="w-3.5 h-3.5 text-sage-600 shrink-0" />
                   <span className="truncate">{activeGroup?.location || "Not specified"}</span>
                 </div>
+              </div>
+
+              {/* Action Buttons Bar */}
+              <div className="pt-2 border-t border-gray-100 flex items-center gap-2">
+                <button
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="flex-1 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                >
+                  <Edit className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Update Book & Progress</span>
+                </button>
+
+                <button
+                  onClick={handleOpenReschedule}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${
+                    activeGroup?.is_rescheduled
+                      ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300"
+                      : "bg-ivory-light hover:bg-amber-50 text-amber-900 border-amber-200"
+                  }`}
+                  title="Reschedule next meeting"
+                >
+                  <CalendarClock className="w-3.5 h-3.5 text-amber-700" />
+                  <span>{activeGroup?.is_rescheduled ? "Resched ⚠️" : "Reschedule"}</span>
+                </button>
               </div>
             </div>
           </div>
