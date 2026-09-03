@@ -269,6 +269,9 @@ export interface BibleStudyGroup {
   max_capacity: number;
   current_member_count?: number;
   members?: BibleStudyMember[];
+  current_chapter?: string;
+  progress_stage?: string;
+  progress_notes?: string | null;
   created_at?: string;
 }
 

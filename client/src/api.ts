@@ -228,6 +228,10 @@ export const api = {
     method: "PUT",
     body: JSON.stringify(data)
   }),
+  updateGroupProgress: (id: number, data: { current_chapter: string; progress_stage?: string; progress_notes?: string }) => request<{ message: string }>(`/groups/${id}/progress`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  }),
   deleteGroup: (id: number) => request<{ message: string }>(`/groups/${id}`, {
     method: "DELETE"
   }),

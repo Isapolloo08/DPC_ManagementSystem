@@ -105,15 +105,35 @@ router.get("/:id", async (req: Request, res: Response) => {
 // Create group (Admin / Coordinator)
 router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, curriculum, ministry_id, leader_name, leader_contact, meeting_day, meeting_time, location, category = "General", max_capacity = 12, member_ids = [] } = req.body;
+    const {
+      name,
+      description,
+      curriculum,
+      ministry_id,
+      leader_name,
+      leader_contact,
+      meeting_day,
+      meeting_time,
+      location,
+      category = "General",
+      max_capacity = 12,
+      member_ids = [],
+      current_chapter = "Chapter 1",
+      progress_stage = "in_progress",
+      progress_notes = null
+    } = req.body;
 
     if (!name || !leader_name || !meeting_day || !meeting_time || !location) {
       return res.status(400).json({ error: "Group name, leader name, day, time, and location are required" });
     }
 
     const result = await db.run(`
-      INSERT INTO bible_study_groups (name, description, curriculum, ministry_id, leader_name, leader_contact, meeting_day, meeting_time, location, category, max_capacity)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO bible_study_groups (
+        name, description, curriculum, ministry_id, leader_name, leader_contact,
+        meeting_day, meeting_time, location, category, max_capacity,
+        current_chapter, progress_stage, progress_notes
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id
     `, [
       name.trim(),
@@ -126,7 +146,10 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       meeting_time,
       location,
       category,
-      Number(max_capacity) || 12
+      Number(max_capacity) || 12,
+      current_chapter || 'Chapter 1',
+      progress_stage || 'in_progress',
+      progress_notes || null
     ]);
 
     const newId = result.lastInsertRowid;
@@ -153,10 +176,26 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
 });
 
 // Update group
-router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
-    const { name, description, curriculum, ministry_id, leader_name, leader_contact, meeting_day, meeting_time, location, category, max_capacity, member_ids } = req.body;
+    const {
+      name,
+      description,
+      curriculum,
+      ministry_id,
+      leader_name,
+      leader_contact,
+      meeting_day,
+      meeting_time,
+      location,
+      category,
+      max_capacity,
+      member_ids,
+      current_chapter,
+      progress_stage,
+      progress_notes
+    } = req.body;
 
     const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Small group not found" });
@@ -173,8 +212,11 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
           meeting_time = COALESCE($8, meeting_time),
           location = COALESCE($9, location),
           category = COALESCE($10, category),
-          max_capacity = COALESCE($11, max_capacity)
-      WHERE id = $12
+          max_capacity = COALESCE($11, max_capacity),
+          current_chapter = COALESCE($12, current_chapter),
+          progress_stage = COALESCE($13, progress_stage),
+          progress_notes = COALESCE($14, progress_notes)
+      WHERE id = $15
     `, [
       name !== undefined ? name.trim() : null,
       description,
@@ -187,6 +229,9 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
       location,
       category,
       max_capacity !== undefined ? Number(max_capacity) : null,
+      current_chapter,
+      progress_stage,
+      progress_notes,
       id
     ]);
 
@@ -206,6 +251,42 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
 
     await logAuditAction(req.user?.id || null, "UPDATE", "bible_study_groups", Number(id), `Updated small group: ${name || current.name}`);
     res.json({ message: "Small group updated successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Dedicated Fast Endpoint: Update Study Chapter Progress & Notice
+router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { current_chapter, progress_stage, progress_notes } = req.body;
+
+    const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
+    if (!current) return res.status(404).json({ error: "Small group not found" });
+
+    await db.run(`
+      UPDATE bible_study_groups
+      SET current_chapter = COALESCE($1, current_chapter),
+          progress_stage = COALESCE($2, progress_stage),
+          progress_notes = $3
+      WHERE id = $4
+    `, [
+      current_chapter ? current_chapter.trim() : current.current_chapter,
+      progress_stage || current.progress_stage || 'in_progress',
+      progress_notes !== undefined ? progress_notes : current.progress_notes,
+      id
+    ]);
+
+    await logAuditAction(
+      req.user?.id || null,
+      "UPDATE_PROGRESS",
+      "bible_study_groups",
+      Number(id),
+      `Updated chapter progress for ${current.name}: ${current_chapter || current.current_chapter}`
+    );
+
+    res.json({ message: "Study chapter progress updated successfully!" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

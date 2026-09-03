@@ -359,6 +359,15 @@ export async function initSchema() {
           }
         }
       }
+      // 8. Ensure chapter and progress tracking columns exist on bible_study_groups
+      try {
+        await sql.unsafe(`
+          ALTER TABLE bible_study_groups
+          ADD COLUMN IF NOT EXISTS current_chapter VARCHAR(100) DEFAULT 'Chapter 1',
+          ADD COLUMN IF NOT EXISTS progress_stage VARCHAR(100) DEFAULT 'in_progress',
+          ADD COLUMN IF NOT EXISTS progress_notes TEXT;
+        `);
+      } catch {}
     } catch (e: any) {
       console.warn("Dishwashing table check note:", e.message);
     }

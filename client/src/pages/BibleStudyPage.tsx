@@ -7,8 +7,8 @@ import {
   BookOpen, Plus, Users, Calendar, Clock, MapPin,
   Search, Filter, CheckCircle2, X, Phone, Sparkles,
   Layers, ShieldCheck, HeartHandshake,
-  Award, CheckCheck, Library, BookmarkCheck,
-  ChevronDown, User as UserIcon, Check, Edit
+  Award, CheckCheck, Library, BookmarkCheck, Bookmark,
+  ChevronDown, User as UserIcon, Check, Edit, FileText, AlertCircle
 } from "lucide-react";
 
 export const BibleStudyPage: React.FC = () => {
@@ -32,6 +32,15 @@ export const BibleStudyPage: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<BibleStudyGroup | null>(null);
 
+  // Quick Chapter Progress Modal State
+  const [progressGroupModal, setProgressGroupModal] = useState<BibleStudyGroup | null>(null);
+  const [progressFormData, setProgressFormData] = useState({
+    current_chapter: "Chapter 1",
+    progress_stage: "in_progress",
+    progress_notes: ""
+  });
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+
   // Form state
   const [formData, setFormData] = useState({
     name: "",
@@ -45,7 +54,10 @@ export const BibleStudyPage: React.FC = () => {
     meeting_time_end: "8:30 PM",
     location: "Fellowship Hall Room 201",
     category: "General",
-    max_capacity: 12
+    max_capacity: 12,
+    current_chapter: "Chapter 1",
+    progress_stage: "in_progress",
+    progress_notes: ""
   });
 
   useEffect(() => {
@@ -351,6 +363,98 @@ export const BibleStudyPage: React.FC = () => {
     }
   };
 
+  const getProgressStageBadge = (stage?: string) => {
+    switch (stage) {
+      case "intro":
+        return {
+          label: "Intro / Starting Out",
+          sublabel: "No. 1 pa lang / Introduction",
+          bg: "bg-emerald-50 text-emerald-800 border-emerald-200",
+          dot: "bg-emerald-500"
+        };
+      case "midway":
+        return {
+          label: "Mid-way (Kalahati)",
+          sublabel: "Ongoing verses in chapter",
+          bg: "bg-amber-50 text-amber-900 border-amber-200",
+          dot: "bg-amber-500"
+        };
+      case "application":
+        return {
+          label: "Discussion & Reflection",
+          sublabel: "Practical study application",
+          bg: "bg-indigo-50 text-indigo-900 border-indigo-200",
+          dot: "bg-indigo-500"
+        };
+      case "completed":
+        return {
+          label: "Chapter Finished",
+          sublabel: "Ready for next lesson",
+          bg: "bg-sky-50 text-sky-900 border-sky-200",
+          dot: "bg-sky-500"
+        };
+      default:
+        return {
+          label: "In Progress",
+          sublabel: "Active study",
+          bg: "bg-indigo-50 text-indigo-900 border-indigo-200",
+          dot: "bg-indigo-500"
+        };
+    }
+  };
+
+  const handleOpenProgressModal = (group: BibleStudyGroup) => {
+    setProgressGroupModal(group);
+    setProgressFormData({
+      current_chapter: group.current_chapter || "Chapter 1",
+      progress_stage: group.progress_stage || "in_progress",
+      progress_notes: group.progress_notes || ""
+    });
+  };
+
+  const handleSaveProgress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!progressGroupModal) return;
+    try {
+      setIsSavingProgress(true);
+      await api.updateGroupProgress(progressGroupModal.id, {
+        current_chapter: progressFormData.current_chapter,
+        progress_stage: progressFormData.progress_stage,
+        progress_notes: progressFormData.progress_notes
+      });
+
+      // Update in local state
+      setGroups(prev =>
+        prev.map(g =>
+          g.id === progressGroupModal.id
+            ? {
+                ...g,
+                current_chapter: progressFormData.current_chapter,
+                progress_stage: progressFormData.progress_stage,
+                progress_notes: progressFormData.progress_notes
+              }
+            : g
+        )
+      );
+
+      if (selectedGroup && selectedGroup.id === progressGroupModal.id) {
+        setSelectedGroup({
+          ...selectedGroup,
+          current_chapter: progressFormData.current_chapter,
+          progress_stage: progressFormData.progress_stage,
+          progress_notes: progressFormData.progress_notes
+        });
+      }
+
+      setIsJoinSuccess(`Updated study progress for ${progressGroupModal.name}!`);
+      setProgressGroupModal(null);
+    } catch (err: any) {
+      alert(err.message || "Failed to update study chapter progress");
+    } finally {
+      setIsSavingProgress(false);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setEditingGroupId(null);
     setSelectedMemberIds([]);
@@ -368,7 +472,10 @@ export const BibleStudyPage: React.FC = () => {
       meeting_time_end: "8:30 PM",
       location: "",
       category: "General",
-      max_capacity: 12
+      max_capacity: 12,
+      current_chapter: "Chapter 1",
+      progress_stage: "in_progress",
+      progress_notes: ""
     });
     setIsCreateModalOpen(true);
   };
@@ -411,7 +518,10 @@ export const BibleStudyPage: React.FC = () => {
       meeting_time_end: end,
       location: group.location || "",
       category: group.category || "General",
-      max_capacity: group.max_capacity || 12
+      max_capacity: group.max_capacity || 12,
+      current_chapter: group.current_chapter || "Chapter 1",
+      progress_stage: group.progress_stage || "in_progress",
+      progress_notes: group.progress_notes || ""
     });
     setSelectedGroup(null);
     setIsCreateModalOpen(true);
@@ -436,7 +546,10 @@ export const BibleStudyPage: React.FC = () => {
         category: formData.category,
         ministry_id: formData.ministry_id ? Number(formData.ministry_id) : null,
         max_capacity: Number(formData.max_capacity) || 12,
-        member_ids: selectedMemberIds
+        member_ids: selectedMemberIds,
+        current_chapter: formData.current_chapter,
+        progress_stage: formData.progress_stage,
+        progress_notes: formData.progress_notes
       };
 
       if (editingGroupId) {
@@ -465,7 +578,10 @@ export const BibleStudyPage: React.FC = () => {
         meeting_time_end: "8:30 PM",
         location: "",
         category: "General",
-        max_capacity: 12
+        max_capacity: 12,
+        current_chapter: "Chapter 1",
+        progress_stage: "in_progress",
+        progress_notes: ""
       });
       loadGroups();
     } catch (err: any) {
@@ -716,16 +832,62 @@ export const BibleStudyPage: React.FC = () => {
                   {g.curriculum && (
                     <div className="mt-1.5 inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200/60 px-2.5 py-1 rounded-lg text-xs font-semibold">
                       <BookOpen className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                      <span className="truncate max-w-[220px]">Study: {g.curriculum}</span>
+                      <span className="truncate max-w-[220px]">Book: {g.curriculum}</span>
                     </div>
                   )}
+
+                  {/* Study Chapter & Progress Tracking Section */}
+                  <div className="mt-3 p-3 bg-gradient-to-br from-indigo-50/70 via-ivory to-amber-50/30 rounded-xl border border-indigo-100 space-y-2">
+                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <Bookmark className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                        <span className="text-xs font-black text-indigo-950">
+                          {g.current_chapter || "Chapter 1"}
+                        </span>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${getProgressStageBadge(g.progress_stage).bg}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${getProgressStageBadge(g.progress_stage).dot}`}></span>
+                        <span>{getProgressStageBadge(g.progress_stage).label}</span>
+                      </span>
+                    </div>
+
+                    {/* Notice / Specific Location Description if available */}
+                    {g.progress_notes ? (
+                      <div className="bg-white/95 p-2 rounded-lg border border-indigo-100/80 text-[11px] text-charcoal/85 flex items-start gap-1.5 shadow-2xs">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="leading-tight min-w-0">
+                          <span className="font-bold text-indigo-950 text-[10px] uppercase tracking-wider block">Notice / Details:</span>
+                          <span className="break-words">{g.progress_notes}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-charcoal/45 italic">
+                        No progress notice logged yet
+                      </div>
+                    )}
+
+                    {/* Quick Chapter Progress Update Button */}
+                    <div className="pt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenProgressModal(g);
+                        }}
+                        className="text-[10px] font-bold text-indigo hover:text-indigo-800 bg-white hover:bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95"
+                      >
+                        <BookmarkCheck className="w-3 h-3 text-indigo-600" />
+                        <span>Update Chapter / Notice</span>
+                      </button>
+                    </div>
+                  </div>
 
                   <p className="text-xs text-charcoal/70 mt-2 line-clamp-2 leading-relaxed">
                     {g.description || "Weekly Bible study fellowship, Scripture discussion, and prayer."}
                   </p>
 
                   {/* Schedule & Venue */}
-                  <div className="mt-4 pt-3 border-t border-gray-100 space-y-1.5 text-xs text-charcoal/75 font-medium">
+                  <div className="mt-3 pt-2.5 border-t border-gray-100 space-y-1.5 text-xs text-charcoal/75 font-medium">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-indigo shrink-0" />
                       <span>Every <strong>{g.meeting_day}</strong> at {g.meeting_time}</span>
@@ -742,7 +904,7 @@ export const BibleStudyPage: React.FC = () => {
                 </div>
 
                 {/* Bottom Capacity & Actions */}
-                <div className="mt-5 pt-3 border-t border-gray-100 space-y-3">
+                <div className="mt-4 pt-3 border-t border-gray-100 space-y-3">
                   {/* Capacity Bar */}
                   <div>
                     <div className="flex justify-between text-[11px] font-bold text-charcoal/60 mb-1">
@@ -818,6 +980,37 @@ export const BibleStudyPage: React.FC = () => {
                   <BookOpen className="w-4 h-4 text-amber-700" />
                   <span>Curriculum: {selectedGroup.curriculum || "General Scripture Discussion"}</span>
                 </div>
+
+                {/* Chapter & Progress Banner */}
+                <div className="p-2.5 bg-white/90 rounded-lg border border-indigo-100 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Bookmark className="w-4 h-4 text-indigo-700" />
+                    <div>
+                      <span className="font-bold text-indigo-950 block text-xs">
+                        {selectedGroup.current_chapter || "Chapter 1"}
+                      </span>
+                      {selectedGroup.progress_notes && (
+                        <span className="text-[11px] text-charcoal/70 block mt-0.5">
+                          Notice: {selectedGroup.progress_notes}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${getProgressStageBadge(selectedGroup.progress_stage).bg}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${getProgressStageBadge(selectedGroup.progress_stage).dot}`}></span>
+                      <span>{getProgressStageBadge(selectedGroup.progress_stage).label}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenProgressModal(selectedGroup)}
+                      className="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-[10px] cursor-pointer"
+                    >
+                      Update
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2 text-charcoal/80">
                   <Clock className="w-4 h-4 text-indigo" />
                   <span>Meets every <strong>{selectedGroup.meeting_day}</strong> at {selectedGroup.meeting_time}</span>
@@ -1467,6 +1660,57 @@ export const BibleStudyPage: React.FC = () => {
                   </div>
                 )}
               </div>
+              {/* Study Chapter Progress & Notice Section */}
+              <div className="p-4 bg-gradient-to-br from-indigo-50/70 to-ivory rounded-2xl border border-indigo-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
+                    <Bookmark className="w-3.5 h-3.5 text-indigo-700" />
+                    <span>Current Chapter & Study Progress</span>
+                  </label>
+                  <span className="text-[10px] text-charcoal/50">Where the group is currently studying</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-charcoal/70 mb-1">Current Chapter / Lesson *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Chapter 1, Introduction, Lesson 3"
+                      value={formData.current_chapter}
+                      onChange={(e) => setFormData({ ...formData, current_chapter: e.target.value })}
+                      className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold text-charcoal"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-charcoal/70 mb-1">Study Phase / Stage</label>
+                    <select
+                      value={formData.progress_stage}
+                      onChange={(e) => setFormData({ ...formData, progress_stage: e.target.value })}
+                      className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-semibold text-charcoal"
+                    >
+                      <option value="intro">🟢 Intro / Just Starting (No. 1 pa lang)</option>
+                      <option value="midway">🟡 Mid-way (Kalahati pa lang ng Chapter)</option>
+                      <option value="application">🟠 Discussion & Reflection Questions</option>
+                      <option value="completed">🔵 Chapter Completed / Ready for Next</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
+                    Lesson Notice & Details (Saan Banda Sila)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Maglagay ng notice o detalye (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide')..."
+                    value={formData.progress_notes}
+                    onChange={(e) => setFormData({ ...formData, progress_notes: e.target.value })}
+                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-charcoal/70 mb-1">Description / Group Purpose</label>
                 <textarea
@@ -1491,6 +1735,137 @@ export const BibleStudyPage: React.FC = () => {
                   className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md cursor-pointer"
                 >
                   {editingGroupId ? "Save Changes" : "Create Small Group"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL: Quick Update Chapter & Progress */}
+      {/* ==================================================== */}
+      {progressGroupModal && (
+        <div className="fixed inset-0 z-50 bg-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-4 animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                  <BookmarkCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-charcoal">Update Study Chapter & Location</h3>
+                  <p className="text-xs text-charcoal/60 truncate max-w-xs">{progressGroupModal.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProgressGroupModal(null)}
+                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Current Book Topic Banner */}
+            {progressGroupModal.curriculum && (
+              <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200/70 text-xs font-semibold text-amber-950 flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>Book / Topic: <strong>{progressGroupModal.curriculum}</strong></span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProgress} className="space-y-3.5 text-xs">
+              {/* Current Chapter / Lesson Input with Quick Chips */}
+              <div>
+                <label className="block font-bold text-charcoal/70 mb-1">
+                  What Chapter / Lesson na sila? *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Chapter 1, Introduction, Chapter 3 (Part 2)"
+                  value={progressFormData.current_chapter}
+                  onChange={(e) => setProgressFormData({ ...progressFormData, current_chapter: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs"
+                />
+                {/* Quick Preset Chips */}
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {["Introduction", "Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5", "Chapter 6", "Lesson 1", "Review / Q&A"].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setProgressFormData({ ...progressFormData, current_chapter: chip })}
+                      className="px-2 py-0.5 rounded-md bg-ivory-light hover:bg-indigo-50 border border-gray-200 text-[10px] font-semibold text-charcoal/70 hover:text-indigo transition-colors cursor-pointer"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Progress Stage Picker */}
+              <div>
+                <label className="block font-bold text-charcoal/70 mb-1.5">
+                  Study Progress Stage (Nasaan sila banda?)
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { id: "intro", title: "🟢 Intro / Just Starting", desc: "No. 1 pa lang / Introduction / overview" },
+                    { id: "midway", title: "🟡 Mid-way (Kalahati)", desc: "Nasa kalahati pa lang ng ongoing verses" },
+                    { id: "application", title: "🟠 Discussion & Reflection", desc: "Tapos na reading, nasa group reflection" },
+                    { id: "completed", title: "🔵 Chapter Finished", desc: "Tapos na ang chapter, next lesson na" }
+                  ].map((st) => (
+                    <div
+                      key={st.id}
+                      onClick={() => setProgressFormData({ ...progressFormData, progress_stage: st.id })}
+                      className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                        progressFormData.progress_stage === st.id
+                          ? "bg-indigo-50/70 border-indigo ring-1 ring-indigo text-indigo-950 font-bold"
+                          : "bg-ivory-light border-gray-200 hover:border-gray-300 text-charcoal/80"
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{st.title}</div>
+                      <div className="text-[10px] text-charcoal/60 mt-0.5">{st.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notice & Progress Description (Saan Banda Sila) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-charcoal/70">
+                    Notice & Specific Location Description
+                  </label>
+                  <span className="text-[10px] text-indigo-600 font-semibold">Important details</span>
+                </div>
+                <textarea
+                  rows={3}
+                  placeholder="Maglagay ng notice o detalye kung nasaan sila banda (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide, itutuloy sa susunod na meeting')..."
+                  value={progressFormData.progress_notes}
+                  onChange={(e) => setProgressFormData({ ...progressFormData, progress_notes: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setProgressGroupModal(null)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProgress}
+                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingProgress ? "Saving..." : "Save Chapter Progress"}</span>
                 </button>
               </div>
             </form>
