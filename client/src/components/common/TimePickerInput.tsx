@@ -116,166 +116,141 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
         </div>
       </div>
 
-      {/* Floating Timepicker Modal Overlay (Overlaps everything cleanly, never clipped) */}
+      {/* Timepicker Popover (Overlaps elements below it) */}
       {isOpen && (
-        <div
-          className="fixed inset-0 z-[100] bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
-          onClick={() => setIsOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs bg-white rounded-2xl shadow-2xl border border-indigo-100 p-4 space-y-3.5 animate-in zoom-in-95 duration-150"
-          >
-            {/* Header: Title & Close Button */}
-            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo" />
-                <span className="font-bold text-charcoal text-xs">
-                  {label ? `Set ${label.replace(/\*/g, '').trim()}` : "Select Time"}
-                </span>
-              </div>
+        <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-indigo-100 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+          {/* Header Display & AM/PM Toggle */}
+          <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-indigo-900 via-indigo to-indigo-800 text-white rounded-xl shadow-xs">
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl font-black tracking-tight">{selectedHour}</span>
+              <span className="text-xl font-bold text-indigo-200 animate-pulse">:</span>
+              <span className="text-xl font-black tracking-tight">{selectedMinute}</span>
+              <span className="text-xs font-bold text-amber-300 ml-1.5">{selectedPeriod}</span>
+            </div>
+
+            {/* AM / PM Segmented Control */}
+            <div className="flex items-center bg-indigo-950/70 p-0.5 rounded-lg border border-indigo-700/60">
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
-                className="p-1 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                onClick={() => updateTime(selectedHour, selectedMinute, "AM")}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  selectedPeriod === "AM"
+                    ? "bg-amber-400 text-charcoal shadow-xs"
+                    : "text-indigo-200 hover:text-white"
+                }`}
               >
-                <X className="w-4 h-4" />
+                <Sun className="w-3 h-3" />
+                <span>AM</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateTime(selectedHour, selectedMinute, "PM")}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  selectedPeriod === "PM"
+                    ? "bg-amber-400 text-charcoal shadow-xs"
+                    : "text-indigo-200 hover:text-white"
+                }`}
+              >
+                <Moon className="w-3 h-3" />
+                <span>PM</span>
               </button>
             </div>
+          </div>
 
-            {/* Header Display & AM/PM Toggle */}
-            <div className="flex items-center justify-between p-3 bg-gradient-to-r from-indigo-900 via-indigo to-indigo-800 text-white rounded-xl shadow-xs">
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black tracking-tight">{selectedHour}</span>
-                <span className="text-2xl font-bold text-indigo-200 animate-pulse">:</span>
-                <span className="text-2xl font-black tracking-tight">{selectedMinute}</span>
-                <span className="text-xs font-bold text-amber-300 ml-1.5">{selectedPeriod}</span>
-              </div>
-
-              {/* AM / PM Segmented Control */}
-              <div className="flex items-center bg-indigo-950/70 p-0.5 rounded-lg border border-indigo-700/60">
-                <button
-                  type="button"
-                  onClick={() => updateTime(selectedHour, selectedMinute, "AM")}
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                    selectedPeriod === "AM"
-                      ? "bg-amber-400 text-charcoal shadow-xs"
-                      : "text-indigo-200 hover:text-white"
-                  }`}
-                >
-                  <Sun className="w-3.5 h-3.5" />
-                  <span>AM</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateTime(selectedHour, selectedMinute, "PM")}
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                    selectedPeriod === "PM"
-                      ? "bg-amber-400 text-charcoal shadow-xs"
-                      : "text-indigo-200 hover:text-white"
-                  }`}
-                >
-                  <Moon className="w-3.5 h-3.5" />
-                  <span>PM</span>
-                </button>
-              </div>
+          {/* Hours Grid */}
+          <div>
+            <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5">
+              <span>Select Hour</span>
+              <span className="text-indigo-600 font-semibold">{selectedHour} o'clock</span>
             </div>
-
-            {/* Hours Grid */}
-            <div>
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5">
-                <span>Select Hour</span>
-                <span className="text-indigo-600 font-semibold">{selectedHour} o'clock</span>
-              </div>
-              <div className="grid grid-cols-6 gap-1.5">
-                {hours.map((h) => {
-                  const isSelected = selectedHour === h;
-                  return (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() => updateTime(h, selectedMinute, selectedPeriod)}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isSelected
-                          ? "bg-indigo text-white shadow-xs font-black ring-2 ring-indigo-300 scale-105"
-                          : "bg-gray-50 text-charcoal/80 hover:bg-indigo-50 hover:text-indigo"
-                      }`}
-                    >
-                      {h}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Minutes Row */}
-            <div>
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5">
-                <span>Select Minute</span>
-                <span className="text-indigo-600 font-semibold">:{selectedMinute}</span>
-              </div>
-              <div className="grid grid-cols-4 gap-1.5">
-                {minutes.map((m) => {
-                  const isSelected = selectedMinute === m;
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => updateTime(selectedHour, m, selectedPeriod)}
-                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isSelected
-                          ? "bg-amber-400 text-charcoal shadow-xs font-black ring-2 ring-amber-500 scale-105"
-                          : "bg-gray-50 text-charcoal/80 hover:bg-amber-50 hover:text-amber-950"
-                      }`}
-                    >
-                      :{m}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Quick Preset Chips */}
-            <div>
-              <div className="text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-500" />
-                <span>Quick Presets</span>
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {commonPresets.slice(0, 6).map((preset) => (
+            <div className="grid grid-cols-6 gap-1">
+              {hours.map((h) => {
+                const isSelected = selectedHour === h;
+                return (
                   <button
-                    key={preset}
+                    key={h}
                     type="button"
-                    onClick={() => handlePresetClick(preset)}
-                    className="px-2 py-1.5 rounded-lg bg-ivory-light hover:bg-indigo-50 border border-gray-200 text-[11px] font-semibold text-charcoal/70 hover:text-indigo hover:border-indigo-200 transition-colors cursor-pointer text-center"
+                    onClick={() => updateTime(h, selectedMinute, selectedPeriod)}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-indigo text-white shadow-xs font-black ring-1 ring-indigo-300"
+                        : "bg-gray-50 text-charcoal/80 hover:bg-indigo-50 hover:text-indigo"
+                    }`}
                   >
-                    {preset}
+                    {h}
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
+          </div>
 
-            {/* Confirm Footer */}
-            <div className="pt-2.5 border-t border-gray-100 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  onChange("");
-                  setIsOpen(false);
-                }}
-                className="text-xs font-semibold text-charcoal/50 hover:text-rose-600 cursor-pointer"
-              >
-                Clear Time
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="px-5 py-2 bg-indigo hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer"
-              >
-                <Check className="w-4 h-4" />
-                <span>Confirm Time</span>
-              </button>
+          {/* Minutes Row */}
+          <div>
+            <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5">
+              <span>Select Minute</span>
+              <span className="text-indigo-600 font-semibold">:{selectedMinute}</span>
             </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {minutes.map((m) => {
+                const isSelected = selectedMinute === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => updateTime(selectedHour, m, selectedPeriod)}
+                    className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-amber-400 text-charcoal shadow-xs font-black ring-1 ring-amber-500"
+                        : "bg-gray-50 text-charcoal/80 hover:bg-amber-50 hover:text-amber-950"
+                    }`}
+                  >
+                    :{m}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Quick Preset Chips */}
+          <div>
+            <div className="text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-500" />
+              <span>Quick Presets</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {commonPresets.slice(0, 6).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => handlePresetClick(preset)}
+                  className="px-2 py-0.5 rounded-md bg-ivory-light hover:bg-indigo-50 border border-gray-200 text-[10px] font-semibold text-charcoal/70 hover:text-indigo hover:border-indigo-200 transition-colors cursor-pointer"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Confirm Footer */}
+          <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setIsOpen(false);
+              }}
+              className="text-[11px] font-semibold text-charcoal/40 hover:text-rose-500 cursor-pointer"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="px-3 py-1 bg-indigo hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Done</span>
+            </button>
           </div>
         </div>
       )}
