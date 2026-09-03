@@ -888,18 +888,18 @@ export const BibleStudyPage: React.FC = () => {
       {/* CREATE GROUP MODAL */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-indigo-100">
+          <div className="bg-white rounded-2xl max-w-xl md:max-w-2xl lg:max-w-3xl w-full p-6 sm:p-7 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto border border-indigo-100">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-bold text-charcoal flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-indigo" />
                 <span>{editingGroupId ? "Edit Bible Study Group" : "Create New Bible Study Small Group"}</span>
               </h2>
-              <button onClick={() => setIsCreateModalOpen(false)} className="p-1 text-charcoal/50 hover:bg-gray-100 rounded-lg cursor-pointer">
+              <button onClick={() => setIsCreateModalOpen(false)} className="p-1.5 text-charcoal/50 hover:bg-gray-100 rounded-lg cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveGroup} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveGroup} className="space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-charcoal/70 mb-1">Group Name *</label>
                 <input
@@ -912,7 +912,7 @@ export const BibleStudyPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-charcoal/70 mb-1">Category *</label>
                   <select
@@ -1056,7 +1056,7 @@ export const BibleStudyPage: React.FC = () => {
               </div>
 
               {/* Leader & Contact Row */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Leader Searchable Dropdown */}
                 <div ref={leaderRef} className="relative">
                   <div className="flex items-center justify-between mb-1">
@@ -1189,8 +1189,8 @@ export const BibleStudyPage: React.FC = () => {
               </div>
 
               {/* Schedule: Day, Time In, Time Out, and Max Capacity */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
                   <label className="block font-bold text-xs text-charcoal/70 mb-1">Meeting Day *</label>
                   <select
                     value={formData.meeting_day}
@@ -1207,7 +1207,7 @@ export const BibleStudyPage: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="sm:col-span-3">
+                <div>
                   <TimePickerInput
                     label="Time In (Start) *"
                     value={formData.meeting_time_start}
@@ -1217,7 +1217,7 @@ export const BibleStudyPage: React.FC = () => {
                   />
                 </div>
 
-                <div className="sm:col-span-3">
+                <div>
                   <TimePickerInput
                     label="Time Out (End)"
                     value={formData.meeting_time_end}
@@ -1226,8 +1226,8 @@ export const BibleStudyPage: React.FC = () => {
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block font-bold text-xs text-charcoal/70 mb-1">Capacity</label>
+                <div>
+                  <label className="block font-bold text-xs text-charcoal/70 mb-1">Max Capacity</label>
                   <input
                     type="number"
                     min="4"

@@ -93,29 +93,23 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
   return (
     <div ref={containerRef} className="relative">
       {label && (
-        <div className="flex items-center justify-between mb-1">
-          <label className="block font-bold text-xs text-charcoal/70">{label}</label>
-          <span className="text-[10px] text-indigo-600 font-semibold flex items-center gap-1">
-            <Clock className="w-3 h-3 text-indigo-500" />
-            <span>Timepicker</span>
-          </span>
-        </div>
+        <label className="block font-bold text-xs text-charcoal/70 mb-1">{label}</label>
       )}
 
       {/* Trigger Input */}
       <div className="relative">
         <div
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full bg-ivory-light p-2.5 pl-9 pr-8 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-bold text-charcoal ${
+          className={`w-full bg-ivory-light p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-bold text-charcoal h-[41px] ${
             isOpen ? "border-indigo ring-2 ring-indigo-100 bg-white" : "border-gray-200 hover:border-gray-300"
           }`}
         >
-          <Clock className="w-4 h-4 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <span className={value ? "text-charcoal font-bold" : "text-charcoal/40 font-normal"}>
+          <Clock className="w-3.5 h-3.5 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <span className={`truncate ${value ? "text-charcoal font-bold" : "text-charcoal/40 font-normal"}`}>
             {value || placeholder}
           </span>
           <ChevronDown
-            className={`w-4 h-4 text-charcoal/40 transition-transform duration-200 ${
+            className={`w-3.5 h-3.5 text-charcoal/40 shrink-0 transition-transform duration-200 ${
               isOpen ? "rotate-180 text-indigo-600" : ""
             }`}
           />
@@ -124,7 +118,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
 
       {/* Rich Visual Timepicker Popover */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 z-50 w-72 bg-white rounded-2xl shadow-2xl border border-indigo-100 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-indigo-100 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150">
           {/* Header Display & AM/PM Toggle */}
           <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-indigo-900 to-indigo text-white rounded-xl shadow-xs">
             <div className="flex items-baseline gap-1">
