@@ -63,6 +63,12 @@ export const BibleStudyPage: React.FC = () => {
   const [isCurriculumDropdownOpen, setIsCurriculumDropdownOpen] = useState(false);
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
 
+  // Group Members Enrollment State
+  const [membersList, setMembersList] = useState<{ id: number; name: string; ministry_name?: string; age?: number }[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
+  const [memberQuery, setMemberQuery] = useState<string>("");
+  const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false);
+
   // Dedicated search queries so selected values don't filter out the list upon re-opening
   const [curriculumQuery, setCurriculumQuery] = useState<string>("");
   const [leaderQuery, setLeaderQuery] = useState<string>("");
@@ -71,6 +77,7 @@ export const BibleStudyPage: React.FC = () => {
   const leaderRef = useRef<HTMLDivElement>(null);
   const curriculumRef = useRef<HTMLDivElement>(null);
   const locationRef = useRef<HTMLDivElement>(null);
+  const memberRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click and reset search queries
   useEffect(() => {
@@ -86,6 +93,10 @@ export const BibleStudyPage: React.FC = () => {
       if (locationRef.current && !locationRef.current.contains(e.target as Node)) {
         setIsLocationDropdownOpen(false);
         setLocationQuery("");
+      }
+      if (memberRef.current && !memberRef.current.contains(e.target as Node)) {
+        setIsMemberDropdownOpen(false);
+        setMemberQuery("");
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -121,7 +132,24 @@ export const BibleStudyPage: React.FC = () => {
   useEffect(() => {
     loadLookups();
     loadLeaders();
+    loadMembers();
   }, []);
+
+  const loadMembers = async () => {
+    try {
+      const res = await api.getMembers();
+      if (res && Array.isArray(res)) {
+        setMembersList(res.map(m => ({
+          id: m.id,
+          name: `${m.first_name} ${m.last_name}`,
+          ministry_name: m.ministry_name,
+          age: m.age
+        })));
+      }
+    } catch (err) {
+      console.warn("Could not load members for small group enrollment", err);
+    }
+  };
 
   const loadLeaders = async () => {
     try {
@@ -257,6 +285,29 @@ export const BibleStudyPage: React.FC = () => {
     return allLocations.filter(loc => loc.toLowerCase().includes(q));
   }, [allLocations, locationQuery]);
 
+  const filteredMembers = useMemo(() => {
+    const q = memberQuery.toLowerCase().trim();
+    if (!q) return membersList;
+    return membersList.filter(m =>
+      m.name.toLowerCase().includes(q) ||
+      (m.ministry_name && m.ministry_name.toLowerCase().includes(q))
+    );
+  }, [membersList, memberQuery]);
+
+  const handleToggleMember = (memberId: number) => {
+    setSelectedMemberIds(prev => {
+      if (prev.includes(memberId)) {
+        return prev.filter(id => id !== memberId);
+      } else {
+        if (prev.length >= (Number(formData.max_capacity) || 12)) {
+          alert(`Max capacity of ${formData.max_capacity} members reached!`);
+          return prev;
+        }
+        return [...prev, memberId];
+      }
+    });
+  };
+
   const loadLookups = async () => {
     try {
       const [catRes, locRes] = await Promise.all([
@@ -300,6 +351,9 @@ export const BibleStudyPage: React.FC = () => {
 
   const handleOpenCreateModal = () => {
     setEditingGroupId(null);
+    setSelectedMemberIds([]);
+    setMemberQuery("");
+    setIsMemberDropdownOpen(false);
     setFormData({
       name: "",
       description: "",
@@ -318,6 +372,12 @@ export const BibleStudyPage: React.FC = () => {
 
   const handleOpenEditModal = (group: BibleStudyGroup) => {
     setEditingGroupId(group.id);
+    const existingIds = (group.members || [])
+      .map((m: any) => m.member_id)
+      .filter((id: any): id is number => typeof id === "number" && id > 0);
+    setSelectedMemberIds(existingIds);
+    setMemberQuery("");
+    setIsMemberDropdownOpen(false);
     setFormData({
       name: group.name,
       description: group.description || "",
@@ -341,7 +401,8 @@ export const BibleStudyPage: React.FC = () => {
       const payload = {
         ...formData,
         ministry_id: formData.ministry_id ? Number(formData.ministry_id) : null,
-        max_capacity: Number(formData.max_capacity) || 12
+        max_capacity: Number(formData.max_capacity) || 12,
+        member_ids: selectedMemberIds
       };
 
       if (editingGroupId) {
@@ -355,6 +416,9 @@ export const BibleStudyPage: React.FC = () => {
       setIsLeaderDropdownOpen(false);
       setIsCurriculumDropdownOpen(false);
       setIsLocationDropdownOpen(false);
+      setIsMemberDropdownOpen(false);
+      setSelectedMemberIds([]);
+      setMemberQuery("");
       setFormData({
         name: "",
         description: "",
@@ -367,7 +431,6 @@ export const BibleStudyPage: React.FC = () => {
         location: "",
         category: "General",
         max_capacity: 12
-      });
       loadGroups();
     } catch (err: any) {
       alert(err.message || "Failed to save Bible study group");
@@ -1226,6 +1289,137 @@ export const BibleStudyPage: React.FC = () => {
                           )}
                         </button>
                       ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Enrolled Disciples / Group Members - Searchable Multi-Select */}
+              <div ref={memberRef} className="relative">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-charcoal/70 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Enrolled Disciples / Group Members</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                    {selectedMemberIds.length} / {formData.max_capacity || 12} Enrolled
+                  </span>
+                </div>
+
+                {/* Selected Member Tag Pills */}
+                {selectedMemberIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 mb-2 bg-indigo-50/50 rounded-xl border border-indigo-100/80 max-h-24 overflow-y-auto">
+                    {selectedMemberIds.map((mId) => {
+                      const m = membersList.find(item => item.id === mId);
+                      return (
+                        <span
+                          key={mId}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-xs font-bold text-charcoal shadow-2xs group"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          <span>{m ? m.name : `Member #${mId}`}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMember(mId)}
+                            className="text-charcoal/40 hover:text-rose-600 p-0.5 rounded transition-colors cursor-pointer"
+                            title="Remove member"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Member Search Bar / Dropdown Trigger */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search disciples by name or ministry to add (e.g. Elena Santos)..."
+                    value={memberQuery}
+                    onFocus={() => setIsMemberDropdownOpen(true)}
+                    onClick={() => setIsMemberDropdownOpen(true)}
+                    onChange={(e) => {
+                      setMemberQuery(e.target.value);
+                      setIsMemberDropdownOpen(true);
+                    }}
+                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                  />
+                  {memberQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMemberQuery("");
+                        setIsMemberDropdownOpen(true);
+                      }}
+                      className="absolute right-7 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 p-1 cursor-pointer transition-colors"
+                      title="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setIsMemberDropdownOpen(!isMemberDropdownOpen)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-indigo p-0.5 cursor-pointer"
+                    title="Toggle members dropdown"
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMemberDropdownOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </div>
+
+                {/* Dropdown Menu for Members */}
+                {isMemberDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
+                    <div className="p-2 bg-indigo-50/80 text-[10px] font-bold text-indigo-950 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
+                      <span>Available Disciples ({filteredMembers.length})</span>
+                      <span className="text-[9px] text-indigo-700 font-normal">Click to toggle enrollment</span>
+                    </div>
+                    {filteredMembers.length === 0 ? (
+                      <div className="p-3 text-center text-charcoal/50 text-xs">
+                        No matching disciples found.
+                      </div>
+                    ) : (
+                      filteredMembers.map((mem) => {
+                        const isSelected = selectedMemberIds.includes(mem.id);
+                        return (
+                          <button
+                            key={mem.id}
+                            type="button"
+                            onClick={() => handleToggleMember(mem.id)}
+                            className={`w-full text-left p-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer ${
+                              isSelected ? "bg-indigo-50/50 font-bold" : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 pr-2">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 ${
+                                isSelected ? "bg-indigo" : "bg-gray-400"
+                              }`}>
+                                {mem.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs text-charcoal group-hover:text-indigo truncate">
+                                  {mem.name}
+                                </div>
+                                {mem.ministry_name && (
+                                  <span className="text-[10px] text-charcoal/50">
+                                    {mem.ministry_name} {mem.age ? `• ${mem.age} yrs` : ""}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${
+                              isSelected
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                : "bg-gray-100 text-charcoal/60 group-hover:bg-indigo-100 group-hover:text-indigo"
+                            }`}>
+                              {isSelected ? "✓ Enrolled" : "+ Add"}
+                            </span>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 )}

@@ -105,7 +105,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 // Create group (Admin / Coordinator)
 router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, curriculum, ministry_id, leader_name, leader_contact, meeting_day, meeting_time, location, category = "General", max_capacity = 12 } = req.body;
+    const { name, description, curriculum, ministry_id, leader_name, leader_contact, meeting_day, meeting_time, location, category = "General", max_capacity = 12, member_ids = [] } = req.body;
 
     if (!name || !leader_name || !meeting_day || !meeting_time || !location) {
       return res.status(400).json({ error: "Group name, leader name, day, time, and location are required" });
@@ -130,6 +130,20 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
     ]);
 
     const newId = result.lastInsertRowid;
+
+    // Enroll initial selected members if provided
+    if (Array.isArray(member_ids) && member_ids.length > 0) {
+      for (const mId of member_ids) {
+        const member = await db.get("SELECT first_name, last_name FROM members WHERE id = $1", [mId]);
+        const mName = member ? `${member.first_name} ${member.last_name}` : "Member";
+        await db.run(`
+          INSERT INTO bible_study_members (group_id, member_id, member_name)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (group_id, member_id) DO NOTHING
+        `, [newId, mId, mName]);
+      }
+    }
+
     await logAuditAction(req.user?.id || null, "CREATE", "bible_study_groups", newId, `Created Bible study group: ${name}`);
 
     res.status(201).json({ id: newId, message: "Small group created successfully" });
@@ -142,7 +156,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
 router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
-    const { name, description, curriculum, ministry_id, leader_name, leader_contact, meeting_day, meeting_time, location, category, max_capacity } = req.body;
+    const { name, description, curriculum, ministry_id, leader_name, leader_contact, meeting_day, meeting_time, location, category, max_capacity, member_ids } = req.body;
 
     const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Small group not found" });
@@ -175,6 +189,20 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
       max_capacity !== undefined ? Number(max_capacity) : null,
       id
     ]);
+
+    // Update members if member_ids is passed
+    if (Array.isArray(member_ids)) {
+      await db.run("DELETE FROM bible_study_members WHERE group_id = $1", [id]);
+      for (const mId of member_ids) {
+        const member = await db.get("SELECT first_name, last_name FROM members WHERE id = $1", [mId]);
+        const mName = member ? `${member.first_name} ${member.last_name}` : "Member";
+        await db.run(`
+          INSERT INTO bible_study_members (group_id, member_id, member_name)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (group_id, member_id) DO NOTHING
+        `, [id, mId, mName]);
+      }
+    }
 
     await logAuditAction(req.user?.id || null, "UPDATE", "bible_study_groups", Number(id), `Updated small group: ${name || current.name}`);
     res.json({ message: "Small group updated successfully" });
