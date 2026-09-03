@@ -1,0 +1,15 @@
+{
+  "name": "dpc-chms-workspace",
+  "private": true,
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "dev:all": "concurrently -n \"SERVER,CLIENT\" -c \"blue.bold,green.bold\" \"npm run dev:server\" \"npm run dev:client\"",
+    "migrate:pg": "npm --prefix server run migrate:pg",
+    "seed": "npm --prefix server run seed",
+    "test": "npm --prefix server run test"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}
