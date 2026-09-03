@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { BibleStudyGroup, StudyTopic, StudyTopicsSummary, User } from "../types";
+import { TimePickerInput } from "../components/common/TimePickerInput";
 import {
   BookOpen, Plus, Users, Calendar, Clock, MapPin,
   Search, Filter, CheckCircle2, X, Phone, Sparkles,
@@ -40,7 +41,8 @@ export const BibleStudyPage: React.FC = () => {
     leader_name: "",
     leader_contact: "",
     meeting_day: "Wednesday",
-    meeting_time: "7:00 PM",
+    meeting_time_start: "7:00 PM",
+    meeting_time_end: "8:30 PM",
     location: "Fellowship Hall Room 201",
     category: "General",
     max_capacity: 12
@@ -362,7 +364,8 @@ export const BibleStudyPage: React.FC = () => {
       leader_name: "",
       leader_contact: "",
       meeting_day: "Wednesday",
-      meeting_time: "7:00 PM",
+      meeting_time_start: "7:00 PM",
+      meeting_time_end: "8:30 PM",
       location: "",
       category: "General",
       max_capacity: 12
@@ -378,6 +381,24 @@ export const BibleStudyPage: React.FC = () => {
     setSelectedMemberIds(existingIds);
     setMemberQuery("");
     setIsMemberDropdownOpen(false);
+
+    let start = "7:00 PM";
+    let end = "8:30 PM";
+    if (group.meeting_time) {
+      if (group.meeting_time.includes("-")) {
+        const parts = group.meeting_time.split("-");
+        start = parts[0]?.trim() || "7:00 PM";
+        end = parts[1]?.trim() || "";
+      } else if (group.meeting_time.toLowerCase().includes("to")) {
+        const parts = group.meeting_time.split(/to/i);
+        start = parts[0]?.trim() || "7:00 PM";
+        end = parts[1]?.trim() || "";
+      } else {
+        start = group.meeting_time.trim();
+        end = "";
+      }
+    }
+
     setFormData({
       name: group.name,
       description: group.description || "",
@@ -386,7 +407,8 @@ export const BibleStudyPage: React.FC = () => {
       leader_name: group.leader_name || "",
       leader_contact: group.leader_contact || "",
       meeting_day: group.meeting_day || "Wednesday",
-      meeting_time: group.meeting_time || "7:00 PM",
+      meeting_time_start: start,
+      meeting_time_end: end,
       location: group.location || "",
       category: group.category || "General",
       max_capacity: group.max_capacity || 12
@@ -398,8 +420,20 @@ export const BibleStudyPage: React.FC = () => {
   const handleSaveGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const formattedMeetingTime = formData.meeting_time_end
+        ? `${formData.meeting_time_start} - ${formData.meeting_time_end}`
+        : formData.meeting_time_start;
+
       const payload = {
-        ...formData,
+        name: formData.name,
+        description: formData.description,
+        curriculum: formData.curriculum,
+        leader_name: formData.leader_name,
+        leader_contact: formData.leader_contact,
+        meeting_day: formData.meeting_day,
+        meeting_time: formattedMeetingTime,
+        location: formData.location,
+        category: formData.category,
         ministry_id: formData.ministry_id ? Number(formData.ministry_id) : null,
         max_capacity: Number(formData.max_capacity) || 12,
         member_ids: selectedMemberIds
@@ -427,7 +461,8 @@ export const BibleStudyPage: React.FC = () => {
         leader_name: "",
         leader_contact: "",
         meeting_day: "Wednesday",
-        meeting_time: "7:00 PM",
+        meeting_time_start: "7:00 PM",
+        meeting_time_end: "8:30 PM",
         location: "",
         category: "General",
         max_capacity: 12
@@ -1153,13 +1188,14 @@ export const BibleStudyPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Meeting Day *</label>
+              {/* Schedule: Day, Time In, Time Out, and Max Capacity */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                <div className="sm:col-span-4">
+                  <label className="block font-bold text-xs text-charcoal/70 mb-1">Meeting Day *</label>
                   <select
                     value={formData.meeting_day}
                     onChange={(e) => setFormData({ ...formData, meeting_day: e.target.value })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium"
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs h-[41px]"
                   >
                     <option value="Monday">Monday</option>
                     <option value="Tuesday">Tuesday</option>
@@ -1170,26 +1206,35 @@ export const BibleStudyPage: React.FC = () => {
                     <option value="Sunday">Sunday</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Meeting Time *</label>
-                  <input
-                    type="text"
-                    required
+
+                <div className="sm:col-span-3">
+                  <TimePickerInput
+                    label="Time In (Start) *"
+                    value={formData.meeting_time_start}
+                    onChange={(val) => setFormData({ ...formData, meeting_time_start: val })}
                     placeholder="e.g. 7:00 PM"
-                    value={formData.meeting_time}
-                    onChange={(e) => setFormData({ ...formData, meeting_time: e.target.value })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                    required
                   />
                 </div>
-                <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Max Capacity</label>
+
+                <div className="sm:col-span-3">
+                  <TimePickerInput
+                    label="Time Out (End)"
+                    value={formData.meeting_time_end}
+                    onChange={(val) => setFormData({ ...formData, meeting_time_end: val })}
+                    placeholder="e.g. 8:30 PM"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-xs text-charcoal/70 mb-1">Capacity</label>
                   <input
                     type="number"
                     min="4"
                     max="50"
                     value={formData.max_capacity}
                     onChange={(e) => setFormData({ ...formData, max_capacity: Number(e.target.value) })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold text-charcoal text-center h-[41px]"
                   />
                 </div>
               </div>
@@ -1421,8 +1466,7 @@ export const BibleStudyPage: React.FC = () => {
                     )}
                   </div>
                 )}
-              </div>            </div>
-
+              </div>
               <div>
                 <label className="block font-bold text-charcoal/70 mb-1">Description / Group Purpose</label>
                 <textarea
