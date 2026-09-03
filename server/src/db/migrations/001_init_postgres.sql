@@ -182,6 +182,13 @@ CREATE TABLE IF NOT EXISTS bible_study_groups (
   location VARCHAR(255) NOT NULL,
   category VARCHAR(50) NOT NULL DEFAULT 'General',
   max_capacity INT DEFAULT 12,
+  current_chapter VARCHAR(100) DEFAULT 'Chapter 1',
+  progress_stage VARCHAR(100) DEFAULT 'in_progress',
+  progress_notes TEXT,
+  is_rescheduled BOOLEAN DEFAULT false,
+  rescheduled_date VARCHAR(50),
+  rescheduled_time VARCHAR(100),
+  reschedule_reason TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

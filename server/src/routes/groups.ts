@@ -194,7 +194,11 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
       member_ids,
       current_chapter,
       progress_stage,
-      progress_notes
+      progress_notes,
+      is_rescheduled,
+      rescheduled_date,
+      rescheduled_time,
+      reschedule_reason
     } = req.body;
 
     const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
@@ -215,8 +219,12 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
           max_capacity = COALESCE($11, max_capacity),
           current_chapter = COALESCE($12, current_chapter),
           progress_stage = COALESCE($13, progress_stage),
-          progress_notes = COALESCE($14, progress_notes)
-      WHERE id = $15
+          progress_notes = COALESCE($14, progress_notes),
+          is_rescheduled = COALESCE($15, is_rescheduled),
+          rescheduled_date = COALESCE($16, rescheduled_date),
+          rescheduled_time = COALESCE($17, rescheduled_time),
+          reschedule_reason = COALESCE($18, reschedule_reason)
+      WHERE id = $19
     `, [
       name !== undefined ? name.trim() : null,
       description,
@@ -232,6 +240,10 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
       current_chapter,
       progress_stage,
       progress_notes,
+      is_rescheduled !== undefined ? Boolean(is_rescheduled) : null,
+      rescheduled_date,
+      rescheduled_time,
+      reschedule_reason,
       id
     ]);
 
@@ -287,6 +299,53 @@ router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Resp
     );
 
     res.json({ message: "Study chapter progress updated successfully!" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Dedicated Fast Endpoint: Reschedule Small Group Next Meeting Session
+router.patch("/:id/reschedule", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { is_rescheduled, rescheduled_date, rescheduled_time, reschedule_reason } = req.body;
+
+    const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
+    if (!current) return res.status(404).json({ error: "Small group not found" });
+
+    await db.run(`
+      UPDATE bible_study_groups
+      SET is_rescheduled = $1,
+          rescheduled_date = $2,
+          rescheduled_time = $3,
+          reschedule_reason = $4
+      WHERE id = $5
+    `, [
+      Boolean(is_rescheduled),
+      is_rescheduled ? (rescheduled_date || null) : null,
+      is_rescheduled ? (rescheduled_time || null) : null,
+      is_rescheduled ? (reschedule_reason || null) : null,
+      id
+    ]);
+
+    const auditActionText = is_rescheduled
+      ? `Rescheduled session for ${current.name} to ${rescheduled_date} (${rescheduled_time || "TBD"}) - Reason: ${reschedule_reason || "None"}`
+      : `Reverted ${current.name} back to regular schedule (${current.meeting_day} ${current.meeting_time})`;
+
+    await logAuditAction(
+      req.user?.id || null,
+      "RESCHEDULE_SESSION",
+      "bible_study_groups",
+      Number(id),
+      auditActionText
+    );
+
+    res.json({
+      message: is_rescheduled
+        ? `Session successfully rescheduled to ${rescheduled_date}!`
+        : "Reverted to regular weekly meeting schedule.",
+      is_rescheduled: Boolean(is_rescheduled)
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

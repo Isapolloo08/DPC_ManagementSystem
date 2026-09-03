@@ -359,13 +359,17 @@ export async function initSchema() {
           }
         }
       }
-      // 8. Ensure chapter and progress tracking columns exist on bible_study_groups
+      // 8. Ensure chapter, progress tracking, and reschedule columns exist on bible_study_groups
       try {
         await sql.unsafe(`
           ALTER TABLE bible_study_groups
           ADD COLUMN IF NOT EXISTS current_chapter VARCHAR(100) DEFAULT 'Chapter 1',
           ADD COLUMN IF NOT EXISTS progress_stage VARCHAR(100) DEFAULT 'in_progress',
-          ADD COLUMN IF NOT EXISTS progress_notes TEXT;
+          ADD COLUMN IF NOT EXISTS progress_notes TEXT,
+          ADD COLUMN IF NOT EXISTS is_rescheduled BOOLEAN DEFAULT false,
+          ADD COLUMN IF NOT EXISTS rescheduled_date VARCHAR(50),
+          ADD COLUMN IF NOT EXISTS rescheduled_time VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS reschedule_reason TEXT;
         `);
       } catch {}
     } catch (e: any) {

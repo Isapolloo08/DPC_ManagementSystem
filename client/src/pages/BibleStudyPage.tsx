@@ -8,7 +8,8 @@ import {
   Search, Filter, CheckCircle2, X, Phone, Sparkles,
   Layers, ShieldCheck, HeartHandshake,
   Award, CheckCheck, Library, BookmarkCheck, Bookmark,
-  ChevronDown, User as UserIcon, Check, Edit, FileText, AlertCircle
+  ChevronDown, User as UserIcon, Check, Edit, FileText, AlertCircle,
+  CalendarClock, AlertTriangle
 } from "lucide-react";
 
 export const BibleStudyPage: React.FC = () => {
@@ -40,6 +41,17 @@ export const BibleStudyPage: React.FC = () => {
     progress_notes: ""
   });
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+
+  // Quick Reschedule Modal State
+  const [rescheduleGroupModal, setRescheduleGroupModal] = useState<BibleStudyGroup | null>(null);
+  const [rescheduleFormData, setRescheduleFormData] = useState({
+    is_rescheduled: true,
+    rescheduled_date: "",
+    rescheduled_time_start: "7:00 PM",
+    rescheduled_time_end: "8:30 PM",
+    reschedule_reason: ""
+  });
+  const [isSavingReschedule, setIsSavingReschedule] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -455,6 +467,97 @@ export const BibleStudyPage: React.FC = () => {
     }
   };
 
+  const handleOpenRescheduleModal = (group: BibleStudyGroup) => {
+    setRescheduleGroupModal(group);
+    let start = "7:00 PM";
+    let end = "8:30 PM";
+    if (group.rescheduled_time) {
+      if (group.rescheduled_time.includes("-")) {
+        const parts = group.rescheduled_time.split("-");
+        start = parts[0]?.trim() || "7:00 PM";
+        end = parts[1]?.trim() || "";
+      } else {
+        start = group.rescheduled_time.trim();
+        end = "";
+      }
+    } else if (group.meeting_time) {
+      if (group.meeting_time.includes("-")) {
+        const parts = group.meeting_time.split("-");
+        start = parts[0]?.trim() || "7:00 PM";
+        end = parts[1]?.trim() || "";
+      } else {
+        start = group.meeting_time.trim();
+        end = "";
+      }
+    }
+
+    const defaultDate = group.rescheduled_date || new Date(Date.now() + 86400000).toISOString().split("T")[0];
+
+    setRescheduleFormData({
+      is_rescheduled: group.is_rescheduled !== undefined ? Boolean(group.is_rescheduled) : true,
+      rescheduled_date: defaultDate,
+      rescheduled_time_start: start,
+      rescheduled_time_end: end,
+      reschedule_reason: group.reschedule_reason || ""
+    });
+  };
+
+  const handleSaveReschedule = async (e?: React.FormEvent, forceRevert = false) => {
+    if (e) e.preventDefault();
+    if (!rescheduleGroupModal) return;
+
+    try {
+      setIsSavingReschedule(true);
+      const isRescheduled = forceRevert ? false : rescheduleFormData.is_rescheduled;
+      const formattedTime = rescheduleFormData.rescheduled_time_end
+        ? `${rescheduleFormData.rescheduled_time_start} - ${rescheduleFormData.rescheduled_time_end}`
+        : rescheduleFormData.rescheduled_time_start;
+
+      await api.rescheduleGroup(rescheduleGroupModal.id, {
+        is_rescheduled: isRescheduled,
+        rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
+        rescheduled_time: isRescheduled ? formattedTime : null,
+        reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
+      });
+
+      // Update in local state
+      setGroups(prev =>
+        prev.map(g =>
+          g.id === rescheduleGroupModal.id
+            ? {
+                ...g,
+                is_rescheduled: isRescheduled,
+                rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
+                rescheduled_time: isRescheduled ? formattedTime : null,
+                reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
+              }
+            : g
+        )
+      );
+
+      if (selectedGroup && selectedGroup.id === rescheduleGroupModal.id) {
+        setSelectedGroup({
+          ...selectedGroup,
+          is_rescheduled: isRescheduled,
+          rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
+          rescheduled_time: isRescheduled ? formattedTime : null,
+          reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
+        });
+      }
+
+      setIsJoinSuccess(
+        isRescheduled
+          ? `✓ Next meeting for ${rescheduleGroupModal.name} rescheduled to ${rescheduleFormData.rescheduled_date}!`
+          : `✓ Reverted ${rescheduleGroupModal.name} to regular weekly schedule.`
+      );
+      setRescheduleGroupModal(null);
+    } catch (err: any) {
+      alert(err.message || "Failed to update reschedule status");
+    } finally {
+      setIsSavingReschedule(false);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setEditingGroupId(null);
     setSelectedMemberIds([]);
@@ -836,6 +939,41 @@ export const BibleStudyPage: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Reschedule Alert Banner (if marked as rescheduled) */}
+                  {g.is_rescheduled ? (
+                    <div className="mt-3 p-3 bg-gradient-to-r from-amber-50 via-orange-50/80 to-amber-50 rounded-xl border border-amber-300 text-xs shadow-2xs space-y-1.5 animate-in fade-in">
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-1.5 font-black text-amber-950 text-xs">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                          <CalendarClock className="w-4 h-4 text-amber-700 shrink-0" />
+                          <span>⚠️ Next Session Rescheduled!</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenRescheduleModal(g);
+                          }}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/90 hover:bg-amber-300 text-amber-950 border border-amber-400 transition-colors cursor-pointer"
+                        >
+                          Manage Resched
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-amber-950 font-bold flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span>
+                          {g.rescheduled_date ? new Date(g.rescheduled_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : "Date TBD"}
+                          {g.rescheduled_time ? ` at ${g.rescheduled_time}` : ""}
+                        </span>
+                      </div>
+                      {g.reschedule_reason && (
+                        <div className="text-[10px] text-amber-900/90 bg-white/85 p-1.5 rounded-lg border border-amber-200/70 leading-tight">
+                          <strong>Notice:</strong> {g.reschedule_reason}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
                   {/* Study Chapter & Progress Tracking Section */}
                   <div className="mt-3 p-3 bg-gradient-to-br from-indigo-50/70 via-ivory to-amber-50/30 rounded-xl border border-indigo-100 space-y-2">
                     <div className="flex items-center justify-between gap-1.5 flex-wrap">
@@ -866,8 +1004,25 @@ export const BibleStudyPage: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Quick Chapter Progress Update Button */}
-                    <div className="pt-1 flex justify-end">
+                    {/* Quick Action Buttons: Update Chapter & Reschedule */}
+                    <div className="pt-1 flex items-center justify-end gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenRescheduleModal(g);
+                        }}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95 ${
+                          g.is_rescheduled
+                            ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300"
+                            : "bg-white hover:bg-amber-50 text-amber-900 border border-amber-200"
+                        }`}
+                        title="Reschedule next upcoming session"
+                      >
+                        <CalendarClock className="w-3 h-3 text-amber-700" />
+                        <span>{g.is_rescheduled ? "Rescheduled ⚠️" : "Reschedule"}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -877,7 +1032,7 @@ export const BibleStudyPage: React.FC = () => {
                         className="text-[10px] font-bold text-indigo hover:text-indigo-800 bg-white hover:bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer shadow-2xs active:scale-95"
                       >
                         <BookmarkCheck className="w-3 h-3 text-indigo-600" />
-                        <span>Update Chapter / Notice</span>
+                        <span>Update Chapter</span>
                       </button>
                     </div>
                   </div>
@@ -890,7 +1045,14 @@ export const BibleStudyPage: React.FC = () => {
                   <div className="mt-3 pt-2.5 border-t border-gray-100 space-y-1.5 text-xs text-charcoal/75 font-medium">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-indigo shrink-0" />
-                      <span>Every <strong>{g.meeting_day}</strong> at {g.meeting_time}</span>
+                      <div>
+                        <span>Every <strong>{g.meeting_day}</strong> at {g.meeting_time}</span>
+                        {g.is_rescheduled && (
+                          <span className="block text-[10px] text-amber-700 font-bold">
+                            ⚡ Next meeting moved to: {g.rescheduled_date ? new Date(g.rescheduled_date).toLocaleDateString() : ""} ({g.rescheduled_time})
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-3.5 h-3.5 text-sage-600 shrink-0" />
@@ -1866,6 +2028,205 @@ export const BibleStudyPage: React.FC = () => {
                 >
                   <Check className="w-4 h-4" />
                   <span>{isSavingProgress ? "Saving..." : "Save Chapter Progress"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL: Reschedule Small Group Next Session */}
+      {/* ==================================================== */}
+      {rescheduleGroupModal && (
+        <div className="fixed inset-0 z-50 bg-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-amber-200 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
+                  <CalendarClock className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-charcoal">Reschedule Bible Study Session</h3>
+                  <p className="text-xs text-charcoal/60 truncate max-w-xs">{rescheduleGroupModal.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRescheduleGroupModal(null)}
+                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Regular Schedule Reference Banner */}
+            <div className="p-3 bg-ivory rounded-2xl border border-amber-200/60 text-xs flex items-center justify-between gap-2 flex-wrap">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-bold text-charcoal/50 uppercase block">Regular Weekly Schedule</span>
+                <span className="font-bold text-charcoal">
+                  Every {rescheduleGroupModal.meeting_day} at {rescheduleGroupModal.meeting_time}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-charcoal/50 uppercase block">Meeting Location</span>
+                <span className="font-bold text-charcoal">{rescheduleGroupModal.location}</span>
+              </div>
+            </div>
+
+            <form onSubmit={(e) => handleSaveReschedule(e, false)} className="space-y-4 text-xs">
+              {/* Status Mode Selector */}
+              <div>
+                <label className="block font-bold text-charcoal/70 mb-1.5">
+                  Reschedule Status:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div
+                    onClick={() => setRescheduleFormData({ ...rescheduleFormData, is_rescheduled: true })}
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      rescheduleFormData.is_rescheduled
+                        ? "bg-amber-50/90 border-amber-400 ring-1 ring-amber-400 text-amber-950 font-bold"
+                        : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="w-4 h-4 rounded-full border border-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+                      {rescheduleFormData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-amber-600"></div>}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">⚠️ Reschedule Active</div>
+                      <div className="text-[10px] text-amber-800/80 font-normal mt-0.5">Move next meeting to a new date/time</div>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setRescheduleFormData({ ...rescheduleFormData, is_rescheduled: false })}
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      !rescheduleFormData.is_rescheduled
+                        ? "bg-emerald-50/90 border-emerald-400 ring-1 ring-emerald-400 text-emerald-950 font-bold"
+                        : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="w-4 h-4 rounded-full border border-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                      {!rescheduleFormData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-emerald-600"></div>}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">✓ Regular Schedule</div>
+                      <div className="text-[10px] text-emerald-800/80 font-normal mt-0.5">Follow normal meeting schedule</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conditional Reschedule Inputs */}
+              {rescheduleFormData.is_rescheduled && (
+                <div className="space-y-3.5 p-3.5 bg-gradient-to-br from-amber-50/60 to-ivory rounded-2xl border border-amber-200/80 animate-in fade-in">
+                  {/* New Date Picker */}
+                  <div>
+                    <label className="block font-bold text-amber-950 mb-1">
+                      New Rescheduled Meeting Date *
+                    </label>
+                    <input
+                      type="date"
+                      required={rescheduleFormData.is_rescheduled}
+                      value={rescheduleFormData.rescheduled_date}
+                      onChange={(e) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_date: e.target.value })}
+                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 font-bold text-charcoal text-xs cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Time In & Time Out using TimePickerInput */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <TimePickerInput
+                        label="New Time In (Start Time) *"
+                        value={rescheduleFormData.rescheduled_time_start}
+                        onChange={(val) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_time_start: val })}
+                        placeholder="e.g. 6:30 PM"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <TimePickerInput
+                        label="New Time Out (End Time)"
+                        value={rescheduleFormData.rescheduled_time_end}
+                        onChange={(val) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_time_end: val })}
+                        placeholder="e.g. 8:00 PM"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Reason Chips */}
+                  <div>
+                    <label className="block font-bold text-amber-950 mb-1">
+                      Reason / Notice for Disciples *
+                    </label>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {[
+                        "🌧️ Typhoon / Bad Weather",
+                        "✈️ Leader Travel / Ministry Duty",
+                        "⛪ Church-Wide Event / Holiday",
+                        "👥 Member Request & Agreement",
+                        "🏠 Venue Maintenance / Setup"
+                      ].map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => setRescheduleFormData({ ...rescheduleFormData, reschedule_reason: chip })}
+                          className="px-2 py-1 rounded-lg bg-white hover:bg-amber-100 border border-amber-200 text-[10px] font-semibold text-amber-950 transition-colors cursor-pointer"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      rows={2}
+                      required={rescheduleFormData.is_rescheduled}
+                      placeholder="e.g. 'Naurong po ang ating meeting sa Friday dahil may church conference sa Miyerkules. Kitakits sa Friday 6:30 PM!'..."
+                      value={rescheduleFormData.reschedule_reason}
+                      onChange={(e) => setRescheduleFormData({ ...rescheduleFormData, reschedule_reason: e.target.value })}
+                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRescheduleGroupModal(null)}
+                    className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  {rescheduleGroupModal.is_rescheduled && (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveReschedule(undefined, true)}
+                      disabled={isSavingReschedule}
+                      className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200 cursor-pointer"
+                      title="Clear reschedule and revert to regular schedule"
+                    >
+                      Clear Reschedule
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSavingReschedule}
+                  className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>
+                    {isSavingReschedule
+                      ? "Saving..."
+                      : rescheduleFormData.is_rescheduled
+                      ? "Save Rescheduled Session"
+                      : "Save Regular Schedule"}
+                  </span>
                 </button>
               </div>
             </form>

@@ -232,6 +232,10 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(data)
   }),
+  rescheduleGroup: (id: number, data: { is_rescheduled: boolean; rescheduled_date?: string | null; rescheduled_time?: string | null; reschedule_reason?: string | null }) => request<{ message: string; is_rescheduled: boolean }>(`/groups/${id}/reschedule`, {
+    method: "PATCH",
+    body: JSON.stringify(data)
+  }),
   deleteGroup: (id: number) => request<{ message: string }>(`/groups/${id}`, {
     method: "DELETE"
   }),

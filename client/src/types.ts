@@ -272,6 +272,10 @@ export interface BibleStudyGroup {
   current_chapter?: string;
   progress_stage?: string;
   progress_notes?: string | null;
+  is_rescheduled?: boolean | number;
+  rescheduled_date?: string | null;
+  rescheduled_time?: string | null;
+  reschedule_reason?: string | null;
   created_at?: string;
 }
 
