@@ -23,17 +23,19 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
 
   // Parse existing value (e.g. "7:00 PM" or "07:30 AM")
-  const parseTime = (timeStr: string) => {
+  const parseTime = (timeStr: string): { hour: string; minute: string; period: "AM" | "PM" } => {
     if (!timeStr) return { hour: "7", minute: "00", period: "PM" };
     const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
     if (match) {
       let h = parseInt(match[1], 10);
       if (h === 0) h = 12;
       if (h > 12) h = h - 12;
+      const rawPeriod = (match[3] || "PM").toUpperCase();
+      const period: "AM" | "PM" = rawPeriod === "AM" ? "AM" : "PM";
       return {
         hour: String(h),
         minute: match[2],
-        period: (match[3] || "PM").toUpperCase() as "AM" | "PM"
+        period
       };
     }
     return { hour: "7", minute: "00", period: "PM" };
