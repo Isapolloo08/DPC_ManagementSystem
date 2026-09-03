@@ -53,13 +53,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
     { id: "members", label: "Members & Families", icon: <Users className="w-4 h-4 shrink-0" /> },
     { id: "biblestudy", label: "Bible Study Groups", icon: <BookOpen className="w-4 h-4 shrink-0" />, badge: "Groups" },
     { id: "curriculum", label: "Topics & Books of Study", icon: <BookMarked className="w-4 h-4 shrink-0" />, badge: "Books" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0" />, badge: "Duty" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Cycle" },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "Duty" },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-amber-500" />, roles: ["Admin"], badge: "Cycle" },
     { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
     { id: "communications", label: "Announcements & Prayer", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "reports", label: "Analytics & Trends", icon: <BarChart3 className="w-4 h-4 shrink-0" /> },
     { id: "users", label: "User Management", icon: <UserCog className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "Admin" },
-    { id: "settings", label: "Settings & Lookups", icon: <Sliders className="w-4 h-4 shrink-0" />, roles: ["Admin", "Coordinator"], badge: "CRUD" },
+    { id: "settings", label: "Settings & Lookups", icon: <Sliders className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "CRUD" },
     { id: "audit", label: "System Audit Logs", icon: <ShieldAlert className="w-4 h-4 shrink-0" />, roles: ["Admin"] },
   ];
 

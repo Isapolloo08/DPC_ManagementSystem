@@ -589,148 +589,185 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         {/* ==================================================== */}
         <div className="lg:col-span-4 space-y-5">
           
-          {/* Section Heading */}
-          <div className="flex items-center justify-between pb-1 border-b border-gray-200/80">
-            <h3 className="text-xs font-black text-charcoal uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Service & Fellowship Turns</span>
-            </h3>
-            <span className="text-[10px] font-bold text-indigo bg-indigo-50 px-2 py-0.5 rounded-md">Live Roster</span>
-          </div>
-
-          {/* WIDGET 1: Saturday Sanctuary & Facility Duty */}
-          <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-white rounded-2xl p-4 sm:p-5 border border-amber-200/90 shadow-2xs space-y-3.5 hover:border-amber-300 transition-all">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-amber text-charcoal shadow-2xs">
-                  <Calendar className="w-4 h-4 text-indigo-900" />
-                </span>
-                <div>
-                  <h4 className="text-xs font-black text-charcoal">Saturday Duty Roster</h4>
-                  <span className="text-[10px] text-charcoal/60">Sanctuary & Facility Cleaning</span>
-                </div>
+          {/* Service & Fellowship Turns (Admin only; hidden from Coordinators) */}
+          {!isCoordinator && (
+            <>
+              {/* Section Heading */}
+              <div className="flex items-center justify-between pb-1 border-b border-gray-200/80">
+                <h3 className="text-xs font-black text-charcoal uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Service & Fellowship Turns</span>
+                </h3>
+                <span className="text-[10px] font-bold text-indigo bg-indigo-50 px-2 py-0.5 rounded-md">Live Roster</span>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300/60">
-                {thisSaturdayDuty ? thisSaturdayDuty.date_formatted || thisSaturdayDuty.duty_date : "This Sat"}
-              </span>
-            </div>
 
-            {thisSaturdayDuty?.team ? (
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between p-2.5 bg-white/95 rounded-xl border border-amber-200/60">
+              {/* WIDGET 1: Saturday Sanctuary & Facility Duty */}
+              <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-white rounded-2xl p-4 sm:p-5 border border-amber-200/90 shadow-2xs space-y-3.5 hover:border-amber-300 transition-all">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span
-                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-inner"
-                      style={{ backgroundColor: thisSaturdayDuty.team.color || "#2C3968" }}
-                    />
-                    <span className="text-sm font-black text-indigo">{thisSaturdayDuty.team.name}</span>
+                    <span className="p-1.5 rounded-lg bg-amber text-charcoal shadow-2xs">
+                      <Calendar className="w-4 h-4 text-indigo-900" />
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-black text-charcoal">Saturday Duty Roster</h4>
+                      <span className="text-[10px] text-charcoal/60">Sanctuary & Facility Cleaning</span>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    {thisSaturdayDuty.status === "completed" ? "✓ Done" : "On Duty"}
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300/60">
+                    {thisSaturdayDuty ? thisSaturdayDuty.date_formatted || thisSaturdayDuty.duty_date : "This Sat"}
                   </span>
                 </div>
 
-                <div className="space-y-1 text-xs text-charcoal/80 px-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-charcoal/60">Leader:</span>
-                    <strong className="text-charcoal">{thisSaturdayDuty.team.leader_name || "Assigned Leader"}</strong>
-                  </div>
-                  {thisSaturdayDuty.team.leader_phone && (
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-charcoal/60">Contact:</span>
-                      <span className="text-charcoal/70 font-mono text-[10px]">{thisSaturdayDuty.team.leader_phone}</span>
+                {thisSaturdayDuty?.team ? (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between p-2.5 bg-white/95 rounded-xl border border-amber-200/60">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full shrink-0 shadow-inner"
+                          style={{ backgroundColor: thisSaturdayDuty.team.color || "#2C3968" }}
+                        />
+                        <span className="text-sm font-black text-indigo">{thisSaturdayDuty.team.name}</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {thisSaturdayDuty.status === "completed" ? "✓ Done" : "On Duty"}
+                      </span>
                     </div>
-                  )}
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-charcoal/60">Enrolled Volunteers:</span>
-                    <strong className="text-indigo">{thisSaturdayDuty.team.members_count || thisSaturdayDuty.team.members?.length || 0} members</strong>
-                  </div>
-                </div>
 
-                {nextSaturdayDuty?.team && (
-                  <div className="text-[10px] text-charcoal/60 pt-1.5 border-t border-amber-100 flex items-center justify-between">
-                    <span>Next ({nextSaturdayDuty.date_formatted}):</span>
-                    <strong className="text-indigo">{nextSaturdayDuty.team.name}</strong>
+                    <div className="space-y-1 text-xs text-charcoal/80 px-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-charcoal/60">Leader:</span>
+                        <strong className="text-charcoal">{thisSaturdayDuty.team.leader_name || "Assigned Leader"}</strong>
+                      </div>
+                      {thisSaturdayDuty.team.leader_phone && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-charcoal/60">Contact:</span>
+                          <span className="text-charcoal/70 font-mono text-[10px]">{thisSaturdayDuty.team.leader_phone}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-charcoal/60">Enrolled Volunteers:</span>
+                        <strong className="text-indigo">{thisSaturdayDuty.team.members_count || thisSaturdayDuty.team.members?.length || 0} members</strong>
+                      </div>
+                    </div>
+
+                    {nextSaturdayDuty?.team && (
+                      <div className="text-[10px] text-charcoal/60 pt-1.5 border-t border-amber-100 flex items-center justify-between">
+                        <span>Next ({nextSaturdayDuty.date_formatted}):</span>
+                        <strong className="text-indigo">{nextSaturdayDuty.team.name}</strong>
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <p className="text-xs text-charcoal/50 italic text-center py-2">No Saturday duty team scheduled.</p>
                 )}
+
+                <button
+                  onClick={() => onNavigate("duty")}
+                  className="w-full bg-amber hover:bg-amber-400 text-charcoal font-bold text-xs py-2 px-3 rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                >
+                  <span>Open Saturday Duty Roster</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-            ) : (
-              <p className="text-xs text-charcoal/50 italic text-center py-2">No Saturday duty team scheduled.</p>
-            )}
 
-            <button
-              onClick={() => onNavigate("duty")}
-              className="w-full bg-amber hover:bg-amber-400 text-charcoal font-bold text-xs py-2 px-3 rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-            >
-              <span>Open Saturday Duty Roster</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* WIDGET 2: Sunday Fellowship Meal Dishwashing Duty */}
-          <div className="bg-gradient-to-br from-indigo-500/10 via-indigo-500/5 to-white rounded-2xl p-4 sm:p-5 border border-indigo-200/90 shadow-2xs space-y-3.5 hover:border-indigo-300 transition-all">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-indigo text-white shadow-2xs">
-                  <Utensils className="w-4 h-4 text-amber-300" />
-                </span>
-                <div>
-                  <h4 className="text-xs font-black text-charcoal">Sunday Dishwashing</h4>
-                  <span className="text-[10px] text-charcoal/60">Fellowship Meal Rotation</span>
-                </div>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-300/60">
-                {thisSundayDishwashing ? new Date(thisSundayDishwashing.duty_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : "This Sun"}
-              </span>
-            </div>
-
-            {thisSundayDishwashing ? (
-              <div className="space-y-2.5">
-                <div className="p-2.5 bg-white/95 rounded-xl border border-indigo-200/60 space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-charcoal/50 uppercase">Assigned Group</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200">
-                      {thisSundayDishwashing.status === "completed" ? "✓ Done" : "This Sunday"}
+              {/* WIDGET 2: Sunday Fellowship Meal Dishwashing Duty */}
+              <div className="bg-gradient-to-br from-indigo-500/10 via-indigo-500/5 to-white rounded-2xl p-4 sm:p-5 border border-indigo-200/90 shadow-2xs space-y-3.5 hover:border-indigo-300 transition-all">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-indigo text-white shadow-2xs">
+                      <Utensils className="w-4 h-4 text-amber-300" />
                     </span>
+                    <div>
+                      <h4 className="text-xs font-black text-charcoal">Sunday Dishwashing</h4>
+                      <span className="text-[10px] text-charcoal/60">Fellowship Meal Rotation</span>
+                    </div>
                   </div>
-                  <h5 className="text-sm font-black text-indigo leading-tight">{thisSundayDishwashing.assigned_name}</h5>
-                  {thisSundayDishwashing.partner_assigned_name && (
-                    <p className="text-[11px] font-bold text-amber-800">
-                      + Teamed Up: {thisSundayDishwashing.partner_assigned_name}
-                    </p>
-                  )}
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-300/60">
+                    {thisSundayDishwashing ? new Date(thisSundayDishwashing.duty_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : "This Sun"}
+                  </span>
                 </div>
 
-                <div className="space-y-1 text-xs text-charcoal/80 px-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-charcoal/60">In-Charge:</span>
-                    <strong className="text-charcoal truncate max-w-[150px]">{thisSundayDishwashing.leader_name || "Leader / Coordinator"}</strong>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-charcoal/60">Cycle Mode:</span>
-                    <strong className="text-indigo capitalize text-[10px]">{thisSundayDishwashing.cycle_mode === "biblestudy_group" ? "Bible Study Groups" : "Ministries"}</strong>
-                  </div>
-                </div>
+                {thisSundayDishwashing ? (
+                  <div className="space-y-2.5">
+                    <div className="p-2.5 bg-white/95 rounded-xl border border-indigo-200/60 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-charcoal/50 uppercase">Assigned Group</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200">
+                          {thisSundayDishwashing.status === "completed" ? "✓ Done" : "This Sunday"}
+                        </span>
+                      </div>
+                      <h5 className="text-sm font-black text-indigo leading-tight">{thisSundayDishwashing.assigned_name}</h5>
+                      {thisSundayDishwashing.partner_assigned_name && (
+                        <p className="text-[11px] font-bold text-amber-800">
+                          + Teamed Up: {thisSundayDishwashing.partner_assigned_name}
+                        </p>
+                      )}
+                    </div>
 
-                {nextSundayDishwashing && (
-                  <div className="text-[10px] text-charcoal/60 pt-1.5 border-t border-indigo-100 flex items-center justify-between">
-                    <span>Next Sun:</span>
-                    <strong className="text-indigo truncate max-w-[150px]">{nextSundayDishwashing.assigned_name}</strong>
+                    <div className="space-y-1 text-xs text-charcoal/80 px-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-charcoal/60">In-Charge:</span>
+                        <strong className="text-charcoal truncate max-w-[150px]">{thisSundayDishwashing.leader_name || "Leader / Coordinator"}</strong>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-charcoal/60">Cycle Mode:</span>
+                        <strong className="text-indigo capitalize text-[10px]">{thisSundayDishwashing.cycle_mode === "biblestudy_group" ? "Bible Study Groups" : "Ministries"}</strong>
+                      </div>
+                    </div>
+
+                    {nextSundayDishwashing && (
+                      <div className="text-[10px] text-charcoal/60 pt-1.5 border-t border-indigo-100 flex items-center justify-between">
+                        <span>Next Sun:</span>
+                        <strong className="text-indigo truncate max-w-[150px]">{nextSundayDishwashing.assigned_name}</strong>
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <p className="text-xs text-charcoal/50 italic text-center py-2">No dishwashing turn scheduled.</p>
                 )}
-              </div>
-            ) : (
-              <p className="text-xs text-charcoal/50 italic text-center py-2">No dishwashing turn scheduled.</p>
-            )}
 
-            <button
-              onClick={() => onNavigate("dishwashing")}
-              className="w-full bg-indigo hover:bg-indigo-700 text-white font-bold text-xs py-2 px-3 rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-            >
-              <span>Open Dishwashing Roster</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+                <button
+                  onClick={() => onNavigate("dishwashing")}
+                  className="w-full bg-indigo hover:bg-indigo-700 text-white font-bold text-xs py-2 px-3 rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                >
+                  <span>Open Dishwashing Roster</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Coordinator Scoped Ministry Summary Card (Shown when Coordinator logs in) */}
+          {isCoordinator && activeMinistry && (
+            <div className="bg-gradient-to-br from-indigo-900 via-indigo to-indigo-800 text-white rounded-2xl p-5 shadow-xs space-y-3.5 border border-indigo-700/60">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-amber text-charcoal px-2.5 py-0.5 rounded-full">
+                  Designated Ministry
+                </span>
+                <span className="text-xs font-semibold text-indigo-200">
+                  {activeMinistry.min_age ? `${activeMinistry.min_age}-${activeMinistry.max_age || '+'} yrs` : "All Ages"}
+                </span>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-black tracking-tight">{activeMinistry.name} Ministry</h4>
+                <p className="text-xs text-indigo-200/80 mt-0.5 line-clamp-2">{activeMinistry.description}</p>
+              </div>
+
+              <div className="p-3 bg-white/10 rounded-xl border border-white/10 flex items-center justify-between text-xs">
+                <span>Active Disciples:</span>
+                <strong className="text-base text-amber-300 font-bold">{scopedMemberCount} Members</strong>
+              </div>
+
+              <button
+                onClick={() => onNavigate("members")}
+                className="w-full bg-amber hover:bg-amber-400 text-charcoal font-bold text-xs py-2.5 px-3 rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+              >
+                <span>Manage {activeMinistry.name} Members</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* WIDGET 3: Birthday Celebrations */}
           <div className="bg-gradient-to-br from-amber-500/10 via-rose-500/5 to-indigo-500/10 rounded-2xl p-4 sm:p-5 border border-amber-200/80 shadow-xs space-y-3.5">
@@ -814,11 +851,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                 <span>Prayer Requests</span>
               </button>
               <button
-                onClick={() => onNavigate("users")}
+                onClick={() => onNavigate(isCoordinator ? "members" : "users")}
                 className="p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-charcoal border border-gray-200 text-left transition-all text-xs font-bold flex flex-col justify-between cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4 text-charcoal/70 mb-1" />
-                <span>User Roles</span>
+                <span>{isCoordinator ? "Ministry Directory" : "User Roles"}</span>
               </button>
             </div>
           </div>
