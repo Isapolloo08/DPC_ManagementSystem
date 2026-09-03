@@ -79,14 +79,23 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         api.getStudyTopics({ ministry_id: selectedMinistryId ?? undefined }).catch(() => null)
       ]);
 
-      setGroups(grps);
+      // Filter groups designated to this leader
+      const designatedGroups = (grps || []).filter(g => {
+        if (!user || user.role_name !== "Leader") return true;
+        const cleanUser = user.name.replace(/\(.*?\)/g, "").trim().toLowerCase();
+        const cleanLeader = (g.leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
+        return cleanUser.includes(cleanLeader) || cleanLeader.includes(cleanUser) || g.leader_name === user.name;
+      });
+
+      const finalGroups = designatedGroups.length > 0 ? designatedGroups : grps;
+      setGroups(finalGroups);
       setAllMembers(mems);
       setPrayers(prs);
       setAnnouncements(anns);
       setStudyTopics(topics?.all || []);
 
-      if (grps.length > 0 && selectedGroupId === null) {
-        setSelectedGroupId(grps[0].id);
+      if (finalGroups.length > 0 && (selectedGroupId === null || !finalGroups.some(g => g.id === selectedGroupId))) {
+        setSelectedGroupId(finalGroups[0].id);
       }
     } catch (err: any) {
       console.error("Failed to load leader data:", err);
@@ -213,9 +222,13 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                 onChange={(e) => setSelectedGroupId(Number(e.target.value))}
                 className="bg-indigo-950 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-white/20 outline-none cursor-pointer"
               >
-                {groups.map(g => (
-                  <option key={g.id} value={g.id}>{g.name} ({g.meeting_day})</option>
-                ))}
+                {groups.length === 0 ? (
+                  <option value="">No Assigned Life Group</option>
+                ) : (
+                  groups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name} ({g.meeting_day})</option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -272,6 +285,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           onSaveAttendanceSession={(date, memberIds) => {
             showToast(`✓ Logged attendance for ${memberIds.length} disciples on ${date}!`);
           }}
+          onGroupUpdated={loadLeaderData}
         />
       )}
 
