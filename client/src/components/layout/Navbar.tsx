@@ -1,6 +1,7 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
-import { Church, Shield, ChevronDown, Bell, LogOut } from "lucide-react";
+import { ChurchLogo } from "../common/ChurchLogo";
+import { Shield, ChevronDown, Bell, LogOut } from "lucide-react";
 
 const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "dashboard": { title: "Executive Dashboard", subtitle: "Church overview, attendance & KPIs" },
@@ -13,6 +14,7 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "biblestudy": { title: "Bible Study Groups", subtitle: "Discipleship life groups & schedules" },
   "curriculum": { title: "Topics & Books of Study", subtitle: "Discipleship curriculum tracker" },
   "duty": { title: "Saturday Duty Roster", subtitle: "Weekly rotating church cleaning teams" },
+  "dishwashing": { title: "Dishwashing Roster", subtitle: "Weekly after-fellowship washing cycle" },
   "events": { title: "Events & Master Calendar", subtitle: "Church schedules & fellowships" },
   "communications": { title: "Announcements & Prayer", subtitle: "Church board & prayer requests" },
   "reports": { title: "Analytics & Trends", subtitle: "Attendance reports & demographic statistics" },
@@ -51,9 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
 
             {/* Mobile-only compact logo & brand title */}
             <div className="flex items-center gap-2 min-w-0 md:hidden">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center shadow-md text-charcoal shrink-0">
-                <Church className="w-4 h-4 text-indigo-900" />
-              </div>
+              <ChurchLogo variant="badge" className="w-8 h-8 shrink-0" />
               <div className="min-w-0 truncate font-bold text-sm text-white">
                 Daet Presbyterian <span className="text-amber-400 font-serif italic text-xs">ChMS</span>
               </div>

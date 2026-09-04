@@ -730,12 +730,12 @@ export const BibleStudyPage: React.FC = () => {
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber text-charcoal shadow-sm">
-              <BookOpen className="w-5 h-5 text-indigo-900" />
-            </div>
+          <div className="flex items-center gap-3">
+            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+              <BookOpen className="w-5 h-5" />
+            </span>
             <div>
-              <h1 className="text-2xl font-bold text-charcoal">Bible Study & Discipleship Groups</h1>
+              <h1 className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">Bible Study & Discipleship Groups</h1>
               <p className="text-xs text-charcoal/60 mt-0.5">
                 Small group fellowships, Scripture study circles, home meetings, and discipleship tracks.
               </p>
@@ -2172,11 +2172,11 @@ export const BibleStudyPage: React.FC = () => {
                     </label>
                     <div className="flex flex-wrap gap-1 mb-2">
                       {[
-                        "🌧️ Typhoon / Bad Weather",
-                        "✈️ Leader Travel / Ministry Duty",
-                        "⛪ Church-Wide Event / Holiday",
-                        "👥 Member Request & Agreement",
-                        "🏠 Venue Maintenance / Setup"
+                        "Typhoon / Severe Weather",
+                        "Leader Travel / Ministry Duty",
+                        "Church-Wide Event / Holiday",
+                        "Member Request & Agreement",
+                        "Venue Maintenance / Room Setup"
                       ].map((chip) => (
                         <button
                           key={chip}

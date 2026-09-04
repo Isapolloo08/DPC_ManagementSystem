@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
-import { StudyTopic, StudyTopicsSummary, BibleStudyGroup, Ministry } from "../types";
+import { StudyTopic, StudyTopicsSummary, StudyTopicDetailResponse, BibleStudyGroup, Ministry } from "../types";
 import {
   Library, BookOpen, BookMarked, Award, CheckCheck, CheckCircle2,
   Plus, Edit2, Trash2, Search, Filter, Sparkles, Calendar,
   Clock, Check, X, GraduationCap, ChevronRight, BookmarkCheck,
-  Building2, Users, FileText, AlertCircle, RefreshCw
+  Building2, Users, FileText, AlertCircle, RefreshCw, Phone, Mail,
+  MapPin, UserCheck, Loader2, PanelRightClose, PanelRight, ExternalLink
 } from "lucide-react";
 
 export const CurriculumPage: React.FC = () => {
@@ -23,6 +24,9 @@ export const CurriculumPage: React.FC = () => {
 
   // Modals & Details View
   const [selectedDetailTopic, setSelectedDetailTopic] = useState<StudyTopic | null>(null);
+  const [topicDetailData, setTopicDetailData] = useState<StudyTopicDetailResponse | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [detailGroupTab, setDetailGroupTab] = useState<"all" | "completed" | "ongoing">("all");
   const [isStudyTopicModalOpen, setIsStudyTopicModalOpen] = useState(false);
   const [editingStudyTopic, setEditingStudyTopic] = useState<StudyTopic | null>(null);
@@ -66,11 +70,35 @@ export const CurriculumPage: React.FC = () => {
       setStudyTopics(studyRes.topics || []);
       setAllGroups(groupsRes);
       setGroupsList(groupsRes.map(g => ({ id: g.id, name: g.name })));
+
+      // Auto-load details for first topic into right container
+      if (studyRes.topics && studyRes.topics.length > 0) {
+        handleOpenDetailModal(studyRes.topics[0]);
+      }
     } catch (err: any) {
       console.error("Failed to load curriculum data:", err);
       showToast(err.message || "Failed to load curriculum data", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenDetailModal = async (topic: StudyTopic) => {
+    setSelectedDetailTopic(topic);
+    setTopicDetailData(null);
+    setDetailGroupTab("all");
+    setLoadingDetail(true);
+    try {
+      const res = await api.getStudyTopic(topic.id);
+      setTopicDetailData(res);
+      if (res.topic) {
+        setSelectedDetailTopic(res.topic);
+      }
+    } catch (err: any) {
+      console.error("Failed to load topic details:", err);
+      showToast(err.message || "Failed to fetch topic details", "error");
+    } finally {
+      setLoadingDetail(false);
     }
   };
 
@@ -282,11 +310,10 @@ export const CurriculumPage: React.FC = () => {
     <div className="space-y-6">
       {/* Toast Feedback */}
       {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${
-          toastMessage.type === "success" 
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${toastMessage.type === "success"
             ? "bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20"
             : "bg-rose-900 text-white border-rose-700 shadow-rose-950/20"
-        }`}>
+          }`}>
           {toastMessage.type === "success" ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
           ) : (
@@ -300,44 +327,49 @@ export const CurriculumPage: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 lg:p-8 border border-indigo-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo text-xs font-bold uppercase tracking-wider">
-            <GraduationCap className="w-3.5 h-3.5 text-indigo" />
-            <span>Discipleship & Scripture Curriculum</span>
+      <div className="relative overflow-hidden bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-200/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="relative z-10 space-y-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+              <BookMarked className="w-5 h-5" />
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-black text-charcoal tracking-tight">
+              Topics & Books of Study
+            </h1>
+            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-black uppercase tracking-wider shadow-2xs">
+              Discipleship & Scripture Curriculum
+            </span>
           </div>
-          <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
-            Topics & Books of Study
-          </h1>
-          <p className="text-sm text-charcoal/70 max-w-2xl">
+          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed">
             Track books of the Bible studied across small groups, record chapter completion, manage curriculum topics, and view the archive of completed studies.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+        <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
           <button
             onClick={() => setIsCompletedBooksModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition-all shadow-2xs"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-300/80 text-xs font-black transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
           >
-            <Award className="w-4 h-4 text-emerald-600" />
+            <Award className="w-4 h-4 text-emerald-700" />
             <span>View Completed Books ({studyTopicsSummary?.completed_count || 0})</span>
           </button>
 
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 bg-indigo hover:bg-indigo-900 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all active:scale-95"
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
           >
-            <Plus className="w-4 h-4 text-amber-400" />
+            <Plus className="w-4 h-4 text-indigo-950" />
             <span>Add Book / Topic Study</span>
           </button>
 
           <button
             onClick={loadData}
             disabled={loading}
-            className="p-2.5 rounded-xl border border-gray-200 text-charcoal hover:bg-indigo-50/50 hover:border-indigo-200 transition-all shadow-2xs"
+            className="p-2.5 rounded-2xl border border-indigo-100 bg-white text-charcoal hover:bg-indigo-50/60 transition-all shadow-2xs cursor-pointer"
             title="Refresh curriculum list"
           >
-            <RefreshCw className={`w-4 h-4 text-indigo ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-4 h-4 text-indigo-700 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
@@ -345,46 +377,46 @@ export const CurriculumPage: React.FC = () => {
       {/* 4 Summary Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Library */}
-        <div className="bg-white rounded-2xl p-5 border border-indigo-100/90 shadow-2xs flex items-center justify-between gap-3">
+        <div className="bg-white/95 rounded-3xl p-5 border border-indigo-100/90 shadow-sm flex items-center justify-between gap-3">
           <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-indigo">
-              <Library className="w-4 h-4 text-indigo shrink-0" />
+            <div className="flex items-center gap-1.5 text-xs font-black text-indigo-900">
+              <Library className="w-4 h-4 text-indigo-700 shrink-0" />
               <span>Total Curriculum</span>
             </div>
-            <div className="text-2xl font-black text-indigo tracking-tight">
+            <div className="text-2xl font-black text-charcoal tracking-tight">
               {studyTopicsSummary?.total_count || 0}
             </div>
             <p className="text-[11px] text-charcoal/60 font-medium">Total Books & Topics</p>
           </div>
-          <div className="p-3.5 bg-indigo-50 text-indigo rounded-2xl shrink-0">
+          <div className="p-3.5 bg-indigo-50 text-indigo-700 rounded-2xl shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
         </div>
 
         {/* Completed Books */}
-        <div 
+        <div
           onClick={() => setIsCompletedBooksModalOpen(true)}
-          className="bg-white rounded-2xl p-5 border border-emerald-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-between gap-3 group"
+          className="bg-white/95 rounded-3xl p-5 border border-emerald-200/80 shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
         >
           <div className="space-y-1 min-w-0 flex-1">
-            <div className="flex items-center justify-between text-xs font-bold text-emerald-800 pr-2">
+            <div className="flex items-center justify-between text-xs font-black text-emerald-950 pr-2">
               <div className="flex items-center gap-1.5">
                 <CheckCheck className="w-4 h-4 text-emerald-700 shrink-0" />
                 <span>Completed Books</span>
               </div>
-              <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-full text-[10px] font-extrabold">
+              <span className="px-2.5 py-0.5 bg-emerald-600 text-white rounded-full text-[10px] font-black shadow-2xs">
                 {studyTopicsSummary?.completion_rate || 0}%
               </span>
             </div>
-            <div className="text-2xl font-black text-emerald-900 tracking-tight flex items-baseline gap-1.5">
+            <div className="text-2xl font-black text-emerald-950 tracking-tight flex items-baseline gap-1.5">
               <span>{studyTopicsSummary?.completed_count || 0}</span>
-              <span className="text-xs text-emerald-700 font-semibold">
+              <span className="text-xs text-emerald-700 font-bold">
                 / {studyTopicsSummary?.total_count || 0}
               </span>
             </div>
             {/* Progress Bar */}
-            <div className="w-full bg-emerald-100 h-1.5 rounded-full overflow-hidden mt-1">
-              <div 
+            <div className="w-full bg-emerald-100 h-2 rounded-full overflow-hidden mt-1.5">
+              <div
                 className="bg-emerald-600 h-full rounded-full transition-all duration-500"
                 style={{ width: `${studyTopicsSummary?.completion_rate || 0}%` }}
               />
@@ -396,21 +428,20 @@ export const CurriculumPage: React.FC = () => {
         </div>
 
         {/* In Progress */}
-        <div 
+        <div
           onClick={() => setStudyTopicFilter(studyTopicFilter === "in_progress" ? "all" : "in_progress")}
-          className={`bg-white rounded-2xl p-5 border transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between gap-3 ${
-            studyTopicFilter === "in_progress" ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/20" : "border-amber-200"
-          }`}
+          className={`bg-white/95 rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${studyTopicFilter === "in_progress" ? "border-amber-400 ring-2 ring-amber-400/30 bg-amber-50/20" : "border-amber-200/80"
+            }`}
         >
           <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+            <div className="flex items-center gap-1.5 text-xs font-black text-amber-950">
               <BookMarked className="w-4 h-4 text-amber-700 shrink-0" />
               <span>In Active Study</span>
             </div>
-            <div className="text-2xl font-black text-amber-900 tracking-tight">
+            <div className="text-2xl font-black text-charcoal tracking-tight">
               {studyTopicsSummary?.in_progress_count || 0}
             </div>
-            <p className="text-[11px] text-amber-700 font-medium">Ongoing Small Groups</p>
+            <p className="text-[11px] text-amber-800 font-medium">Ongoing Small Groups</p>
           </div>
           <div className="p-3.5 bg-amber-50 text-amber-700 rounded-2xl shrink-0">
             <BookMarked className="w-5 h-5" />
@@ -418,14 +449,13 @@ export const CurriculumPage: React.FC = () => {
         </div>
 
         {/* Planned */}
-        <div 
+        <div
           onClick={() => setStudyTopicFilter(studyTopicFilter === "planned" ? "all" : "planned")}
-          className={`bg-white rounded-2xl p-5 border transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between gap-3 ${
-            studyTopicFilter === "planned" ? "border-slate-500 ring-2 ring-slate-500/20 bg-slate-50/40" : "border-gray-200"
-          }`}
+          className={`bg-white/95 rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${studyTopicFilter === "planned" ? "border-indigo-400 ring-2 ring-indigo-400/20 bg-indigo-50/30" : "border-indigo-100/90"
+            }`}
         >
           <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-charcoal/70">
+            <div className="flex items-center gap-1.5 text-xs font-black text-charcoal/80">
               <Calendar className="w-4 h-4 text-charcoal/50 shrink-0" />
               <span>Planned Series</span>
             </div>
@@ -440,490 +470,578 @@ export const CurriculumPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-indigo-100/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      {/* Filter and Search Bar with Layout Mode & Inspector Toggle */}
+      <div className="bg-white/95 rounded-3xl p-4 sm:p-5 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Status Filter Chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar flex-1">
           {[
             { id: "all", label: "All Studies", count: studyTopics.length },
-            { id: "completed", label: "✅ Completed Books", count: studyTopicsSummary?.completed_count || 0 },
-            { id: "in_progress", label: "⏳ In Progress", count: studyTopicsSummary?.in_progress_count || 0 },
-            { id: "planned", label: "🗓️ Planned", count: studyTopicsSummary?.planned_count || 0 }
+            { id: "completed", label: "Completed Books", count: studyTopicsSummary?.completed_count || 0 },
+            { id: "in_progress", label: "In Progress", count: studyTopicsSummary?.in_progress_count || 0 },
+            { id: "planned", label: "Planned", count: studyTopicsSummary?.planned_count || 0 }
           ].map(filter => (
             <button
               key={filter.id}
               onClick={() => setStudyTopicFilter(filter.id as any)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                studyTopicFilter === filter.id
-                  ? "bg-indigo text-white shadow-2xs"
-                  : "bg-gray-100 text-charcoal/70 hover:bg-gray-200"
-              }`}
+              className={`px-3.5 py-2 rounded-2xl text-xs font-black whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${studyTopicFilter === filter.id
+                  ? "bg-indigo-900 text-white shadow-sm ring-2 ring-indigo-900/20"
+                  : "bg-gray-100/80 text-charcoal/70 hover:bg-gray-200/70 hover:text-charcoal"
+                }`}
             >
               <span>{filter.label}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                studyTopicFilter === filter.id ? "bg-white/20 text-white" : "bg-white text-charcoal/60"
-              }`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${studyTopicFilter === filter.id ? "bg-white/20 text-white" : "bg-white text-charcoal/70 shadow-2xs"
+                }`}>
                 {filter.count}
               </span>
             </button>
           ))}
         </div>
 
-        <div className="relative min-w-[260px]">
-          <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search book, teacher, verse..."
-            value={studyTopicSearch}
-            onChange={(e) => setStudyTopicSearch(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-1.5 rounded-xl border border-gray-200 bg-gray-50/50 text-xs focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
-          />
+        {/* Search Bar & Inspector Toggle */}
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search book, teacher, verse..."
+              value={studyTopicSearch}
+              onChange={(e) => setStudyTopicSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-2xl border border-indigo-100/90 bg-ivory-light text-xs focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium placeholder:text-charcoal/40 transition-all"
+            />
+          </div>
+
+          {selectedDetailTopic && (
+            <button
+              onClick={() => setIsInspectorOpen(!isInspectorOpen)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border text-xs font-black transition-all cursor-pointer whitespace-nowrap ${isInspectorOpen
+                  ? "bg-indigo-50 text-indigo-950 border-indigo-200 shadow-2xs hover:bg-indigo-100/70"
+                  : "bg-white text-charcoal/70 border-gray-200 hover:bg-gray-50"
+                }`}
+              title={isInspectorOpen ? "Close Side Inspector" : "Open Side Inspector"}
+            >
+              {isInspectorOpen ? <PanelRightClose className="w-4 h-4 text-indigo-700" /> : <PanelRight className="w-4 h-4 text-charcoal/50" />}
+              <span className="hidden sm:inline">{isInspectorOpen ? "Hide Inspector" : "Show Inspector"}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Study Topics Cards Grid */}
-      {filteredStudyTopics.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 space-y-3">
-          <BookOpen className="w-10 h-10 text-charcoal/30 mx-auto" />
-          <p className="text-sm font-bold text-charcoal/70">No book studies found matching your filter.</p>
-          <button
-            onClick={() => handleOpenModal()}
-            className="px-4 py-2 rounded-xl bg-indigo text-white text-xs font-bold"
-          >
-            + Add New Book Study
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredStudyTopics.map(topic => {
-            const isCompleted = topic.status === "completed";
-            const progressPercent = topic.total_chapters > 0 
-              ? Math.min(100, Math.round((topic.completed_chapters / topic.total_chapters) * 100))
-              : (isCompleted ? 100 : 0);
-
-            const { completedGroups, ongoingGroups } = getGroupsForTopic(topic);
-
-            return (
-              <div
-                key={topic.id}
-                onClick={() => {
-                  setSelectedDetailTopic(topic);
-                  setDetailGroupTab("all");
-                }}
-                className={`rounded-2xl border p-5 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-md hover:border-indigo-300 group ${
-                  isCompleted
-                    ? "bg-gradient-to-b from-emerald-50/40 to-white border-emerald-200 shadow-2xs"
-                    : topic.status === "in_progress"
-                    ? "bg-white border-amber-200 shadow-2xs"
-                    : "bg-gray-50/40 border-gray-200 hover:bg-white"
-                }`}
+      {/* Main Content Layout: Responsive Master-Detail Split */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Side: Study Topics Cards */}
+        <div className={selectedDetailTopic && isInspectorOpen ? "lg:col-span-7 2xl:col-span-8 space-y-4" : "lg:col-span-12 space-y-4"}>
+          {filteredStudyTopics.length === 0 ? (
+            <div className="text-center py-16 bg-white/95 rounded-3xl border border-dashed border-indigo-200/80 space-y-4">
+              <div className="w-14 h-14 rounded-3xl bg-indigo-50 text-indigo-700 flex items-center justify-center mx-auto">
+                <BookOpen className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-base font-black text-charcoal">No curriculum studies found</p>
+                <p className="text-xs text-charcoal/60 max-w-sm mx-auto">No study materials match your current search or status filter.</p>
+              </div>
+              <button
+                onClick={() => handleOpenModal()}
+                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 text-xs font-black shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
               >
-                <div className="space-y-3">
-                  {/* Top Badges */}
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo border border-indigo-100">
-                      {topic.testament_or_category || (topic.type === "book" ? "Book of the Bible" : "Topic Study")}
-                    </span>
+                + Add New Book Study
+              </button>
+            </div>
+          ) : (
+            <div className={`grid gap-5 ${selectedDetailTopic && isInspectorOpen
+                ? "grid-cols-1 md:grid-cols-2 2xl:grid-cols-2"
+                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+              }`}>
+              {filteredStudyTopics.map(topic => {
+                const isSelected = selectedDetailTopic?.id === topic.id;
+                const isCompleted = topic.status === "completed";
+                const progressPercent = topic.total_chapters > 0
+                  ? Math.min(100, Math.round((topic.completed_chapters / topic.total_chapters) * 100))
+                  : (isCompleted ? 100 : 0);
 
-                    {isCompleted ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold shadow-2xs">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Completed</span>
-                      </span>
-                    ) : topic.status === "in_progress" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold shadow-2xs">
-                        <BookMarked className="w-3.5 h-3.5 text-amber-700" />
-                        <span>In Progress</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 text-charcoal/70 text-[10px] font-bold">
-                        <Calendar className="w-3.5 h-3.5 text-charcoal/50" />
-                        <span>Planned</span>
-                      </span>
-                    )}
-                  </div>
+                const { completedGroups, ongoingGroups } = getGroupsForTopic(topic);
 
-                  {/* Title & Notes */}
-                  <div>
-                    <h3 className="text-base font-black text-indigo tracking-tight leading-snug group-hover:text-indigo-900 transition-colors">
-                      {topic.title}
-                    </h3>
-                    {topic.summary_notes && (
-                      <p className="text-xs text-charcoal/70 line-clamp-2 mt-1 leading-relaxed">
-                        {topic.summary_notes}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Key Verse banner if available */}
-                  {topic.key_verse && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50/80 border border-amber-200/70 text-[11px] text-amber-900 font-semibold">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      <span className="truncate">Key Verse: {topic.key_verse}</span>
-                    </div>
-                  )}
-
-                  {/* Chapters Progress Bar */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold">
-                      <span className="text-charcoal/60">Chapter Progress:</span>
-                      <span className={isCompleted ? "text-emerald-700 font-black" : "text-indigo font-bold"}>
-                        {topic.completed_chapters} / {topic.total_chapters} Chapters ({progressPercent}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          isCompleted ? "bg-emerald-600" : "bg-amber-500"
-                        }`}
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Meta: Leader, Group status chips */}
-                  <div className="flex items-center justify-between text-[11px] text-charcoal/60 pt-2 border-t border-gray-100 flex-wrap gap-1">
-                    <span>Teacher: <strong className="text-charcoal font-semibold">{topic.lead_teacher || "Pastor / Leader"}</strong></span>
-                    {topic.completed_date && isCompleted ? (
-                      <span className="text-emerald-700 font-bold">
-                        Completed: {topic.completed_date}
-                      </span>
-                    ) : (
-                      <span className="text-indigo font-medium">
-                        {completedGroups.length > 0 && `✅ ${completedGroups.length} Done `}
-                        {ongoingGroups.length > 0 && `⏳ ${ongoingGroups.length} Active`}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Click hint badge */}
-                  <div className="flex items-center justify-between pt-1 text-[10px] font-bold text-indigo-600 group-hover:text-indigo-800">
-                    <span>👥 View Group Progress & Details</span>
-                    <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleCompleted(topic);
+                return (
+                  <div
+                    key={topic.id}
+                    onClick={() => {
+                      handleOpenDetailModal(topic);
+                      setIsInspectorOpen(true);
                     }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      isCompleted
-                        ? "bg-gray-100 text-charcoal/70 hover:bg-gray-200"
-                        : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
-                    }`}
-                    title={isCompleted ? "Reopen study as In Progress" : "Mark as Completed"}
+                    className={`group relative rounded-3xl border p-5 sm:p-6 transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-4 ${isSelected
+                        ? "bg-gradient-to-b from-indigo-50/60 via-white to-white border-indigo-500 ring-2 ring-indigo-500/20 shadow-md scale-[1.01]"
+                        : isCompleted
+                          ? "bg-white/95 border-emerald-200/80 hover:border-emerald-400 hover:shadow-md hover:shadow-emerald-950/5"
+                          : topic.status === "in_progress"
+                            ? "bg-white/95 border-amber-200/80 hover:border-amber-400 hover:shadow-md hover:shadow-amber-950/5"
+                            : "bg-white/90 border-indigo-100/90 hover:border-indigo-300 hover:shadow-md"
+                      }`}
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>{isCompleted ? "Reopen Study ↺" : "Mark as Completed 🎉"}</span>
-                  </button>
+                    {/* Top Status & Category Badges */}
+                    <div className="space-y-3.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="px-3 py-1 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-950 border border-indigo-200/70 shadow-2xs">
+                          {topic.testament_or_category || (topic.type === "book" ? "Scripture Study" : "Topic Study")}
+                        </span>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenModal(topic);
-                      }}
-                      className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/60 hover:text-indigo transition-colors"
-                      title="Edit book details"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteConfirmTopic(topic);
-                      }}
-                      className="p-1.5 hover:bg-rose-50 rounded-lg text-charcoal/60 hover:text-rose-600 transition-colors"
-                      title="Delete book study"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                        {isCompleted ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-200 text-[10px] font-black shadow-2xs">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Completed</span>
+                          </span>
+                        ) : topic.status === "in_progress" ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-black shadow-2xs">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            <span>In Progress</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-charcoal/70 text-[10px] font-black">
+                            <Calendar className="w-3.5 h-3.5 text-charcoal/40" />
+                            <span>Planned</span>
+                          </span>
+                        )}
+                      </div>
 
-      {/* ==================================================== */}
-      {/* MODAL: STUDY BOOK DETAILS & GROUP PROGRESS */}
-      {/* ==================================================== */}
-      {selectedDetailTopic && (() => {
-        const { completedGroups, ongoingGroups, matchedGroups } = getGroupsForTopic(selectedDetailTopic);
-        const isCompleted = selectedDetailTopic.status === "completed";
-        const progressPercent = selectedDetailTopic.total_chapters > 0 
-          ? Math.min(100, Math.round((selectedDetailTopic.completed_chapters / selectedDetailTopic.total_chapters) * 100))
-          : (isCompleted ? 100 : 0);
+                      {/* Title & Notes */}
+                      <div>
+                        <h3 className={`text-base sm:text-lg font-black tracking-tight leading-snug transition-colors ${isSelected ? "text-indigo-950" : "text-charcoal group-hover:text-indigo-900"
+                          }`}>
+                          {topic.title}
+                        </h3>
+                        {topic.summary_notes && (
+                          <p className="text-xs text-charcoal/65 line-clamp-2 mt-1.5 leading-relaxed font-normal">
+                            {topic.summary_notes}
+                          </p>
+                        )}
+                      </div>
 
-        const displayedGroups = detailGroupTab === "completed" 
-          ? completedGroups 
-          : detailGroupTab === "ongoing" 
-          ? ongoingGroups 
-          : (completedGroups.length > 0 || ongoingGroups.length > 0 ? [...completedGroups, ...ongoingGroups.filter(g => !completedGroups.some(cg => cg.id === g.id))] : matchedGroups);
+                      {/* Scripture Callout Ribbon */}
+                      {topic.key_verse && (
+                        <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-xs text-amber-950 font-bold truncate shadow-2xs">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="truncate font-serif italic">{topic.key_verse}</span>
+                        </div>
+                      )}
 
-        return (
-          <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 lg:p-8 shadow-2xl border border-indigo-100 space-y-6 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-              {/* Header */}
-              <div className="flex items-start justify-between pb-4 border-b border-gray-100 gap-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo border border-indigo-100">
-                      {selectedDetailTopic.testament_or_category || "Curriculum"}
-                    </span>
-                    {isCompleted ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Completed Book Study</span>
-                      </span>
-                    ) : selectedDetailTopic.status === "in_progress" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
-                        <BookMarked className="w-3.5 h-3.5 text-amber-700" />
-                        <span>In Active Study</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gray-100 text-charcoal/70 text-[10px] font-bold">
-                        <Calendar className="w-3.5 h-3.5 text-charcoal/50" />
-                        <span>Planned Series</span>
-                      </span>
-                    )}
-                  </div>
+                      {/* Chapters Progress Bar */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-xs font-black">
+                          <span className="text-charcoal/50 text-[11px]">Progress:</span>
+                          <span className={isCompleted ? "text-emerald-700 font-black" : "text-indigo-950 font-black"}>
+                            {topic.completed_chapters} / {topic.total_chapters} Chapters ({progressPercent}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${isCompleted ? "bg-emerald-600" : "bg-gradient-to-r from-amber-400 to-amber-500"
+                              }`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                      </div>
 
-                  <h2 className="text-xl font-black text-indigo tracking-tight">
-                    {selectedDetailTopic.title}
-                  </h2>
-                </div>
+                      {/* Facilitator & Small Groups Footer */}
+                      <div className="flex items-center justify-between text-xs text-charcoal/70 pt-3 border-t border-gray-100 flex-wrap gap-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-900 font-black text-[9px] flex items-center justify-center shrink-0">
+                            {(topic.lead_teacher || "P")[0]}
+                          </div>
+                          <span className="truncate text-charcoal font-bold text-xs">
+                            {topic.lead_teacher || "Pastor / Leader"}
+                          </span>
+                        </div>
 
-                <button
-                  onClick={() => setSelectedDetailTopic(null)}
-                  className="p-2 rounded-full text-charcoal/40 hover:text-charcoal hover:bg-gray-100 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Book Info Summary Card */}
-              <div className="space-y-3.5 p-4 rounded-2xl bg-ivory-light/70 border border-amber-200/60">
-                {selectedDetailTopic.key_verse && (
-                  <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs space-y-1">
-                    <div className="flex items-center gap-1.5 text-amber-800 font-bold text-xs">
-                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Key Scripture Verse</span>
-                    </div>
-                    <p className="text-xs text-charcoal/80 font-medium italic">
-                      "{selectedDetailTopic.key_verse}"
-                    </p>
-                  </div>
-                )}
-
-                {selectedDetailTopic.summary_notes && (
-                  <div>
-                    <h4 className="text-xs font-bold text-charcoal/70 mb-1">Study Overview & Objectives:</h4>
-                    <p className="text-xs text-charcoal/80 leading-relaxed bg-white p-3 rounded-xl border border-gray-100">
-                      {selectedDetailTopic.summary_notes}
-                    </p>
-                  </div>
-                )}
-
-                {/* Progress & Teacher */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="bg-white p-3 rounded-xl border border-gray-100 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-charcoal/60">Chapter Progress:</span>
-                      <span className={isCompleted ? "text-emerald-700 font-black" : "text-indigo font-bold"}>
-                        {selectedDetailTopic.completed_chapters} / {selectedDetailTopic.total_chapters} ({progressPercent}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          isCompleted ? "bg-emerald-600" : "bg-amber-500"
-                        }`}
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-gray-100 text-xs flex flex-col justify-center space-y-0.5">
-                    <span className="text-charcoal/50 text-[11px]">Lead Teacher / Facilitator:</span>
-                    <strong className="text-charcoal font-bold text-xs">
-                      {selectedDetailTopic.lead_teacher || "Pastor / Small Group Leader"}
-                    </strong>
-                    {selectedDetailTopic.completed_date && isCompleted && (
-                      <span className="text-[11px] text-emerald-700 font-semibold">
-                        Finished on {selectedDetailTopic.completed_date}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Group Participation & Progress Section */}
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-gray-100">
-                  <div>
-                    <h3 className="font-black text-sm text-charcoal flex items-center gap-2">
-                      <Users className="w-4 h-4 text-indigo" />
-                      <span>Small Groups Progress on this Book</span>
-                    </h3>
-                    <p className="text-[11px] text-charcoal/60">
-                      Track which groups have completed or are actively studying this curriculum
-                    </p>
-                  </div>
-
-                  {/* Tabs */}
-                  <div className="flex items-center bg-gray-100 p-1 rounded-xl gap-1 shrink-0">
-                    <button
-                      onClick={() => setDetailGroupTab("all")}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                        detailGroupTab === "all" ? "bg-white text-indigo shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
-                      }`}
-                    >
-                      All ({completedGroups.length + ongoingGroups.length})
-                    </button>
-                    <button
-                      onClick={() => setDetailGroupTab("completed")}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                        detailGroupTab === "completed" ? "bg-white text-emerald-700 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
-                      }`}
-                    >
-                      ✅ Done ({completedGroups.length})
-                    </button>
-                    <button
-                      onClick={() => setDetailGroupTab("ongoing")}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                        detailGroupTab === "ongoing" ? "bg-white text-amber-700 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
-                      }`}
-                    >
-                      ⏳ Ongoing ({ongoingGroups.length})
-                    </button>
-                  </div>
-                </div>
-
-                {displayedGroups.length === 0 ? (
-                  <div className="p-8 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-center space-y-2">
-                    <BookOpen className="w-8 h-8 text-charcoal/30 mx-auto" />
-                    <p className="text-xs font-bold text-charcoal/70">
-                      {detailGroupTab === "completed"
-                        ? "No small groups have completed this book study yet."
-                        : detailGroupTab === "ongoing"
-                        ? "No small groups are currently ongoing with this book."
-                        : "No small groups currently assigned to this curriculum."}
-                    </p>
-                    <p className="text-[11px] text-charcoal/50">
-                      You can assign this book when creating or editing small groups in the Bible Study tab.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[280px] overflow-y-auto pr-1">
-                    {displayedGroups.map((grp) => {
-                      const isGroupDone = completedGroups.some((cg) => cg.id === grp.id);
-
-                      return (
-                        <div
-                          key={grp.id}
-                          className={`p-3.5 rounded-2xl border transition-all space-y-2 ${
-                            isGroupDone
-                              ? "bg-gradient-to-br from-emerald-50/50 to-white border-emerald-200"
-                              : "bg-gradient-to-br from-amber-50/50 to-white border-amber-200"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo border border-indigo-100">
-                                {grp.category || "LifeGroup"}
+                        {topic.completed_date && isCompleted ? (
+                          <span className="text-emerald-700 font-black text-[11px] bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                            {topic.completed_date}
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            {completedGroups.length > 0 && (
+                              <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded-md">
+                                {completedGroups.length} Done
                               </span>
-                              <h4 className="font-bold text-xs text-charcoal mt-1">
-                                {grp.name}
-                              </h4>
-                            </div>
-
-                            {isGroupDone ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                <span>Completed</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold shrink-0">
-                                <Clock className="w-3 h-3 text-amber-700" />
-                                <span>Ongoing</span>
+                            )}
+                            {ongoingGroups.length > 0 && (
+                              <span className="text-amber-800 font-bold bg-amber-50 px-1.5 py-0.5 rounded-md">
+                                {ongoingGroups.length} Active
                               </span>
                             )}
                           </div>
+                        )}
+                      </div>
 
-                          <div className="space-y-1 text-[11px] text-charcoal/70 pt-1 border-t border-gray-100/80">
-                            <div className="flex items-center gap-1.5 text-charcoal font-medium">
-                              <span>👤 Leader: <strong>{grp.leader_name}</strong></span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 text-indigo shrink-0" />
-                              <span>{grp.meeting_day}s at {grp.meeting_time}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 truncate">
-                              <Building2 className="w-3 h-3 text-sage-600 shrink-0" />
-                              <span className="truncate">{grp.location}</span>
-                            </div>
-                          </div>
+                      {/* Select & View Action Tag */}
+                      <div className={`flex items-center justify-between pt-1 text-xs font-black transition-colors ${isSelected ? "text-indigo-700" : "text-indigo-900/80 group-hover:text-indigo-900"
+                        }`}>
+                        <span>{isSelected ? "✨ Currently Inspected" : "🔍 View Study Details & Roster"}</span>
+                        <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? "translate-x-1" : "group-hover:translate-x-1"}`} />
+                      </div>
+                    </div>
 
-                          <div className="flex items-center justify-between pt-1.5 border-t border-gray-100 text-[10px] font-semibold text-charcoal/60">
-                            <span>👥 {grp.current_member_count || 0} Members</span>
-                            <span className={isGroupDone ? "text-emerald-700 font-bold" : "text-amber-700 font-bold"}>
-                              {isGroupDone ? "Finished Curriculum" : "Actively Studying"}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {/* Quick Card Action Buttons */}
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleCompleted(topic);
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black transition-all cursor-pointer ${isCompleted
+                            ? "bg-gray-100 text-charcoal/80 hover:bg-gray-200"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-95"
+                          }`}
+                        title={isCompleted ? "Reopen study as In Progress" : "Mark as Completed"}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{isCompleted ? "Reopen Study" : "Mark Done"}</span>
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenModal(topic);
+                          }}
+                          className="p-2 hover:bg-indigo-50 rounded-xl text-charcoal/50 hover:text-indigo-700 transition-colors cursor-pointer"
+                          title="Edit study"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmTopic(topic);
+                          }}
+                          className="p-2 hover:bg-rose-50 rounded-xl text-charcoal/50 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Delete study"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-              {/* Modal Footer */}
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100 flex-wrap gap-2">
-                <button
-                  onClick={() => {
-                    handleToggleCompleted(selectedDetailTopic);
-                    setSelectedDetailTopic(null);
-                  }}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs ${
-                    isCompleted
-                      ? "bg-gray-100 text-charcoal/70 hover:bg-gray-200"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  }`}
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{isCompleted ? "Reopen Study ↺" : "Mark Book as Completed 🎉"}</span>
-                </button>
+        {/* Right Side: Responsive Master Inspector (Sticky Dock on Desktop, Slide-over Drawer on Tablet/Mobile) */}
+        {selectedDetailTopic && isInspectorOpen && (() => {
+          const topicData = topicDetailData?.topic || selectedDetailTopic;
+          const groupMembers = topicDetailData?.group_members || [];
+          const { completedGroups, ongoingGroups, matchedGroups } = getGroupsForTopic(topicData);
+          const isCompleted = topicData.status === "completed";
+          const progressPercent = topicData.total_chapters > 0
+            ? Math.min(100, Math.round((topicData.completed_chapters / topicData.total_chapters) * 100))
+            : (isCompleted ? 100 : 0);
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const topic = selectedDetailTopic;
-                      setSelectedDetailTopic(null);
-                      handleOpenModal(topic);
-                    }}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo font-bold text-xs transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit Book</span>
-                  </button>
+          const displayedGroups = detailGroupTab === "completed"
+            ? completedGroups
+            : detailGroupTab === "ongoing"
+              ? ongoingGroups
+              : (completedGroups.length > 0 || ongoingGroups.length > 0 ? [...completedGroups, ...ongoingGroups.filter(g => !completedGroups.some(cg => cg.id === g.id))] : matchedGroups);
 
-                  <button
-                    onClick={() => setSelectedDetailTopic(null)}
-                    className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors"
-                  >
-                    Close
-                  </button>
+          return (
+            <>
+              {/* Backdrop for smaller screens (< lg) */}
+              <div
+                onClick={() => setIsInspectorOpen(false)}
+                className="lg:hidden fixed inset-0 z-40 bg-indigo-950/60 backdrop-blur-xs animate-in fade-in duration-200"
+              />
+
+              {/* Inspector Container */}
+              <div className="lg:col-span-5 2xl:col-span-4 lg:sticky lg:top-6 fixed inset-y-0 right-0 z-50 lg:z-auto w-full max-w-md lg:max-w-none bg-white lg:bg-transparent shadow-2xl lg:shadow-none p-4 sm:p-6 lg:p-0 overflow-y-auto animate-in slide-in-from-right duration-200">
+                <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 sm:p-6 border border-indigo-100/90 shadow-sm space-y-5">
+                  {/* Inspector Header */}
+                  <div className="flex items-start justify-between pb-4 border-b border-gray-100 gap-3">
+                    <div className="space-y-2 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-3 py-1 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-950 border border-indigo-200/70 shadow-2xs">
+                          {topicData.testament_or_category || (topicData.type === "book" ? "Book of the Bible" : "Curriculum")}
+                        </span>
+
+                        {topicData.ministry_name && (
+                          <span
+                            className="px-2.5 py-0.5 rounded-full text-[10px] font-black text-white shadow-2xs"
+                            style={{ backgroundColor: topicData.ministry_color || "#2C3968" }}
+                          >
+                            {topicData.ministry_name}
+                          </span>
+                        )}
+
+                        {isCompleted ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-950 border border-emerald-200 text-[10px] font-black shadow-2xs">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>Completed</span>
+                          </span>
+                        ) : topicData.status === "in_progress" ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-200 text-[10px] font-black shadow-2xs">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            <span>In Progress</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gray-100 text-charcoal/70 text-[10px] font-black">
+                            <Calendar className="w-3.5 h-3.5 text-charcoal/40" />
+                            <span>Planned</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <h2 className="text-xl font-black text-indigo-950 tracking-tight leading-snug">
+                        {topicData.title}
+                      </h2>
+                    </div>
+
+                    <button
+                      onClick={() => setIsInspectorOpen(false)}
+                      className="p-2 rounded-2xl text-charcoal/40 hover:text-charcoal hover:bg-gray-100 transition-colors cursor-pointer shrink-0"
+                      title="Close Inspector"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Live sync loader */}
+                  {loadingDetail && (
+                    <div className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-indigo-50/70 border border-indigo-100 text-indigo-900 text-xs font-bold animate-pulse">
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                      <span>Syncing study metadata & members...</span>
+                    </div>
+                  )}
+
+                  {/* Illuminated Scripture Ribbon */}
+                  {topicData.key_verse && (
+                    <div className="p-4 bg-gradient-to-r from-amber-50/95 via-amber-100/40 to-amber-50/60 rounded-2xl border-l-4 border-amber-500 shadow-2xs space-y-1.5">
+                      <div className="flex items-center gap-2 text-amber-900 font-black text-xs">
+                        <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Key Scripture Focus</span>
+                      </div>
+                      <p className="text-sm text-amber-950 font-serif italic leading-relaxed">
+                        "{topicData.key_verse}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Overview & Theological Notes */}
+                  {topicData.summary_notes && (
+                    <div className="space-y-1.5">
+                      <h4 className="text-xs font-black text-charcoal/70">Overview & Study Notes:</h4>
+                      <p className="text-xs text-charcoal/80 leading-relaxed bg-gray-50/90 p-3.5 rounded-2xl border border-gray-100">
+                        {topicData.summary_notes}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Chapter Progress & Facilitator Summary Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Chapter Progress Box */}
+                    <div className="bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100 space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between text-xs font-black">
+                        <span className="text-charcoal/60">Chapter Progress:</span>
+                        <span className={isCompleted ? "text-emerald-700 font-black" : "text-indigo-950 font-bold"}>
+                          {topicData.completed_chapters}/{topicData.total_chapters} ({progressPercent}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${isCompleted ? "bg-emerald-600" : "bg-gradient-to-r from-amber-400 to-amber-500"
+                            }`}
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Teacher Box */}
+                    <div className="bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100 text-xs flex flex-col justify-center space-y-1 shadow-2xs">
+                      <span className="text-charcoal/50 text-[11px] font-semibold">Teacher / Facilitator:</span>
+                      <strong className="text-charcoal font-black text-xs truncate">
+                        {topicData.lead_teacher || topicData.leader_name || "Pastor / Leader"}
+                      </strong>
+                      {topicData.completed_date && isCompleted && (
+                        <span className="text-[10px] text-emerald-700 font-bold">
+                          Finished on {topicData.completed_date}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Assigned Small Group Details */}
+                  <div className="space-y-2 p-4 bg-gray-50/80 rounded-2xl border border-gray-100 text-xs">
+                    <div className="flex items-center justify-between font-black text-charcoal">
+                      <div className="flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-indigo-700" />
+                        <span>{topicData.group_name || "General Church Curriculum"}</span>
+                      </div>
+                      {topicData.meeting_day && (
+                        <span className="text-[11px] text-amber-800 font-bold flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          {topicData.meeting_day}s {topicData.meeting_time}
+                        </span>
+                      )}
+                    </div>
+                    {topicData.leader_email && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-indigo-800 font-medium">
+                        <Mail className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span className="truncate">{topicData.leader_email}</span>
+                      </div>
+                    )}
+                    {topicData.current_location && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-charcoal/70">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="truncate">{topicData.current_location}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Enrolled Group Members */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-black text-xs text-charcoal flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4 text-emerald-700" />
+                        <span>Enrolled Group Members ({groupMembers.length})</span>
+                      </h4>
+                    </div>
+
+                    {groupMembers.length === 0 ? (
+                      <p className="text-[11px] text-charcoal/50 italic p-3.5 bg-gray-50/80 rounded-2xl text-center border border-dashed border-gray-200">
+                        No active members registered in this group yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1 no-scrollbar">
+                        {groupMembers.map((m) => (
+                          <div
+                            key={m.id || m.member_id}
+                            className="p-2.5 bg-white rounded-2xl border border-gray-100 flex items-center justify-between gap-2 shadow-2xs hover:border-indigo-200 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-100 flex items-center justify-center font-black text-[10px] shrink-0">
+                                {m.first_name?.[0]}{m.last_name?.[0]}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-xs text-charcoal truncate">
+                                  {m.first_name} {m.last_name}
+                                </div>
+                                <div className="text-[10px] text-charcoal/60 truncate">
+                                  {m.member_ministry_name || m.gender || "Member"}
+                                </div>
+                              </div>
+                            </div>
+                            {m.contact_phone && (
+                              <span className="text-[10px] font-semibold text-charcoal/60 shrink-0 flex items-center gap-1">
+                                <Phone className="w-2.5 h-2.5 text-amber-600" />
+                                {m.contact_phone}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Groups Progress Tabs */}
+                  <div className="space-y-3 pt-2 border-t border-gray-100">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <h4 className="font-black text-xs text-charcoal flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>Groups on this Study</span>
+                      </h4>
+
+                      <div className="flex items-center bg-gray-100 p-0.5 rounded-xl gap-0.5 shrink-0">
+                        <button
+                          onClick={() => setDetailGroupTab("all")}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "all" ? "bg-white text-indigo-900 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                            }`}
+                        >
+                          All ({completedGroups.length + ongoingGroups.length})
+                        </button>
+                        <button
+                          onClick={() => setDetailGroupTab("completed")}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "completed" ? "bg-white text-emerald-800 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                            }`}
+                        >
+                          Done ({completedGroups.length})
+                        </button>
+                        <button
+                          onClick={() => setDetailGroupTab("ongoing")}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "ongoing" ? "bg-white text-amber-800 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                            }`}
+                        >
+                          Active ({ongoingGroups.length})
+                        </button>
+                      </div>
+                    </div>
+
+                    {displayedGroups.length === 0 ? (
+                      <p className="text-[11px] text-charcoal/50 italic p-3.5 bg-gray-50/80 rounded-2xl text-center border border-dashed border-gray-200">
+                        No small groups recorded for this study category yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 no-scrollbar">
+                        {displayedGroups.map((grp) => {
+                          const isGroupDone = completedGroups.some((cg) => cg.id === grp.id);
+
+                          return (
+                            <div
+                              key={grp.id}
+                              className={`p-2.5 rounded-2xl border text-xs flex items-center justify-between gap-2 ${isGroupDone
+                                  ? "bg-emerald-50/50 border-emerald-200"
+                                  : "bg-amber-50/50 border-amber-200"
+                                }`}
+                            >
+                              <div className="min-w-0">
+                                <div className="font-bold text-charcoal truncate">{grp.name}</div>
+                                <div className="text-[10px] text-charcoal/60 truncate">
+                                  Leader: {grp.leader_name} • {grp.meeting_day}s
+                                </div>
+                              </div>
+
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black shrink-0 ${isGroupDone ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                                }`}>
+                                {isGroupDone ? "Done" : "Ongoing"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Primary & Secondary Inspector Action Buttons */}
+                  <div className="flex items-center justify-between pt-3.5 border-t border-gray-100 flex-wrap gap-2">
+                    <button
+                      onClick={() => handleToggleCompleted(topicData)}
+                      className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs font-black transition-all shadow-xs cursor-pointer ${isCompleted
+                          ? "bg-gray-100 text-charcoal/80 hover:bg-gray-200"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95"
+                        }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{isCompleted ? "Reopen Study" : "Mark Completed"}</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenModal(topicData)}
+                        className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-black text-xs transition-colors cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmTopic(topicData)}
+                        className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-xs transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+            </>
+          );
+        })()}
+      </div>
 
       {/* ==================================================== */}
       {/* MODAL: COMPLETED BOOKS ARCHIVE */}
@@ -978,11 +1096,18 @@ export const CurriculumPage: React.FC = () => {
             ) : (
               <div className="space-y-3 divide-y divide-gray-100">
                 {completedBooksList.map(item => (
-                  <div key={item.id} className="pt-3 first:pt-0 space-y-2">
+                  <div 
+                    key={item.id} 
+                    onClick={() => {
+                      setIsCompletedBooksModalOpen(false);
+                      handleOpenDetailModal(item);
+                    }}
+                    className="pt-3 first:pt-0 space-y-2 p-3 rounded-2xl hover:bg-emerald-50/50 transition-colors cursor-pointer group"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-black text-sm text-indigo">{item.title}</span>
+                          <span className="font-black text-sm text-indigo-950 group-hover:text-indigo-800">{item.title}</span>
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
                             {item.total_chapters} Chapters
                           </span>

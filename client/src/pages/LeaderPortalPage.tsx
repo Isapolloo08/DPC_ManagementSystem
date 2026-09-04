@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
+import { ChurchLogo } from "../components/common/ChurchLogo";
 import { api } from "../api";
 import { 
   BibleStudyGroup, Member, PrayerRequest, Announcement, StudyTopic, BibleStudyMember 
@@ -169,20 +170,23 @@ export const LeaderPortalPage: React.FC = () => {
         <div className="absolute right-0 top-0 w-96 h-96 bg-radial from-sky-400/15 via-indigo-500/5 to-transparent rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-sky-300 text-[11px] font-bold shadow-2xs backdrop-blur-md">
-              <BookOpen className="w-3.5 h-3.5 text-sky-400" />
-              <span>Small Group & Discipleship Leader Portal</span>
+          <div className="flex items-start gap-4">
+            <ChurchLogo variant="badge" className="w-12 h-12 rounded-2xl shadow-xl ring-2 ring-white/20 shrink-0 mt-1" />
+            <div className="space-y-1.5 min-w-0">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-sky-300 text-[11px] font-bold shadow-2xs backdrop-blur-md">
+                <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+                <span>Small Group & Discipleship Leader Portal</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
+                <span>Welcome, Leader {user?.name || "Daniel Cruz"}</span>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-sky-500/30 text-sky-200 border border-sky-400/30">
+                  Leader
+                </span>
+              </h1>
+              <p className="text-xs text-sky-200/90 max-w-xl leading-relaxed">
+                Oversee your Bible study disciples, track weekly meeting attendance, guide curriculum progress, and pray for your group members.
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
-              <span>Welcome, Leader {user?.name || "Daniel Cruz"}</span>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-sky-500/30 text-sky-200 border border-sky-400/30">
-                Leader
-              </span>
-            </h1>
-            <p className="text-xs text-sky-200/90 max-w-xl leading-relaxed">
-              Oversee your Bible study disciples, track weekly meeting attendance, guide curriculum progress, and pray for your group members.
-            </p>
           </div>
 
           {/* Group Selector Dropdown */}

@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { ChurchLogo } from "../common/ChurchLogo";
 import { 
   LayoutDashboard, Users, UserCheck, Calendar, MessageSquare, 
   Heart, BarChart3, ShieldAlert, Sparkles, BookOpen, BookMarked, LogOut, Sliders, UserCog, CalendarCheck,
-  Church, X, ChevronLeft, ChevronRight, Utensils
+  X, ChevronLeft, ChevronRight, Utensils
 } from "lucide-react";
 
 export type NavTab = 
@@ -121,11 +122,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
               <button
                 type="button"
                 onClick={() => setIsCollapsed(false)}
-                className="group relative w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center shadow-md text-charcoal transition-all hover:scale-105 hover:shadow-lg cursor-pointer"
+                className="group relative w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-300 flex items-center justify-center shadow-md text-charcoal transition-all hover:scale-105 hover:shadow-lg cursor-pointer"
                 title="Expand sidebar (Click to un-collapse)"
               >
-                {/* Default Church Logo */}
-                <Church className="w-6 h-6 text-indigo-900 transition-all duration-200 group-hover:opacity-0 group-hover:scale-75" />
+                {/* Professional Church Logo */}
+                <ChurchLogo className="w-6 h-6 text-indigo-950 transition-all duration-200 group-hover:opacity-0 group-hover:scale-75" />
                 
                 {/* Hover State: Arrow Icon smoothly appearing */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-amber-400 rounded-xl">
@@ -137,9 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
             /* EXPANDED HEADER: Church Logo, Name, and Collapse Button */
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center shadow-md text-charcoal shrink-0">
-                  <Church className="w-6 h-6 text-indigo-900" />
-                </div>
+                <ChurchLogo variant="badge" className="w-10 h-10 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-[13px] text-charcoal tracking-tight flex items-center gap-1">
                     <span className="truncate">Daet Presbyterian</span>

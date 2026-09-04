@@ -253,6 +253,7 @@ export const api = {
     if (params?.search) q.set("search", params.search);
     return request<StudyTopicsSummary>(`/study-topics?${q.toString()}`);
   },
+  getStudyTopic: (id: number) => request<{ topic: StudyTopic; group_members: any[]; all_groups: any[] }>(`/study-topics/${id}`),
   createStudyTopic: (data: Partial<StudyTopic>) => request<{ id: number; message: string }>("/study-topics", {
     method: "POST",
     body: JSON.stringify(data)

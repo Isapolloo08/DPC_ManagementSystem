@@ -1,76 +1,166 @@
-import { Router, Request, Response } from "express";
+import express from "express";
 import { db } from "../db/schema";
-import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { authMiddleware, requireRoles } from "../middleware/auth";
 
-const router = Router();
+const router = express.Router();
+router.use(authMiddleware);
 
-// Get study topics with stats summary
-router.get("/", async (req: Request, res: Response) => {
+// ====================================================
+// 1. GET ALL STUDY TOPICS & CURRICULUM SUMMARY
+// ====================================================
+router.get("/", async (req, res) => {
   try {
     const { status, type, ministry_id, search } = req.query;
 
-    let query = `
-      SELECT t.*, 
-             g.name as group_name, min.name as ministry_name, min.color as ministry_color
+    let sql = `
+      SELECT 
+        t.*,
+        g.name as group_name,
+        g.leader_name as leader_name,
+        g.leader_contact as leader_phone,
+        g.meeting_day,
+        g.meeting_time,
+        g.location as current_location,
+        COALESCE(m.name, gm.name) as ministry_name,
+        COALESCE(m.color, gm.color) as ministry_color
       FROM bible_study_topics t
       LEFT JOIN bible_study_groups g ON t.assigned_group_id = g.id
-      LEFT JOIN ministries min ON t.assigned_ministry_id = min.id
+      LEFT JOIN ministries m ON t.assigned_ministry_id = m.id
+      LEFT JOIN ministries gm ON g.ministry_id = gm.id
       WHERE 1=1
     `;
     const params: any[] = [];
 
     if (status && status !== "all") {
       params.push(status);
-      query += ` AND t.status = $${params.length}`;
+      sql += ` AND t.status = $${params.length}`;
     }
 
-    if (type && type !== "all") {
+    if (type) {
       params.push(type);
-      query += ` AND t.type = $${params.length}`;
+      sql += ` AND t.type = $${params.length}`;
     }
 
     if (ministry_id) {
-      params.push(ministry_id);
-      query += ` AND t.assigned_ministry_id = $${params.length}`;
+      params.push(Number(ministry_id));
+      sql += ` AND (t.assigned_ministry_id = $${params.length} OR g.ministry_id = $${params.length})`;
     }
 
-    if (search && typeof search === "string") {
+    if (search) {
       params.push(`%${search}%`);
-      const pIdx = params.length;
-      query += ` AND (t.title ILIKE $${pIdx} OR t.lead_teacher ILIKE $${pIdx} OR t.key_verse ILIKE $${pIdx} OR t.testament_or_category ILIKE $${pIdx})`;
+      sql += ` AND (t.title ILIKE $${params.length} OR t.testament_or_category ILIKE $${params.length} OR t.lead_teacher ILIKE $${params.length} OR t.key_verse ILIKE $${params.length})`;
     }
 
-    query += " ORDER BY t.status ASC, t.id ASC";
+    sql += ` ORDER BY CASE WHEN t.status = 'in_progress' THEN 1 WHEN t.status = 'completed' THEN 2 ELSE 3 END, t.created_at DESC`;
 
-    const topics = await db.all(query, params);
+    const topics = await db.all<any>(sql, params);
 
-    // Summary counts
-    const allTopics = await db.all("SELECT * FROM bible_study_topics");
-    const counts = {
-      total: allTopics.length,
-      completed: allTopics.filter(t => t.status === "completed").length,
-      in_progress: allTopics.filter(t => t.status === "in_progress").length,
-      planned: allTopics.filter(t => t.status === "planned").length,
-      books_completed: allTopics.filter(t => t.type === "book" && t.status === "completed").length,
-      total_chapters_completed: allTopics.reduce((acc, t) => acc + (Number(t.completed_chapters) || 0), 0)
-    };
+    // Compute Summary Stats
+    const allTopics = await db.all<any>("SELECT * FROM bible_study_topics");
+    const total_count = allTopics.length;
+    const completed_count = allTopics.filter(t => t.status === "completed").length;
+    const in_progress_count = allTopics.filter(t => t.status === "in_progress").length;
+    const planned_count = allTopics.filter(t => t.status === "planned").length;
+    const completion_rate = total_count > 0 ? Math.round((completed_count / total_count) * 100) : 0;
+    const completed_books = allTopics.filter(t => t.status === "completed");
 
     res.json({
       topics,
-      summary: counts
+      total_count,
+      completed_count,
+      in_progress_count,
+      planned_count,
+      completion_rate,
+      completed_books
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (error: any) {
+    console.error("Failed to fetch study topics:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch study topics" });
   }
 });
 
-// Create study topic
-router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+// ====================================================
+// 2. GET SINGLE STUDY TOPIC WITH GROUP & MEMBERS DETAILS
+// ====================================================
+router.get("/:id", async (req, res) => {
+  try {
+    const topicId = Number(req.params.id);
+
+    const topic = await db.get<any>(`
+      SELECT 
+        t.*,
+        g.name as group_name,
+        g.leader_name as leader_name,
+        g.leader_contact as leader_phone,
+        g.meeting_day,
+        g.meeting_time,
+        g.location as current_location,
+        COALESCE(m.name, gm.name) as ministry_name,
+        COALESCE(m.color, gm.color) as ministry_color
+      FROM bible_study_topics t
+      LEFT JOIN bible_study_groups g ON t.assigned_group_id = g.id
+      LEFT JOIN ministries m ON t.assigned_ministry_id = m.id
+      LEFT JOIN ministries gm ON g.ministry_id = gm.id
+      WHERE t.id = $1
+    `, [topicId]);
+
+    if (!topic) {
+      return res.status(404).json({ error: "Study topic not found" });
+    }
+
+    // Fetch enrolled group members if assigned to a group
+    let group_members: any[] = [];
+    if (topic.assigned_group_id) {
+      group_members = await db.all<any>(`
+        SELECT 
+          bm.id as enrollment_id,
+          bm.group_id,
+          bm.member_id,
+          bm.joined_at,
+          m.first_name,
+          m.last_name,
+          m.contact_phone,
+          m.contact_email,
+          m.gender,
+          m.status as member_status,
+          min.name as member_ministry_name
+        FROM bible_study_members bm
+        JOIN members m ON bm.member_id = m.id
+        LEFT JOIN ministries min ON m.ministry_id = min.id
+        WHERE bm.group_id = $1
+        ORDER BY m.first_name ASC, m.last_name ASC
+      `, [topic.assigned_group_id]);
+    }
+
+    // Fetch all groups to cross-match curriculum progress
+    const all_groups = await db.all<any>(`
+      SELECT 
+        id, name, leader_name, leader_contact, meeting_day, meeting_time, 
+        location, category, curriculum, current_chapter, progress_stage, ministry_id
+      FROM bible_study_groups
+      ORDER BY name ASC
+    `);
+
+    res.json({
+      topic,
+      group_members,
+      all_groups
+    });
+  } catch (error: any) {
+    console.error("Failed to fetch study topic details:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch study topic details" });
+  }
+});
+
+// ====================================================
+// 3. CREATE STUDY TOPIC
+// ====================================================
+router.post("/", requireRoles("Admin", "Coordinator", "Leader"), async (req, res) => {
   try {
     const {
       title,
       type = "book",
-      testament_or_category,
+      testament_or_category = "New Testament",
       total_chapters = 1,
       completed_chapters = 0,
       status = "in_progress",
@@ -83,7 +173,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
     } = req.body;
 
     if (!title) {
-      return res.status(400).json({ error: "Topic title is required" });
+      return res.status(400).json({ error: "Title is required" });
     }
 
     const result = await db.run(`
@@ -94,13 +184,13 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id
     `, [
-      title.trim(),
+      title,
       type,
-      testament_or_category || null,
+      testament_or_category,
       Number(total_chapters) || 1,
       Number(completed_chapters) || 0,
       status,
-      status === "completed" ? (completed_date || new Date().toISOString().split("T")[0]) : null,
+      completed_date || null,
       assigned_group_id ? Number(assigned_group_id) : null,
       assigned_ministry_id ? Number(assigned_ministry_id) : null,
       lead_teacher || null,
@@ -108,19 +198,22 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       summary_notes || null
     ]);
 
-    const newId = result.lastInsertRowid;
-    await logAuditAction(req.user?.id || null, "CREATE", "bible_study_topics", newId, `Created study topic: ${title}`);
-
-    res.status(201).json({ id: newId, message: "Study topic created successfully" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(201).json({
+      id: result.lastInsertRowid || (result as any).id,
+      message: "Study topic added successfully"
+    });
+  } catch (error: any) {
+    console.error("Failed to create study topic:", error);
+    res.status(500).json({ error: error.message || "Failed to create study topic" });
   }
 });
 
-// Update study topic
-router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+// ====================================================
+// 4. UPDATE STUDY TOPIC
+// ====================================================
+router.put("/:id", requireRoles("Admin", "Coordinator", "Leader"), async (req, res) => {
   try {
-    const id = req.params.id;
+    const topicId = Number(req.params.id);
     const {
       title,
       type,
@@ -136,83 +229,61 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
       summary_notes
     } = req.body;
 
+    const existing = await db.get("SELECT id FROM bible_study_topics WHERE id = $1", [topicId]);
+    if (!existing) {
+      return res.status(404).json({ error: "Study topic not found" });
+    }
+
     await db.run(`
       UPDATE bible_study_topics
-      SET title = COALESCE($1, title),
-          type = COALESCE($2, type),
-          testament_or_category = COALESCE($3, testament_or_category),
-          total_chapters = COALESCE($4, total_chapters),
-          completed_chapters = COALESCE($5, completed_chapters),
-          status = COALESCE($6, status),
-          completed_date = COALESCE($7, completed_date),
-          assigned_group_id = COALESCE($8, assigned_group_id),
-          assigned_ministry_id = COALESCE($9, assigned_ministry_id),
-          lead_teacher = COALESCE($10, lead_teacher),
-          key_verse = COALESCE($11, key_verse),
-          summary_notes = COALESCE($12, summary_notes)
+      SET 
+        title = COALESCE($1, title),
+        type = COALESCE($2, type),
+        testament_or_category = COALESCE($3, testament_or_category),
+        total_chapters = COALESCE($4, total_chapters),
+        completed_chapters = COALESCE($5, completed_chapters),
+        status = COALESCE($6, status),
+        completed_date = $7,
+        assigned_group_id = $8,
+        assigned_ministry_id = $9,
+        lead_teacher = COALESCE($10, lead_teacher),
+        key_verse = COALESCE($11, key_verse),
+        summary_notes = COALESCE($12, summary_notes)
       WHERE id = $13
     `, [
-      title !== undefined ? title.trim() : null,
+      title,
       type,
       testament_or_category,
       total_chapters !== undefined ? Number(total_chapters) : null,
       completed_chapters !== undefined ? Number(completed_chapters) : null,
       status,
       completed_date,
-      assigned_group_id !== undefined ? (assigned_group_id ? Number(assigned_group_id) : null) : null,
-      assigned_ministry_id !== undefined ? (assigned_ministry_id ? Number(assigned_ministry_id) : null) : null,
+      assigned_group_id ? Number(assigned_group_id) : null,
+      assigned_ministry_id ? Number(assigned_ministry_id) : null,
       lead_teacher,
       key_verse,
       summary_notes,
-      id
+      topicId
     ]);
 
-    await logAuditAction(req.user?.id || null, "UPDATE", "bible_study_topics", Number(id), `Updated study topic #${id}`);
     res.json({ message: "Study topic updated successfully" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (error: any) {
+    console.error("Failed to update study topic:", error);
+    res.status(500).json({ error: error.message || "Failed to update study topic" });
   }
 });
 
-// Toggle completed status
-router.post("/:id/toggle-completed", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+// ====================================================
+// 5. DELETE STUDY TOPIC
+// ====================================================
+router.delete("/:id", requireRoles("Admin", "Coordinator", "Leader"), async (req, res) => {
   try {
-    const id = req.params.id;
-    const current = await db.get("SELECT * FROM bible_study_topics WHERE id = $1", [id]);
-    if (!current) return res.status(404).json({ error: "Study topic not found" });
-
-    const isNowCompleted = current.status !== "completed";
-    const nextStatus = isNowCompleted ? "completed" : "in_progress";
-    const nextDate = isNowCompleted ? new Date().toISOString().split("T")[0] : null;
-    const nextChapters = isNowCompleted ? current.total_chapters : current.completed_chapters;
-
-    await db.run(`
-      UPDATE bible_study_topics
-      SET status = $1, completed_date = $2, completed_chapters = $3
-      WHERE id = $4
-    `, [nextStatus, nextDate, nextChapters, id]);
-
-    await logAuditAction(req.user?.id || null, "UPDATE", "bible_study_topics", Number(id), `Marked topic '${current.title}' as ${nextStatus}`);
-
-    res.json({
-      message: `Topic marked as ${nextStatus}`,
-      status: nextStatus,
-      completed_date: nextDate
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Delete study topic
-router.delete("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
-  try {
-    const id = req.params.id;
-    await db.run("DELETE FROM bible_study_topics WHERE id = $1", [id]);
-    await logAuditAction(req.user?.id || null, "DELETE", "bible_study_topics", Number(id), `Deleted study topic #${id}`);
+    const topicId = Number(req.params.id);
+    await db.run("DELETE FROM bible_study_topics WHERE id = $1", [topicId]);
     res.json({ message: "Study topic deleted successfully" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (error: any) {
+    console.error("Failed to delete study topic:", error);
+    res.status(500).json({ error: error.message || "Failed to delete study topic" });
   }
 });
 

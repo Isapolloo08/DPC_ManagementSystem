@@ -417,34 +417,40 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       )}
 
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 lg:p-8 border border-indigo-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo text-xs font-bold uppercase tracking-wider">
-            <Sliders className="w-3.5 h-3.5 text-indigo" />
-            <span>Master Data & Category Management</span>
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-80 h-80 bg-gradient-to-br from-indigo-500/5 via-amber-500/5 to-transparent rounded-full blur-2xl pointer-events-none"></div>
+
+        <div className="space-y-2 relative z-10">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+              <Sliders className="w-5 h-5" />
+            </span>
+            <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
+              System Settings & Dropdowns
+            </h1>
+            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-black uppercase tracking-wider shadow-2xs">
+              Lookups & Configuration
+            </span>
           </div>
-          <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
-            System Settings & Dropdowns
-          </h1>
-          <p className="text-sm text-charcoal/70 max-w-2xl">
+          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed font-medium">
             Configure dynamic categories, ministry brackets, stewardship funds, payment methods, event rooms, and church preferences across the entire platform.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap self-start md:self-auto">
+        <div className="flex items-center gap-3 flex-wrap self-start md:self-auto relative z-10">
           {onNavigateToUsers && (
             <button
               onClick={onNavigateToUsers}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
             >
-              <UserCog className="w-3.5 h-3.5 text-amber-400" />
-              <span>User Management (4 Roles)</span>
+              <UserCog className="w-4 h-4 text-indigo-950" />
+              <span>User Management (5 Roles)</span>
             </button>
           )}
           <button
             onClick={loadAllData}
             disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-bold text-charcoal hover:bg-indigo-50/50 hover:border-indigo-200 transition-all shadow-2xs"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-indigo-50/60 border border-indigo-200/80 text-xs font-bold text-charcoal shadow-2xs hover:shadow-xs transition-all cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -453,7 +459,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       </div>
 
       {/* Settings Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-gray-200 scrollbar-none">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-indigo-100/60 scrollbar-none">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -463,10 +469,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 setActiveTab(tab.id);
                 setSearchTerm("");
               }}
-              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-xs font-black whitespace-nowrap transition-all cursor-pointer ${
                 isActive
-                  ? "bg-indigo text-white shadow-sm"
-                  : "text-charcoal/70 hover:bg-white hover:text-indigo border border-transparent hover:border-gray-200"
+                  ? "bg-indigo text-white shadow-md shadow-indigo-950/20"
+                  : "bg-white/80 hover:bg-white text-charcoal/70 hover:text-indigo border border-indigo-100/80 hover:border-indigo-200 shadow-2xs"
               }`}
             >
               <span className={isActive ? "text-amber-400" : "text-indigo/70"}>
@@ -474,8 +480,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </span>
               <span>{tab.label}</span>
               {tab.count !== undefined && (
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                  isActive ? "bg-white/20 text-white" : "bg-gray-100 text-charcoal/60"
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  isActive ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo border border-indigo-100/60"
                 }`}>
                   {tab.count}
                 </span>

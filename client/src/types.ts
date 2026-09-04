@@ -365,7 +365,22 @@ export interface StudyTopic {
   lead_teacher?: string | null;
   key_verse?: string | null;
   summary_notes?: string | null;
+  group_name?: string | null;
+  meeting_day?: string | null;
+  meeting_time?: string | null;
+  current_location?: string | null;
+  leader_name?: string | null;
+  leader_email?: string | null;
+  leader_phone?: string | null;
+  ministry_name?: string | null;
+  ministry_color?: string | null;
   created_at?: string;
+}
+
+export interface StudyTopicDetailResponse {
+  topic: StudyTopic;
+  group_members: any[];
+  all_groups: any[];
 }
 
 export interface StudyTopicsSummary {

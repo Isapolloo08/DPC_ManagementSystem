@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
+import { ChurchLogo } from "../components/common/ChurchLogo";
 import { api } from "../api";
 import { Member, AttendanceRecord, Ministry, AttendanceRosterItem } from "../types";
 import { 
   UserCheck, ShieldCheck, Tag, AlertCircle, 
   Search, CheckCircle2, Clock, Printer, KeyRound, QrCode, X,
-  Users, Sparkles, Church, Heart, Check, Calendar, Plus, RefreshCw,
+  Users, Sparkles, Heart, Check, Calendar, Plus, RefreshCw,
   Home, Phone, UserPlus, Filter, ArrowRight, ShieldAlert, Award
 } from "lucide-react";
 
@@ -268,7 +269,7 @@ export const CheckInPage: React.FC = () => {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-amber-300 text-[11px] font-bold shadow-2xs backdrop-blur-md">
-              <Church className="w-3.5 h-3.5 text-amber-400" />
+              <ChurchLogo className="w-3.5 h-3.5 text-amber-400" />
               <span>Sunday Divine Worship & Attendance Kiosk</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">

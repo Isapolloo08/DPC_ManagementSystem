@@ -225,33 +225,37 @@ export const DutyPage: React.FC = () => {
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-charcoal flex items-center gap-2">
-            <CalendarCheck className="w-6 h-6 text-indigo" />
-            <span>Saturday Duty Roster & Rotating Teams</span>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+              <CalendarCheck className="w-5 h-5" />
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">
+              Saturday Duty Roster & Rotating Teams
+            </h1>
             {coordinatorMinistryId && (
-              <span className="text-xs bg-indigo-50 text-indigo border border-indigo-200 px-2.5 py-0.5 rounded-full font-bold">
+              <span className="text-xs bg-indigo-50 text-indigo-950 border border-indigo-200/80 px-3 py-1 rounded-full font-black shadow-2xs">
                 {coordinatorMinistryName} Scope
               </span>
             )}
-          </h1>
-          <p className="text-xs text-charcoal/60 mt-0.5">
+          </div>
+          <p className="text-xs text-charcoal/60 mt-1">
             Weekly Saturday service preparation, church facility cleaning, and rotating team duty cycle.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={loadDutyData}
-            className="p-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-charcoal/70 transition-all shadow-2xs"
+            className="p-2.5 rounded-2xl border border-indigo-100 bg-white hover:bg-gray-50 text-charcoal/70 transition-all shadow-2xs cursor-pointer active:scale-95"
             title="Refresh schedule"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo" : ""}`} />
           </button>
           <button
             onClick={handleOpenCreateTeam}
-            className="flex items-center gap-1.5 bg-indigo hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95"
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-4.5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 text-indigo-950" />
             <span>Create Team</span>
           </button>
         </div>
@@ -259,21 +263,22 @@ export const DutyPage: React.FC = () => {
 
       {/* Hero Card: THIS SATURDAY'S ON-DUTY TEAM */}
       {thisSaturday && thisSaturday.team && (
-        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-950 via-indigo-900 to-indigo-950 rounded-2xl p-6 text-white shadow-xl border border-indigo-800">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-radial from-amber-500/10 via-transparent to-transparent pointer-events-none rounded-full blur-2xl"></div>
+        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-950 via-indigo-900 to-indigo-800 rounded-3xl p-7 sm:p-8 text-white shadow-xl border border-indigo-700/70">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-400/15 pointer-events-none rounded-full blur-3xl -mr-20 -mt-20"></div>
+          <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-emerald-500/10 pointer-events-none rounded-full blur-2xl"></div>
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2.5">
-                <span className="bg-amber-400 text-indigo-950 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm animate-pulse">
-                  <Clock className="w-3 h-3" />
+            <div className="space-y-3.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="bg-amber-400 text-indigo-950 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-xs animate-pulse">
+                  <Clock className="w-3.5 h-3.5 text-indigo-950" />
                   <span>THIS SATURDAY ON DUTY</span>
                 </span>
-                <span className="text-xs text-indigo-200 font-semibold">
+                <span className="text-xs text-indigo-100 font-bold bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
                   {thisSaturday.date_formatted}
                 </span>
                 {thisSaturday.status === "completed" && (
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1">
                     <Check className="w-3 h-3" />
                     <span>Completed</span>
                   </span>
@@ -281,54 +286,54 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <h2 className="text-2xl font-black text-amber-300 flex items-center gap-3">
+                <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
                   <span>{thisSaturday.team.name}</span>
                   <span 
-                    className="w-3 h-3 rounded-full border border-white/50 inline-block" 
+                    className="w-4 h-4 rounded-full ring-2 ring-white/60 shadow-md inline-block" 
                     style={{ backgroundColor: thisSaturday.team.color }}
                   ></span>
                 </h2>
-                <p className="text-xs text-indigo-200 mt-1 max-w-xl">
+                <p className="text-xs text-indigo-100/90 mt-1.5 max-w-xl leading-relaxed">
                   Responsibilities: {thisSaturday.notes || thisSaturday.team.tasks_checklist || "Sanctuary Cleaning, Restrooms, Trash, Audio Setup"}
                 </p>
               </div>
 
               {/* Leader & Roster Preview */}
-              <div className="flex flex-wrap items-center gap-4 pt-1">
-                <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15 flex items-center gap-2">
-                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 flex items-center gap-2 shadow-2xs">
+                  <Crown className="w-4 h-4 text-amber-300" />
                   <span className="text-xs font-semibold">
-                    Leader: <strong className="text-white">{thisSaturday.team.leader_name || "Unassigned"}</strong>
+                    Leader: <strong className="text-white font-black">{thisSaturday.team.leader_name || "Unassigned"}</strong>
                   </span>
                   {thisSaturday.team.leader_phone && (
                     <span className="text-[11px] text-indigo-200 font-mono">({thisSaturday.team.leader_phone})</span>
                   )}
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15 flex items-center gap-2">
-                  <Users className="w-3.5 h-3.5 text-indigo-300" />
+                <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 flex items-center gap-2 shadow-2xs">
+                  <Users className="w-4 h-4 text-amber-300" />
                   <span className="text-xs font-semibold">
-                    Team Strength: <strong className="text-white">{thisSaturday.team.members?.length || thisSaturday.team.members_count || 0} Members</strong>
+                    Team Strength: <strong className="text-white font-black">{thisSaturday.team.members?.length || thisSaturday.team.members_count || 0} Members</strong>
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0">
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0">
               {thisSaturday.status !== "completed" ? (
                 <button
                   onClick={() => {
                     setCompletingItem(thisSaturday);
                     setCompletionNotes("");
                   }}
-                  className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-lg transition-all active:scale-95"
+                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs py-3 px-5 rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Mark Duty Completed</span>
                 </button>
               ) : (
-                <div className="text-xs text-emerald-300 font-semibold bg-emerald-950/60 border border-emerald-500/30 px-3 py-2 rounded-xl flex items-center gap-2">
+                <div className="text-xs text-emerald-300 font-bold bg-emerald-950/70 border border-emerald-500/40 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs">
                   <Check className="w-4 h-4 text-emerald-400" />
                   <span>Finished for {thisSaturday.date_formatted}</span>
                 </div>
@@ -336,7 +341,7 @@ export const DutyPage: React.FC = () => {
 
               <button
                 onClick={() => handleOpenSwapModal(thisSaturday)}
-                className="flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 text-white font-bold text-xs py-2.5 px-4 rounded-xl border border-white/20 transition-all active:scale-95"
+                className="flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 text-white font-bold text-xs py-2.5 px-4 rounded-2xl border border-white/20 transition-all active:scale-95 cursor-pointer shadow-xs"
               >
                 <ArrowLeftRight className="w-4 h-4 text-amber-300" />
                 <span>Swap Saturday Team</span>
@@ -346,17 +351,17 @@ export const DutyPage: React.FC = () => {
 
           {/* Member chips row */}
           {thisSaturday.team.members && thisSaturday.team.members.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Duty Disciples:</span>
+            <div className="mt-5 pt-4 border-t border-white/15 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">Duty Disciples:</span>
               {thisSaturday.team.members.map((m, idx) => (
                 <span
                   key={idx}
-                  className="bg-white/10 hover:bg-white/20 border border-white/10 px-2.5 py-1 rounded-lg text-xs font-medium text-indigo-100 flex items-center gap-1.5"
+                  className="bg-white/15 hover:bg-white/25 border border-white/15 px-3 py-1 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 shadow-2xs backdrop-blur-xs"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                   <span>{m.first_name} {m.last_name}</span>
                   {m.team_role === "Team Leader" && (
-                    <span className="text-[9px] bg-amber-400 text-indigo-950 font-black px-1 rounded">LEAD</span>
+                    <span className="text-[9px] bg-amber-400 text-indigo-950 font-black px-1.5 py-0.2 rounded-md">LEAD</span>
                   )}
                 </span>
               ))}
@@ -366,13 +371,13 @@ export const DutyPage: React.FC = () => {
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+      <div className="flex items-center bg-white/95 p-1.5 rounded-2xl border border-indigo-100/90 shadow-2xs w-fit gap-1.5">
         <button
           onClick={() => setActiveTab("teams")}
-          className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all ${
+          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${
             activeTab === "teams"
-              ? "bg-indigo text-white shadow-xs"
-              : "text-charcoal/70 hover:bg-gray-100"
+              ? "bg-indigo-950 text-white shadow-xs"
+              : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
           }`}
         >
           <Users className="w-4 h-4" />
@@ -381,10 +386,10 @@ export const DutyPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab("schedule")}
-          className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all ${
+          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${
             activeTab === "schedule"
-              ? "bg-indigo text-white shadow-xs"
-              : "text-charcoal/70 hover:bg-gray-100"
+              ? "bg-indigo-950 text-white shadow-xs"
+              : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
           }`}
         >
           <Calendar className="w-4 h-4" />
@@ -393,14 +398,14 @@ export const DutyPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab("tasks")}
-          className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl transition-all ${
+          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${
             activeTab === "tasks"
-              ? "bg-indigo text-white shadow-xs"
-              : "text-charcoal/70 hover:bg-gray-100"
+              ? "bg-indigo-950 text-white shadow-xs"
+              : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
           }`}
         >
           <CheckSquare className="w-4 h-4" />
-          <span>Saturday Cleaning & Duty Checklist</span>
+          <span>Duty Checklist</span>
         </button>
       </div>
 
@@ -411,35 +416,35 @@ export const DutyPage: React.FC = () => {
             {teams.map((team) => (
               <div
                 key={team.id}
-                className="bg-white rounded-2xl border border-gray-200/90 hover:border-indigo-200 shadow-2xs hover:shadow-md transition-all p-5 flex flex-col justify-between space-y-4"
+                className="bg-white/95 rounded-3xl border border-indigo-100/90 hover:border-amber-400 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between space-y-4"
               >
                 <div>
                   {/* Team Card Header */}
-                  <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                    <div className="flex items-center gap-2.5">
+                  <div className="flex items-center justify-between pb-3.5 border-b border-indigo-50">
+                    <div className="flex items-center gap-3">
                       <span
-                        className="w-4 h-4 rounded-full shadow-2xs"
+                        className="w-4 h-4 rounded-full shadow-inner ring-2 ring-white"
                         style={{ backgroundColor: team.color }}
                       ></span>
                       <div>
-                        <h3 className="font-bold text-base text-charcoal">{team.name}</h3>
-                        <span className="text-[10px] text-indigo font-bold bg-indigo-50 px-2 py-0.5 rounded">
-                          Cycle Turn #{team.order_seq}
+                        <h3 className="font-black text-base text-indigo-950">{team.name}</h3>
+                        <span className="text-[10px] text-indigo-950 font-black bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
+                          Turn #{team.order_seq}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleOpenEditTeam(team)}
-                        className="p-1.5 text-charcoal/50 hover:text-indigo hover:bg-indigo-50 rounded-lg transition-colors"
+                        className="p-2 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
                         title="Edit Team"
                       >
                         <Edit className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteTeam(team.id, team.name)}
-                        className="p-1.5 text-charcoal/50 hover:text-rose hover:bg-rose-50 rounded-lg transition-colors"
+                        className="p-2 text-charcoal/50 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                         title="Delete Team"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -448,26 +453,26 @@ export const DutyPage: React.FC = () => {
                   </div>
 
                   {/* Leader Banner */}
-                  <div className="mt-3 bg-ivory-light p-2.5 rounded-xl border border-gray-100 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <Crown className="w-3.5 h-3.5 text-amber-500" />
+                  <div className="mt-3.5 bg-ivory-light/70 p-3 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <Crown className="w-4 h-4 text-amber-500" />
                       <div>
-                        <span className="text-[10px] text-charcoal/50 block font-semibold">Team Leader</span>
-                        <span className="font-bold text-charcoal">{team.leader_name || "Unassigned"}</span>
+                        <span className="text-[10px] text-charcoal/50 block font-bold">Team Leader</span>
+                        <span className="font-black text-indigo-950">{team.leader_name || "Unassigned"}</span>
                       </div>
                     </div>
                     {team.leader_phone && (
-                      <span className="text-[10px] text-indigo font-mono font-medium">{team.leader_phone}</span>
+                      <span className="text-[10px] text-indigo-900 font-mono font-bold">{team.leader_phone}</span>
                     )}
                   </div>
 
                   {/* Member Roster Chips */}
-                  <div className="mt-3.5 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-charcoal/70">
-                      <span>Assigned Members ({team.members?.length || 0})</span>
+                  <div className="mt-4 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs font-black text-indigo-950">
+                      <span>Assigned Disciples ({team.members?.length || 0})</span>
                       <button
                         onClick={() => handleOpenAddMember(team)}
-                        className="text-indigo hover:text-indigo-700 text-[11px] flex items-center gap-1 font-bold"
+                        className="text-indigo-950 hover:text-amber-600 text-[11px] flex items-center gap-1 font-black cursor-pointer transition-colors"
                       >
                         <UserPlus className="w-3.5 h-3.5" />
                         <span>Add Member</span>
@@ -475,19 +480,19 @@ export const DutyPage: React.FC = () => {
                     </div>
 
                     {team.members && team.members.length > 0 ? (
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                         {team.members.map((m) => (
                           <div
                             key={m.member_id}
-                            className="flex items-center justify-between p-2 rounded-xl bg-ivory-light/70 hover:bg-ivory-light border border-gray-100 text-xs transition-colors"
+                            className="flex items-center justify-between p-2.5 rounded-xl bg-ivory-light/60 hover:bg-ivory-light border border-indigo-50/80 text-xs transition-colors"
                           >
                             <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-indigo/40"></span>
-                              <span className="font-semibold text-charcoal">
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                              <span className="font-bold text-indigo-950">
                                 {m.first_name} {m.last_name}
                               </span>
                               {m.team_role === "Team Leader" && (
-                                <span className="text-[9px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.2 rounded">
+                                <span className="text-[9px] bg-amber-100 text-amber-950 font-black px-2 py-0.2 rounded-md border border-amber-300">
                                   Lead
                                 </span>
                               )}
@@ -495,20 +500,20 @@ export const DutyPage: React.FC = () => {
 
                             <button
                               onClick={() => handleRemoveMember(team.id, m.member_id, `${m.first_name} ${m.last_name}`)}
-                              className="p-1 text-charcoal/40 hover:text-rose hover:bg-white rounded transition-colors"
+                              className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
                               title="Remove from team"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="p-4 rounded-xl border border-dashed border-gray-200 text-center text-xs text-charcoal/50">
+                      <div className="p-4 rounded-2xl border border-dashed border-indigo-200 text-center text-xs text-charcoal/50">
                         No members assigned yet.
                         <button
                           onClick={() => handleOpenAddMember(team)}
-                          className="block mx-auto mt-1 text-indigo font-bold underline"
+                          className="block mx-auto mt-1 text-indigo-950 font-bold underline cursor-pointer"
                         >
                           + Add first member
                         </button>
@@ -518,7 +523,7 @@ export const DutyPage: React.FC = () => {
                 </div>
 
                 {/* Team Footer Checklist Preview */}
-                <div className="pt-3 border-t border-gray-100 text-[11px] text-charcoal/60 line-clamp-2">
+                <div className="pt-3 border-t border-indigo-50 text-[11px] text-charcoal/60 line-clamp-2">
                   <span className="font-bold text-charcoal/80">Duty Checklist:</span>{" "}
                   {team.tasks_checklist || "General Saturday sanctuary cleaning and preparations."}
                 </div>
@@ -527,15 +532,15 @@ export const DutyPage: React.FC = () => {
           </div>
 
           {teams.length === 0 && !loading && (
-            <div className="p-12 text-center bg-white rounded-2xl border border-gray-200">
+            <div className="p-12 text-center bg-white rounded-3xl border border-indigo-100 shadow-sm">
               <Users className="w-12 h-12 text-charcoal/30 mx-auto mb-3" />
-              <h3 className="font-bold text-charcoal text-base">No Duty Teams Created</h3>
+              <h3 className="font-black text-indigo-950 text-base">No Duty Teams Created</h3>
               <p className="text-xs text-charcoal/60 mt-1 max-w-sm mx-auto">
                 Create Team 1, Team 2, and more to set up a seamless rotating Saturday duty cycle.
               </p>
               <button
                 onClick={handleOpenCreateTeam}
-                className="mt-4 bg-indigo text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm"
+                className="mt-4 bg-indigo-950 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs"
               >
                 + Create Team 1
               </button>
@@ -546,18 +551,18 @@ export const DutyPage: React.FC = () => {
 
       {/* TAB 2: SATURDAY ROTATION CYCLE TIMELINE */}
       {activeTab === "schedule" && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-2xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-gray-100">
+        <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-indigo-50">
             <div>
-              <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-indigo" />
+              <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-700" />
                 <span>Upcoming Saturday Rotation Schedule</span>
               </h2>
               <p className="text-xs text-charcoal/50">
                 Teams automatically cycle every Saturday ({teams.length}-week repeat interval).
               </p>
             </div>
-            <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+            <span className="text-xs font-black text-emerald-950 bg-emerald-100 border border-emerald-300 px-3.5 py-1 rounded-full">
               Cycle Active: {teams.length} Teams
             </span>
           </div>
@@ -566,12 +571,12 @@ export const DutyPage: React.FC = () => {
             {schedule.map((item, idx) => (
               <div
                 key={idx}
-                className={`p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
                   item.is_this_saturday
-                    ? "bg-indigo-50/60 border-indigo-200 shadow-xs ring-2 ring-indigo-300/30"
+                    ? "bg-gradient-to-r from-indigo-50 via-white to-amber-50/30 border-amber-300 shadow-xs ring-2 ring-amber-300/30"
                     : item.status === "completed"
                     ? "bg-emerald-50/40 border-emerald-200/80"
-                    : "bg-white border-gray-100 hover:border-indigo-100"
+                    : "bg-white border-indigo-100/70 hover:border-indigo-200"
                 }`}
               >
                 <div className="flex items-center gap-4">
@@ -580,11 +585,11 @@ export const DutyPage: React.FC = () => {
                     <span className="text-[10px] font-bold uppercase tracking-wider text-charcoal/50 block">
                       Week {item.week_number}
                     </span>
-                    <span className="text-xs font-bold text-charcoal block">
+                    <span className="text-xs font-black text-indigo-950 block">
                       {item.date_formatted}
                     </span>
                     {item.is_this_saturday && (
-                      <span className="text-[9px] bg-amber-500 text-white font-black px-1.5 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 animate-pulse">
+                      <span className="text-[9px] bg-amber-400 text-indigo-950 font-black px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
                         This Saturday
                       </span>
                     )}
@@ -594,30 +599,30 @@ export const DutyPage: React.FC = () => {
                   {item.team ? (
                     <div className="flex items-center gap-3">
                       <span
-                        className="w-3.5 h-3.5 rounded-full shrink-0 shadow-2xs"
+                        className="w-4 h-4 rounded-full shrink-0 shadow-inner ring-1 ring-white"
                         style={{ backgroundColor: item.team.color }}
                       ></span>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-sm text-charcoal">{item.team.name}</h4>
-                          <span className="text-[10px] text-charcoal/50 font-medium">
+                          <h4 className="font-black text-sm text-indigo-950">{item.team.name}</h4>
+                          <span className="text-[10px] text-charcoal/50 font-bold">
                             ({item.team.members?.length || item.team.members_count || 0} Members)
                           </span>
                         </div>
                         <span className="text-[11px] text-charcoal/60">
-                          Leader: <strong className="text-charcoal font-semibold">{item.team.leader_name || "Assigned"}</strong>
+                          Leader: <strong className="text-indigo-950 font-bold">{item.team.leader_name || "Assigned"}</strong>
                         </span>
                       </div>
                     </div>
                   ) : (
-                    <span className="text-xs text-rose font-bold">No team assigned</span>
+                    <span className="text-xs text-rose-600 font-bold">No team assigned</span>
                   )}
                 </div>
 
                 {/* Status & Actions */}
                 <div className="flex items-center gap-2 self-end md:self-center">
                   {item.status === "completed" ? (
-                    <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1.5">
+                    <span className="bg-emerald-100 text-emerald-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-emerald-300">
                       <Check className="w-3.5 h-3.5 text-emerald-700" />
                       <span>Duty Completed</span>
                     </span>
@@ -627,16 +632,16 @@ export const DutyPage: React.FC = () => {
                         setCompletingItem(item);
                         setCompletionNotes("");
                       }}
-                      className="bg-gray-100 hover:bg-emerald-50 hover:text-emerald-800 font-bold text-xs px-3 py-1.5 rounded-xl border border-gray-200 transition-colors flex items-center gap-1.5"
+                      className="bg-white hover:bg-emerald-50 text-indigo-950 hover:text-emerald-950 font-black text-xs px-3.5 py-1.5 rounded-xl border border-indigo-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Mark Complete</span>
                     </button>
                   )}
 
                   <button
                     onClick={() => handleOpenSwapModal(item)}
-                    className="p-1.5 hover:bg-indigo-50 rounded-lg text-charcoal/50 hover:text-indigo transition-colors"
+                    className="p-2 hover:bg-indigo-50 rounded-xl text-charcoal/50 hover:text-indigo-950 transition-colors cursor-pointer"
                     title="Swap with another Saturday"
                   >
                     <ArrowLeftRight className="w-4 h-4" />
@@ -650,16 +655,16 @@ export const DutyPage: React.FC = () => {
 
       {/* TAB 3: SATURDAY CHECKLIST */}
       {activeTab === "tasks" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3 shadow-2xs">
-            <h3 className="font-bold text-sm text-charcoal flex items-center gap-2">
-              <CheckSquare className="w-4 h-4 text-indigo" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 space-y-4 shadow-sm">
+            <h3 className="font-black text-sm text-indigo-950 flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-indigo-700" />
               <span>Standard Saturday Cleaning Checklist</span>
             </h3>
             <p className="text-xs text-charcoal/60">
               Assigned teams follow this standard protocol each Saturday before Sunday service:
             </p>
-            <div className="space-y-2 text-xs">
+            <div className="space-y-2.5 text-xs">
               {[
                 { task: "Sanctuary Sweeping & Mopping", desc: "Clean altar, aisles, pews, and pulpit area." },
                 { task: "Restroom Sanitization", desc: "Restock toilet paper, soap, clean sinks and mirrors." },
@@ -668,10 +673,10 @@ export const DutyPage: React.FC = () => {
                 { task: "Fellowship Area Preparation", desc: "Clean tables, wash coffee cups, wipe counters." },
                 { task: "Entrance Porch & Perimeter", desc: "Sweep foyer entrance, ensure welcome mats are clean." },
               ].map((item, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-ivory-light border border-gray-100 flex items-start gap-2.5">
+                <div key={idx} className="p-3.5 rounded-2xl bg-ivory-light/70 border border-indigo-50/80 flex items-start gap-3">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
                   <div>
-                    <span className="font-bold text-charcoal block">{item.task}</span>
+                    <span className="font-black text-indigo-950 block">{item.task}</span>
                     <span className="text-[11px] text-charcoal/60">{item.desc}</span>
                   </div>
                 </div>
@@ -679,22 +684,22 @@ export const DutyPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3 shadow-2xs">
-            <h3 className="font-bold text-sm text-charcoal flex items-center gap-2">
+          <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 space-y-4 shadow-sm">
+            <h3 className="font-black text-sm text-indigo-950 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-500" />
               <span>Duty Team Best Practices</span>
             </h3>
-            <div className="space-y-3 text-xs text-charcoal/70">
-              <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/80">
-                <span className="font-bold text-amber-950 block mb-1">⏰ Call Time & Attendance</span>
-                <p className="text-[11px] text-amber-900">
+            <div className="space-y-3.5 text-xs text-charcoal/70">
+              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200">
+                <span className="font-black text-amber-950 block mb-1">⏰ Call Time & Attendance</span>
+                <p className="text-[11px] text-amber-900 leading-relaxed">
                   Duty teams convene at the church premises every Saturday by 1:00 PM - 3:00 PM. Team Leaders coordinate attendance in advance.
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-200/80">
-                <span className="font-bold text-indigo-950 block mb-1">🔄 Schedule Swaps</span>
-                <p className="text-[11px] text-indigo-900">
+              <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200">
+                <span className="font-black text-indigo-950 block mb-1">🔄 Schedule Swaps</span>
+                <p className="text-[11px] text-indigo-900 leading-relaxed">
                   If team members have personal conflicts on their designated Saturday, use the <strong>"Swap Saturday Team"</strong> button to trade dates with another team.
                 </p>
               </div>

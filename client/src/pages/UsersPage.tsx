@@ -293,24 +293,30 @@ export const UsersPage: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="bg-white rounded-2xl p-6 lg:p-8 border border-indigo-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo text-xs font-bold uppercase tracking-wider">
-            <UserCog className="w-3.5 h-3.5 text-indigo" />
-            <span>User Access & Role Management</span>
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-80 h-80 bg-gradient-to-br from-indigo-500/5 via-amber-500/5 to-transparent rounded-full blur-2xl pointer-events-none"></div>
+
+        <div className="space-y-2 relative z-10">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+              <UserCog className="w-5 h-5" />
+            </span>
+            <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
+              User Accounts & Permissions
+            </h1>
+            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-black uppercase tracking-wider shadow-2xs">
+              Access & Role Management
+            </span>
           </div>
-          <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
-            User Accounts & Permissions
-          </h1>
-          <p className="text-sm text-charcoal/70 max-w-2xl">
-            Manage system logins, assign ministry departments, configure permissions for Admins, Coordinators, Volunteers, and link accounts to church member profiles.
+          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed font-medium">
+            Manage system logins, assign ministry departments, configure permissions for Admins, Coordinators, Leaders, Volunteers, and link accounts to church member profiles.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+        <div className="flex items-center gap-3 flex-wrap shrink-0 relative z-10">
           <button
             onClick={() => setIsMatrixOpen(!isMatrixOpen)}
-            className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo font-bold px-3.5 py-2.5 rounded-xl text-xs border border-indigo-100 transition-all shadow-2xs"
+            className="flex items-center gap-2 bg-white hover:bg-indigo-50/60 border border-indigo-200/80 text-charcoal font-bold px-4 py-2.5 rounded-2xl text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4 text-indigo" />
             <span>{isMatrixOpen ? "Hide Permissions Matrix" : "Role Permissions Matrix"}</span>
@@ -318,9 +324,9 @@ export const UsersPage: React.FC = () => {
 
           <button
             onClick={() => handleOpenUserModal()}
-            className="flex items-center gap-2 bg-indigo hover:bg-indigo-900 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all active:scale-95"
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs py-2.5 px-5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
           >
-            <UserPlus className="w-4 h-4 text-amber-400" />
+            <UserPlus className="w-4 h-4 text-indigo-950" />
             <span>Add New User</span>
           </button>
         </div>
@@ -331,21 +337,21 @@ export const UsersPage: React.FC = () => {
         {/* 1. Admin */}
         <div 
           onClick={() => setSelectedRole(selectedRole === "admin" ? "all" : "admin")}
-          className={`bg-white rounded-2xl p-4 sm:p-5 border transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between gap-3 ${
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
             selectedRole === "admin" 
-              ? "border-indigo ring-2 ring-indigo/20 bg-indigo-50/20" 
+              ? "border-indigo ring-2 ring-indigo/20 bg-indigo-50/30" 
               : "border-indigo-100/90 hover:border-indigo-300"
           }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <Shield className="w-4 h-4 text-indigo shrink-0" />
-              <span className="text-xs font-bold text-indigo">Admins</span>
+              <span className="text-xs font-black text-indigo">Admins</span>
             </div>
             <div className="text-2xl font-black text-indigo tracking-tight">{roleCounts.admin}</div>
-            <p className="text-[10px] text-charcoal/60 font-medium">Full System Access</p>
+            <p className="text-[10px] text-charcoal/60 font-semibold">Full System Access</p>
           </div>
-          <div className="p-3 bg-indigo-50 text-indigo rounded-2xl shrink-0">
+          <div className="p-3 bg-indigo-50 text-indigo rounded-2xl shrink-0 border border-indigo-100">
             <Lock className="w-4 h-4" />
           </div>
         </div>
@@ -353,21 +359,21 @@ export const UsersPage: React.FC = () => {
         {/* 2. Coordinator */}
         <div 
           onClick={() => setSelectedRole(selectedRole === "coordinator" ? "all" : "coordinator")}
-          className={`bg-white rounded-2xl p-4 sm:p-5 border transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between gap-3 ${
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
             selectedRole === "coordinator" 
-              ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20" 
+              ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/30" 
               : "border-emerald-100/90 hover:border-emerald-300"
           }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-              <span className="text-xs font-bold text-emerald-800">Coordinators</span>
+              <span className="text-xs font-black text-emerald-800">Coordinators</span>
             </div>
             <div className="text-2xl font-black text-emerald-900 tracking-tight">{roleCounts.coordinator}</div>
-            <p className="text-[10px] text-charcoal/60 font-medium">Dept. Overseers</p>
+            <p className="text-[10px] text-charcoal/60 font-semibold">Dept. Overseers</p>
           </div>
-          <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl shrink-0">
+          <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl shrink-0 border border-emerald-100">
             <Building2 className="w-4 h-4" />
           </div>
         </div>
@@ -375,21 +381,21 @@ export const UsersPage: React.FC = () => {
         {/* 3. Leader */}
         <div 
           onClick={() => setSelectedRole(selectedRole === "leader" ? "all" : "leader")}
-          className={`bg-white rounded-2xl p-4 sm:p-5 border transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between gap-3 ${
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
             selectedRole === "leader" 
-              ? "border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/20" 
+              ? "border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/30" 
               : "border-sky-100/90 hover:border-sky-300"
           }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <BookOpen className="w-4 h-4 text-sky-700 shrink-0" />
-              <span className="text-xs font-bold text-sky-800">Leaders</span>
+              <span className="text-xs font-black text-sky-800">Leaders</span>
             </div>
             <div className="text-2xl font-black text-sky-900 tracking-tight">{roleCounts.leader}</div>
-            <p className="text-[10px] text-charcoal/60 font-medium">Life Group Leaders</p>
+            <p className="text-[10px] text-charcoal/60 font-semibold">Life Group Leaders</p>
           </div>
-          <div className="p-3 bg-sky-50 text-sky-700 rounded-2xl shrink-0">
+          <div className="p-3 bg-sky-50 text-sky-700 rounded-2xl shrink-0 border border-sky-100">
             <BookOpen className="w-4 h-4" />
           </div>
         </div>
@@ -397,21 +403,21 @@ export const UsersPage: React.FC = () => {
         {/* 4. Volunteer */}
         <div 
           onClick={() => setSelectedRole(selectedRole === "volunteer" ? "all" : "volunteer")}
-          className={`bg-white rounded-2xl p-4 sm:p-5 border transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between gap-3 ${
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
             selectedRole === "volunteer" 
-              ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/20" 
+              ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30" 
               : "border-amber-100/90 hover:border-amber-300"
           }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <HeartHandshake className="w-4 h-4 text-amber-700 shrink-0" />
-              <span className="text-xs font-bold text-amber-800">Volunteers</span>
+              <span className="text-xs font-black text-amber-800">Volunteers</span>
             </div>
             <div className="text-2xl font-black text-amber-900 tracking-tight">{roleCounts.volunteer}</div>
-            <p className="text-[10px] text-charcoal/60 font-medium">Service Helpers</p>
+            <p className="text-[10px] text-charcoal/60 font-semibold">Service Helpers</p>
           </div>
-          <div className="p-3 bg-amber-50 text-amber-700 rounded-2xl shrink-0">
+          <div className="p-3 bg-amber-50 text-amber-700 rounded-2xl shrink-0 border border-amber-100">
             <UserCheck className="w-4 h-4" />
           </div>
         </div>
@@ -419,21 +425,21 @@ export const UsersPage: React.FC = () => {
         {/* 5. Member */}
         <div 
           onClick={() => setSelectedRole(selectedRole === "member" ? "all" : "member")}
-          className={`bg-white rounded-2xl p-4 sm:p-5 border transition-all cursor-pointer shadow-2xs hover:shadow-xs flex items-center justify-between gap-3 ${
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
             selectedRole === "member" 
               ? "border-slate-500 ring-2 ring-slate-500/20 bg-slate-50/40" 
-              : "border-gray-200 hover:border-gray-300"
+              : "border-slate-100/90 hover:border-slate-300"
           }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <Users className="w-4 h-4 text-slate-700 shrink-0" />
-              <span className="text-xs font-bold text-slate-800">Members</span>
+              <span className="text-xs font-black text-slate-800">Members</span>
             </div>
             <div className="text-2xl font-black text-slate-900 tracking-tight">{roleCounts.member}</div>
-            <p className="text-[10px] text-charcoal/60 font-medium">Church Attendees</p>
+            <p className="text-[10px] text-charcoal/60 font-semibold">Church Attendees</p>
           </div>
-          <div className="p-3 bg-slate-100 text-slate-700 rounded-2xl shrink-0">
+          <div className="p-3 bg-slate-100 text-slate-700 rounded-2xl shrink-0 border border-slate-200">
             <UserCircle2 className="w-5 h-5" />
           </div>
         </div>
@@ -441,10 +447,10 @@ export const UsersPage: React.FC = () => {
 
       {/* Optional: Interactive Role Permissions Matrix */}
       {isMatrixOpen && (
-        <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center justify-between pb-3 border-b border-gray-100">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-indigo-50 text-indigo rounded-xl">
+              <div className="p-2 bg-indigo-50 text-indigo rounded-xl border border-indigo-100">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
@@ -456,7 +462,7 @@ export const UsersPage: React.FC = () => {
             </div>
             <button
               onClick={() => setIsMatrixOpen(false)}
-              className="p-1 hover:bg-gray-100 rounded-lg text-charcoal/50"
+              className="p-1 hover:bg-gray-100 rounded-xl text-charcoal/50 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -467,14 +473,14 @@ export const UsersPage: React.FC = () => {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/70 text-charcoal/80">
                   <th className="py-2.5 px-3 font-black">Module / Feature</th>
-                  <th className="py-2.5 px-3 font-black text-indigo">👑 Admin</th>
-                  <th className="py-2.5 px-3 font-black text-emerald-800">🛡️ Coordinator</th>
-                  <th className="py-2.5 px-3 font-black text-sky-800">📖 Leader</th>
-                  <th className="py-2.5 px-3 font-black text-amber-800">🤝 Volunteer</th>
-                  <th className="py-2.5 px-3 font-black text-slate-800">👤 Member</th>
+                  <th className="py-2.5 px-3 font-black text-indigo">Admin</th>
+                  <th className="py-2.5 px-3 font-black text-emerald-800">Coordinator</th>
+                  <th className="py-2.5 px-3 font-black text-sky-800">Leader</th>
+                  <th className="py-2.5 px-3 font-black text-amber-800">Volunteer</th>
+                  <th className="py-2.5 px-3 font-black text-slate-800">Member</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-charcoal/80">
+              <tbody className="divide-y divide-gray-100 text-charcoal/80 font-medium">
                 <tr>
                   <td className="py-2.5 px-3 font-bold">User Accounts & Roles CRUD</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Full Access</td>
@@ -530,30 +536,31 @@ export const UsersPage: React.FC = () => {
       )}
 
       {/* User Search & Filter Toolbar */}
-      <div className="bg-white rounded-2xl p-4 border border-indigo-100/80 shadow-2xs space-y-3">
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border border-indigo-100/90 shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Role Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {[
-              { id: "all", label: "All Roles", count: users.length },
-              { id: "admin", label: "👑 Admin", count: roleCounts.admin },
-              { id: "coordinator", label: "🛡️ Coordinator", count: roleCounts.coordinator },
-              { id: "leader", label: "📖 Leader", count: roleCounts.leader },
-              { id: "volunteer", label: "🤝 Volunteer", count: roleCounts.volunteer },
-              { id: "member", label: "👤 Member", count: roleCounts.member }
+              { id: "all", label: "All Roles", icon: null, count: users.length },
+              { id: "admin", label: "Admin", icon: <Shield className="w-3.5 h-3.5 text-indigo-700" />, count: roleCounts.admin },
+              { id: "coordinator", label: "Coordinator", icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />, count: roleCounts.coordinator },
+              { id: "leader", label: "Leader", icon: <BookOpen className="w-3.5 h-3.5 text-sky-600" />, count: roleCounts.leader },
+              { id: "volunteer", label: "Volunteer", icon: <HeartHandshake className="w-3.5 h-3.5 text-amber-600" />, count: roleCounts.volunteer },
+              { id: "member", label: "Member", icon: <Users className="w-3.5 h-3.5 text-slate-600" />, count: roleCounts.member }
             ].map(filter => (
               <button
                 key={filter.id}
                 onClick={() => setSelectedRole(filter.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                className={`px-3.5 py-2 rounded-2xl text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                   selectedRole === filter.id
-                    ? "bg-indigo text-white shadow-2xs"
-                    : "bg-gray-100 text-charcoal/70 hover:bg-gray-200"
+                    ? "bg-indigo text-white shadow-md shadow-indigo-950/20"
+                    : "bg-indigo-50/50 text-charcoal/70 hover:bg-indigo-50 border border-indigo-100/60"
                 }`}
               >
+                {filter.icon}
                 <span>{filter.label}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                  selectedRole === filter.id ? "bg-white/20 text-white" : "bg-white text-charcoal/60"
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  selectedRole === filter.id ? "bg-white/20 text-white" : "bg-white text-charcoal/70 shadow-2xs"
                 }`}>
                   {filter.count}
                 </span>
@@ -563,20 +570,20 @@ export const UsersPage: React.FC = () => {
 
           {/* Search Input */}
           <div className="relative min-w-[260px]">
-            <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search user name, email, ministry..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3.5 py-1.5 rounded-xl border border-gray-200 bg-gray-50/50 text-xs focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
+              className="w-full pl-10 pr-4 py-2 rounded-2xl border border-indigo-100 bg-indigo-50/30 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition-all"
             />
           </div>
         </div>
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-2xl border border-indigo-100 shadow-xs overflow-hidden">
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16 space-x-2 text-indigo">
             <RefreshCw className="w-5 h-5 animate-spin" />
@@ -588,7 +595,7 @@ export const UsersPage: React.FC = () => {
             <p className="text-sm font-bold text-charcoal/70">No user accounts found matching your filter.</p>
             <button
               onClick={() => handleOpenUserModal()}
-              className="px-4 py-2 rounded-xl bg-indigo text-white text-xs font-bold"
+              className="px-5 py-2.5 rounded-2xl bg-indigo text-white text-xs font-bold shadow-md hover:bg-indigo-900 transition-all cursor-pointer"
             >
               + Create User Account
             </button>
@@ -597,12 +604,12 @@ export const UsersPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50/80 text-charcoal/80 font-black">
-                  <th className="py-3 px-4">User Account</th>
-                  <th className="py-3 px-4">Role</th>
-                  <th className="py-3 px-4">Assigned Department(s)</th>
-                  <th className="py-3 px-4">Linked Member Profile</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                <tr className="border-b border-indigo-100/80 bg-indigo-50/40 text-charcoal/80 font-black">
+                  <th className="py-3.5 px-5">User Account</th>
+                  <th className="py-3.5 px-4">Role</th>
+                  <th className="py-3.5 px-4">Assigned Department(s)</th>
+                  <th className="py-3.5 px-4">Linked Member Profile</th>
+                  <th className="py-3.5 px-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -610,28 +617,28 @@ export const UsersPage: React.FC = () => {
                   const isCurrentSessionUser = currentUser?.id === u.id;
 
                   return (
-                    <tr key={u.id} className="hover:bg-indigo-50/20 transition-colors">
+                    <tr key={u.id} className="hover:bg-indigo-50/30 transition-colors">
                       {/* Name & Email */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-4 px-5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-black text-sm border border-indigo-100 shrink-0">
+                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100/80 text-indigo flex items-center justify-center font-black text-sm border border-indigo-200/60 shadow-2xs shrink-0">
                             {u.name.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <div className="font-bold text-charcoal flex items-center gap-1.5">
-                              <span>{u.name}</span>
+                              <span className="text-xs">{u.name}</span>
                               {u.username && (
-                                <span className="text-[10px] font-mono text-indigo-700 bg-indigo-50/80 px-1.5 py-0.5 rounded border border-indigo-100">
+                                <span className="text-[10px] font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 font-bold">
                                   @{u.username}
                                 </span>
                               )}
                               {isCurrentSessionUser && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-indigo text-white">
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-indigo text-white shadow-2xs">
                                   YOU
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-charcoal/60 flex items-center gap-1 mt-0.5">
+                            <div className="text-[11px] text-charcoal/60 flex items-center gap-1 mt-0.5 font-medium">
                               <Mail className="w-3 h-3 text-charcoal/40" />
                               <span>{u.email}</span>
                             </div>
@@ -640,14 +647,14 @@ export const UsersPage: React.FC = () => {
                       </td>
 
                       {/* Role */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-4 px-4">
                         {getRoleBadge(u.role_name)}
                       </td>
 
                       {/* Assigned Ministries */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-4 px-4">
                         {u.role_name === "Admin" ? (
-                          <span className="text-[11px] font-bold text-indigo bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100">
+                          <span className="text-[11px] font-bold text-indigo bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-100">
                             All 7 Ministries (Church-Wide)
                           </span>
                         ) : (!u.ministries || u.ministries.length === 0) ? (
@@ -659,7 +666,7 @@ export const UsersPage: React.FC = () => {
                             {u.ministries.map(m => (
                               <span
                                 key={m.id}
-                                className="px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-2xs"
+                                className="px-2.5 py-1 rounded-xl text-[10px] font-black text-white shadow-2xs"
                                 style={{ backgroundColor: m.color || "#2C3968" }}
                               >
                                 {m.name}
@@ -670,11 +677,11 @@ export const UsersPage: React.FC = () => {
                       </td>
 
                       {/* Linked Member */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-4 px-4">
                         {u.linked_member_name ? (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                            <span className="font-bold text-charcoal">{u.linked_member_name}</span>
+                            <span className="font-bold text-charcoal text-xs">{u.linked_member_name}</span>
                           </div>
                         ) : (
                           <span className="text-charcoal/40 text-[11px] italic">
@@ -684,22 +691,22 @@ export const UsersPage: React.FC = () => {
                       </td>
 
                       {/* Action Buttons */}
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-4 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* Demo Switch Button */}
                           <button
                             onClick={() => handleSwitchUser(u)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo text-[11px] font-bold border border-indigo-100 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo text-[11px] font-bold border border-indigo-200/60 transition-all cursor-pointer"
                             title={`Switch to ${u.name}'s view`}
                           >
-                            <Key className="w-3 h-3 text-indigo" />
+                            <Key className="w-3.5 h-3.5 text-indigo" />
                             <span>Switch</span>
                           </button>
 
                           {/* Edit Button */}
                           <button
                             onClick={() => handleOpenUserModal(u)}
-                            className="p-1.5 hover:bg-gray-100 text-charcoal/70 hover:text-indigo rounded-lg transition-colors"
+                            className="p-2 hover:bg-indigo-50 text-charcoal/70 hover:text-indigo rounded-xl transition-colors cursor-pointer"
                             title="Edit user account"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -709,10 +716,10 @@ export const UsersPage: React.FC = () => {
                           <button
                             onClick={() => setDeleteConfirmUser(u)}
                             disabled={u.id === 1 || isCurrentSessionUser}
-                            className={`p-1.5 rounded-lg transition-colors ${
+                            className={`p-2 rounded-xl transition-colors ${
                               u.id === 1 || isCurrentSessionUser
                                 ? "text-gray-300 cursor-not-allowed"
-                                : "hover:bg-rose-50 text-rose-600"
+                                : "hover:bg-rose-50 text-rose-600 cursor-pointer"
                             }`}
                             title={u.id === 1 ? "Cannot delete root admin" : isCurrentSessionUser ? "Cannot delete own account" : "Delete user account"}
                           >
@@ -734,10 +741,10 @@ export const UsersPage: React.FC = () => {
       {/* ==================================================== */}
       {isUserModalOpen && (
         <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo flex items-center justify-center font-bold">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-bold border border-indigo-100">
                   <UserCog className="w-4 h-4" />
                 </div>
                 <div>
@@ -745,13 +752,13 @@ export const UsersPage: React.FC = () => {
                     {editingUser ? "Edit User Account" : "Add New User Account"}
                   </h3>
                   <p className="text-[11px] text-charcoal/60">
-                    Configure login credentials, role permissions, and ministry department linkages.
+                    Configure login credentials, role permissions, and ministry linkages.
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsUserModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/50 hover:text-charcoal transition-colors"
+                className="p-1.5 hover:bg-gray-100 rounded-xl text-charcoal/50 hover:text-charcoal transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -759,20 +766,20 @@ export const UsersPage: React.FC = () => {
 
             <form onSubmit={handleSaveUser} className="space-y-4">
               {/* Link to Church Member Profile (Placed at Top for Quick Auto-Fill) */}
-              <div className="space-y-1.5 p-3 rounded-xl bg-sky-50/60 border border-sky-200">
+              <div className="space-y-1.5 p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200">
                 <label className="text-xs font-bold text-sky-950 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-sky-700" />
                     <span>Link to Church Member Profile (Auto-Fills Details)</span>
                   </span>
-                  <span className="text-[10px] text-sky-800 font-semibold bg-sky-100 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] text-sky-800 font-bold bg-sky-100 px-2 py-0.5 rounded-md">
                     Fast Auto-Fill
                   </span>
                 </label>
                 <select
                   value={formData.member_id}
                   onChange={(e) => handleMemberSelect(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl border border-sky-200 text-xs bg-white focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none font-medium text-charcoal"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-sky-200 text-xs bg-white focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none font-medium text-charcoal"
                 >
                   <option value="">-- Choose Member to Auto-Fill Credentials --</option>
                   {members.map(m => (
@@ -795,7 +802,7 @@ export const UsersPage: React.FC = () => {
                   placeholder="e.g. Sarah Jenkins, Marcus Vance..."
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
                 />
               </div>
 
@@ -811,7 +818,7 @@ export const UsersPage: React.FC = () => {
                     placeholder="e.g. sarah.jenkins"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
                   />
                 </div>
 
@@ -823,7 +830,7 @@ export const UsersPage: React.FC = () => {
                     placeholder="e.g. coordinator.kinder@church.org"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
                   />
                 </div>
               </div>
@@ -840,7 +847,7 @@ export const UsersPage: React.FC = () => {
                   placeholder={editingUser ? "••••••••" : "Enter account password"}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
                 />
               </div>
 
@@ -865,13 +872,13 @@ export const UsersPage: React.FC = () => {
                       <div
                         key={r.id}
                         onClick={() => setFormData({ ...formData, role_id: r.id })}
-                        className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2 ${
+                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                           formData.role_id === r.id
                             ? "border-indigo bg-indigo-50/60 ring-2 ring-indigo/20 shadow-xs"
                             : "border-gray-200 hover:border-indigo-200 bg-white"
                         }`}
                       >
-                        <div className="p-1 rounded-lg bg-white shadow-2xs shrink-0 mt-0.5">
+                        <div className="p-1.5 rounded-xl bg-white shadow-2xs shrink-0 mt-0.5 border border-gray-100">
                           {meta.icon}
                         </div>
                         <div className="min-w-0">
@@ -891,7 +898,7 @@ export const UsersPage: React.FC = () => {
                 if (!isMinistryRole) return null;
 
                 return (
-                  <div className="space-y-2 p-3.5 rounded-xl bg-amber-50/40 border border-amber-200/70">
+                  <div className="space-y-2 p-3.5 rounded-2xl bg-amber-50/40 border border-amber-200/70">
                     <label className="text-xs font-bold text-charcoal flex items-center justify-between">
                       <span>Assigned Ministry Departments ({formData.ministry_ids.length} selected)</span>
                       <span className="text-[10px] text-amber-800 font-semibold">Optional for Coordinators, Leaders & Volunteers</span>
@@ -904,7 +911,7 @@ export const UsersPage: React.FC = () => {
                             type="button"
                             key={min.id}
                             onClick={() => toggleMinistrySelection(min.id)}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border text-left flex items-center justify-between transition-all ${
+                            className={`px-3 py-2 rounded-xl text-xs font-bold border text-left flex items-center justify-between transition-all cursor-pointer ${
                               isChecked
                                 ? "bg-indigo text-white border-indigo shadow-2xs"
                                 : "bg-white text-charcoal/80 border-gray-200 hover:border-gray-300"
@@ -921,17 +928,17 @@ export const UsersPage: React.FC = () => {
               })()}
 
               {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsUserModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 transition-colors"
+                  className="px-4 py-2.5 rounded-2xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs"
+                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
                 >
                   {editingUser ? "Save User Changes" : "Create User Account"}
                 </button>
@@ -946,8 +953,8 @@ export const UsersPage: React.FC = () => {
       {/* ==================================================== */}
       {deleteConfirmUser && (
         <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-center">
-            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
@@ -956,18 +963,18 @@ export const UsersPage: React.FC = () => {
                 Are you sure you want to delete <strong>{deleteConfirmUser.name}</strong> ({deleteConfirmUser.email})? This action cannot be undone.
               </p>
             </div>
-            <div className="flex items-center justify-center gap-2 pt-2">
+            <div className="flex items-center justify-center gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setDeleteConfirmUser(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 bg-gray-100 hover:bg-gray-200 transition-colors"
+                className="px-4 py-2.5 rounded-2xl text-xs font-bold text-charcoal/70 bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleDeleteUser}
-                className="px-5 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 text-xs font-bold transition-all shadow-xs"
+                className="px-5 py-2.5 rounded-2xl bg-rose-600 text-white hover:bg-rose-700 text-xs font-bold transition-all shadow-md cursor-pointer"
               >
                 Yes, Delete
               </button>

@@ -2,10 +2,11 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { Member, Household, Ministry } from "../types";
-import { 
-  Users, Home, Search, Plus, Filter, AlertCircle, 
+import {
+  Users, Home, Search, Plus, Filter, AlertCircle,
   Heart, Sparkles, Phone, Mail, Calendar, ShieldCheck, ArrowRight, X, Check,
-  Cake, Gift, PartyPopper, Send, FileText, MapPin, Briefcase, GraduationCap, Clock
+  Cake, Gift, PartyPopper, Send, FileText, MapPin, Briefcase, GraduationCap, Clock,
+  Layers, Shield, Info, ArrowLeft
 } from "lucide-react";
 
 export const MembersPage: React.FC = () => {
@@ -13,9 +14,10 @@ export const MembersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"members" | "households">("members");
   const [members, setMembers] = useState<Member[]>([]);
   const isCoordinator = user?.role_name === "Coordinator";
-  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0 
-    ? user.ministries[0].id 
+  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
+    ? user.ministries[0].id
     : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
+  const coordinatorMinistryName = ministries.find(m => m.id === coordinatorMinistryId)?.name || "Assigned";
 
   const [households, setHouseholds] = useState<Household[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,14 +87,14 @@ export const MembersPage: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const activeMinistryParam = coordinatorMinistryId 
-        ? coordinatorMinistryId 
+      const activeMinistryParam = coordinatorMinistryId
+        ? coordinatorMinistryId
         : (filterMinistry ? Number(filterMinistry) : undefined);
 
       const [mList, hList] = await Promise.all([
-        api.getMembers({ 
-          ministry_id: activeMinistryParam, 
-          search: searchQuery || undefined 
+        api.getMembers({
+          ministry_id: activeMinistryParam,
+          search: searchQuery || undefined
         }),
         api.getHouseholds()
       ]);
@@ -132,7 +134,7 @@ export const MembersPage: React.FC = () => {
   // Real-time age and ministry calculation when user enters birthdate in Add Member form
   const handleBirthdateChange = async (birthdateVal: string) => {
     if (!birthdateVal) {
-      setFormData(prev => ({ ...prev, birthdate: "", ministry_id: "" }));
+      setFormData(prev => ({ ...prev, birthdate: "" }));
       setSuggestedMinistryInfo(null);
       return;
     }
@@ -146,7 +148,7 @@ export const MembersPage: React.FC = () => {
         setFormData(prev => ({
           ...prev,
           birthdate: birthdateVal,
-          ministry_id: String(localSuggested.id)
+          ministry_id: prev.ministry_id ? prev.ministry_id : String(localSuggested.id)
         }));
       } else {
         setFormData(prev => ({ ...prev, birthdate: birthdateVal }));
@@ -162,7 +164,7 @@ export const MembersPage: React.FC = () => {
       if (res.suggested_ministry?.id && !coordinatorMinistryId) {
         setFormData(prev => ({
           ...prev,
-          ministry_id: String(res.suggested_ministry.id)
+          ministry_id: prev.ministry_id ? prev.ministry_id : String(res.suggested_ministry.id)
         }));
       }
     } catch (err) {
@@ -281,39 +283,44 @@ export const MembersPage: React.FC = () => {
   });
 
   const canEdit = user?.role_name === "Admin" || user?.role_name === "Coordinator";
-  const coordinatorMinistryName = user?.ministries && user.ministries.length > 0 ? user.ministries[0].name : "Youth";
+
 
   return (
     <div className="space-y-6">
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-charcoal flex items-center gap-2">
-            <span>Members & Family Directory</span>
-            <span className="text-xs bg-indigo-50 text-indigo-800 font-bold px-2.5 py-1 rounded-full">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+              <Users className="w-5 h-5" />
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">
+              Members & Family Directory
+            </h1>
+            <span className="text-xs bg-indigo-50 border border-indigo-200/80 text-indigo-950 font-black px-3 py-1 rounded-full shadow-2xs">
               {coordinatorMinistryId ? `${displayedMembers.length} Active ${coordinatorMinistryName} Records` : `${displayedMembers.length} of ${members.length} Active Records`}
             </span>
-          </h1>
-          <p className="text-xs text-charcoal/60 mt-0.5">
+          </div>
+          <p className="text-xs text-charcoal/60 mt-1">
             Individual member profiles, households, birthdays, medical alerts, and age-based ministry tracking.
           </p>
         </div>
 
         {/* Action Buttons */}
         {canEdit && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <button
               onClick={() => setIsAddHouseholdModalOpen(true)}
-              className="flex items-center gap-1.5 bg-white hover:bg-ivory border border-indigo-200 text-charcoal font-semibold px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-all"
+              className="flex items-center gap-2 bg-white hover:bg-amber-50/50 border border-indigo-200 text-indigo-950 font-bold px-4 py-2.5 rounded-2xl text-xs shadow-2xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
             >
-              <Home className="w-3.5 h-3.5 text-amber-600" />
+              <Home className="w-4 h-4 text-amber-600" />
               <span>New Household</span>
             </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-1.5 bg-indigo hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-sm transition-all"
+              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-4.5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
             >
-              <Plus className="w-4 h-4 text-amber-300" />
+              <Plus className="w-4 h-4 text-indigo-950" />
               <span>Add Member</span>
             </button>
           </div>
@@ -321,24 +328,22 @@ export const MembersPage: React.FC = () => {
       </div>
 
       {/* Tabs, Search & Birthday Filter Bar */}
-      <div className="space-y-2.5">
-        <div className="bg-white p-3 rounded-2xl border border-indigo-100/80 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
+      <div className="space-y-3">
+        <div className="bg-white/95 p-3.5 rounded-3xl border border-indigo-100/90 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3.5">
           {/* Tab switchers */}
-          <div className="flex items-center bg-ivory p-1 rounded-xl w-full md:w-auto">
+          <div className="flex items-center bg-indigo-50/60 p-1.5 rounded-2xl w-full md:w-auto border border-indigo-100/60">
             <button
               onClick={() => setActiveTab("members")}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                activeTab === "members" ? "bg-white text-indigo shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${activeTab === "members" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-charcoal/60 hover:text-indigo-950"
+                }`}
             >
-              <Users className="w-3.5 h-3.5 text-indigo" />
-              <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Members (${displayedMembers.length})` : `All Members (${members.length})`}</span>
+              <Users className="w-3.5 h-3.5 text-indigo-700" />
+              <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Disciples (${displayedMembers.length})` : `All Members (${members.length})`}</span>
             </button>
             <button
               onClick={() => setActiveTab("households")}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                activeTab === "households" ? "bg-white text-indigo shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${activeTab === "households" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-charcoal/60 hover:text-indigo-950"
+                }`}
             >
               <Home className="w-3.5 h-3.5 text-amber-600" />
               <span>Households ({households.length})</span>
@@ -346,30 +351,30 @@ export const MembersPage: React.FC = () => {
           </div>
 
           {/* Search & Filter */}
-          <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-2.5 w-full md:w-auto">
             <div className="relative flex-1 md:w-64">
-              <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
               <input
                 type="text"
                 placeholder="Search by name, email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && loadData()}
-                className="w-full bg-ivory-light pl-9 pr-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo"
+                className="w-full bg-ivory-light/60 pl-10 pr-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo focus:bg-white transition-all"
               />
             </div>
 
             {coordinatorMinistryId ? (
-              <div className="bg-indigo-50 border border-indigo-200 text-indigo-900 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-950 px-3.5 py-2 rounded-2xl text-xs font-black flex items-center gap-2 shrink-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{coordinatorMinistryName} Ministry</span>
-                <span className="text-[10px] text-indigo-600 font-medium">(Assigned Scope)</span>
+                <span className="text-[10px] text-indigo-700 font-bold">(Assigned)</span>
               </div>
             ) : (
               <select
                 value={filterMinistry}
                 onChange={(e) => setFilterMinistry(e.target.value)}
-                className="bg-ivory-light px-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal"
+                className="bg-ivory-light/60 px-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo font-bold text-indigo-950 transition-all cursor-pointer"
               >
                 <option value="">All Ministries</option>
                 {ministries.map((m) => (
@@ -384,41 +389,41 @@ export const MembersPage: React.FC = () => {
 
         {/* Birthday Celebrant Quick Filters */}
         {activeTab === "members" && (
-          <div className="flex items-center gap-1.5 flex-wrap bg-ivory-light/90 p-2.5 rounded-xl border border-indigo-100/70 text-xs">
-            <span className="font-bold text-charcoal/80 flex items-center gap-1 mr-1 text-[11px]">
-              <Cake className="w-3.5 h-3.5 text-rose" />
-              <span>Birthday Milestones:</span>
+          <div className="flex items-center gap-2 flex-wrap bg-white/80 p-3 rounded-2xl border border-indigo-100/80 shadow-2xs text-xs">
+            <span className="font-black text-indigo-950 flex items-center gap-1.5 mr-1 text-[11px] uppercase tracking-wider">
+              <Cake className="w-3.5 h-3.5 text-rose-500" />
+              <span>Milestones:</span>
             </span>
             {[
-              { id: "all", label: "All Members" },
-              { id: "today", label: "🎉 Birthday Today" },
-              { id: "this_week", label: "🎈 This Week" },
-              { id: "this_month", label: "🎂 This Month" },
+              { id: "all", label: "All Members", icon: <Users className="w-3.5 h-3.5 text-indigo-700" /> },
+              { id: "today", label: "Birthday Today", icon: <Sparkles className="w-3.5 h-3.5 text-amber-500" /> },
+              { id: "this_week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5 text-rose-500" /> },
+              { id: "this_month", label: "This Month", icon: <Cake className="w-3.5 h-3.5 text-emerald-600" /> },
             ].map(pill => (
               <button
                 key={pill.id}
                 onClick={() => setBirthdayFilter(pill.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  birthdayFilter === pill.id
-                    ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-2xs"
-                    : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
-                }`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${birthdayFilter === pill.id
+                  ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 shadow-xs border border-amber-300"
+                  : "bg-white text-charcoal/70 hover:bg-gray-100 border border-indigo-100"
+                  }`}
               >
-                {pill.label}
+                {pill.icon}
+                <span>{pill.label}</span>
               </button>
             ))}
 
             <select
               value={birthdayFilter.startsWith("month_") ? birthdayFilter : ""}
               onChange={(e) => setBirthdayFilter(e.target.value || "all")}
-              className="bg-white px-2.5 py-1 rounded-lg text-xs border border-gray-200 font-medium text-charcoal focus:outline-none"
+              className="bg-white px-3 py-1.5 rounded-xl text-xs border border-indigo-100 font-bold text-indigo-950 focus:outline-none cursor-pointer"
             >
               <option value="">Filter by Birth Month...</option>
               {[
                 "January", "February", "March", "April", "May", "June",
                 "July", "August", "September", "October", "November", "December"
               ].map((mName, i) => (
-                <option key={i+1} value={`month_${i+1}`}>
+                <option key={i + 1} value={`month_${i + 1}`}>
                   {mName} Birthdays
                 </option>
               ))}
@@ -427,9 +432,9 @@ export const MembersPage: React.FC = () => {
             {birthdayFilter !== "all" && (
               <button
                 onClick={() => setBirthdayFilter("all")}
-                className="text-[11px] text-rose-600 font-bold hover:underline ml-auto flex items-center gap-0.5"
+                className="text-[11px] text-rose-600 font-bold hover:underline ml-auto flex items-center gap-1 cursor-pointer"
               >
-                <X className="w-3 h-3" /> Reset Filter
+                <X className="w-3.5 h-3.5" /> Reset Filter
               </button>
             )}
           </div>
@@ -438,104 +443,106 @@ export const MembersPage: React.FC = () => {
 
       {/* Main Content Area */}
       {activeTab === "members" ? (
-        <div className="bg-white rounded-2xl border border-indigo-100/80 shadow-2xs overflow-hidden">
+        <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-ivory text-charcoal/70 uppercase text-[10px] font-bold tracking-wider border-b border-indigo-100">
+              <thead className="bg-gradient-to-r from-indigo-50/80 via-ivory-light to-amber-50/40 text-indigo-950 uppercase text-[10px] font-black tracking-wider border-b border-indigo-100">
                 <tr>
-                  <th className="p-3.5">Member Name</th>
-                  <th className="p-3.5">Ministry</th>
-                  <th className="p-3.5">Age / Birthday</th>
-                  <th className="p-3.5">Household</th>
-                  <th className="p-3.5">Medical / Notes</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5 text-right">Actions</th>
+                  <th className="p-4">Member Name</th>
+                  <th className="p-4">Ministry</th>
+                  <th className="p-4">Age / Birthday</th>
+                  <th className="p-4">Household</th>
+                  <th className="p-4">Medical / Notes</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-indigo-50">
                 {displayedMembers.map((m) => (
                   <tr
                     key={m.id}
                     onClick={() => setSelectedMember(m)}
-                    className="hover:bg-ivory-light/60 transition-colors cursor-pointer"
+                    className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
                   >
-                    <td className="p-3.5 font-semibold text-charcoal flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo font-bold flex items-center justify-center text-xs">
+                    <td className="p-4 font-bold text-indigo-950 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-900 text-white font-black flex items-center justify-center text-xs shadow-2xs ring-2 ring-white shrink-0">
                         {m.first_name[0]}{m.last_name[0]}
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-indigo">{m.first_name} {m.last_name}</div>
+                        <div className="text-xs font-black text-indigo-950 group-hover:text-amber-600 transition-colors">{m.first_name} {m.last_name}</div>
                         <div className="text-[10px] text-charcoal/50">{m.contact_email || m.contact_phone || "No direct contact"}</div>
                       </div>
                     </td>
 
-                    <td className="p-3.5">
-                      <div className="flex items-center gap-1.5">
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
                         <span
-                          className="w-2.5 h-2.5 rounded-full"
+                          className="w-3 h-3 rounded-full shadow-inner ring-1 ring-white shrink-0"
                           style={{ backgroundColor: m.ministry_color || "#2C3968" }}
-                        ></span>
-                        <span className="font-semibold text-charcoal">{m.ministry_name || "Unassigned"}</span>
+                        />
+                        <span className="font-bold text-indigo-950">{m.ministry_name || "Unassigned"}</span>
                         {m.is_aging_out && (
-                          <span className="bg-rose text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse-subtle">
+                          <span className="bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse shadow-2xs">
                             Aging Out
                           </span>
                         )}
                       </div>
                     </td>
 
-                    <td className="p-3.5">
-                      <div className="font-medium text-charcoal">{m.age} years old</div>
-                      <div className="text-[10px] text-charcoal/50 flex items-center gap-1 mt-0.5">
+                    <td className="p-4">
+                      <div className="font-black text-indigo-950">{m.age} years old</div>
+                      <div className="text-[10px] text-charcoal/50 flex items-center gap-1.5 mt-0.5">
                         <span>{m.birth_month_name ? `${m.birth_month_name} ${m.birth_day}` : m.birthdate}</span>
                         {m.is_birthday_today ? (
-                          <span className="bg-rose text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce">
-                            TODAY! 🎂
+                          <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-bounce shadow-2xs">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                            <span>TODAY!</span>
                           </span>
                         ) : m.is_birthday_this_week ? (
-                          <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.2 rounded">
-                            🎂 in {m.days_until_birthday}d
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-300">
+                            <Calendar className="w-2.5 h-2.5 text-amber-700" />
+                            <span>in {m.days_until_birthday}d</span>
                           </span>
                         ) : m.is_birthday_this_month ? (
-                          <span className="bg-rose-50 text-rose-700 text-[9px] font-semibold px-1 py-0.2 rounded">
-                            🎂 This month
+                          <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-rose-200">
+                            <Cake className="w-2.5 h-2.5 text-rose-500" />
+                            <span>This month</span>
                           </span>
                         ) : null}
                       </div>
                     </td>
 
-                    <td className="p-3.5">
+                    <td className="p-4">
                       {m.household_name ? (
-                        <div className="font-medium text-charcoal flex items-center gap-1">
-                          <Home className="w-3 h-3 text-amber-600" />
+                        <div className="font-bold text-indigo-950 flex items-center gap-1.5">
+                          <Home className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           <span>{m.household_name}</span>
                         </div>
                       ) : (
-                        <span className="text-charcoal/40 italic">Individual</span>
+                        <span className="text-charcoal/40 italic font-medium">Individual</span>
                       )}
                     </td>
 
-                    <td className="p-3.5">
+                    <td className="p-4">
                       {m.medical_notes ? (
-                        <span className="bg-rose-50 border border-rose-200 text-rose-800 font-semibold px-2 py-0.5 rounded text-[10px] flex items-center gap-1 max-w-xs truncate">
-                          <AlertCircle className="w-3 h-3 text-rose shrink-0" />
-                          {m.medical_notes}
+                        <span className="bg-rose-50 border border-rose-200 text-rose-900 font-bold px-2.5 py-0.5 rounded-lg text-[10px] flex items-center gap-1.5 max-w-xs truncate">
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>{m.medical_notes}</span>
                         </span>
                       ) : (
-                        <span className="text-charcoal/40 text-[10px]">None</span>
+                        <span className="text-charcoal/40 text-[10px] font-medium">None</span>
                       )}
                     </td>
 
-                    <td className="p-3.5">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                        m.status === "active" ? "bg-sage-100 text-sage-800" : "bg-gray-100 text-gray-600"
-                      }`}>
+                    <td className="p-4">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${m.status === "active" ? "bg-emerald-100 text-emerald-950 border border-emerald-300" : "bg-gray-100 text-gray-700"
+                        }`}>
                         {m.status}
                       </span>
                     </td>
 
-                    <td className="p-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -543,18 +550,18 @@ export const MembersPage: React.FC = () => {
                             handleOpenGreeting(m);
                           }}
                           title="Send Birthday Blessing"
-                          className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors"
+                          className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 transition-all active:scale-95 shadow-2xs cursor-pointer"
                         >
-                          <Gift className="w-3.5 h-3.5" />
+                          <Gift className="w-3.5 h-3.5 text-amber-600" />
                         </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedMember(m);
                           }}
-                          className="text-indigo hover:text-indigo-800 font-bold text-[11px] underline px-1 py-1"
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-black text-xs px-3 py-1.5 rounded-xl border border-indigo-200/80 transition-all active:scale-95 cursor-pointer shadow-2xs"
                         >
-                          View Card
+                          Details
                         </button>
                       </div>
                     </td>
@@ -568,40 +575,40 @@ export const MembersPage: React.FC = () => {
         /* Households Tab */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {households.map((h) => (
-            <div key={h.id} className="bg-white rounded-2xl p-5 border border-indigo-100/80 shadow-2xs flex flex-col justify-between">
+            <div key={h.id} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm flex flex-col justify-between hover:border-amber-300 transition-all">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-xl bg-amber-50 text-amber-700">
+                <div className="flex items-center justify-between mb-3 pb-3 border-b border-indigo-50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
                       <Home className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-sm text-charcoal">{h.name}</h3>
+                      <h3 className="font-black text-sm text-indigo-950">{h.name}</h3>
                       <p className="text-[10px] text-charcoal/50">{h.address || "Address unlisted"}</p>
                     </div>
                   </div>
-                  <span className="text-xs font-bold bg-indigo-50 text-indigo px-2.5 py-0.5 rounded-full">
+                  <span className="text-xs font-black bg-indigo-50 text-indigo-950 px-3 py-1 rounded-full border border-indigo-100">
                     {h.members?.length || 0} Members
                   </span>
                 </div>
 
                 {h.primary_contact_phone && (
-                  <div className="text-xs text-charcoal/70 flex items-center gap-1.5 my-2">
-                    <Phone className="w-3.5 h-3.5 text-sage-600" />
-                    <span>{h.primary_contact_phone}</span>
+                  <div className="text-xs text-charcoal/70 flex items-center gap-1.5 my-2.5 bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="font-mono text-[11px] font-bold text-indigo-950">{h.primary_contact_phone}</span>
                   </div>
                 )}
 
                 {/* Family Members list */}
-                <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-charcoal/50">Family Tree & Ministries</p>
+                <div className="mt-3.5 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-charcoal/50">Family Tree & Ministries</p>
                   {h.members && h.members.map((fam) => (
-                    <div key={fam.id} className="flex items-center justify-between text-xs p-1.5 rounded-lg bg-ivory-light/50 border border-gray-100">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-charcoal">{fam.first_name} {fam.last_name}</span>
-                        <span className="text-[10px] text-charcoal/50">({fam.age} yrs)</span>
+                    <div key={fam.id} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-ivory-light/70 border border-indigo-50/80">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-indigo-950">{fam.first_name} {fam.last_name}</span>
+                        <span className="text-[10px] text-charcoal/50 font-medium">({fam.age} yrs)</span>
                       </div>
-                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] font-black text-indigo-950 bg-white border border-indigo-100 px-2 py-0.5 rounded-md shadow-2xs">
                         {fam.ministry_name}
                       </span>
                     </div>
@@ -615,27 +622,27 @@ export const MembersPage: React.FC = () => {
 
       {/* Member Details Centered Modal */}
       {selectedMember && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100">
+        <div className="fixed inset-0 z-50 bg-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl p-6 sm:p-7 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100 animate-in fade-in zoom-in duration-200">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-              <div className="flex items-center gap-3.5">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo to-indigo-800 text-white font-black text-lg flex items-center justify-center shadow-md ring-4 ring-indigo-50">
+            <div className="flex items-center justify-between pb-4 border-b border-indigo-50">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-900 to-indigo-700 text-white font-black text-xl flex items-center justify-center shadow-md ring-4 ring-indigo-50 shrink-0">
                   {selectedMember.first_name[0]}{selectedMember.last_name[0]}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-charcoal">{selectedMember.first_name} {selectedMember.last_name}</h2>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sage-100 text-sage-800 uppercase tracking-wide">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl font-black text-indigo-950">{selectedMember.first_name} {selectedMember.last_name}</h2>
+                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-950 uppercase tracking-wider border border-emerald-300">
                       {selectedMember.status}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-1">
                     <span
-                      className="w-2.5 h-2.5 rounded-full"
+                      className="w-2.5 h-2.5 rounded-full shadow-inner ring-1 ring-white"
                       style={{ backgroundColor: selectedMember.ministry_color || "#2C3968" }}
-                    ></span>
-                    <span className="text-xs font-semibold text-charcoal/70">
+                    />
+                    <span className="text-xs font-bold text-charcoal/70">
                       {selectedMember.ministry_name || "Unassigned Ministry"}
                     </span>
                   </div>
@@ -643,7 +650,7 @@ export const MembersPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setSelectedMember(null)}
-                className="p-1.5 rounded-xl hover:bg-gray-100 text-charcoal/50 hover:text-charcoal transition-colors"
+                className="p-2 rounded-xl hover:bg-gray-100 text-charcoal/50 hover:text-indigo-950 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -651,24 +658,24 @@ export const MembersPage: React.FC = () => {
 
             {/* Aging Out Promo Alert Banner if applicable */}
             {selectedMember.is_aging_out && (
-              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs">
-                <div className="flex items-center gap-2 font-bold text-rose-900">
-                  <AlertCircle className="w-4 h-4 text-rose shrink-0" />
+              <div className="bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent border border-rose-300 rounded-2xl p-4 text-xs space-y-2">
+                <div className="flex items-center gap-2 font-black text-rose-950">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>Member is Aging Out of Current Ministry</span>
                 </div>
-                <p className="text-charcoal/70 mt-1">
-                  At {selectedMember.age} years old, {selectedMember.first_name} has completed the {selectedMember.ministry_name} age bracket.
+                <p className="text-charcoal/80 leading-relaxed">
+                  At {selectedMember.age} years old, {selectedMember.first_name} has completed the {selectedMember.ministry_name} age bracket and is eligible for promotion.
                 </p>
-                <div className="mt-2.5 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap gap-2 pt-1">
                   {ministries
                     .filter(m => (m.min_age ?? 0) <= (selectedMember.age ?? 0) && (m.max_age ?? 999) >= (selectedMember.age ?? 0))
                     .map(nextM => (
                       <button
                         key={nextM.id}
                         onClick={() => handlePromoteMinistry(selectedMember, nextM.id)}
-                        className="bg-rose hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-2xs transition-all active:scale-95 flex items-center gap-1.5"
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-black px-3.5 py-1.5 rounded-xl text-xs shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Sparkles className="w-3.5 h-3.5" />
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                         <span>Promote to {nextM.name} Ministry</span>
                       </button>
                     ))}
@@ -679,88 +686,96 @@ export const MembersPage: React.FC = () => {
             {/* Profile Grid Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               {/* Card 1: Member Demographics */}
-              <div className="p-3.5 bg-ivory-light rounded-xl border border-gray-100 space-y-2">
-                <p className="font-bold text-charcoal/50 text-[10px] uppercase tracking-wider">Demographics</p>
+              <div className="p-4 bg-ivory-light/70 rounded-2xl border border-indigo-100/70 space-y-2">
+                <p className="font-black text-indigo-950 text-[10px] uppercase tracking-wider">Demographics</p>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Age:</span>
-                  <span className="font-bold text-charcoal">{selectedMember.age} years old</span>
+                  <span className="font-black text-indigo-950">{selectedMember.age} years old</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Birthdate:</span>
-                  <span className="font-semibold text-charcoal">{selectedMember.birthdate}</span>
+                  <span className="font-bold text-charcoal">{selectedMember.birthdate}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Gender:</span>
-                  <span className="font-semibold text-charcoal">{selectedMember.gender || "Unspecified"}</span>
+                  <span className="font-bold text-charcoal">{selectedMember.gender || "Unspecified"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Grade Level:</span>
-                  <span className="font-semibold text-charcoal">{selectedMember.grade_level || "N/A"}</span>
+                  <span className="font-bold text-charcoal">{selectedMember.grade_level || "N/A"}</span>
                 </div>
               </div>
 
               {/* Card 2: Household & Ministry */}
-              <div className="p-3.5 bg-ivory-light rounded-xl border border-gray-100 space-y-2">
-                <p className="font-bold text-charcoal/50 text-[10px] uppercase tracking-wider">Household & Ministry</p>
+              <div className="p-4 bg-ivory-light/70 rounded-2xl border border-indigo-100/70 space-y-2">
+                <p className="font-black text-indigo-950 text-[10px] uppercase tracking-wider">Household & Ministry</p>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Household:</span>
-                  <span className="font-bold text-indigo">{selectedMember.household_name || "Individual"}</span>
+                  <span className="font-black text-indigo-950">{selectedMember.household_name || "Individual"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Current Ministry:</span>
-                  <span className="font-bold text-indigo">{selectedMember.ministry_name || "None"}</span>
+                  <span className="font-black text-indigo-950">{selectedMember.ministry_name || "None"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Email:</span>
-                  <span className="font-semibold text-charcoal truncate max-w-[140px]">{selectedMember.contact_email || "N/A"}</span>
+                  <span className="font-bold text-charcoal truncate max-w-[140px]">{selectedMember.contact_email || "N/A"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-charcoal/60">Phone:</span>
-                  <span className="font-semibold text-charcoal">{selectedMember.contact_phone || "N/A"}</span>
+                  <span className="font-bold text-charcoal">{selectedMember.contact_phone || "N/A"}</span>
                 </div>
               </div>
             </div>
 
             {/* Card 3: Birthday & Milestone Celebration */}
-            <div className="p-4 bg-gradient-to-br from-amber-50 via-rose-50/40 to-indigo-50/50 rounded-xl border border-amber-200/70 space-y-3">
+            <div className="p-4 bg-gradient-to-br from-amber-500/10 via-rose-500/5 to-indigo-500/10 rounded-2xl border border-amber-200/80 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-charcoal flex items-center gap-1.5 text-xs">
-                  <Cake className="w-4 h-4 text-rose" />
+                <span className="font-black text-indigo-950 flex items-center gap-1.5 text-xs">
+                  <Cake className="w-4 h-4 text-rose-500" />
                   <span>Birthday & Milestone Celebration</span>
                 </span>
                 {selectedMember.is_birthday_today ? (
-                  <span className="bg-rose text-white text-[10px] font-black px-2.5 py-0.5 rounded-full animate-bounce">
-                    TODAY! 🎉
+                  <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full animate-bounce shadow-2xs">
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    <span>TODAY!</span>
                   </span>
                 ) : selectedMember.is_birthday_this_week ? (
-                  <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    In {selectedMember.days_until_birthday} days!
+                  <span className="inline-flex items-center gap-1 bg-amber-400 text-indigo-950 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
+                    <Calendar className="w-3 h-3 text-indigo-900" />
+                    <span>In {selectedMember.days_until_birthday} days!</span>
                   </span>
                 ) : selectedMember.is_birthday_this_month ? (
-                  <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    This Month
+                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-amber-300">
+                    <Cake className="w-3 h-3 text-amber-700" />
+                    <span>This Month</span>
                   </span>
                 ) : null}
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                <div className="bg-white/80 p-2.5 rounded-lg border border-amber-100">
-                  <span className="text-[10px] text-charcoal/50 block">Birth Date</span>
-                  <span className="font-bold text-charcoal">
+                <div className="bg-white/90 p-2.5 rounded-xl border border-amber-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Birth Date</span>
+                  <span className="font-black text-indigo-950">
                     {selectedMember.birth_month_name ? `${selectedMember.birth_month_name} ${selectedMember.birth_day}` : selectedMember.birthdate}
                   </span>
                 </div>
-                <div className="bg-white/80 p-2.5 rounded-lg border border-amber-100">
-                  <span className="text-[10px] text-charcoal/50 block">Next Turning Age</span>
-                  <span className="font-bold text-indigo">
+                <div className="bg-white/90 p-2.5 rounded-xl border border-amber-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Next Turning Age</span>
+                  <span className="font-black text-indigo-950">
                     {selectedMember.turning_age || ((selectedMember.age ?? 0) + 1)} yrs old
                   </span>
                 </div>
-                <div className="bg-white/80 p-2.5 rounded-lg border border-amber-100">
-                  <span className="text-[10px] text-charcoal/50 block">Countdown</span>
-                  <span className="font-bold text-amber-700">
+                <div className="bg-white/90 p-2.5 rounded-xl border border-amber-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Countdown</span>
+                  <span className="font-black text-amber-700 flex items-center gap-1">
                     {selectedMember.days_until_birthday !== undefined ? (
-                      selectedMember.days_until_birthday === 0 ? "Today! 🎂" : `${selectedMember.days_until_birthday} days`
+                      selectedMember.days_until_birthday === 0 ? (
+                        <>
+                          <Sparkles className="w-3 h-3 text-amber-600" />
+                          <span>Today!</span>
+                        </>
+                      ) : `${selectedMember.days_until_birthday} days`
                     ) : "Upcoming"}
                   </span>
                 </div>
@@ -769,23 +784,23 @@ export const MembersPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleOpenGreeting(selectedMember)}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all active:scale-95"
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs py-2.5 px-4 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
               >
-                <Gift className="w-4 h-4" />
+                <Gift className="w-4 h-4 text-indigo-950" />
                 <span>Send Birthday Blessing / Announcement</span>
               </button>
             </div>
 
             {/* Official Application Card Details */}
             {(selectedMember.address || selectedMember.guardian_names || selectedMember.school_name || selectedMember.program_major || selectedMember.occupation || selectedMember.hobbies || selectedMember.invited_by || selectedMember.previous_church || selectedMember.facebook_account || selectedMember.family_details || selectedMember.class_schedule || selectedMember.application_date) && (
-              <div className="p-4 bg-white rounded-xl border border-indigo-100 shadow-2xs space-y-2.5 text-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                  <span className="font-bold text-charcoal flex items-center gap-1.5 text-xs">
-                    <FileText className="w-4 h-4 text-indigo" />
+              <div className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs space-y-3 text-xs">
+                <div className="flex items-center justify-between pb-2.5 border-b border-indigo-50">
+                  <span className="font-black text-indigo-950 flex items-center gap-1.5 text-xs">
+                    <FileText className="w-4 h-4 text-indigo-700" />
                     <span>Application for Membership Card</span>
                   </span>
                   {selectedMember.application_date && (
-                    <span className="text-[10px] bg-indigo-50 text-indigo px-2 py-0.5 rounded font-semibold">
+                    <span className="text-[10px] bg-indigo-50 text-indigo-950 px-2.5 py-0.5 rounded-md font-bold border border-indigo-100">
                       Applied: {selectedMember.application_date}
                     </span>
                   )}
@@ -793,81 +808,81 @@ export const MembersPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   {selectedMember.address && (
-                    <div className="sm:col-span-2 flex items-start gap-2 bg-ivory-light p-2 rounded-lg">
-                      <MapPin className="w-3.5 h-3.5 text-sage-600 mt-0.5 shrink-0" />
+                    <div className="sm:col-span-2 flex items-start gap-2 bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
                       <div>
-                        <span className="text-[10px] text-charcoal/50 block font-semibold">Address</span>
-                        <span className="text-charcoal font-medium">{selectedMember.address}</span>
+                        <span className="text-[10px] text-charcoal/50 block font-bold">Address</span>
+                        <span className="text-indigo-950 font-bold">{selectedMember.address}</span>
                       </div>
                     </div>
                   )}
 
                   {selectedMember.guardian_names && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Parents / Guardians</span>
-                      <span className="text-charcoal font-medium">{selectedMember.guardian_names}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Parents / Guardians</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.guardian_names}</span>
                       {selectedMember.guardian_phone && (
-                        <span className="text-indigo block text-[11px] font-semibold">{selectedMember.guardian_phone}</span>
+                        <span className="text-indigo-700 block text-[11px] font-bold">{selectedMember.guardian_phone}</span>
                       )}
                     </div>
                   )}
 
                   {selectedMember.family_details && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Family Members</span>
-                      <span className="text-charcoal font-medium">{selectedMember.family_details}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Family Members</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.family_details}</span>
                     </div>
                   )}
 
                   {selectedMember.school_name && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">School / College</span>
-                      <span className="text-charcoal font-medium">{selectedMember.school_name}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">School / College</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.school_name}</span>
                       {selectedMember.program_major && (
-                        <span className="text-indigo block text-[11px] font-semibold">{selectedMember.program_major}</span>
+                        <span className="text-indigo-700 block text-[11px] font-bold">{selectedMember.program_major}</span>
                       )}
                     </div>
                   )}
 
                   {selectedMember.class_schedule && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Class Schedule</span>
-                      <span className="text-charcoal font-medium">{selectedMember.class_schedule}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Class Schedule</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.class_schedule}</span>
                     </div>
                   )}
 
                   {selectedMember.occupation && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Occupation</span>
-                      <span className="text-charcoal font-medium">{selectedMember.occupation}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Occupation</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.occupation}</span>
                     </div>
                   )}
 
                   {selectedMember.hobbies && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Hobbies</span>
-                      <span className="text-charcoal font-medium">{selectedMember.hobbies}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Hobbies</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.hobbies}</span>
                     </div>
                   )}
 
                   {selectedMember.invited_by && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Who Invited in DPC?</span>
-                      <span className="text-indigo font-bold">{selectedMember.invited_by}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Who Invited in DPC?</span>
+                      <span className="text-indigo-900 font-black">{selectedMember.invited_by}</span>
                     </div>
                   )}
 
                   {selectedMember.previous_church && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Previous Church / Religion</span>
-                      <span className="text-charcoal font-medium">{selectedMember.previous_church}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Previous Church</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.previous_church}</span>
                     </div>
                   )}
 
                   {selectedMember.facebook_account && (
-                    <div className="bg-ivory-light p-2 rounded-lg">
-                      <span className="text-[10px] text-charcoal/50 block font-semibold">Facebook Account</span>
-                      <span className="text-charcoal font-medium">{selectedMember.facebook_account}</span>
+                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Facebook Account</span>
+                      <span className="text-indigo-950 font-bold">{selectedMember.facebook_account}</span>
                     </div>
                   )}
                 </div>
@@ -876,22 +891,22 @@ export const MembersPage: React.FC = () => {
 
             {/* Medical / Allergy Alert Box */}
             {selectedMember.medical_notes && (
-              <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl text-xs">
-                <span className="font-bold text-rose-900 flex items-center gap-1.5 mb-1">
-                  <AlertCircle className="w-4 h-4 text-rose" />
+              <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-2xl text-xs space-y-1.5">
+                <span className="font-black text-rose-950 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
                   <span>Medical & Special Care Instructions:</span>
                 </span>
-                <p className="text-rose-950 font-medium bg-white p-2.5 rounded-lg border border-rose-100 shadow-2xs">
+                <p className="text-rose-950 font-bold bg-white p-3 rounded-xl border border-rose-100 shadow-2xs">
                   {selectedMember.medical_notes}
                 </p>
               </div>
             )}
 
             {/* Modal Footer */}
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+            <div className="pt-3 border-t border-indigo-50 flex items-center justify-end gap-2">
               <button
                 onClick={() => setSelectedMember(null)}
-                className="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-charcoal font-bold rounded-xl text-xs transition-colors"
+                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-charcoal font-black rounded-2xl text-xs transition-colors cursor-pointer"
               >
                 Close Profile
               </button>
@@ -902,8 +917,8 @@ export const MembersPage: React.FC = () => {
 
       {/* Add Member Modal */}
       {isAddModalOpen && (() => {
-        const currentModalMinistryId = formData.ministry_id 
-          ? Number(formData.ministry_id) 
+        const currentModalMinistryId = formData.ministry_id
+          ? Number(formData.ministry_id)
           : (coordinatorMinistryId || suggestedMinistryInfo?.ministry?.id || null);
         const currentModalMinistry = ministries.find(m => m.id === currentModalMinistryId) || suggestedMinistryInfo?.ministry || null;
         const currentMinName = (currentModalMinistry?.name || "").toLowerCase();
@@ -915,15 +930,27 @@ export const MembersPage: React.FC = () => {
         const isJuniorAdult = currentMinName.includes("junior");
         const isOldAdult = currentMinName.includes("old") || currentMinName.includes("senior");
 
+        const getMinistryRequirementSummary = (name?: string) => {
+          const n = (name || "").toLowerCase();
+          if (n.includes("kinder")) return "Requires Parent/Guardian Contact & Allergy Instructions";
+          if (n.includes("elem")) return "Requires Invitee & Parent Guardian Information";
+          if (n.includes("high") || n.includes("school")) return "Requires School, Grade Level, Hobbies & Invitee";
+          if (n.includes("youth") && !n.includes("adult")) return "Requires College/Major, Class Schedule & Hobbies";
+          if (n.includes("young")) return "Requires Workplace/Occupation, Previous Church & Invitee";
+          if (n.includes("junior")) return "Requires Occupation, Facebook Handle & Invitee";
+          if (n.includes("old") || n.includes("senior")) return "Requires Status, Living With & Health Maintenance";
+          return "General Medical & Allergy Notes";
+        };
+
         return (
           <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                 <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
                   <Users className="w-5 h-5 text-indigo" />
                   <span>Add New Member Record</span>
                 </h2>
-                <button onClick={() => setIsAddModalOpen(false)} className="p-1 text-charcoal/50 hover:text-charcoal">
+                <button onClick={() => setIsAddModalOpen(false)} className="p-1 text-charcoal/50 hover:text-charcoal cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -945,6 +972,58 @@ export const MembersPage: React.FC = () => {
                 <span className="text-[10px] bg-white/10 text-indigo-200 px-2 py-0.5 rounded-md border border-white/20 font-medium">
                   Paper Form Sync
                 </span>
+              </div>
+
+              {/* Target Ministry Application Form Type Dropdown (Admin Selector / Coordinator Scope) */}
+              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/90 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-indigo-700" />
+                    <span>Application Form Type (Target Ministry):</span>
+                  </label>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white text-indigo-900 border border-indigo-200 shadow-2xs">
+                    {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Manual Ministry Selected" : "Auto-Detect by Birthday")}
+                  </span>
+                </div>
+
+                {coordinatorMinistryId ? (
+                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 font-bold text-xs flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Locked to <strong>{coordinatorMinistryName} Ministry Form</strong> (Coordinator Scope)</span>
+                  </div>
+                ) : (
+                  <select
+                    value={formData.ministry_id}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData(prev => ({ ...prev, ministry_id: val }));
+                    }}
+                    className="w-full bg-white p-2.5 rounded-xl border border-indigo-200 focus:outline-none focus:border-indigo font-bold text-indigo-950 shadow-2xs cursor-pointer text-xs"
+                  >
+                    <option value="">🌟 Auto-Detect by Birthday (Default & Recommended)</option>
+                    {ministries.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        📋 {m.name} Application Form ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All Ages'})
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Active Form Type & Requirement Summary Banner */}
+                <div className="p-2.5 rounded-xl bg-white/90 border border-indigo-100 flex items-start gap-2 text-[11px] text-indigo-950 font-medium shadow-2xs">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    {currentModalMinistry ? (
+                      <span>
+                        Active Form: <strong className="text-indigo-900">{currentModalMinistry.name} Ministry</strong> — {getMinistryRequirementSummary(currentModalMinistry.name)}.
+                      </span>
+                    ) : (
+                      <span className="text-charcoal/70">
+                        Enter birthday below or pick a ministry above to load the exact paper application fields.
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <form onSubmit={handleCreateMember} className="space-y-4 text-xs">
@@ -987,12 +1066,13 @@ export const MembersPage: React.FC = () => {
                     className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
                   />
                   {suggestedMinistryInfo && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-sage-50 border border-sage-200 flex items-center justify-between">
-                      <span className="font-semibold text-sage-900">
-                        Calculated Age: {suggestedMinistryInfo.age} yrs
+                    <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Calculated Age: {suggestedMinistryInfo.age} yrs</span>
                       </span>
-                      <span className="font-bold text-indigo bg-white px-2 py-0.5 rounded shadow-2xs">
-                        Suggested: {suggestedMinistryInfo.ministry?.name || "None"}
+                      <span className="font-black text-indigo-950 bg-white px-2.5 py-0.5 rounded-md shadow-2xs border border-indigo-200">
+                        Suggested: {suggestedMinistryInfo.ministry?.name || "General"} Ministry
                       </span>
                     </div>
                   )}
@@ -1046,7 +1126,7 @@ export const MembersPage: React.FC = () => {
                     <div className="flex items-center justify-between mb-1">
                       <label className="font-bold text-charcoal/70">Ministry Assignment</label>
                       <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-bold">
-                        {coordinatorMinistryId ? "Coordinator Scope" : (suggestedMinistryInfo?.ministry && formData.ministry_id === String(suggestedMinistryInfo.ministry.id) ? "Auto-assigned" : "Auto-assigned")}
+                        {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Assigned" : "Auto-Assigned by Age")}
                       </span>
                     </div>
                     <select

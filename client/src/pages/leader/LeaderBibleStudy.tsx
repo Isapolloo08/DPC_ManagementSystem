@@ -6,7 +6,7 @@ import {
   UserCheck, Calendar, Check, CheckCircle2, BookOpen,
   Edit, Bookmark, BookmarkCheck, Sparkles, MapPin,
   Clock, ShieldCheck, X, ChevronDown, Layers,
-  CalendarClock
+  CalendarClock, Users
 } from "lucide-react";
 
 interface LeaderBibleStudyProps {
@@ -374,16 +374,14 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                   <div
                     key={d.id}
                     onClick={() => setCheckedMembers(prev => ({ ...prev, [d.id]: !prev[d.id] }))}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                      isChecked
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${isChecked
                         ? "bg-emerald-50/60 border-emerald-300 shadow-2xs"
                         : "bg-gray-50/60 border-gray-200 hover:border-gray-300"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center border ${
-                        isChecked ? "bg-emerald-600 border-emerald-600 text-white" : "border-gray-300 bg-white"
-                      }`}>
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center border ${isChecked ? "bg-emerald-600 border-emerald-600 text-white" : "border-gray-300 bg-white"
+                        }`}>
                         {isChecked && <Check className="w-4 h-4" />}
                       </div>
                       <div>
@@ -392,9 +390,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                       </div>
                     </div>
 
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${
-                      isChecked ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-charcoal/50"
-                    }`}>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${isChecked ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-charcoal/50"
+                      }`}>
                       {isChecked ? "Present" : "Absent"}
                     </span>
                   </div>
@@ -494,11 +491,10 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
                 <button
                   onClick={handleOpenReschedule}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${
-                    activeGroup?.is_rescheduled
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${activeGroup?.is_rescheduled
                       ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300"
                       : "bg-ivory-light hover:bg-amber-50 text-amber-900 border-amber-200"
-                  }`}
+                    }`}
                   title="Reschedule next meeting"
                 >
                   <CalendarClock className="w-3.5 h-3.5 text-amber-700" />
@@ -822,11 +818,10 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div
                     onClick={() => setRescheduleData({ ...rescheduleData, is_rescheduled: true })}
-                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
-                      rescheduleData.is_rescheduled
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${rescheduleData.is_rescheduled
                         ? "bg-amber-50/90 border-amber-400 ring-1 ring-amber-400 text-amber-950 font-bold"
                         : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
-                    }`}
+                      }`}
                   >
                     <div className="w-4 h-4 rounded-full border border-amber-600 flex items-center justify-center shrink-0 mt-0.5">
                       {rescheduleData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-amber-600"></div>}
@@ -839,11 +834,10 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
                   <div
                     onClick={() => setRescheduleData({ ...rescheduleData, is_rescheduled: false })}
-                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
-                      !rescheduleData.is_rescheduled
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${!rescheduleData.is_rescheduled
                         ? "bg-emerald-50/90 border-emerald-400 ring-1 ring-emerald-400 text-emerald-950 font-bold"
                         : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
-                    }`}
+                      }`}
                   >
                     <div className="w-4 h-4 rounded-full border border-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
                       {!rescheduleData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-emerald-600"></div>}
@@ -901,11 +895,11 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                     </label>
                     <div className="flex flex-wrap gap-1 mb-2">
                       {[
-                        "🌧️ Typhoon / Bad Weather",
-                        "✈️ Leader Travel / Ministry Duty",
-                        "⛪ Church-Wide Event / Holiday",
-                        "👥 Member Request & Agreement",
-                        "🏠 Venue Maintenance / Setup"
+                        "Typhoon / Severe Weather",
+                        "Leader Travel / Ministry Duty",
+                        "Church-Wide Event / Holiday",
+                        "Member Request & Agreement",
+                        "Venue Maintenance / Room Setup"
                       ].map((chip) => (
                         <button
                           key={chip}
@@ -962,8 +956,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                     {isSavingReschedule
                       ? "Saving..."
                       : rescheduleData.is_rescheduled
-                      ? "Save Rescheduled Session"
-                      : "Save Regular Schedule"}
+                        ? "Save Rescheduled Session"
+                        : "Save Regular Schedule"}
                   </span>
                 </button>
               </div>
