@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../api";
 import { ChurchLogo } from "../components/common/ChurchLogo";
+import { WindowControls } from "../components/layout/WindowControls";
 import {
   Lock, Mail, ArrowRight, ShieldCheck, Sparkles,
-  Users, CheckCircle2, AlertCircle, Heart, MapPin, BookOpen, UserPlus, LogIn, AtSign
+  Users, CheckCircle2, AlertCircle, Heart, MapPin, BookOpen, UserPlus, LogIn, AtSign, X, ShieldAlert, KeyRound
 } from "lucide-react";
 
 // Auto-cycling 2-second carousel slides showcasing church building, worship, youth center, and community
@@ -49,19 +51,26 @@ interface MinistrySummary {
 }
 
 export const LoginPage: React.FC = () => {
-  const { login, register, switchDemoUser, demoUsers, hasUsers } = useAuth();
-  const [isRegisterMode, setIsRegisterMode] = useState(!hasUsers);
+  const { login, register, switchDemoUser, demoUsers, hasUsers, hasAdmin, loading: authLoading } = useAuth();
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [ministries, setMinistries] = useState<MinistrySummary[]>([]);
   const [loadingMinistries, setLoadingMinistries] = useState(false);
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
+  
+  // Login form state
   const [emailOrUsername, setEmailOrUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  
+  // Admin Setup Modal form state
+  const [adminName, setAdminName] = useState("");
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Fetch all active ministries dynamically from backend
@@ -69,11 +78,8 @@ export const LoginPage: React.FC = () => {
     const fetchMinistries = async () => {
       try {
         setLoadingMinistries(true);
-        const res = await fetch("/api/ministries");
-        if (res.ok) {
-          const data = await res.json();
-          setMinistries(data);
-        }
+        const data = await api.getMinistries();
+        setMinistries(data);
       } catch (err) {
         console.error("Failed to load ministries:", err);
       } finally {
@@ -84,10 +90,12 @@ export const LoginPage: React.FC = () => {
     fetchMinistries();
   }, []);
 
-  // Sync mode if hasUsers changes (only true if system has zero users)
+  // Open modal automatically when auth status loads and no admin is found
   React.useEffect(() => {
-    setIsRegisterMode(!hasUsers);
-  }, [hasUsers]);
+    if (!authLoading && (!hasUsers || !hasAdmin)) {
+      setShowAdminModal(true);
+    }
+  }, [authLoading, hasUsers, hasAdmin]);
 
   // Preload all carousel images into browser cache for instant, zero-flicker transitions
   React.useEffect(() => {
@@ -97,7 +105,7 @@ export const LoginPage: React.FC = () => {
     });
   }, []);
 
-  // Auto-cycle carousel every 2 seconds
+  // Auto-cycle carousel every 5 seconds
   React.useEffect(() => {
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % CAROUSEL_SLIDES.length);
@@ -113,68 +121,82 @@ export const LoginPage: React.FC = () => {
     }
 
     try {
-      setLoading(true);
+      setSubmitting(true);
       setError(null);
       await login(emailOrUsername.trim(), password || "password123");
     } catch (err: any) {
       setError(err.message || "Invalid credentials. Please verify your email/username and password.");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
+  const handleAdminSetupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError("Please enter your full name.");
+    if (!adminName.trim()) {
+      setAdminError("Please enter your full name.");
       return;
     }
-    if (!email.trim()) {
-      setError("Please enter your email address.");
+    if (!adminEmail.trim()) {
+      setAdminError("Please enter your email address.");
       return;
     }
-    if (!password || password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (!adminPassword || adminPassword.length < 6) {
+      setAdminError("Password must be at least 6 characters.");
       return;
     }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+    if (adminPassword !== adminConfirmPassword) {
+      setAdminError("Passwords do not match.");
       return;
     }
 
     try {
-      setLoading(true);
-      setError(null);
+      setSubmitting(true);
+      setAdminError(null);
       const res = await register({
-        name: name.trim(),
-        username: username.trim() || undefined,
-        email: email.trim(),
-        password: password.trim()
+        name: adminName.trim(),
+        username: adminUsername.trim() || undefined,
+        email: adminEmail.trim(),
+        password: adminPassword.trim()
       });
       if (res.isFirstUser) {
         setSuccessMsg("Master Administrator account created! Logging you in...");
       }
+      setShowAdminModal(false);
     } catch (err: any) {
-      setError(err.message || "Failed to create account. Please try again.");
+      setAdminError(err.message || "Failed to create administrator account. Please try again.");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleDemoLogin = async (userId: number) => {
     try {
-      setLoading(true);
+      setSubmitting(true);
       setError(null);
       await switchDemoUser(userId);
     } catch (err: any) {
       setError(err.message || "Failed to log in with demo account.");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col md:flex-row bg-white">
+    <div className="min-h-screen w-full flex flex-col md:flex-row bg-white relative">
+      {/* Top draggable strip and window controls for desktop app */}
+      <div
+        className="fixed top-0 left-0 right-0 h-11 z-50 pointer-events-none flex items-center justify-end px-3 select-none"
+        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+      >
+        <div className="pointer-events-auto bg-white/90 backdrop-blur-md border border-gray-300/80 rounded-xl shadow-xs p-0.5 flex items-center">
+          <WindowControls
+            className="flex items-center gap-0.5"
+            buttonClassName="w-8 h-8 rounded-lg text-slate-700 hover:text-slate-950 hover:bg-gray-200 active:bg-gray-300 transition-all cursor-pointer flex items-center justify-center"
+            closeButtonClassName="w-8 h-8 rounded-lg text-slate-700 hover:text-white hover:bg-rose-600 active:bg-rose-700 transition-all cursor-pointer flex items-center justify-center group"
+          />
+        </div>
+      </div>
 
       {/* LEFT SIDE: Church Identity Picture Carousel & Scripture (Responsive for Mobile, Tablet, Desktop) */}
       <div className="w-full md:w-1/2 lg:w-7/12 relative min-h-[280px] sm:min-h-[340px] md:min-h-screen bg-indigo-950 flex flex-col justify-between p-5 sm:p-8 md:p-10 lg:p-14 text-white overflow-hidden shrink-0">
@@ -300,31 +322,40 @@ export const LoginPage: React.FC = () => {
       <div className="w-full md:w-1/2 lg:w-5/12 min-h-0 md:min-h-screen bg-ivory-light flex flex-col justify-between p-5 sm:p-8 md:p-10 lg:p-14 overflow-y-auto">
         <div className="max-w-md w-full mx-auto my-auto space-y-5 sm:space-y-6 py-4 sm:py-0">
 
-          {/* ZERO USERS / INITIAL SETUP BANNER */}
-          {!hasUsers && (
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 text-amber-950 space-y-1.5 shadow-sm animate-fade-slide-up">
-              <div className="flex items-center gap-2 font-black text-xs text-amber-900">
-                <Sparkles className="w-4 h-4 text-amber-600 animate-pulse" />
-                <span>Initial System Setup Detected</span>
+          {/* ZERO USERS OR ZERO ADMINS / INITIAL SETUP BANNER (Reopens modal if closed) */}
+          {(!hasUsers || !hasAdmin) && (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-300 text-amber-950 space-y-2 shadow-xs animate-fade-slide-up">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-black text-xs text-amber-900">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 animate-pulse" />
+                  <span>{!hasUsers ? "Initial System Setup" : "No Administrator Account Found"}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowAdminModal(true); setAdminError(null); }}
+                  className="px-2.5 py-1 text-[11px] font-bold text-amber-900 bg-amber-200/80 hover:bg-amber-300 rounded-lg transition-all cursor-pointer shadow-2xs"
+                >
+                  Configure Admin
+                </button>
               </div>
               <p className="text-[11px] text-amber-800/90 leading-relaxed">
-                No user accounts were found in the database. Creating this first account will automatically assign you the <strong className="font-bold text-amber-950">Master Administrator</strong> role.
+                {!hasUsers
+                  ? "No user accounts were found. Creating this first account will automatically assign you the Master Administrator role."
+                  : "No Administrator exists yet. Click above to create the Master Admin account with full privileges."}
               </p>
             </div>
           )}
 
           {/* Header */}
-          <div className="animate-fade-slide-up anim-delay-100">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200/60 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full inline-block mb-1.5 sm:mb-2 shadow-2xs animate-pulse-subtle">
-              {!hasUsers ? "First Time Setup" : "Portal Authentication"}
+          <div className="animate-fade-slide-up anim-delay-100 space-y-1">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200/60 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full inline-block shadow-2xs">
+              Portal Authentication
             </span>
             <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-charcoal tracking-tight">
-              {!hasUsers ? "Create Admin Account" : "Sign In to Your Portal"}
+              Sign In to Your Portal
             </h2>
-            <p className="text-[11px] sm:text-xs text-charcoal/60 mt-1 leading-relaxed">
-              {!hasUsers
-                ? "Enter your details to configure the initial administrator credentials for DPC."
-                : "Enter your credentials to access church schedules, ministry kiosks, and member directories."}
+            <p className="text-[11px] sm:text-xs text-charcoal/60 leading-relaxed">
+              Enter your credentials to access church schedules, ministry kiosks, and member directories.
             </p>
           </div>
 
@@ -344,155 +375,52 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {/* REGISTER / CREATE ACCOUNT FORM */}
-          {isRegisterMode ? (
-            <form onSubmit={handleRegisterSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-charcoal/80 mb-1">Full Name</label>
-                <div className="relative">
-                  <Users className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Pastor David Admin"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-white pl-10 pr-4 py-2.5 rounded-xl sm:rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all"
-                  />
-                </div>
+          {/* SIGN IN FORM */}
+          <form onSubmit={handleLoginSubmit} className="space-y-3.5 sm:space-y-4 text-xs">
+            <div className="animate-fade-slide-up anim-delay-200">
+              <label className="block font-bold text-charcoal/80 mb-1 sm:mb-1.5">Email or Username</label>
+              <div className="relative group">
+                <Mail className="w-4 h-4 text-charcoal/40 group-focus-within:text-indigo absolute left-3.5 top-3.5 transition-colors duration-200" />
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. admin or admin@church.org"
+                  value={emailOrUsername}
+                  onChange={(e) => setEmailOrUsername(e.target.value)}
+                  className="w-full bg-white pl-10 pr-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-gray-200 hover:border-indigo-300 focus:outline-none focus:border-indigo focus:ring-3 focus:ring-indigo/15 font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all duration-300"
+                />
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block font-bold text-charcoal/80 mb-1">Username</label>
-                  <div className="relative">
-                    <AtSign className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      placeholder="e.g. admin"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full bg-white pl-10 pr-4 py-2.5 rounded-xl sm:rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-charcoal/80 mb-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
-                    <input
-                      type="email"
-                      required
-                      placeholder="e.g. admin@church.org"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-white pl-10 pr-4 py-2.5 rounded-xl sm:rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all"
-                    />
-                  </div>
-                </div>
+            <div className="animate-fade-slide-up anim-delay-250">
+              <label className="block font-bold text-charcoal/80 mb-1 sm:mb-1.5">Password</label>
+              <div className="relative group">
+                <Lock className="w-4 h-4 text-charcoal/40 group-focus-within:text-indigo absolute left-3.5 top-3.5 transition-colors duration-200" />
+                <input
+                  type="password"
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-white pl-10 pr-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-gray-200 hover:border-indigo-300 focus:outline-none focus:border-indigo focus:ring-3 focus:ring-indigo/15 font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all duration-300"
+                />
               </div>
-
-              <div>
-                <label className="block font-bold text-charcoal/80 mb-1">Password</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
-                  <input
-                    type="password"
-                    required
-                    placeholder="At least 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-white pl-10 pr-4 py-2.5 rounded-xl sm:rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all"
-                  />
-                </div>
+              <div className="text-[10px] text-charcoal/50 mt-1 sm:mt-1.5 flex justify-between">
+                <span>Default demo password: <code className="bg-gray-100 px-1 py-0.5 rounded font-mono text-indigo font-bold">password123</code></span>
               </div>
+            </div>
 
-              <div>
-                <label className="block font-bold text-charcoal/80 mb-1">Confirm Password</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
-                  <input
-                    type="password"
-                    required
-                    placeholder="Re-enter your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full bg-white pl-10 pr-4 py-2.5 rounded-xl sm:rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-indigo hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl sm:rounded-2xl text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 mt-2"
-              >
-                <span>{loading ? "Creating Account..." : (!hasUsers ? "Initialize Church & Create Admin" : "Complete Registration")}</span>
-                <ArrowRight className="w-4 h-4 text-amber-300" />
-              </button>
-
-              {hasUsers && (
-                <p className="text-center text-[11px] text-charcoal/60 pt-1">
-                  Already have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => { setIsRegisterMode(false); setError(null); }}
-                    className="font-bold text-indigo hover:underline"
-                  >
-                    Sign In here
-                  </button>
-                </p>
-              )}
-            </form>
-          ) : (
-            /* SIGN IN FORM */
-            <form onSubmit={handleLoginSubmit} className="space-y-3.5 sm:space-y-4 text-xs">
-              <div className="animate-fade-slide-up anim-delay-200">
-                <label className="block font-bold text-charcoal/80 mb-1 sm:mb-1.5">Email or Username</label>
-                <div className="relative group">
-                  <Mail className="w-4 h-4 text-charcoal/40 group-focus-within:text-indigo absolute left-3.5 top-3.5 transition-colors duration-200" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. admin or admin@church.org"
-                    value={emailOrUsername}
-                    onChange={(e) => setEmailOrUsername(e.target.value)}
-                    className="w-full bg-white pl-10 pr-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-gray-200 hover:border-indigo-300 focus:outline-none focus:border-indigo focus:ring-3 focus:ring-indigo/15 font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all duration-300"
-                  />
-                </div>
-              </div>
-
-              <div className="animate-fade-slide-up anim-delay-250">
-                <label className="block font-bold text-charcoal/80 mb-1 sm:mb-1.5">Password</label>
-                <div className="relative group">
-                  <Lock className="w-4 h-4 text-charcoal/40 group-focus-within:text-indigo absolute left-3.5 top-3.5 transition-colors duration-200" />
-                  <input
-                    type="password"
-                    placeholder="••••••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-white pl-10 pr-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-gray-200 hover:border-indigo-300 focus:outline-none focus:border-indigo focus:ring-3 focus:ring-indigo/15 font-medium text-charcoal text-sm sm:text-xs shadow-2xs transition-all duration-300"
-                  />
-                </div>
-                <div className="text-[10px] text-charcoal/50 mt-1 sm:mt-1.5 flex justify-between">
-                  <span>Default demo password: <code className="bg-gray-100 px-1 py-0.5 rounded font-mono text-indigo font-bold">password123</code></span>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-indigo hover:bg-indigo-700 text-white font-bold py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-xs shadow-md hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 mt-2 shimmer-button animate-fade-slide-up anim-delay-300 cursor-pointer"
-              >
-                <span>{loading ? "Authenticating..." : "Sign In to DPC Portal"}</span>
-                <ArrowRight className="w-4 h-4 text-amber-300 transition-transform group-hover:translate-x-1" />
-              </button>
-            </form>
-          )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-indigo hover:bg-indigo-700 text-white font-bold py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-xs shadow-md hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 mt-2 shimmer-button animate-fade-slide-up anim-delay-300 cursor-pointer"
+            >
+              <span>{submitting ? "Authenticating..." : "Sign In to DPC Portal"}</span>
+              <ArrowRight className="w-4 h-4 text-amber-300 transition-transform group-hover:translate-x-1" />
+            </button>
+          </form>
 
           {/* Divider & 1-Click Demo Login (Responsive grid: 1-col on mobile phones, 2-col on tablets and desktops) */}
-          {hasUsers && demoUsers.length > 0 && !isRegisterMode && (
+          {hasUsers && demoUsers.length > 0 && (
             <div className="animate-fade-slide-up anim-delay-400 space-y-2.5 sm:space-y-3">
               <div className="flex items-center gap-3 pt-1 sm:pt-2">
                 <div className="flex-1 h-px bg-gray-200"></div>
@@ -517,7 +445,7 @@ export const LoginPage: React.FC = () => {
                       key={u.id}
                       type="button"
                       onClick={() => handleDemoLogin(u.id)}
-                      disabled={loading}
+                      disabled={submitting}
                       className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-md active:scale-95 shadow-2xs cursor-pointer ${roleColors[u.role_name] || "border-gray-200 bg-white"
                         }`}
                       style={{ animationDelay: `${400 + idx * 50}ms` }}
@@ -545,6 +473,150 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* MASTER ADMINISTRATOR SETUP MODAL */}
+      {showAdminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-indigo-950/80 backdrop-blur-md overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-amber-300/80 p-6 sm:p-8 space-y-5 animate-scale-up my-auto">
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setShowAdminModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              title="Close modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Header */}
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold shadow-2xs">
+                <ShieldAlert className="w-4 h-4 text-amber-600 animate-pulse" />
+                <span>Initial System Setup Required</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-charcoal tracking-tight">
+                No Administrator Account Found
+              </h3>
+              <p className="text-xs text-charcoal/70 leading-relaxed">
+                There is currently no administrator registered for <strong>Daet Presbyterian Church</strong>. Create the initial Master Administrator account below to manage ministries, rosters, schedules, and portal settings.
+              </p>
+            </div>
+
+            {/* Modal Error/Success Alerts */}
+            {adminError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2.5 shadow-2xs">
+                <AlertCircle className="w-4 h-4 text-rose shrink-0" />
+                <span>{adminError}</span>
+              </div>
+            )}
+            {successMsg && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2.5 shadow-2xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+
+            {/* Admin Registration Form in Modal */}
+            <form onSubmit={handleAdminSetupSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Pastor / Elder Admin"
+                  value={adminName}
+                  onChange={(e) => setAdminName(e.target.value)}
+                  className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Username (for easy sign-in)</label>
+                <div className="relative">
+                  <AtSign className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. admin"
+                    value={adminUsername}
+                    onChange={(e) => setAdminUsername(e.target.value)}
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Admin Email Address</label>
+                <div className="relative">
+                  <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. admin@church.org"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-charcoal mb-1">Master Password</label>
+                  <div className="relative">
+                    <KeyRound className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-3" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-gray-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-charcoal mb-1">Confirm Password</label>
+                  <div className="relative">
+                    <Lock className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-3" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={adminConfirmPassword}
+                      onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-gray-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-3 px-4 rounded-xl text-xs shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{submitting ? "Creating Master Admin..." : "Create Master Administrator Account"}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminModal(false)}
+                  className="text-[11px] text-charcoal/60 hover:text-charcoal hover:underline cursor-pointer"
+                >
+                  Skip for now & return to login screen
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -1,14 +1,16 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useSocketConnection } from "../../socket";
 import { ChurchLogo } from "../common/ChurchLogo";
-import { Shield, ChevronDown, Bell, LogOut } from "lucide-react";
+import { WindowControls } from "./WindowControls";
+import { Bell, UserCog } from "lucide-react";
 
 const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "dashboard": { title: "Executive Dashboard", subtitle: "Church overview, attendance & KPIs" },
-  "leaderportal": { title: "Leader Portal", subtitle: "Small group & disciple care" },
-  "leader-dashboard": { title: "Leader Dashboard", subtitle: "Life group discipleship overview" },
-  "leader-members": { title: "Disciples Roster", subtitle: "Assigned life group members" },
-  "leader-biblestudy": { title: "Bible Study Groups", subtitle: "Curriculum & meeting progress" },
+  "leaderportal": { title: "My Bible Study Group", subtitle: "Small group fellowship & spiritual growth" },
+  "leader-dashboard": { title: "My Bible Study Group", subtitle: "Small group fellowship & spiritual growth" },
+  "leader-members": { title: "Lead Group Disciples", subtitle: "Assigned discipleship roster & care" },
+  "leader-biblestudy": { title: "Meeting & Curriculum", subtitle: "Curriculum & meeting attendance" },
   "attendance": { title: "Sunday Attendance", subtitle: "Live divine worship service kiosks" },
   "members": { title: "Members & Households", subtitle: "7 ministries directory & membership cards" },
   "biblestudy": { title: "Bible Study Groups", subtitle: "Discipleship life groups & schedules" },
@@ -16,33 +18,53 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "duty": { title: "Saturday Duty Roster", subtitle: "Weekly rotating church cleaning teams" },
   "dishwashing": { title: "Dishwashing Roster", subtitle: "Weekly after-fellowship washing cycle" },
   "events": { title: "Events & Master Calendar", subtitle: "Church schedules & fellowships" },
-  "communications": { title: "Announcements & Prayer", subtitle: "Church board & prayer requests" },
+  "communications": { title: "Announcements", subtitle: "Church board & ministry bulletins" },
   "reports": { title: "Analytics & Trends", subtitle: "Attendance reports & demographic statistics" },
   "users": { title: "User Management", subtitle: "System access & role permissions" },
   "settings": { title: "Settings & Lookups", subtitle: "System lookup configurations" },
-  "audit": { title: "System Audit Logs", subtitle: "Administrative activity history" }
+  "audit": { title: "System Audit Logs", subtitle: "Administrative activity history" },
+  "profile": { title: "My Profile & Account", subtitle: "Personal details, security & church engagement" }
 };
 
 interface NavbarProps {
   currentTab?: string;
   onToggleSidebar?: () => void;
+  onOpenProfile?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onToggleSidebar }) => {
-  const { user, logout } = useAuth();
+export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onToggleSidebar, onOpenProfile }) => {
+  const { user } = useAuth();
+  const isConnected = useSocketConnection();
   const currentTabMeta = TAB_TITLES[currentTab] || { title: "DPC Management System", subtitle: "Church portal" };
+  const isElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.isElectron);
 
   return (
-    <header className="bg-indigo text-white border-b border-indigo-800/60 shadow-xs">
-      <div className="w-full px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Left: Mobile hamburger toggle & Desktop active view title */}
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+    <header className="bg-indigo text-white border-b border-indigo-800/60 shadow-xs select-none relative">
+      {/* Top-Right Window Controls (Fixed at top-right desktop window corner) */}
+      <div
+        className="absolute top-0 right-0 z-50 pointer-events-auto"
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <WindowControls />
+      </div>
+
+      {/* Main Navbar Row with explicit padding ensuring a solid gap before window controls */}
+      <div
+        className="w-full pl-3 sm:pl-6 lg:pl-8 pr-3 sm:pr-6 lg:pr-8"
+        style={isElectron ? { paddingRight: "165px" } : undefined}
+      >
+        <div className="flex items-center justify-between h-14 sm:h-16">
+          {/* Left: Mobile hamburger toggle & Desktop active view title (Draggable) */}
+          <div
+            className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 h-full"
+            style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+          >
             {onToggleSidebar && (
               <button
                 type="button"
                 onClick={onToggleSidebar}
-                className="md:hidden p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer shrink-0"
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                className="md:hidden p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer shrink-0"
                 aria-label="Toggle navigation menu"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -53,9 +75,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
 
             {/* Mobile-only compact logo & brand title */}
             <div className="flex items-center gap-2 min-w-0 md:hidden">
-              <ChurchLogo variant="badge" className="w-8 h-8 shrink-0" />
-              <div className="min-w-0 truncate font-bold text-sm text-white">
-                Daet Presbyterian <span className="text-amber-400 font-serif italic text-xs">ChMS</span>
+              <ChurchLogo variant="badge" className="w-7 h-7 shrink-0" />
+              <div className="min-w-0 truncate font-bold text-xs text-white">
+                Daet Presbyterian <span className="text-amber-400 font-serif italic text-[10px]">ChMS</span>
               </div>
             </div>
 
@@ -70,45 +92,52 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
             </div>
           </div>
 
-          {/* User Profile & Actions */}
-          <div className="flex items-center gap-3">
+          {/* Right: User Profile & Status Badges (Completely non-draggable and 100% responsive) */}
+          <div
+            className="flex items-center gap-2 sm:gap-3 shrink-0"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
+            {/* Real-time Socket.IO Live Indicator */}
+            <div 
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide border transition-all ${
+                isConnected 
+                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" 
+                  : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+              }`}
+              title={isConnected ? "Real-time Socket.IO connected across all church terminals" : "Connecting to real-time server..."}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
+              <span className="hidden lg:inline">{isConnected ? "Live Sync" : "Syncing..."}</span>
+            </div>
+
             {/* Notification Indicator */}
             <div className="relative p-2 rounded-full hover:bg-indigo-700/60 text-indigo-200 hover:text-white cursor-pointer transition-colors">
               <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose rounded-full"></span>
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose rounded-full"></span>
             </div>
 
-            {/* User Pill & Logout */}
+            {/* User Pill (Interactive -> Opens Profile Management) */}
             {user && (
-              <div className="flex items-center gap-3 pl-2 border-l border-indigo-700">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-amber-400 text-charcoal font-bold flex items-center justify-center text-xs shadow-inner">
-                    {user.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
+              <button
+                type="button"
+                onClick={onOpenProfile}
+                title="Manage Account Profile & Security Settings"
+                className="group flex items-center gap-2 pl-2.5 pr-2.5 py-1 rounded-2xl border border-indigo-700/80 bg-indigo-900/40 hover:bg-indigo-800/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs text-left active:scale-98"
+              >
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-amber-300 text-indigo-950 font-black flex items-center justify-center text-xs shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+                  {user.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
+                </div>
+                <div className="hidden sm:block text-left min-w-0">
+                  <div className="text-xs font-bold leading-tight text-white truncate max-w-[110px] lg:max-w-[140px] group-hover:text-amber-300 transition-colors">
+                    {user.name}
                   </div>
-                  <div className="hidden sm:block text-left">
-                    <div className="text-xs font-semibold leading-tight text-white">{user.name}</div>
-                    <div className="flex items-center gap-1">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-sage-400"></span>
-                      <span className="text-[10px] text-amber-300 font-medium">{user.role_name}</span>
-                      {user.ministries.length > 0 && (
-                        <span className="text-[10px] text-indigo-200">
-                          • {user.ministries.map(m => m.name).join(", ")}
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-sage-400 shrink-0"></span>
+                    <span className="text-[10px] text-amber-300/90 font-medium truncate">{user.role_name}</span>
                   </div>
                 </div>
-
-                {/* Logout Button */}
-                <button
-                  onClick={logout}
-                  title="Sign Out"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-rose hover:text-white text-indigo-200 text-xs font-bold transition-all active:scale-95 shadow-2xs"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Log Out</span>
-                </button>
-              </div>
+                <UserCog className="w-3.5 h-3.5 text-indigo-300 group-hover:text-amber-400 shrink-0 ml-0.5 transition-colors hidden md:block" />
+              </button>
             )}
           </div>
         </div>

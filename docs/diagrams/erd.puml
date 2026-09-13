@@ -1,0 +1,161 @@
+@startuml
+!theme plain
+skinparam linetype ortho
+skinparam roundcorner 5
+
+entity "roles" as roles {
+  * id : SERIAL <<PK>>
+  --
+  * name : VARCHAR(50) <<UNIQUE>>
+}
+
+entity "users" as users {
+  * id : SERIAL <<PK>>
+  --
+  * name : VARCHAR(255)
+  username : VARCHAR(100) <<UNIQUE>>
+  * email : VARCHAR(255) <<UNIQUE>>
+  * password_hash : VARCHAR(255)
+  * role_id : INT <<FK>>
+  created_at : TIMESTAMPTZ
+}
+
+entity "ministries" as ministries {
+  * id : SERIAL <<PK>>
+  --
+  * name : VARCHAR(100) <<UNIQUE>>
+  min_age : INT
+  max_age : INT
+  description : TEXT
+  color : VARCHAR(20)
+}
+
+entity "user_ministries" as user_ministries {
+  * id : SERIAL <<PK>>
+  --
+  * user_id : INT <<FK>>
+  * ministry_id : INT <<FK>>
+}
+
+entity "households" as households {
+  * id : SERIAL <<PK>>
+  --
+  * name : VARCHAR(255)
+  address : TEXT
+  primary_contact_phone : VARCHAR(50)
+  created_at : TIMESTAMPTZ
+}
+
+entity "members" as members {
+  * id : SERIAL <<PK>>
+  --
+  * first_name : VARCHAR(100)
+  * last_name : VARCHAR(100)
+  * birthdate : DATE
+  gender : VARCHAR(20)
+  contact_email : VARCHAR(255)
+  contact_phone : VARCHAR(50)
+  household_id : INT <<FK>>
+  ministry_id : INT <<FK>>
+  user_id : INT <<FK>>
+  status : VARCHAR(50)
+  grade_level : VARCHAR(50)
+  created_at : TIMESTAMPTZ
+}
+
+entity "events" as events {
+  * id : SERIAL <<PK>>
+  --
+  * title : VARCHAR(255)
+  description : TEXT
+  * start_time : TIMESTAMPTZ
+  * end_time : TIMESTAMPTZ
+  location : VARCHAR(255)
+  ministry_id : INT <<FK>>
+  created_by : INT <<FK>>
+  max_capacity : INT
+  created_at : TIMESTAMPTZ
+}
+
+entity "event_rsvps" as event_rsvps {
+  * id : SERIAL <<PK>>
+  --
+  * event_id : INT <<FK>>
+  member_id : INT <<FK>>
+  user_id : INT <<FK>>
+  guests_count : INT
+  status : VARCHAR(20)
+  created_at : TIMESTAMPTZ
+}
+
+entity "attendance" as attendance {
+  * id : SERIAL <<PK>>
+  --
+  * member_id : INT <<FK>>
+  * ministry_id : INT <<FK>>
+  event_id : INT <<FK>>
+  checked_in_at : TIMESTAMPTZ
+  checked_in_by : INT <<FK>>
+  security_tag : VARCHAR(50)
+}
+
+entity "documents" as documents {
+  * id : SERIAL <<PK>>
+  --
+  * title : VARCHAR(255)
+  * doc_type : VARCHAR(100)
+  file_url : VARCHAR(500)
+  current_version : INT
+  * current_status : VARCHAR(50)
+  * submitted_by : INT <<FK>>
+  event_id : INT <<FK>>
+  created_at : TIMESTAMPTZ
+}
+
+entity "document_approval_steps" as approval_steps {
+  * id : SERIAL <<PK>>
+  --
+  * document_id : INT <<FK>>
+  * reviewer_id : INT <<FK>>
+  * step_order : INT
+  * status : VARCHAR(50)
+  comments : TEXT
+  reviewed_at : TIMESTAMPTZ
+}
+
+entity "funds" as funds {
+  * id : SERIAL <<PK>>
+  --
+  * name : VARCHAR(100) <<UNIQUE>>
+  description : TEXT
+  target_amount : DECIMAL(12,2)
+  is_active : INT
+}
+
+entity "donations" as donations {
+  * id : SERIAL <<PK>>
+  --
+  member_id : INT <<FK>>
+  * fund_id : INT <<FK>>
+  * amount : DECIMAL(12,2)
+  payment_method : VARCHAR(50)
+  donated_at : TIMESTAMPTZ
+}
+
+roles ||--o{ users : "assigns"
+users ||--o{ user_ministries : "has"
+ministries ||--o{ user_ministries : "in"
+households ||--o{ members : "contains"
+ministries ||--o{ members : "belongs to"
+users ||--o| members : "links"
+users ||--o{ events : "organizes"
+events ||--o{ event_rsvps : "receives"
+members ||--o{ event_rsvps : "registers"
+members ||--o{ attendance : "attends"
+events ||--o{ attendance : "logs"
+users ||--o{ documents : "authors"
+events ||--o{ documents : "relates"
+documents ||--o{ approval_steps : "workflow steps"
+funds ||--o{ donations : "credits"
+members ||--o{ donations : "gives"
+@enduml

@@ -1,0 +1,41 @@
+@startuml
+start
+:Officer creates Activity / Event\n(e.g., Worship Night, Bible Study, Retreat);
+:Set capacity, location, schedule, and RSVP settings;
+:Publish Event & Announcements;
+
+partition "Member Interaction" {
+  :Member browses upcoming activities;
+  :Submit RSVP / Registration;
+  if (Capacity reached?) then (Yes)
+    :Place in Waiting List;
+    stop
+  else (No)
+    :Confirm Registration;
+    :Generate Unique Participant QR Code;
+  endif
+}
+
+partition "Event Day Attendance" {
+  :Participant arrives at venue;
+  if (Check-in Method?) then (QR Code Scanner)
+    :Scan participant QR Code via mobile or camera;
+  else (Manual Search)
+    :Search Member Name / Student ID;
+  endif
+  :Validate participant & timestamp;
+  :Record Attendance (Status: PRESENT / LATE);
+}
+
+partition "Post-Event Automated Reporting" {
+  :Calculate Attendance % & Participation Rate;
+  :Auto-generate Accomplishment Report Data;
+  if (Certificates Required?) then (Yes)
+    :Select Certificate Template;
+    :Bulk-generate PDFs for Present Attendees;
+    :Distribute to Members;
+  endif
+  :Update Organization Dashboard;
+}
+stop
+@enduml

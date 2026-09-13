@@ -1,7 +1,9 @@
+import http from "http";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { initSchema } from "./db/schema";
+import { initSocketServer } from "./socket";
 
 import authRouter from "./routes/auth";
 import usersRouter from "./routes/users";
@@ -19,11 +21,17 @@ import reportsRouter from "./routes/reports";
 import auditRouter from "./routes/audit";
 import dutyRouter from "./routes/duty";
 import dishwashingRouter from "./routes/dishwashing";
+import backupRouter from "./routes/backup";
+import bibleReadingRouter from "./routes/bibleReading";
 
 dotenv.config();
 
 const app = express();
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 4000;
+
+// Initialize Socket.IO
+initSocketServer(httpServer);
 
 // Middleware
 app.use(cors({
@@ -31,13 +39,14 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Health Check
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
-    service: "Church Management System API (Node.js + PostgreSQL)",
+    service: "Church Management System API (Node.js + PostgreSQL + Socket.IO)",
     time: new Date().toISOString()
   });
 });
@@ -59,6 +68,8 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/audit", auditRouter);
 app.use("/api/duty", dutyRouter);
 app.use("/api/dishwashing", dishwashingRouter);
+app.use("/api/backup", backupRouter);
+app.use("/api/bible-reading", bibleReadingRouter);
 
 // Global Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -70,8 +81,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 async function start() {
   await initSchema();
 
-  app.listen(PORT, () => {
-    console.log(`✨ ChMS Backend API (Node.js + Express + PostgreSQL) running on http://localhost:${PORT}`);
+  httpServer.listen(PORT, () => {
+    console.log(`✨ ChMS Backend API & Socket.IO running on http://localhost:${PORT}`);
   });
 }
 

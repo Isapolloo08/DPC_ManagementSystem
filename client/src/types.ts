@@ -13,7 +13,7 @@ export interface Ministry {
 
 export interface Role {
   id: number;
-  name: "Admin" | "Coordinator" | "Volunteer" | "Member" | string;
+  name: "Admin" | "Coordinator" | "Leader" | "Volunteer" | "Member" | string;
   description?: string;
   user_count?: number;
 }
@@ -32,6 +32,36 @@ export interface User {
   member?: Member | null;
   member_id?: number | null;
   linked_member_name?: string | null;
+}
+
+export interface UpdateProfilePayload {
+  name?: string;
+  username?: string;
+  email?: string;
+  contact_phone?: string;
+  birthdate?: string;
+  gender?: string;
+  address?: string;
+  occupation?: string;
+  hobbies?: string;
+  school_name?: string;
+  program_major?: string;
+  guardian_names?: string;
+  guardian_phone?: string;
+  family_details?: string;
+  facebook_account?: string;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UserActivityStats {
+  attendanceCount: number;
+  groupsLed: { id: number; name: string; schedule_day: string; schedule_time: string; meeting_location?: string }[];
+  groupsAttended: { id: number; name: string; schedule_day: string; schedule_time: string; meeting_location?: string }[];
+  dutiesAssigned: { team_id: number; team_name: string; duty_role?: string }[];
 }
 
 export interface Member {
@@ -138,6 +168,7 @@ export interface AttendanceRosterItem {
   attendance_notes: string | null;
   checked_in_by_name?: string | null;
   is_present: number;
+  attendance_status?: "present" | "absent" | "excused" | "checked_out" | "unmarked";
 }
 
 export interface EventItem {
@@ -166,19 +197,6 @@ export interface Announcement {
   title: string;
   body: string;
   is_pinned: number;
-  created_at: string;
-}
-
-export interface PrayerRequest {
-  id: number;
-  member_id: number | null;
-  submitter_name?: string;
-  ministry_id: number | null;
-  ministry_name?: string;
-  ministry_color?: string;
-  request_text: string;
-  is_anonymous: number;
-  status: "open" | "answered" | "archived";
   created_at: string;
 }
 
@@ -211,7 +229,8 @@ export interface DashboardMetrics {
     total_households: number;
     today_checkins: number;
     ytd_giving_amount: number;
-    open_prayer_requests: number;
+    active_announcements?: number;
+    open_prayer_requests?: number;
     upcoming_events_count: number;
     aging_out_alerts_count: number;
     birthdays_this_month_count?: number;
@@ -245,6 +264,7 @@ export interface BibleStudyMember {
   group_id: number;
   member_id: number | null;
   member_name: string | null;
+  display_name?: string;
   first_name?: string;
   last_name?: string;
   contact_email?: string;
@@ -260,6 +280,7 @@ export interface BibleStudyGroup {
   ministry_id: number | null;
   ministry_name?: string;
   ministry_color?: string;
+  leader_id?: number | null;
   leader_name: string;
   leader_contact: string | null;
   meeting_day: string;
@@ -270,6 +291,7 @@ export interface BibleStudyGroup {
   current_member_count?: number;
   members?: BibleStudyMember[];
   current_chapter?: string;
+  curriculum_total_chapters?: number;
   progress_stage?: string;
   progress_notes?: string | null;
   is_rescheduled?: boolean | number;
@@ -283,7 +305,6 @@ export type LookupType =
   | "bible_study_category"
   | "event_category"
   | "event_location"
-  | "prayer_topic"
   | "announcement_category"
   | "payment_method"
   | "member_status";
@@ -352,45 +373,19 @@ export interface SystemSetting {
 export interface StudyTopic {
   id: number;
   title: string;
-  type: "book" | "topical" | "doctrinal" | "character";
-  testament_or_category?: string | null;
   total_chapters: number;
-  completed_chapters: number;
-  status: "completed" | "in_progress" | "planned";
-  completed_date?: string | null;
-  assigned_group_id?: number | null;
-  assigned_group_name?: string | null;
-  assigned_ministry_id?: number | null;
-  assigned_ministry_name?: string | null;
-  lead_teacher?: string | null;
-  key_verse?: string | null;
   summary_notes?: string | null;
-  group_name?: string | null;
-  meeting_day?: string | null;
-  meeting_time?: string | null;
-  current_location?: string | null;
-  leader_name?: string | null;
-  leader_email?: string | null;
-  leader_phone?: string | null;
-  ministry_name?: string | null;
-  ministry_color?: string | null;
   created_at?: string;
 }
 
 export interface StudyTopicDetailResponse {
   topic: StudyTopic;
-  group_members: any[];
-  all_groups: any[];
+  all_groups: BibleStudyGroup[];
 }
 
 export interface StudyTopicsSummary {
   topics: StudyTopic[];
   total_count: number;
-  completed_count: number;
-  in_progress_count: number;
-  planned_count: number;
-  completion_rate: number;
-  completed_books: StudyTopic[];
 }
 
 export interface DutyTeamMember {
@@ -428,6 +423,7 @@ export interface SaturdayDutyScheduleItem {
   date_formatted: string;
   week_number: number;
   is_this_saturday: boolean;
+  is_next_saturday?: boolean;
   is_past: boolean;
   status: "on_duty" | "scheduled" | "completed" | "swapped";
   completed_at?: string | null;
@@ -439,6 +435,49 @@ export interface SaturdayDutyScheduleResponse {
   total_teams: number;
   cycle_interval_weeks: number;
   schedule: SaturdayDutyScheduleItem[];
+}
+
+export interface DishwashingTeam {
+  id: number;
+  name: string;
+  cycle_mode: "biblestudy_group" | "ministry" | "custom";
+  biblestudy_group_id?: number | null;
+  ministry_id?: number | null;
+  ministry_name?: string | null;
+  ministry_color?: string | null;
+  group_name?: string | null;
+  group_meeting_day?: string | null;
+  leader_id?: number | null;
+  leader_name?: string | null;
+  leader_phone?: string | null;
+  leader_contact?: string | null;
+  color: string;
+  order_seq: number;
+  tasks_checklist?: string | null;
+  volunteers_count: number;
+  created_at?: string;
+  members_count: number;
+  members: DutyTeamMember[];
+}
+
+export interface SundayDutyScheduleItem {
+  duty_date: string;
+  date_formatted: string;
+  week_number: number;
+  is_this_sunday: boolean;
+  is_next_sunday: boolean;
+  status: "on_duty" | "scheduled" | "completed" | "swapped";
+  completed_at?: string | null;
+  notes?: string | null;
+  team: DishwashingTeam | null;
+}
+
+export interface SundayDutyScheduleResponse {
+  total_teams: number;
+  cycle_interval_weeks: number;
+  thisSunday: SundayDutyScheduleItem | null;
+  nextSunday: SundayDutyScheduleItem | null;
+  schedule: SundayDutyScheduleItem[];
 }
 
 export interface DishwashingDutyItem {
@@ -486,4 +525,83 @@ export interface DishwashingCyclePayload {
   teams_per_turn?: number;
 }
 
+export interface BackupYearStats {
+  year: number;
+  totalRecords: number;
+  attendance: number;
+  donationsCount: number;
+  donationsTotal: number;
+  events: number;
+  dutySchedules: number;
+  dishwashingRoster: number;
+  announcements: number;
+  membersCreated: number;
+}
 
+export interface BackupSummaryResponse {
+  success: boolean;
+  totalStats: Record<string, number>;
+  yearlyBreakdown: BackupYearStats[];
+  generatedAt: string;
+}
+
+export interface BackupYearDetailsResponse {
+  success: boolean;
+  year: number;
+  tables: {
+    attendance: any[];
+    donations: any[];
+    events: any[];
+    duty_schedules: any[];
+    dishwashing_roster: any[];
+    announcements: any[];
+    members_created: any[];
+  };
+}
+
+export interface BackupPreviewResponse {
+  success: boolean;
+  system: string;
+  backupType: string;
+  targetYear: string | number;
+  createdAt: string;
+  exportedBy: string;
+  totalRows: number;
+  tableCounts: Record<string, number>;
+  samplePreviews: Record<string, any[]>;
+}
+
+export interface BackupExportPayload {
+  system: string;
+  version: string;
+  backupType: string;
+  targetYear: string | number;
+  createdAt: string;
+  exportedBy: string;
+  totalRows: number;
+  tableCounts: Record<string, number>;
+  data: Record<string, any[]>;
+}
+
+export interface BibleReadingProgressResponse {
+  success: boolean;
+  completedKeys: string[];
+  records: {
+    id: number;
+    day_key: string;
+    completed_at: string;
+    notes: string | null;
+  }[];
+}
+
+export interface BibleReadingToggleResponse {
+  success: boolean;
+  day_key: string;
+  isCompleted: boolean;
+}
+
+export interface BibleReadingStatsResponse {
+  success: boolean;
+  totalCompletionsCount: number;
+  activeReadersCount: number;
+}

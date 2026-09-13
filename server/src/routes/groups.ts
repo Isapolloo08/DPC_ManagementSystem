@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
+import { resolveTotalChapters } from "./studyTopics";
 
 const router = Router();
 
@@ -41,7 +43,10 @@ router.get("/", async (req: Request, res: Response) => {
 
     query += " ORDER BY g.id ASC";
 
-    const groups = await db.all(query, params);
+    const [groups, dbTopics] = await Promise.all([
+      db.all(query, params),
+      db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => [])
+    ]);
 
     const detailed = await Promise.all(groups.map(async (g) => {
       const members = await db.all(`
@@ -52,8 +57,11 @@ router.get("/", async (req: Request, res: Response) => {
         ORDER BY bsm.joined_at ASC
       `, [g.id]);
 
+      const totalChapters = resolveTotalChapters(g.curriculum || "", dbTopics);
+
       return {
         ...g,
+        curriculum_total_chapters: totalChapters,
         current_member_count: Number(g.current_member_count || 0),
         members: members.map(m => ({
           ...m,
@@ -82,16 +90,22 @@ router.get("/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Small group not found" });
     }
 
-    const members = await db.all(`
-      SELECT bsm.*, m.first_name, m.last_name, m.contact_email, m.contact_phone
-      FROM bible_study_members bsm
-      LEFT JOIN members m ON bsm.member_id = m.id
-      WHERE bsm.group_id = $1
-      ORDER BY bsm.joined_at ASC
-    `, [group.id]);
+    const [members, dbTopics] = await Promise.all([
+      db.all(`
+        SELECT bsm.*, m.first_name, m.last_name, m.contact_email, m.contact_phone
+        FROM bible_study_members bsm
+        LEFT JOIN members m ON bsm.member_id = m.id
+        WHERE bsm.group_id = $1
+        ORDER BY bsm.joined_at ASC
+      `, [group.id]),
+      db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => [])
+    ]);
+
+    const totalChapters = resolveTotalChapters(group.curriculum || "", dbTopics);
 
     res.json({
       ...group,
+      curriculum_total_chapters: totalChapters,
       members: members.map(m => ({
         ...m,
         display_name: m.first_name ? `${m.first_name} ${m.last_name}` : m.member_name
@@ -168,6 +182,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
     }
 
     await logAuditAction(req.user?.id || null, "CREATE", "bible_study_groups", newId, `Created Bible study group: ${name}`);
+    emitRealtimeEvent("groups:changed", { action: "create", id: newId });
 
     res.status(201).json({ id: newId, message: "Small group created successfully" });
   } catch (err: any) {
@@ -262,6 +277,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
     }
 
     await logAuditAction(req.user?.id || null, "UPDATE", "bible_study_groups", Number(id), `Updated small group: ${name || current.name}`);
+    emitRealtimeEvent("groups:changed", { action: "update", id: Number(id) });
     res.json({ message: "Small group updated successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -298,6 +314,7 @@ router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Resp
       `Updated chapter progress for ${current.name}: ${current_chapter || current.current_chapter}`
     );
 
+    emitRealtimeEvent("groups:changed", { action: "update_progress", id: Number(id) });
     res.json({ message: "Study chapter progress updated successfully!" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -340,6 +357,8 @@ router.patch("/:id/reschedule", authMiddleware, requireRoles("Admin", "Coordinat
       auditActionText
     );
 
+    emitRealtimeEvent("groups:changed", { action: "reschedule", id: Number(id) });
+
     res.json({
       message: is_rescheduled
         ? `Session successfully rescheduled to ${rescheduled_date}!`
@@ -359,6 +378,7 @@ router.delete("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), asyn
     await db.run("DELETE FROM bible_study_groups WHERE id = $1", [id]);
 
     await logAuditAction(req.user?.id || null, "DELETE", "bible_study_groups", Number(id), `Deleted small group #${id}`);
+    emitRealtimeEvent("groups:changed", { action: "delete", id: Number(id) });
     res.json({ message: "Small group deleted successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -396,6 +416,8 @@ router.post("/:id/join", authMiddleware, async (req: AuthRequest, res: Response)
       VALUES ($1, $2, $3)
       ON CONFLICT (group_id, member_id) DO NOTHING
     `, [groupId, targetMemberId || null, targetName || "Member"]);
+
+    emitRealtimeEvent("groups:changed", { action: "join", id: Number(groupId) });
 
     res.json({ message: "Joined small group successfully!" });
   } catch (err: any) {

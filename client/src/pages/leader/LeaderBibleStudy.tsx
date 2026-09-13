@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { BibleStudyGroup, BibleStudyMember } from "../../types";
 import { api } from "../../api";
 import { TimePickerInput } from "../../components/common/TimePickerInput";
+import { DatePickerInput } from "../../components/common/DatePickerInput";
+import { ConfirmationModal, ModalType } from "../../components/common/ConfirmationModal";
+import { getBookTotalChapters, generateChapterOptions } from "../../utils/curriculumHelper";
 import {
   UserCheck, Calendar, Check, CheckCircle2, BookOpen,
   Edit, Bookmark, BookmarkCheck, Sparkles, MapPin,
@@ -25,6 +29,37 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split("T")[0]);
   const [checkedMembers, setCheckedMembers] = useState<Record<number, boolean>>({});
   const [sessionSavedSuccess, setSessionSavedSuccess] = useState(false);
+
+  // Custom Confirmation & Alert Modal State
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    type: ModalType;
+    confirmText?: string;
+    cancelText?: string | null;
+    isLoading?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    type: "info",
+    confirmText: "Okay",
+    onConfirm: () => {}
+  });
+
+  const showAlert = (title: string, message: string, type: ModalType = "danger") => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title,
+      type,
+      confirmText: "Okay",
+      cancelText: null,
+      description: <p className="text-xs text-charcoal/80 text-center">{message}</p>,
+      onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
 
   // Edit Study & Book Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -173,7 +208,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
         setIsEditModalOpen(false);
       }, 1000);
     } catch (err: any) {
-      alert(err.message || "Failed to update study details");
+      showAlert("Update Failed", err.message || "Failed to update study details", "danger");
     } finally {
       setIsSaving(false);
     }
@@ -233,7 +268,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
       if (onGroupUpdated) onGroupUpdated();
       setIsRescheduleModalOpen(false);
     } catch (err: any) {
-      alert(err.message || "Failed to update reschedule status");
+      showAlert("Reschedule Failed", err.message || "Failed to update reschedule status", "danger");
     } finally {
       setIsSavingReschedule(false);
     }
@@ -274,10 +309,22 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
     }
   };
 
+  if (!activeGroup) {
+    return (
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-12 text-center space-y-3">
+        <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
+        <h3 className="text-base font-black text-slate-900">No Life Group Designated Yet</h3>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          You are logged in as a Leader, but no Life Group has been assigned to you. Weekly roll-call attendance, session scheduling, and curriculum tracking will be enabled once your group is designated.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Reschedule Alert Banner for Leader */}
-      {activeGroup?.is_rescheduled && (
+      {activeGroup.is_rescheduled && (
         <div className="p-4 bg-gradient-to-r from-amber-50 via-orange-50/80 to-amber-50 rounded-3xl border border-amber-300 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0 mt-0.5">
@@ -337,13 +384,11 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-indigo" />
-              <input
-                type="date"
+            <div className="w-40">
+              <DatePickerInput
                 value={sessionDate}
-                onChange={(e) => setSessionDate(e.target.value)}
-                className="text-xs font-bold text-charcoal border border-gray-200 px-2.5 py-1 rounded-xl outline-none cursor-pointer"
+                onChange={(val) => setSessionDate(val)}
+                placeholder="Select date"
               />
             </div>
           </div>
@@ -375,8 +420,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                     key={d.id}
                     onClick={() => setCheckedMembers(prev => ({ ...prev, [d.id]: !prev[d.id] }))}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${isChecked
-                        ? "bg-emerald-50/60 border-emerald-300 shadow-2xs"
-                        : "bg-gray-50/60 border-gray-200 hover:border-gray-300"
+                      ? "bg-emerald-50/60 border-emerald-300 shadow-2xs"
+                      : "bg-gray-50/60 border-gray-200 hover:border-gray-300"
                       }`}
                   >
                     <div className="flex items-center gap-3">
@@ -492,8 +537,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 <button
                   onClick={handleOpenReschedule}
                   className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${activeGroup?.is_rescheduled
-                      ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300"
-                      : "bg-ivory-light hover:bg-amber-50 text-amber-900 border-amber-200"
+                    ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300"
+                    : "bg-ivory-light hover:bg-amber-50 text-amber-900 border-amber-200"
                     }`}
                   title="Reschedule next meeting"
                 >
@@ -509,11 +554,10 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
       {/* ========================================================================= */}
       {/* MODAL: UPDATE BIBLE STUDY BOOK, CHAPTER PROGRESS & MEETING TIME */}
       {/* ========================================================================= */}
-      {isEditModalOpen && activeGroup && (
-        <div className="fixed inset-0 z-50 bg-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {isEditModalOpen && activeGroup && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 space-y-4.5 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-800 flex items-center justify-center font-bold">
                   <BookOpen className="w-5 h-5" />
@@ -628,73 +672,115 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 )}
               </div>
 
-              {/* Study Chapter Progress & Notice Section */}
-              <div className="p-3.5 bg-gradient-to-br from-indigo-50/70 to-ivory rounded-2xl border border-indigo-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
-                    <Bookmark className="w-3.5 h-3.5 text-indigo-700" />
-                    <span>Current Chapter & Study Progress</span>
-                  </label>
-                  <span className="text-[10px] text-charcoal/50">Where the group is studying</span>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
-                      What Chapter / Lesson na sila? *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Chapter 1, Introduction, Lesson 3"
-                      value={formData.current_chapter}
-                      onChange={(e) => setFormData({ ...formData, current_chapter: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal"
-                    />
-                    {/* Quick Chips */}
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {["Intro", "Ch 1", "Ch 2", "Ch 3", "Ch 4", "Ch 5", "Review"].map((chip) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, current_chapter: chip === "Intro" ? "Introduction" : chip.replace("Ch", "Chapter") })}
-                          className="px-2 py-0.5 rounded-md bg-white hover:bg-indigo-50 border border-gray-200 text-[10px] font-semibold text-charcoal/70 hover:text-indigo transition-colors cursor-pointer"
+              {(() => {
+                const bookTotalChapters = getBookTotalChapters(formData.curriculum);
+                const chapterOptions = generateChapterOptions(bookTotalChapters);
+
+                return (
+                  <div className="p-3.5 bg-gradient-to-br from-indigo-50/70 to-ivory rounded-2xl border border-indigo-100 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
+                        <Bookmark className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>Current Chapter & Study Progress</span>
+                      </label>
+                      {formData.curriculum && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                          {formData.curriculum} • {bookTotalChapters} Chapters Total
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-bold text-charcoal/70">
+                            What Chapter / Lesson na sila? *
+                          </label>
+                          <span className="text-[10px] text-indigo-700 font-semibold">
+                            Max {bookTotalChapters} Ch.
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="e.g. Chapter 1, Introduction, Lesson 3"
+                            value={formData.current_chapter}
+                            onChange={(e) => setFormData({ ...formData, current_chapter: e.target.value })}
+                            className="w-full bg-white p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs"
+                          />
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setFormData({ ...formData, current_chapter: e.target.value });
+                              }
+                            }}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-indigo-50 text-indigo-900 px-1.5 py-1 rounded-lg border border-indigo-200 cursor-pointer outline-none"
+                            title="Pick from Book's Chapters"
+                          >
+                            <option value="">Pick ▼</option>
+                            {chapterOptions.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Dynamic Quick Chips based on book */}
+                        <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto pr-1 no-scrollbar">
+                          {chapterOptions.slice(0, Math.min(chapterOptions.length, 12)).map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, current_chapter: opt.value })}
+                              className={`px-2 py-0.5 rounded-md border text-[10px] font-semibold transition-colors cursor-pointer ${formData.current_chapter === opt.value
+                                ? "bg-indigo text-white border-indigo shadow-2xs font-bold"
+                                : "bg-white hover:bg-indigo-50 border-gray-200 text-charcoal/70 hover:text-indigo"
+                                }`}
+                            >
+                              {opt.label.replace("Chapter ", "Ch ")}
+                            </button>
+                          ))}
+                          {chapterOptions.length > 12 && (
+                            <span className="text-[10px] text-charcoal/40 self-center pl-1 font-medium">
+                              +{chapterOptions.length - 12} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
+                          Study Stage (Nasaan sila banda?)
+                        </label>
+                        <select
+                          value={formData.progress_stage}
+                          onChange={(e) => setFormData({ ...formData, progress_stage: e.target.value })}
+                          className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-semibold text-charcoal h-[41px]"
                         >
-                          {chip}
-                        </button>
-                      ))}
+                          <option value="intro">🟢 Intro / Just Starting (No. 1 pa lang)</option>
+                          <option value="midway">🟡 Mid-way (Kalahati pa lang ng Chapter)</option>
+                          <option value="application">🟠 Discussion & Reflection Questions</option>
+                          <option value="completed">🔵 Chapter Completed / Ready for Next</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
+                        Lesson Notice & Specific Location (Saan Banda Sila)
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Maglagay ng notice o detalye (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide')..."
+                        value={formData.progress_notes}
+                        onChange={(e) => setFormData({ ...formData, progress_notes: e.target.value })}
+                        className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                      />
                     </div>
                   </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
-                      Study Stage (Nasaan sila banda?)
-                    </label>
-                    <select
-                      value={formData.progress_stage}
-                      onChange={(e) => setFormData({ ...formData, progress_stage: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-semibold text-charcoal h-[41px]"
-                    >
-                      <option value="intro">🟢 Intro / Just Starting (No. 1 pa lang)</option>
-                      <option value="midway">🟡 Mid-way (Kalahati pa lang ng Chapter)</option>
-                      <option value="application">🟠 Discussion & Reflection Questions</option>
-                      <option value="completed">🔵 Chapter Completed / Ready for Next</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
-                    Lesson Notice & Specific Location (Saan Banda Sila)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Maglagay ng notice o detalye (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide')..."
-                    value={formData.progress_notes}
-                    onChange={(e) => setFormData({ ...formData, progress_notes: e.target.value })}
-                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                  />
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Schedule: Meeting Day, Time In (Start Time), Time Out (End Time / end_time) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -767,17 +853,17 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
       {/* MODAL: RESCHEDULE NEXT SESSION (LEADER PORTAL) */}
       {/* ========================================================================= */}
-      {isRescheduleModalOpen && activeGroup && (
-        <div className="fixed inset-0 z-50 bg-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {isRescheduleModalOpen && activeGroup && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-amber-200 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
                   <CalendarClock className="w-5 h-5 text-amber-700" />
@@ -819,8 +905,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                   <div
                     onClick={() => setRescheduleData({ ...rescheduleData, is_rescheduled: true })}
                     className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${rescheduleData.is_rescheduled
-                        ? "bg-amber-50/90 border-amber-400 ring-1 ring-amber-400 text-amber-950 font-bold"
-                        : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
+                      ? "bg-amber-50/90 border-amber-400 ring-1 ring-amber-400 text-amber-950 font-bold"
+                      : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
                       }`}
                   >
                     <div className="w-4 h-4 rounded-full border border-amber-600 flex items-center justify-center shrink-0 mt-0.5">
@@ -835,8 +921,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                   <div
                     onClick={() => setRescheduleData({ ...rescheduleData, is_rescheduled: false })}
                     className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${!rescheduleData.is_rescheduled
-                        ? "bg-emerald-50/90 border-emerald-400 ring-1 ring-emerald-400 text-emerald-950 font-bold"
-                        : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
+                      ? "bg-emerald-50/90 border-emerald-400 ring-1 ring-emerald-400 text-emerald-950 font-bold"
+                      : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
                       }`}
                   >
                     <div className="w-4 h-4 rounded-full border border-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
@@ -855,15 +941,13 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 <div className="space-y-3.5 p-3.5 bg-gradient-to-br from-amber-50/60 to-ivory rounded-2xl border border-amber-200/80 animate-in fade-in">
                   {/* New Date Picker */}
                   <div>
-                    <label className="block font-bold text-amber-950 mb-1">
-                      New Rescheduled Meeting Date *
-                    </label>
-                    <input
-                      type="date"
+                    <DatePickerInput
+                      label="New Rescheduled Meeting Date"
                       required={rescheduleData.is_rescheduled}
                       value={rescheduleData.rescheduled_date}
-                      onChange={(e) => setRescheduleData({ ...rescheduleData, rescheduled_date: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 font-bold text-charcoal text-xs cursor-pointer"
+                      onChange={(val) => setRescheduleData({ ...rescheduleData, rescheduled_date: val })}
+                      placeholder="Select new meeting date"
+                      amberTheme
                     />
                   </div>
 
@@ -963,8 +1047,22 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
+      {/* Reusable Confirmation & Alert Modal */}
+      <ConfirmationModal
+        isOpen={confirmModalConfig.isOpen}
+        title={confirmModalConfig.title}
+        description={confirmModalConfig.description}
+        type={confirmModalConfig.type}
+        confirmText={confirmModalConfig.confirmText}
+        cancelText={confirmModalConfig.cancelText}
+        isLoading={confirmModalConfig.isLoading}
+        onConfirm={confirmModalConfig.onConfirm}
+        onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

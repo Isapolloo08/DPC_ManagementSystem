@@ -3,9 +3,22 @@ import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 
-dotenv.config();
+const envCandidates = [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "server", ".env"),
+  path.resolve(__dirname, "../.env"),
+  path.resolve(__dirname, "../../.env"),
+  path.resolve(__dirname, "../../server/.env")
+];
 
-const connectionString = process.env.DATABASE_URL || "postgres://postgres:postgrespassword@localhost:5432/chms_db";
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
+
+const connectionString = process.env.DATABASE_URL || "postgres://postgres:admin123@localhost:5432/chms_db";
 
 export const sql = postgres(connectionString, {
   max: 10,
@@ -104,17 +117,32 @@ export async function initSchema() {
         CREATE TABLE IF NOT EXISTS event_rsvps (id SERIAL PRIMARY KEY, event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE, member_id INT REFERENCES members(id) ON DELETE CASCADE, user_id INT REFERENCES users(id) ON DELETE CASCADE, guests_count INT DEFAULT 0, status VARCHAR(20) DEFAULT 'attending', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, UNIQUE(event_id, member_id));
         CREATE TABLE IF NOT EXISTS attendance (id SERIAL PRIMARY KEY, member_id INT NOT NULL REFERENCES members(id) ON DELETE CASCADE, ministry_id INT NOT NULL REFERENCES ministries(id) ON DELETE CASCADE, event_id INT REFERENCES events(id) ON DELETE SET NULL, checked_in_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, checked_in_by INT REFERENCES users(id) ON DELETE SET NULL, security_tag VARCHAR(50), checked_out_at TIMESTAMP WITH TIME ZONE, checked_out_by INT REFERENCES users(id) ON DELETE SET NULL, notes TEXT);
         CREATE TABLE IF NOT EXISTS announcements (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, body TEXT NOT NULL, ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL, created_by INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, is_pinned INT DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS prayer_requests (id SERIAL PRIMARY KEY, member_id INT REFERENCES members(id) ON DELETE SET NULL, requester_name VARCHAR(100) NOT NULL, title VARCHAR(255) NOT NULL, description TEXT NOT NULL, ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL, is_private INT DEFAULT 0, is_anonymous INT DEFAULT 0, status VARCHAR(20) DEFAULT 'open', prayer_count INT DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS funds (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, description TEXT, target_amount DECIMAL(12, 2) DEFAULT 0, is_active INT DEFAULT 1, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS donations (id SERIAL PRIMARY KEY, member_id INT REFERENCES members(id) ON DELETE SET NULL, fund_id INT NOT NULL REFERENCES funds(id) ON DELETE RESTRICT, amount DECIMAL(12, 2) NOT NULL, donated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, payment_method VARCHAR(50) DEFAULT 'Cash', notes TEXT, recorded_by INT REFERENCES users(id) ON DELETE SET NULL);
         CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE SET NULL, action VARCHAR(50) NOT NULL, target_table VARCHAR(50) NOT NULL, target_id INT, details TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS bible_study_groups (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, curriculum VARCHAR(255), ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL, leader_name VARCHAR(255) NOT NULL, leader_contact VARCHAR(100), meeting_day VARCHAR(50) NOT NULL, meeting_time VARCHAR(50) NOT NULL, location VARCHAR(255) NOT NULL, category VARCHAR(50) NOT NULL DEFAULT 'General', max_capacity INT DEFAULT 12, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS bible_study_members (id SERIAL PRIMARY KEY, group_id INT NOT NULL REFERENCES bible_study_groups(id) ON DELETE CASCADE, member_id INT REFERENCES members(id) ON DELETE CASCADE, member_name VARCHAR(255), joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, UNIQUE(group_id, member_id));
-        CREATE TABLE IF NOT EXISTS bible_study_topics (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'book', testament_or_category VARCHAR(100), total_chapters INT DEFAULT 1, completed_chapters INT DEFAULT 0, status VARCHAR(50) NOT NULL DEFAULT 'in_progress', completed_date VARCHAR(50), assigned_group_id INT REFERENCES bible_study_groups(id) ON DELETE SET NULL, assigned_ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL, lead_teacher VARCHAR(255), key_verse VARCHAR(255), summary_notes TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS bible_study_topics (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, total_chapters INT DEFAULT 1, summary_notes TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS system_lookups (id SERIAL PRIMARY KEY, type VARCHAR(100) NOT NULL, name VARCHAR(255) NOT NULL, description TEXT, color VARCHAR(20) DEFAULT '#2C3968', sort_order INT DEFAULT 0, is_active INT DEFAULT 1, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, UNIQUE(type, name));
         CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value TEXT NOT NULL, category VARCHAR(100) DEFAULT 'general', updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
       `);
     }
+
+    // Cleanly drop deprecated prayer_requests and deprecated columns from bible_study_topics in existing databases
+    try {
+      await sql.unsafe(`
+        DROP TABLE IF EXISTS prayer_requests;
+        ALTER TABLE bible_study_topics
+        DROP COLUMN IF EXISTS status,
+        DROP COLUMN IF EXISTS completed_date,
+        DROP COLUMN IF EXISTS completed_chapters,
+        DROP COLUMN IF EXISTS type,
+        DROP COLUMN IF EXISTS testament_or_category,
+        DROP COLUMN IF EXISTS lead_teacher,
+        DROP COLUMN IF EXISTS key_verse,
+        DROP COLUMN IF EXISTS assigned_group_id,
+        DROP COLUMN IF EXISTS assigned_ministry_id;
+      `);
+    } catch {}
 
     // 2. Ensure username column exists
     try {
@@ -149,31 +177,25 @@ export async function initSchema() {
       `;
     } catch {}
 
-    // 4. Seed demo users if Leader role account is missing
+    // 4. Ensure 7 core ministries exist
     try {
-      const leaderUser = await db.get("SELECT u.id FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'Leader'");
-      if (!leaderUser) {
-        const leaderRole = await db.get("SELECT id FROM roles WHERE name = 'Leader'");
-        if (leaderRole) {
-          await db.run(`
-            INSERT INTO users (name, username, email, password_hash, role_id)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (email) DO NOTHING
-          `, [
-            "Daniel Cruz (Life Group Leader)",
-            "leader.daniel",
-            "leader.daniel@church.org",
-            "$2a$10$wU05/0WwZ4nCgT5Y5f9/kO1qI11YJ5n1kO7G1n1kO7G1n1kO7G1n1",
-            leaderRole.id
-          ]);
-        }
-      }
+      await sql`
+        INSERT INTO ministries (name, min_age, max_age, description, color) VALUES
+          ('Kinder', 3, 5, 'Ages 3-5: Bible stories, play, crafts, and secure child check-in', '#E07A5F'),
+          ('Elementary', 6, 12, 'Ages 6-12: Interactive Sunday school, worship, and Scripture memory', '#D9A441'),
+          ('Highschool', 13, 16, 'Ages 13-16: Teen fellowship, small groups, and discipleship', '#B85C56'),
+          ('Youth', 17, 21, 'Ages 17-21: College & young adults campus outreach, deep worship', '#6E8B74'),
+          ('Young Adult', 22, 35, 'Ages 22-35: Career navigation, marriage & life foundation', '#2C3968'),
+          ('Junior Adult', 36, 55, 'Ages 36-55: Family life, parenting, leadership and community impact', '#4A5568'),
+          ('Old Adult', 56, 120, 'Ages 56+: Golden years fellowship, prayer warriors & legacy mentorship', '#8D5B4C')
+        ON CONFLICT (name) DO NOTHING;
+      `;
     } catch {}
 
-    // 5. Seed system_lookups if empty
+    // 5. Ensure default system lookups & settings if baseline seed exists
     const lookupCount = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM system_lookups");
     if (Number(lookupCount?.count || 0) === 0 && seedSqlPath) {
-      console.log("🌱 Seeding default system lookups...");
+      console.log("🌱 Applying baseline system lookups & settings...");
       const seedSql = fs.readFileSync(seedSqlPath, "utf-8");
       await sql.unsafe(seedSql);
     }
@@ -216,59 +238,11 @@ export async function initSchema() {
         CREATE INDEX IF NOT EXISTS idx_duty_teams_ministry ON duty_teams(ministry_id);
         CREATE INDEX IF NOT EXISTS idx_duty_schedules_date ON duty_schedules(duty_date);
       `);
-
-      // Seed starter duty teams (Team 1 & Team 2) if empty
-      const teamCount = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM duty_teams");
-      if (Number(teamCount?.count || 0) === 0) {
-        const youthMin = await db.get("SELECT id FROM ministries WHERE name ILIKE '%Youth%' LIMIT 1");
-        const youthMinId = youthMin?.id || null;
-        const members = await db.all("SELECT id, first_name, last_name FROM members ORDER BY id ASC LIMIT 4");
-
-        const t1 = await db.run(`
-          INSERT INTO duty_teams (name, ministry_id, leader_id, leader_name, color, order_seq, tasks_checklist)
-          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
-        `, [
-          "Team 1",
-          youthMinId,
-          members[0]?.id || null,
-          members[0] ? `${members[0].first_name} ${members[0].last_name}` : "Assigned Leader",
-          "#2C3968",
-          1,
-          "Sanctuary Cleaning, Trash Disposal, Restroom Sanitation, Sound Setup"
-        ]);
-
-        const t2 = await db.run(`
-          INSERT INTO duty_teams (name, ministry_id, leader_id, leader_name, color, order_seq, tasks_checklist)
-          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
-        `, [
-          "Team 2",
-          youthMinId,
-          members[1]?.id || null,
-          members[1] ? `${members[1].first_name} ${members[1].last_name}` : "Assigned Leader",
-          "#E07A5F",
-          2,
-          "Fellowship Hall Cleaning, Musical Instruments Inspection, Entrance/Porch Sweeping"
-        ]);
-
-        if (t1.lastInsertRowid && members[0]?.id) {
-          await db.run("INSERT INTO duty_team_members (team_id, member_id, role) VALUES ($1, $2, 'Team Leader') ON CONFLICT DO NOTHING", [t1.lastInsertRowid, members[0].id]);
-          if (members[2]?.id) {
-            await db.run("INSERT INTO duty_team_members (team_id, member_id, role) VALUES ($1, $2, 'Member') ON CONFLICT DO NOTHING", [t1.lastInsertRowid, members[2].id]);
-          }
-        }
-
-        if (t2.lastInsertRowid && members[1]?.id) {
-          await db.run("INSERT INTO duty_team_members (team_id, member_id, role) VALUES ($1, $2, 'Team Leader') ON CONFLICT DO NOTHING", [t2.lastInsertRowid, members[1].id]);
-          if (members[3]?.id) {
-            await db.run("INSERT INTO duty_team_members (team_id, member_id, role) VALUES ($1, $2, 'Member') ON CONFLICT DO NOTHING", [t2.lastInsertRowid, members[3].id]);
-          }
-        }
-      }
     } catch (e: any) {
       console.warn("Duty table check note:", e.message);
     }
 
-    // 7. Ensure dishwashing_roster table exists
+    // 7. Ensure dishwashing tables exist
     try {
       await sql.unsafe(`
         CREATE TABLE IF NOT EXISTS dishwashing_roster (
@@ -293,8 +267,49 @@ export async function initSchema() {
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS dishwashing_teams (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(150) NOT NULL,
+          cycle_mode VARCHAR(50) DEFAULT 'biblestudy_group',
+          biblestudy_group_id INT REFERENCES bible_study_groups(id) ON DELETE SET NULL,
+          ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL,
+          leader_id INT REFERENCES members(id) ON DELETE SET NULL,
+          leader_name VARCHAR(150),
+          leader_contact VARCHAR(100),
+          color VARCHAR(20) DEFAULT '#2C3968',
+          order_seq INT DEFAULT 1,
+          tasks_checklist TEXT,
+          volunteers_count INT DEFAULT 4,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS dishwashing_team_members (
+          id SERIAL PRIMARY KEY,
+          team_id INT NOT NULL REFERENCES dishwashing_teams(id) ON DELETE CASCADE,
+          member_id INT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          role VARCHAR(50) DEFAULT 'Member',
+          joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(team_id, member_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS dishwashing_schedules (
+          id SERIAL PRIMARY KEY,
+          duty_date DATE NOT NULL,
+          team_id INT REFERENCES dishwashing_teams(id) ON DELETE CASCADE,
+          biblestudy_group_id INT REFERENCES bible_study_groups(id) ON DELETE SET NULL,
+          ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL,
+          assigned_name VARCHAR(150),
+          leader_name VARCHAR(150),
+          status VARCHAR(50) DEFAULT 'scheduled',
+          notes TEXT,
+          completed_at TIMESTAMP WITH TIME ZONE,
+          UNIQUE(duty_date, team_id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_dishwashing_duty_date ON dishwashing_roster(duty_date);
         CREATE INDEX IF NOT EXISTS idx_dishwashing_status ON dishwashing_roster(status);
+        CREATE INDEX IF NOT EXISTS idx_dishwashing_teams_seq ON dishwashing_teams(order_seq);
+        CREATE INDEX IF NOT EXISTS idx_dishwashing_schedules_date ON dishwashing_schedules(duty_date);
 
         ALTER TABLE dishwashing_roster
         ADD COLUMN IF NOT EXISTS partner_assigned_name VARCHAR(150),
@@ -304,61 +319,32 @@ export async function initSchema() {
         ADD COLUMN IF NOT EXISTS is_joint_duty BOOLEAN DEFAULT false;
       `);
 
-      // Seed starter dishwashing cycle if table is empty
-      const dishCount = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM dishwashing_roster");
-      if (Number(dishCount?.count || 0) === 0) {
-        const groups = await db.all("SELECT id, name, leader_name, leader_contact, ministry_id FROM bible_study_groups ORDER BY id ASC");
-        const ministries = await db.all("SELECT id, name FROM ministries ORDER BY id ASC");
-
-        // Starter 4-week Sunday rotation from Aug 30, 2026
-        const starterSundays = [
-          "2026-08-30",
-          "2026-09-06",
-          "2026-09-13",
-          "2026-09-20"
-        ];
-
-        for (let i = 0; i < starterSundays.length; i++) {
-          const date = starterSundays[i];
-          if (groups.length > 0) {
-            const grp = groups[i % groups.length];
-            await db.run(`
-              INSERT INTO dishwashing_roster (
-                duty_date, event_name, cycle_mode, cycle_order_index,
-                biblestudy_group_id, ministry_id, assigned_name, leader_name, leader_contact, status
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            `, [
-              date,
-              "Sunday Fellowship Lunch",
-              "biblestudy_group",
-              i + 1,
-              grp.id,
-              grp.ministry_id,
-              grp.name,
-              grp.leader_name,
-              grp.leader_contact || "+63 912 345 6789",
-              i === 0 ? "scheduled" : "scheduled"
-            ]);
-          } else if (ministries.length > 0) {
-            const min = ministries[i % ministries.length];
-            await db.run(`
-              INSERT INTO dishwashing_roster (
-                duty_date, event_name, cycle_mode, cycle_order_index,
-                ministry_id, assigned_name, leader_name, status
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [
-              date,
-              "Sunday Fellowship Lunch",
-              "ministry",
-              i + 1,
-              min.id,
-              `${min.name} Ministry`,
-              "Ministry Coordinator",
-              "scheduled"
-            ]);
+      // Seed default dishwashing rotating teams from existing BS groups and ministries if empty
+      try {
+        const teamCount = await sql`SELECT COUNT(*) as count FROM dishwashing_teams`;
+        if (Number(teamCount[0]?.count || 0) === 0) {
+          const bsGroups = await sql`SELECT id, name, leader_name, ministry_id FROM bible_study_groups ORDER BY id ASC LIMIT 6`;
+          let seq = 1;
+          for (const g of bsGroups) {
+            await sql`
+              INSERT INTO dishwashing_teams (name, cycle_mode, biblestudy_group_id, ministry_id, leader_name, color, order_seq, tasks_checklist)
+              VALUES (${g.name}, 'biblestudy_group', ${g.id}, ${g.ministry_id || null}, ${g.leader_name || 'Group Leader'}, ${seq % 2 === 1 ? '#2C3968' : '#E07A5F'}, ${seq}, 'Pre-rinse plates and cups, Wash with hot soapy water, Sanitize and wipe down kitchen countertops, Dispose food waste and trash')
+            `;
+            seq++;
+          }
+          const mins = await sql`SELECT id, name, color FROM ministries ORDER BY id ASC LIMIT 4`;
+          for (const m of mins) {
+            await sql`
+              INSERT INTO dishwashing_teams (name, cycle_mode, ministry_id, leader_name, color, order_seq, tasks_checklist)
+              VALUES (${m.name + ' Ministry'}, 'ministry', ${m.id}, 'Ministry Coordinator', ${m.color || '#3D5A80'}, ${seq}, 'Pre-rinse plates and cups, Wash with hot soapy water, Sanitize and wipe down kitchen countertops, Dispose food waste and trash')
+            `;
+            seq++;
           }
         }
+      } catch (seedErr: any) {
+        console.warn("Dishwashing seeding note:", seedErr.message);
       }
+
       // 8. Ensure chapter, progress tracking, and reschedule columns exist on bible_study_groups
       try {
         await sql.unsafe(`
@@ -372,10 +358,38 @@ export async function initSchema() {
           ADD COLUMN IF NOT EXISTS reschedule_reason TEXT;
         `);
       } catch {}
+
+      // 9. Ensure Daily Bible Reading Plan user progress tracking table exists
+      try {
+        await sql.unsafe(`
+          CREATE TABLE IF NOT EXISTS user_bible_reading_progress (
+            id SERIAL PRIMARY KEY,
+            user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            day_key VARCHAR(50) NOT NULL,
+            completed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            notes TEXT,
+            UNIQUE(user_id, day_key)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_bible_reading_user_id ON user_bible_reading_progress(user_id);
+          CREATE INDEX IF NOT EXISTS idx_bible_reading_day_key ON user_bible_reading_progress(day_key);
+          CREATE INDEX IF NOT EXISTS idx_bible_reading_completed_at ON user_bible_reading_progress(completed_at);
+        `);
+      } catch (brErr: any) {
+        console.warn("Bible reading table init note:", brErr.message);
+      }
     } catch (e: any) {
       console.warn("Dishwashing table check note:", e.message);
     }
   } catch (err: any) {
-    console.error("⚠️ PostgreSQL auto-init notice:", err.message);
+    console.error("⚠️ PostgreSQL auto-init error:", {
+      message: err?.message,
+      code: err?.code,
+      detail: err?.detail,
+      errno: err?.errno,
+      address: err?.address,
+      port: err?.port,
+      stack: err?.stack
+    });
   }
 }

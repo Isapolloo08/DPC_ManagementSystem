@@ -1,0 +1,45 @@
+@startuml
+start
+:Officer accesses Document Module;
+:Select Document Type\n(Activity Proposal, Budget Request, Resolution, etc.);
+
+repeat
+  :Fill out / update online form fields;
+  partition "System Automation" {
+    :Auto-populate Organization Info\n(Logo, School, Officer Titles, Dates);
+    :Auto-calculate Budget Totals;
+    :Generate Formatted PDF;
+  }
+  :Submit Document for Approval;
+  note right: Status = UNDER_REVIEW
+
+  :Notify Reviewer (President / Committee Head);
+
+  if (Initial Review?) then (Approved)
+    if (Requires Adviser Approval?) then (Yes)
+      :Forward to Organization Adviser;
+      :Adviser reviews Proposal & Budget;
+      if (Adviser Decision?) then (Approved)
+        :Set Document Status to APPROVED;
+        :Auto-generate Notification to Secretary;
+        :Lock version for Digital Archiving;
+        stop
+      else (Revision Requested)
+        :Log Review Comments;
+        :Set Status to REVISION_REQUIRED;
+        :Notify Document Author;
+      endif
+    else (No)
+      :Set Status to APPROVED;
+      :Archive Document;
+      stop
+    endif
+  else (Rejected)
+    :Log Rejection Reason;
+    :Set Status to REJECTED;
+    :Notify Author;
+    stop
+  endif
+repeat while (Revision Required?) is (Yes)
+stop
+@enduml

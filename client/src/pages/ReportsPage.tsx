@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { DashboardMetrics, BirthdaySummary } from "../types";
+import { ReportsPageSkeleton } from "../components/common/SkeletonLoader";
+import { useSocketEvent } from "../socket";
 import { BarChart3, TrendingUp, Users, Heart, UserCheck, Calendar, Cake, Gift, PartyPopper, BookOpen } from "lucide-react";
 
 export const ReportsPage: React.FC = () => {
@@ -22,6 +24,12 @@ export const ReportsPage: React.FC = () => {
   useEffect(() => {
     loadReports();
   }, [selectedMinistryId, coordinatorMinistryId]);
+
+  // Real-time synchronization
+  useSocketEvent("attendance:changed", () => loadReports());
+  useSocketEvent("members:changed", () => loadReports());
+  useSocketEvent("ministries:changed", () => loadReports());
+  useSocketEvent("finance:changed", () => loadReports());
 
   const loadReports = async () => {
     try {
@@ -48,6 +56,10 @@ export const ReportsPage: React.FC = () => {
   const scopedMemberCount = coordinatorMinistryId 
     ? (metrics?.ministry_breakdown?.find(m => m.id === coordinatorMinistryId)?.member_count ?? metrics?.metrics.total_active_members ?? "...")
     : (metrics?.metrics.total_active_members ?? "...");
+
+  if (loading && !metrics) {
+    return <ReportsPageSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

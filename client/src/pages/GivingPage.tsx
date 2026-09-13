@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { useSocketEvent } from "../socket";
+import { GivingPageSkeleton, StatCardSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import { Fund, Donation } from "../types";
+import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
 import { Heart, Plus, DollarSign, FileText, Printer, CheckCircle2, X } from "lucide-react";
 
 export const GivingPage: React.FC = () => {
@@ -9,8 +13,40 @@ export const GivingPage: React.FC = () => {
   const [funds, setFunds] = useState<Fund[]>([]);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<{ name: string; description: string | null }[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isGiveModalOpen, setIsGiveModalOpen] = useState(false);
   const [statementData, setStatementData] = useState<any | null>(null);
+
+  // Custom Confirmation & Alert Modal State
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    type: ModalType;
+    confirmText?: string;
+    cancelText?: string | null;
+    isLoading?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    type: "info",
+    confirmText: "Okay",
+    onConfirm: () => {}
+  });
+
+  const showAlert = (title: string, message: string, type: ModalType = "danger") => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title,
+      type,
+      confirmText: "Okay",
+      cancelText: null,
+      description: <p className="text-xs text-charcoal/80 text-center">{message}</p>,
+      onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
 
   const [giveForm, setGiveForm] = useState({
     fund_id: "1",
@@ -23,8 +59,17 @@ export const GivingPage: React.FC = () => {
     loadGivingData();
   }, []);
 
+  // Real-time synchronization
+  useSocketEvent("finance:changed", () => {
+    loadGivingData();
+  });
+  useSocketEvent("lookups:changed", () => {
+    loadGivingData();
+  });
+
   const loadGivingData = async () => {
     try {
+      setLoading(true);
       const [fList, dList, methodsRes] = await Promise.all([
         api.getFunds(),
         api.getDonations(),
@@ -37,6 +82,8 @@ export const GivingPage: React.FC = () => {
       }
     } catch (err) {
       console.error("Failed to load giving data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -53,19 +100,27 @@ export const GivingPage: React.FC = () => {
       setGiveForm({ fund_id: "1", amount: "", method: "online", notes: "" });
       loadGivingData();
     } catch (err: any) {
-      alert(err.message || "Failed to record donation");
+      showAlert("Record Giving Failed", err.message || "Failed to record donation", "danger");
     }
   };
 
   const handleGenerateStatement = async () => {
     try {
-      const memberId = user?.member?.id || 2; // Default to Elena Santos if demo member
+      const memberId = user?.member?.id;
+      if (!memberId) {
+        showAlert("Member Record Required", "No member profile is linked to your account. Please ensure your account has an active member record to generate a personal statement.", "warning");
+        return;
+      }
       const res = await api.getGivingStatement(memberId);
       setStatementData(res);
     } catch (err: any) {
-      alert(err.message || "Failed to generate statement");
+      showAlert("Statement Error", err.message || "Failed to generate statement", "danger");
     }
   };
+
+  if (loading && funds.length === 0) {
+    return <GivingPageSkeleton />;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -108,46 +163,50 @@ export const GivingPage: React.FC = () => {
       </div>
 
       {/* Funds Goals Meter Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {funds.map((fund) => {
-          const raised = fund.raised_amount || 0;
-          const target = fund.target_amount || 1;
-          const pct = Math.min(100, Math.round((raised / target) * 100));
+      {loading && funds.length === 0 ? (
+        <StatCardSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {funds.map((fund) => {
+            const raised = fund.raised_amount || 0;
+            const target = fund.target_amount || 1;
+            const pct = Math.min(100, Math.round((raised / target) * 100));
 
-          return (
-            <div key={fund.id} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="p-2.5 rounded-2xl bg-amber-50 text-amber-600">
-                    <Heart className="w-4 h-4" />
-                  </span>
-                  <span className="text-xs font-black text-emerald-950 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-full shadow-2xs">
-                    {pct}% Funded
-                  </span>
+            return (
+              <div key={fund.id} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="p-2.5 rounded-2xl bg-amber-50 text-amber-600">
+                      <Heart className="w-4 h-4" />
+                    </span>
+                    <span className="text-xs font-black text-emerald-950 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-full shadow-2xs">
+                      {pct}% Funded
+                    </span>
+                  </div>
+
+                  <h3 className="font-black text-base text-charcoal">{fund.name}</h3>
+                  <p className="text-xs text-charcoal/70 line-clamp-2 mt-1 leading-relaxed">
+                    {fund.description || "Church ministry and community development fund."}
+                  </p>
                 </div>
 
-                <h3 className="font-black text-base text-charcoal">{fund.name}</h3>
-                <p className="text-xs text-charcoal/70 line-clamp-2 mt-1 leading-relaxed">
-                  {fund.description}
-                </p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-bold text-charcoal">
+                    <span>${raised.toLocaleString()}</span>
+                    <span className="text-charcoal/50">Goal: ${target.toLocaleString()}</span>
+                  </div>
+                  <div className="w-full bg-ivory-light rounded-full h-3 overflow-hidden p-0.5 border border-indigo-100/80">
+                    <div
+                      className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-full rounded-full transition-all duration-500 shadow-2xs"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="flex justify-between text-xs font-black mb-2">
-                  <span className="text-indigo-900">${raised.toLocaleString()}</span>
-                  <span className="text-charcoal/50 font-medium">Goal: ${target.toLocaleString()}</span>
-                </div>
-                <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-amber-400 to-amber-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${pct}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Recent Donations Ledger Table */}
       <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
@@ -161,47 +220,51 @@ export const GivingPage: React.FC = () => {
           <span className="text-xs text-charcoal/50 font-normal">({donations.length} recorded gifts)</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-indigo-50/40 text-charcoal/80 uppercase text-[11px] font-black tracking-wider border-b border-indigo-100/80">
-              <tr>
-                <th className="py-3.5 px-5">Donor Name</th>
-                <th className="py-3.5 px-5">Fund Designation</th>
-                <th className="py-3.5 px-5">Amount</th>
-                <th className="py-3.5 px-5">Payment Method</th>
-                <th className="py-3.5 px-5">Notes</th>
-                <th className="py-3.5 px-5 text-right">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-indigo-50 font-medium">
-              {donations.map((d) => (
-                <tr key={d.id} className="hover:bg-indigo-50/30 transition-colors">
-                  <td className="py-4 px-5 font-black text-charcoal">
-                    {d.first_name ? `${d.first_name} ${d.last_name}` : "Anonymous / Direct"}
-                  </td>
-                  <td className="py-4 px-5 font-semibold text-charcoal/80">{d.fund_name}</td>
-                  <td className="py-4 px-5 font-black text-indigo-900">${d.amount.toFixed(2)}</td>
-                  <td className="py-4 px-5">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-indigo-50 text-indigo-900 border border-indigo-100">
-                      {d.method}
-                    </span>
-                  </td>
-                  <td className="py-4 px-5 text-charcoal/60">{d.notes || "—"}</td>
-                  <td className="py-4 px-5 text-right text-charcoal/50 font-medium">
-                    {new Date(d.donated_at).toLocaleDateString([], { dateStyle: 'medium' })}
-                  </td>
+        {loading && donations.length === 0 ? (
+          <TableSkeleton rows={5} columns={6} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-indigo-50/40 text-charcoal/80 uppercase text-[11px] font-black tracking-wider border-b border-indigo-100/80">
+                <tr>
+                  <th className="py-3.5 px-5">Donor Name</th>
+                  <th className="py-3.5 px-5">Fund Designation</th>
+                  <th className="py-3.5 px-5">Amount</th>
+                  <th className="py-3.5 px-5">Payment Method</th>
+                  <th className="py-3.5 px-5">Notes</th>
+                  <th className="py-3.5 px-5 text-right">Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-indigo-50 font-medium">
+                {donations.map((d) => (
+                  <tr key={d.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <td className="py-4 px-5 font-black text-charcoal">
+                      {d.first_name ? `${d.first_name} ${d.last_name}` : "Anonymous / Direct"}
+                    </td>
+                    <td className="py-4 px-5 font-semibold text-charcoal/80">{d.fund_name}</td>
+                    <td className="py-4 px-5 font-black text-indigo-900">${d.amount.toFixed(2)}</td>
+                    <td className="py-4 px-5">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-indigo-50 text-indigo-900 border border-indigo-100">
+                        {d.method}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5 text-charcoal/60">{d.notes || "—"}</td>
+                    <td className="py-4 px-5 text-right text-charcoal/50 font-medium">
+                      {new Date(d.donated_at).toLocaleDateString([], { dateStyle: 'medium' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Record Donation Modal */}
-      {isGiveModalOpen && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
+      {isGiveModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 space-y-4 animate-scale-up">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <h2 className="text-base font-black text-charcoal flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-amber-600" />
                 <span>Give / Record Contribution</span>
@@ -290,14 +353,14 @@ export const GivingPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Tax Giving Statement Printable Modal */}
-      {statementData && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
+      {statementData && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto border border-indigo-100 animate-scale-up">
-            {/* Statement Header */}
             <div className="flex items-center justify-between pb-4 border-b border-gray-200">
               <div>
                 <div className="text-xs font-black uppercase tracking-wider text-amber-700">OFFICIAL ANNUAL CONTRIBUTION STATEMENT</div>
@@ -372,8 +435,22 @@ export const GivingPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
+      {/* Reusable Confirmation & Alert Modal */}
+      <ConfirmationModal
+        isOpen={confirmModalConfig.isOpen}
+        title={confirmModalConfig.title}
+        description={confirmModalConfig.description}
+        type={confirmModalConfig.type}
+        confirmText={confirmModalConfig.confirmText}
+        cancelText={confirmModalConfig.cancelText}
+        isLoading={confirmModalConfig.isLoading}
+        onConfirm={confirmModalConfig.onConfirm}
+        onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

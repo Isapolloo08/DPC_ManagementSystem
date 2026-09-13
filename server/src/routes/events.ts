@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
@@ -101,6 +102,8 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user!.id, "CREATE", "events", newId, `Created event: ${title}`);
 
+    emitRealtimeEvent("events:changed", { action: "create", id: newId });
+
     res.status(201).json({ id: newId, message: "Event created successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -132,6 +135,9 @@ router.post("/:id/rsvp", authMiddleware, async (req: AuthRequest, res: Response)
       await db.run(`
         UPDATE event_registrations SET status = $1 WHERE id = $2
       `, [status, existing.id]);
+
+      emitRealtimeEvent("events:changed", { action: "rsvp", id: Number(eventId) });
+
       return res.json({ message: "RSVP updated", status });
     }
 
@@ -139,6 +145,8 @@ router.post("/:id/rsvp", authMiddleware, async (req: AuthRequest, res: Response)
       INSERT INTO event_registrations (event_id, member_id, status)
       VALUES ($1, $2, $3)
     `, [eventId, targetMemberId, status]);
+
+    emitRealtimeEvent("events:changed", { action: "rsvp", id: Number(eventId) });
 
     res.status(201).json({ message: "RSVP confirmed successfully" });
   } catch (err: any) {
@@ -152,6 +160,9 @@ router.delete("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), asyn
     const id = req.params.id;
     await db.run("DELETE FROM events WHERE id = $1", [id]);
     await logAuditAction(req.user!.id, "DELETE", "events", Number(id), `Deleted event #${id}`);
+
+    emitRealtimeEvent("events:changed", { action: "delete", id: Number(id) });
+
     res.json({ message: "Event deleted successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

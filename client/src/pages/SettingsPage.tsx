@@ -1,27 +1,32 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { SystemLookup, SystemSetting, Ministry, Fund, LookupType } from "../types";
-import { 
-  Sliders, BookOpen, Users, Heart, Calendar, MessageSquare, 
-  Settings as SettingsIcon, Plus, Edit2, Trash2, CheckCircle2, 
-  AlertCircle, Search, RefreshCw, Layers, MapPin, DollarSign, 
+import { SettingsPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
+import {
+  Sliders, BookOpen, Users, Heart, Calendar, MessageSquare,
+  Settings as SettingsIcon, Plus, Edit2, Trash2, CheckCircle2,
+  AlertCircle, Search, RefreshCw, Layers, MapPin, DollarSign,
   Tag, Shield, Check, X, Info, Sparkles, Building2, Phone, Mail, Clock,
-  FileText, UserCog
+  FileText, UserCog, ChevronLeft, ChevronRight, Database
 } from "lucide-react";
+import { useSocketEvent } from "../socket";
+import { BackupManagementSection } from "../components/settings/BackupManagementSection";
 
-type SettingsTab = 
+type SettingsTab =
   | "bible_study_categories"
   | "locations"
   | "ministries"
   | "events"
   | "communications"
   | "membership"
+  | "backup_restore"
   | "general";
 
 const COLOR_PRESETS = [
-  "#2C3968", "#D9A441", "#6E8B74", "#B85C56", "#E07A5F", 
-  "#4A5568", "#8D5B4C", "#3B82F6", "#8B5CF6", "#10B981", 
+  "#2C3968", "#D9A441", "#6E8B74", "#B85C56", "#E07A5F",
+  "#4A5568", "#8D5B4C", "#3B82F6", "#8B5CF6", "#10B981",
   "#F59E0B", "#EC4899", "#6366F1", "#14B8A6", "#64748B"
 ];
 
@@ -32,12 +37,73 @@ interface SettingsPageProps {
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers }) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<SettingsTab>("ministries");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Data states
+  // Tab horizontal scroll & drag states
+  const tabContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragScrollLeft, setDragScrollLeft] = useState(0);
   const [lookups, setLookups] = useState<SystemLookup[]>([]);
   const [ministries, setMinistries] = useState<Ministry[]>([]);
+
+  const checkTabScroll = () => {
+    const el = tabContainerRef.current;
+    if (el) {
+      setCanScrollLeft(el.scrollLeft > 2);
+      setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+    }
+  };
+
+  useEffect(() => {
+    checkTabScroll();
+    const timer = setTimeout(checkTabScroll, 100);
+    window.addEventListener("resize", checkTabScroll);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", checkTabScroll);
+    };
+  }, [lookups, ministries]);
+
+  const scrollTabs = (direction: "left" | "right") => {
+    const el = tabContainerRef.current;
+    if (el) {
+      const scrollAmount = 260;
+      el.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth"
+      });
+      setTimeout(checkTabScroll, 320);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const el = tabContainerRef.current;
+    if (!el) return;
+    setIsDragging(true);
+    setDragStartX(e.pageX - el.offsetLeft);
+    setDragScrollLeft(el.scrollLeft);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const el = tabContainerRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - dragStartX) * 1.5;
+    el.scrollLeft = dragScrollLeft - walk;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+  };
+
+  // Data states
+
   const [funds, setFunds] = useState<Fund[]>([]);
   const [generalSettings, setGeneralSettings] = useState<Record<string, string>>({});
 
@@ -98,6 +164,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // Real-time synchronization
+  useSocketEvent("settings:changed", () => loadAllData());
+  useSocketEvent("ministries:changed", () => loadAllData());
+  useSocketEvent("lookups:changed", () => loadAllData());
+  useSocketEvent("finance:changed", () => loadAllData());
 
   const showToast = (text: string, type: "success" | "error" = "success") => {
     setToastMessage({ text, type });
@@ -352,58 +424,66 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
   };
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode; count?: number | string }[] = [
-    { 
-      id: "bible_study_categories", 
-      label: "Bible Study Categories", 
+    {
+      id: "bible_study_categories",
+      label: "Bible Study Categories",
       icon: <BookOpen className="w-4 h-4" />,
       count: lookups.filter(l => l.type === "bible_study_category").length
     },
-    { 
-      id: "locations", 
-      label: "Meeting Rooms & Locations", 
+    {
+      id: "locations",
+      label: "Meeting Rooms & Locations",
       icon: <MapPin className="w-4 h-4" />,
       count: lookups.filter(l => l.type === "event_location").length
     },
-    { 
-      id: "ministries", 
-      label: "Ministries & Age Brackets", 
+    {
+      id: "ministries",
+      label: "Ministries & Age Brackets",
       icon: <Users className="w-4 h-4" />,
       count: ministries.length
     },
-    { 
-      id: "events", 
-      label: "Event Categories", 
+    {
+      id: "events",
+      label: "Event Categories",
       icon: <Calendar className="w-4 h-4" />,
       count: lookups.filter(l => l.type === "event_category").length
     },
-    { 
-      id: "communications", 
-      label: "Prayer & Announcements", 
+    {
+      id: "communications",
+      label: "Announcements & Broadcasts",
       icon: <MessageSquare className="w-4 h-4" />,
-      count: lookups.filter(l => l.type === "prayer_topic" || l.type === "announcement_category").length
+      count: lookups.filter(l => l.type === "announcement_category").length
     },
-    { 
-      id: "membership", 
-      label: "Membership Statuses", 
+    {
+      id: "membership",
+      label: "Membership Statuses",
       icon: <Shield className="w-4 h-4" />,
       count: lookups.filter(l => l.type === "member_status").length
     },
-    { 
-      id: "general", 
-      label: "Church Profile & Config", 
+    {
+      id: "backup_restore",
+      label: "Backup & Data Management",
+      icon: <Database className="w-4 h-4" />
+    },
+    {
+      id: "general",
+      label: "Church Profile & Config",
       icon: <SettingsIcon className="w-4 h-4" />
     }
   ];
+
+  if (loading && lookups.length === 0 && ministries.length === 0) {
+    return <SettingsPageSkeleton />;
+  }
 
   return (
     <div className="space-y-6">
       {/* Toast Alert */}
       {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${
-          toastMessage.type === "success" 
-            ? "bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20"
-            : "bg-rose-900 text-white border-rose-700 shadow-rose-950/20"
-        }`}>
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${toastMessage.type === "success"
+          ? "bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20"
+          : "bg-rose-900 text-white border-rose-700 shadow-rose-950/20"
+          }`}>
           {toastMessage.type === "success" ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
           ) : (
@@ -415,6 +495,87 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           </button>
         </div>
       )}
+
+      {/* TOP: Settings Navigation Tabs with Left & Right Scroll Buttons + Drag-to-Scroll */}
+      <div className="relative flex items-center gap-2 group/tabstrip bg-slate-50/70 p-1.5 rounded-2xl border border-indigo-100/60 shadow-2xs">
+        {/* Scroll Left Button */}
+        <button
+          type="button"
+          onClick={() => scrollTabs("left")}
+          disabled={!canScrollLeft}
+          title="Scroll Left"
+          aria-label="Scroll tabs left"
+          className={`shrink-0 z-10 w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-200 cursor-pointer ${canScrollLeft
+              ? "bg-white hover:bg-indigo-50 text-indigo border-indigo-200 shadow-sm hover:shadow-md active:scale-95 opacity-100"
+              : "bg-slate-100 text-charcoal/20 border-transparent cursor-not-allowed opacity-20"
+            }`}
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+
+        {/* Scrollable & Draggable Tabs Container */}
+        <div
+          ref={tabContainerRef}
+          onScroll={checkTabScroll}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+          className={`flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-1 py-0.5 select-none ${
+            isDragging ? "cursor-grabbing" : "cursor-grab"
+          }`}
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  if (!isDragging) {
+                    setActiveTab(tab.id);
+                    setSearchTerm("");
+                  }
+                }}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all shrink-0 cursor-pointer ${isActive
+                    ? "bg-indigo text-white shadow-md shadow-indigo-950/20"
+                    : "bg-white hover:bg-indigo-50/80 text-charcoal/70 hover:text-indigo border border-indigo-100/80 hover:border-indigo-200 shadow-2xs"
+                  }`}
+              >
+                <span className={isActive ? "text-amber-400" : "text-indigo/70"}>
+                  {tab.icon}
+                </span>
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-indigo-50 text-indigo border border-indigo-100/60"
+                      }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Scroll Right Button */}
+        <button
+          type="button"
+          onClick={() => scrollTabs("right")}
+          disabled={!canScrollRight}
+          title="Scroll Right"
+          aria-label="Scroll tabs right"
+          className={`shrink-0 z-10 w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-200 cursor-pointer ${canScrollRight
+              ? "bg-white hover:bg-indigo-50 text-indigo border-indigo-200 shadow-sm hover:shadow-md active:scale-95 opacity-100"
+              : "bg-slate-100 text-charcoal/20 border-transparent cursor-not-allowed opacity-20"
+            }`}
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
 
       {/* Header Banner */}
       <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
@@ -458,39 +619,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
         </div>
       </div>
 
-      {/* Settings Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-indigo-100/60 scrollbar-none">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id);
-                setSearchTerm("");
-              }}
-              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-xs font-black whitespace-nowrap transition-all cursor-pointer ${
-                isActive
-                  ? "bg-indigo text-white shadow-md shadow-indigo-950/20"
-                  : "bg-white/80 hover:bg-white text-charcoal/70 hover:text-indigo border border-indigo-100/80 hover:border-indigo-200 shadow-2xs"
-              }`}
-            >
-              <span className={isActive ? "text-amber-400" : "text-indigo/70"}>
-                {tab.icon}
-              </span>
-              <span>{tab.label}</span>
-              {tab.count !== undefined && (
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  isActive ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo border border-indigo-100/60"
-                }`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Main Workspace for Selected Tab */}
       <div className="space-y-6">
 
@@ -518,74 +646,78 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {ministries.map((min) => (
-                <div
-                  key={min.id}
-                  className="p-5 rounded-2xl border border-gray-100 bg-gray-50/40 hover:bg-white hover:border-indigo-200 hover:shadow-xs transition-all space-y-4"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-xs"
-                        style={{ backgroundColor: min.color || "#2C3968" }}
-                      >
-                        {min.name.substring(0, 2).toUpperCase()}
+            {loading && ministries.length === 0 ? (
+              <CardGridSkeleton count={6} columns={3} />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {ministries.map((min) => (
+                  <div
+                    key={min.id}
+                    className="p-5 rounded-2xl border border-gray-100 bg-gray-50/40 hover:bg-white hover:border-indigo-200 hover:shadow-xs transition-all space-y-4"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-xs"
+                          style={{ backgroundColor: min.color || "#2C3968" }}
+                        >
+                          {min.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm text-charcoal">{min.name}</h3>
+                          <span className="text-[11px] font-semibold text-charcoal/60">
+                            {min.min_age !== null && min.max_age !== null
+                              ? `Ages ${min.min_age} - ${min.max_age} yrs`
+                              : min.min_age !== null
+                                ? `Ages ${min.min_age}+ yrs`
+                                : "All Ages"}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-sm text-charcoal">{min.name}</h3>
-                        <span className="text-[11px] font-semibold text-charcoal/60">
-                          {min.min_age !== null && min.max_age !== null 
-                            ? `Ages ${min.min_age} - ${min.max_age} yrs` 
-                            : min.min_age !== null 
-                            ? `Ages ${min.min_age}+ yrs`
-                            : "All Ages"}
+                    </div>
+
+                    <p className="text-xs text-charcoal/70 line-clamp-2 leading-relaxed">
+                      {min.description || "Ministry department description"}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 text-xs">
+                      <div className="bg-white p-2 rounded-xl border border-gray-100">
+                        <span className="text-[10px] text-charcoal/50 uppercase font-bold block">Members</span>
+                        <span className="font-bold text-indigo">{min.active_members_count || 0} active</span>
+                      </div>
+                      <div className="bg-white p-2 rounded-xl border border-gray-100">
+                        <span className="text-[10px] text-charcoal/50 uppercase font-bold block">Age Bracket</span>
+                        <span className="font-bold text-charcoal">
+                          {min.min_age !== null && min.min_age !== undefined ? `${min.min_age}-${min.max_age || '+'} yrs` : 'All Ages'}
                         </span>
                       </div>
                     </div>
-                  </div>
 
-                  <p className="text-xs text-charcoal/70 line-clamp-2 leading-relaxed">
-                    {min.description || "Ministry department description"}
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 text-xs">
-                    <div className="bg-white p-2 rounded-xl border border-gray-100">
-                      <span className="text-[10px] text-charcoal/50 uppercase font-bold block">Members</span>
-                      <span className="font-bold text-indigo">{min.active_members_count || 0} active</span>
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button
+                        onClick={() => handleOpenMinistryModal(min)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-indigo hover:bg-indigo-50 transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm({
+                          type: "ministry",
+                          id: min.id,
+                          name: min.name,
+                          usageCount: min.active_members_count
+                        })}
+                        className="p-1.5 hover:bg-rose-50 text-rose rounded-lg transition-colors"
+                        title="Delete Ministry"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <div className="bg-white p-2 rounded-xl border border-gray-100">
-                      <span className="text-[10px] text-charcoal/50 uppercase font-bold block">Age Bracket</span>
-                      <span className="font-bold text-charcoal">
-                        {min.min_age !== null && min.min_age !== undefined ? `${min.min_age}-${min.max_age || '+'} yrs` : 'All Ages'}
-                      </span>
-                    </div>
                   </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-2">
-                    <button
-                      onClick={() => handleOpenMinistryModal(min)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-indigo hover:bg-indigo-50 transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      <span>Edit</span>
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm({
-                        type: "ministry",
-                        id: min.id,
-                        name: min.name,
-                        usageCount: min.active_members_count
-                      })}
-                      className="p-1.5 hover:bg-rose-50 text-rose rounded-lg transition-colors"
-                      title="Delete Ministry"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -622,8 +754,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span 
-                          className="w-3 h-3 rounded-full shrink-0 shadow-2xs" 
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0 shadow-2xs"
                           style={{ backgroundColor: cat.color || "#2C3968" }}
                         />
                         <span className="font-bold text-xs text-charcoal">{cat.name}</span>
@@ -638,9 +770,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      cat.is_active ? "text-emerald-700 bg-emerald-50" : "text-gray-500 bg-gray-100"
-                    }`}>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cat.is_active ? "text-emerald-700 bg-emerald-50" : "text-gray-500 bg-gray-100"
+                      }`}>
                       {cat.is_active ? "Active" : "Inactive"}
                     </span>
 
@@ -776,8 +907,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span 
-                        className="w-3 h-3 rounded-full shrink-0" 
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: cat.color || "#2C3968" }}
                       />
                       <span className="font-bold text-xs text-charcoal">{cat.name}</span>
@@ -810,71 +941,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
         )}
 
         {/* ==================================================== */}
-        {/* 5. COMMUNICATIONS & PRAYER TAB */}
+        {/* 5. COMMUNICATIONS & ANNOUNCEMENTS TAB */}
         {/* ==================================================== */}
         {activeTab === "communications" && (
           <div className="space-y-6">
-            {/* Prayer Topics */}
-            <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-indigo" />
-                    <span>Prayer Request Topics & Tags</span>
-                  </h2>
-                  <p className="text-xs text-charcoal/60">
-                    Topics used by members and intercessory teams (Healing, Family, Guidance, Missions, Thanksgiving).
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleOpenLookupModal("prayer_topic")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add Prayer Topic</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                {getLookupsForType("prayer_topic").map((topic) => (
-                  <div
-                    key={topic.id}
-                    className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/30 hover:bg-white hover:border-indigo-200 transition-all flex flex-col justify-between space-y-2"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span 
-                          className="w-2.5 h-2.5 rounded-full shrink-0" 
-                          style={{ backgroundColor: topic.color || "#10B981" }}
-                        />
-                        <span className="font-bold text-xs text-charcoal">{topic.name}</span>
-                      </div>
-                      <p className="text-[10px] text-charcoal/60 line-clamp-2">{topic.description}</p>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-1 pt-1.5 border-t border-gray-100">
-                      <button
-                        onClick={() => handleOpenLookupModal("prayer_topic", topic)}
-                        className="p-1 hover:bg-indigo-50 text-indigo rounded transition-colors"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm({
-                          type: "lookup",
-                          id: topic.id,
-                          name: topic.name
-                        })}
-                        className="p-1 hover:bg-rose-50 text-rose rounded transition-colors"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Announcement Categories */}
             <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -903,8 +973,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                     className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/30 hover:bg-white hover:border-indigo-200 transition-all flex items-center justify-between"
                   >
                     <div className="flex items-center gap-2.5">
-                      <span 
-                        className="w-3 h-3 rounded-full shrink-0" 
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: cat.color || "#2C3968" }}
                       />
                       <div>
@@ -971,8 +1041,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span 
-                          className="w-3 h-3 rounded-full shrink-0" 
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0"
                           style={{ backgroundColor: status.color || "#10B981" }}
                         />
                         <span className="font-bold text-sm text-charcoal">{status.name}</span>
@@ -1013,7 +1083,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
         )}
 
         {/* ==================================================== */}
-        {/* 7. GENERAL CHURCH SETTINGS */}
+        {/* 7. BACKUP, RESTORE & DATA MANAGEMENT TAB */}
+        {/* ==================================================== */}
+        {activeTab === "backup_restore" && (
+          <BackupManagementSection onShowToast={showToast} />
+        )}
+
+        {/* ==================================================== */}
+        {/* 8. GENERAL CHURCH SETTINGS */}
         {/* ==================================================== */}
         {activeTab === "general" && (
           <form onSubmit={handleSaveGeneralSettings} className="bg-white rounded-2xl p-6 lg:p-8 border border-indigo-100 shadow-xs space-y-6">
@@ -1192,12 +1269,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       {/* ==================================================== */}
       {/* MODAL: Add / Edit Master Lookup */}
       {/* ==================================================== */}
-      {isLookupModalOpen && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      {isLookupModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div 
+                <div
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-2xs"
                   style={{ backgroundColor: lookupFormData.color }}
                 >
@@ -1251,11 +1328,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                       type="button"
                       key={col}
                       onClick={() => setLookupFormData({ ...lookupFormData, color: col })}
-                      className={`w-6 h-6 rounded-full transition-transform ${
-                        lookupFormData.color.toLowerCase() === col.toLowerCase()
-                          ? "ring-2 ring-indigo ring-offset-2 scale-110"
-                          : "hover:scale-105"
-                      }`}
+                      className={`w-6 h-6 rounded-full transition-transform ${lookupFormData.color.toLowerCase() === col.toLowerCase()
+                        ? "ring-2 ring-indigo ring-offset-2 scale-110"
+                        : "hover:scale-105"
+                        }`}
                       style={{ backgroundColor: col }}
                     />
                   ))}
@@ -1311,18 +1387,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ==================================================== */}
       {/* MODAL: Add / Edit Ministry */}
       {/* ==================================================== */}
-      {isMinistryModalOpen && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      {isMinistryModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div 
+                <div
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-2xs"
                   style={{ backgroundColor: ministryFormData.color }}
                 >
@@ -1400,11 +1477,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                       type="button"
                       key={col}
                       onClick={() => setMinistryFormData({ ...ministryFormData, color: col })}
-                      className={`w-6 h-6 rounded-full transition-transform ${
-                        ministryFormData.color.toLowerCase() === col.toLowerCase()
-                          ? "ring-2 ring-indigo ring-offset-2 scale-110"
-                          : "hover:scale-105"
-                      }`}
+                      className={`w-6 h-6 rounded-full transition-transform ${ministryFormData.color.toLowerCase() === col.toLowerCase()
+                        ? "ring-2 ring-indigo ring-offset-2 scale-110"
+                        : "hover:scale-105"
+                        }`}
                       style={{ backgroundColor: col }}
                     />
                   ))}
@@ -1434,16 +1510,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ==================================================== */}
       {/* MODAL: Add / Edit Fund */}
       {/* ==================================================== */}
-      {isFundModalOpen && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      {isFundModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo flex items-center justify-center text-xs font-bold">
                   <Heart className="w-3.5 h-3.5" />
@@ -1513,14 +1590,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ==================================================== */}
       {/* MODAL: Delete Confirmation */}
       {/* ==================================================== */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+      {deleteConfirm && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose flex items-center justify-center mx-auto">
               <Trash2 className="w-5 h-5" />
@@ -1553,7 +1631,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

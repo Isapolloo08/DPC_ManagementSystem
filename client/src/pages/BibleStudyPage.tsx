@@ -1,24 +1,62 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { BibleStudyGroup, StudyTopic, StudyTopicsSummary, User } from "../types";
 import { TimePickerInput } from "../components/common/TimePickerInput";
+import { DatePickerInput } from "../components/common/DatePickerInput";
+import { useSocketEvent } from "../socket";
+import { BibleStudyPageSkeleton, CardGridSkeleton } from "../components/common/SkeletonLoader";
+import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
 import {
   BookOpen, Plus, Users, Calendar, Clock, MapPin,
   Search, Filter, CheckCircle2, X, Phone, Sparkles,
   Layers, ShieldCheck, HeartHandshake,
-  Award, CheckCheck, Library, BookmarkCheck, Bookmark,
+  Award, CheckCheck, Library, BookmarkCheck,
   ChevronDown, User as UserIcon, Check, Edit, FileText, AlertCircle,
   CalendarClock, AlertTriangle
 } from "lucide-react";
+import { getBookTotalChapters, generateChapterOptions } from "../utils/curriculumHelper";
 
 export const BibleStudyPage: React.FC = () => {
   const { user, ministries, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
   const [groups, setGroups] = useState<BibleStudyGroup[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [studySummary, setStudySummary] = useState<StudyTopicsSummary | null>(null);
   const [isCompletedModalOpen, setIsCompletedModalOpen] = useState(false);
   const [isJoinSuccess, setIsJoinSuccess] = useState<string | null>(null);
+
+  // Custom Confirmation & Alert Modal State
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    type: ModalType;
+    confirmText?: string;
+    cancelText?: string | null;
+    isLoading?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    type: "info",
+    confirmText: "Okay",
+    onConfirm: () => {}
+  });
+
+  const showAlert = (title: string, message: string, type: ModalType = "danger") => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title,
+      type,
+      confirmText: "Okay",
+      cancelText: null,
+      description: <p className="text-xs text-charcoal/80 text-center">{message}</p>,
+      onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
+
   const initialMinistry = isRestricted && allowedMinistries.length > 0
     ? String(allowedMinistries[0].id)
     : (selectedMinistryId ? String(selectedMinistryId) : "");
@@ -42,7 +80,7 @@ export const BibleStudyPage: React.FC = () => {
   });
   const [isSavingProgress, setIsSavingProgress] = useState(false);
 
-  // Quick Reschedule Modal State
+  // Reschedule Modal State
   const [rescheduleGroupModal, setRescheduleGroupModal] = useState<BibleStudyGroup | null>(null);
   const [rescheduleFormData, setRescheduleFormData] = useState({
     is_rescheduled: true,
@@ -72,15 +110,14 @@ export const BibleStudyPage: React.FC = () => {
     progress_notes: ""
   });
 
-  useEffect(() => {
-    if (isRestricted && allowedMinistries.length > 0) {
-      setFilterMinistry(String(allowedMinistries[0].id));
-      setFormData(prev => ({ ...prev, ministry_id: String(allowedMinistries[0].id) }));
-    }
-  }, [isRestricted, allowedMinistries]);
-
   const [systemCategories, setSystemCategories] = useState<string[]>([]);
   const [systemLocations, setSystemLocations] = useState<string[]>([]);
+
+  const categories = useMemo(() => ["All", ...systemCategories], [systemCategories]);
+  const daysOfWeek = useMemo(
+    () => ["All Days", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    []
+  );
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
 
   // Searchable Dropdowns state & refs for Group Creation Modal
@@ -129,91 +166,96 @@ export const BibleStudyPage: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const defaultCategories = [
-    "Men's Group",
-    "Women's Group",
-    "Couples / Family",
-    "Youth",
-    "Young Professionals",
-    "Seniors",
-    "General"
-  ];
-
-  const categories = useMemo(() => {
-    const list = systemCategories.length > 0 ? systemCategories : defaultCategories;
-    return ["All", ...list];
-  }, [systemCategories]);
-
-  const daysOfWeek = [
-    "All Days",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday"
-  ];
-
   useEffect(() => {
-    loadLookups();
-    loadLeaders();
-    loadMembers();
-  }, []);
+    loadData();
+  }, [filterMinistry, selectedCategory, filterDay]);
 
-  const loadMembers = async () => {
+  // Real-time synchronization
+  useSocketEvent("groups:changed", () => loadData());
+  useSocketEvent("members:changed", () => loadData());
+  useSocketEvent("lookups:changed", () => loadData());
+  useSocketEvent("study_topics:changed", () => loadData());
+
+  const loadData = async () => {
     try {
-      const res = await api.getMembers();
-      if (res && Array.isArray(res)) {
-        setMembersList(res.map(m => ({
-          id: m.id,
-          name: `${m.first_name} ${m.last_name}`,
-          ministry_name: m.ministry_name,
-          age: m.age
-        })));
-      }
+      setLoading(true);
+      const params: any = {};
+      if (filterMinistry !== "all" && filterMinistry) params.ministry_id = Number(filterMinistry);
+      if (selectedCategory !== "all") params.category = selectedCategory;
+      if (filterDay !== "all") params.meeting_day = filterDay;
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+
+      const [groupsRes, studyRes, categoriesRes, locationsRes] = await Promise.all([
+        api.getGroups(params),
+        api.getStudyTopics().catch(() => null),
+        api.getLookups({ type: "bible_study_category" }).catch(() => []),
+        api.getLookups({ type: "event_location" }).catch(() => [])
+      ]);
+
+      setGroups(groupsRes);
+      setStudySummary(studyRes);
+      setSystemCategories(categoriesRes.filter((c: any) => c.is_active).map((c: any) => c.name));
+      setSystemLocations(locationsRes.filter((l: any) => l.is_active).map((l: any) => l.name));
+      
+      // Eagerly load leaders and members for group assignment
+      loadLeadersList(filterMinistry);
+      loadMembersForEnrollment(filterMinistry);
     } catch (err) {
-      console.warn("Could not load members for small group enrollment", err);
+      console.error("Failed to load Bible study data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadLeaders = async () => {
+  const loadMembersForEnrollment = async (ministryId?: number | string) => {
     try {
-      const users = await api.getUsers();
-      const leaderUsers = (users || []).filter(u =>
-        u.role_name === "Leader" || u.role_name === "Coordinator" || u.role_name === "Admin"
-      );
-      const mapped = leaderUsers.map(u => ({
+      const res = await api.getMembers({
+        ministry_id: ministryId && ministryId !== "all" ? Number(ministryId) : undefined
+      });
+      const members = res.map((m: any) => ({
+        id: m.id,
+        name: `${m.first_name} ${m.last_name}`,
+        ministry_name: m.ministry_name,
+        age: m.birthdate ? Math.floor((new Date().getTime() - new Date(m.birthdate).getTime()) / 31557600000) : undefined
+      }));
+      setMembersList(members);
+    } catch (err) {
+      console.warn("Could not load members for enrollment", err);
+      setMembersList([]);
+    }
+  };
+
+  const loadLeadersList = async (ministryId?: number | string) => {
+    try {
+      const [usersRes, membersRes] = await Promise.all([
+        api.getUsers().catch(() => []),
+        api.getMembers({
+          ministry_id: ministryId && ministryId !== "all" ? Number(ministryId) : undefined
+        }).catch(() => [])
+      ]);
+
+      const userLeaders = (usersRes || []).map((u: any) => ({
         id: u.id,
-        name: u.name,
-        contact: u.contact_phone || u.contact_email || u.email,
-        role_name: u.role_name
+        name: u.name || `${u.member_first_name || ""} ${u.member_last_name || ""}`.trim() || u.username,
+        contact: u.contact_phone || u.email || u.contact_email || "",
+        role_name: u.role_name || "User"
       }));
 
-      const knownFallbacks = [
-        { id: "seed-1", name: "Daniel Cruz", contact: "leader.daniel@church.org", role_name: "Leader" },
-        { id: "seed-2", name: "Arthur Bautista", contact: "+1 (555) 345-6789", role_name: "Leader" },
-        { id: "seed-3", name: "Hannah Bautista", contact: "+1 (555) 345-6781", role_name: "Leader" },
-        { id: "seed-4", name: "Maria Bautista", contact: "+1 (555) 345-6780", role_name: "Leader" },
-        { id: "seed-5", name: "Roberto Santos", contact: "+1 (555) 234-5678", role_name: "Leader" },
-        { id: "seed-6", name: "Elena Santos", contact: "+1 (555) 234-5679", role_name: "Leader" },
-      ];
+      const memberLeaders = (membersRes || []).map((m: any) => ({
+        id: `m-${m.id}`,
+        name: `${m.first_name} ${m.last_name}`.trim(),
+        contact: m.contact_phone || m.contact_email || "",
+        role_name: m.ministry_name ? `${m.ministry_name} Member` : "Church Member"
+      }));
 
-      const combined = [...mapped, ...knownFallbacks];
-      const unique = Array.from(
-        new Map(combined.map(item => [item.name.toLowerCase().trim(), item])).values()
+      const combined = [...userLeaders, ...memberLeaders];
+      const unique = combined.filter((l: any, idx: number, arr: any[]) =>
+        l.name && arr.findIndex((x: any) => x.name.toLowerCase().trim() === l.name.toLowerCase().trim()) === idx
       );
       setLeadersList(unique);
     } catch (err) {
-      console.warn("Could not load users for leader options, using fallbacks", err);
-      setLeadersList([
-        { id: "seed-1", name: "Daniel Cruz", contact: "leader.daniel@church.org", role_name: "Leader" },
-        { id: "seed-2", name: "Arthur Bautista", contact: "+1 (555) 345-6789", role_name: "Leader" },
-        { id: "seed-3", name: "Hannah Bautista", contact: "+1 (555) 345-6781", role_name: "Leader" },
-        { id: "seed-4", name: "Maria Bautista", contact: "+1 (555) 345-6780", role_name: "Leader" },
-        { id: "seed-5", name: "Roberto Santos", contact: "+1 (555) 234-5678", role_name: "Leader" },
-        { id: "seed-6", name: "Elena Santos", contact: "+1 (555) 234-5679", role_name: "Leader" },
-      ]);
+      console.warn("Could not load users for leader options", err);
+      setLeadersList([]);
     }
   };
 
@@ -228,51 +270,54 @@ export const BibleStudyPage: React.FC = () => {
     );
   }, [leadersList, leaderQuery]);
 
-  // Combined and filtered curricula (church topics + Bible books)
+  // Combined and filtered curricula (church topics + Bible books) with exact total_chapters
   const allCurricula = useMemo(() => {
     const churchTopics = (studySummary?.topics || []).map(t => ({
       title: t.title,
       type: "curriculum",
-      category: t.testament_or_category || "Church Topic",
-      authorOrVerse: t.key_verse || t.lead_teacher || ""
+      category: "Church Topic",
+      total_chapters: t.total_chapters || getBookTotalChapters(t.title)
     }));
 
     const bibleBooks = [
-      { title: "Book of Romans", type: "bible_book", category: "New Testament" },
-      { title: "Gospel of John", type: "bible_book", category: "New Testament" },
-      { title: "Gospel of Matthew", type: "bible_book", category: "New Testament" },
-      { title: "Gospel of Mark", type: "bible_book", category: "New Testament" },
-      { title: "Gospel of Luke", type: "bible_book", category: "New Testament" },
-      { title: "Acts of the Apostles", type: "bible_book", category: "New Testament" },
-      { title: "1 & 2 Corinthians", type: "bible_book", category: "New Testament" },
-      { title: "Galatians", type: "bible_book", category: "New Testament" },
-      { title: "Ephesians", type: "bible_book", category: "New Testament" },
-      { title: "Philippians", type: "bible_book", category: "New Testament" },
-      { title: "Colossians", type: "bible_book", category: "New Testament" },
-      { title: "1 & 2 Thessalonians", type: "bible_book", category: "New Testament" },
-      { title: "1 & 2 Timothy", type: "bible_book", category: "New Testament" },
-      { title: "Hebrews", type: "bible_book", category: "New Testament" },
-      { title: "James", type: "bible_book", category: "New Testament" },
-      { title: "1 & 2 Peter", type: "bible_book", category: "New Testament" },
-      { title: "1, 2, 3 John", type: "bible_book", category: "New Testament" },
-      { title: "Revelation", type: "bible_book", category: "New Testament" },
-      { title: "Genesis", type: "bible_book", category: "Old Testament" },
-      { title: "Exodus", type: "bible_book", category: "Old Testament" },
-      { title: "Psalms", type: "bible_book", category: "Old Testament" },
-      { title: "Proverbs", type: "bible_book", category: "Old Testament" },
-      { title: "Ecclesiastes", type: "bible_book", category: "Old Testament" },
-      { title: "Isaiah", type: "bible_book", category: "Old Testament" },
-      { title: "Jeremiah", type: "bible_book", category: "Old Testament" },
-      { title: "Daniel", type: "bible_book", category: "Old Testament" },
-      { title: "Discipleship 101: Foundations", type: "curriculum", category: "Topical Track" },
-      { title: "Sacred Marriage by Gary Thomas", type: "curriculum", category: "Family & Marriage" },
-      { title: "The Cost of Discipleship", type: "curriculum", category: "Discipleship Track" }
+      { title: "Book of Romans", type: "bible_book", category: "New Testament", total_chapters: 16 },
+      { title: "Gospel of John", type: "bible_book", category: "New Testament", total_chapters: 21 },
+      { title: "Gospel of Matthew", type: "bible_book", category: "New Testament", total_chapters: 28 },
+      { title: "Gospel of Mark", type: "bible_book", category: "New Testament", total_chapters: 16 },
+      { title: "Gospel of Luke", type: "bible_book", category: "New Testament", total_chapters: 24 },
+      { title: "Acts of the Apostles", type: "bible_book", category: "New Testament", total_chapters: 28 },
+      { title: "1 & 2 Corinthians", type: "bible_book", category: "New Testament", total_chapters: 29 },
+      { title: "Galatians", type: "bible_book", category: "New Testament", total_chapters: 6 },
+      { title: "Ephesians", type: "bible_book", category: "New Testament", total_chapters: 6 },
+      { title: "Philippians", type: "bible_book", category: "New Testament", total_chapters: 4 },
+      { title: "Colossians", type: "bible_book", category: "New Testament", total_chapters: 4 },
+      { title: "1 & 2 Thessalonians", type: "bible_book", category: "New Testament", total_chapters: 8 },
+      { title: "1 & 2 Timothy", type: "bible_book", category: "New Testament", total_chapters: 10 },
+      { title: "Hebrews", type: "bible_book", category: "New Testament", total_chapters: 13 },
+      { title: "James", type: "bible_book", category: "New Testament", total_chapters: 5 },
+      { title: "1 & 2 Peter", type: "bible_book", category: "New Testament", total_chapters: 8 },
+      { title: "1, 2, 3 John", type: "bible_book", category: "New Testament", total_chapters: 7 },
+      { title: "Revelation", type: "bible_book", category: "New Testament", total_chapters: 22 },
+      { title: "Genesis", type: "bible_book", category: "Old Testament", total_chapters: 50 },
+      { title: "Exodus", type: "bible_book", category: "Old Testament", total_chapters: 40 },
+      { title: "Psalms", type: "bible_book", category: "Old Testament", total_chapters: 150 },
+      { title: "Proverbs", type: "bible_book", category: "Old Testament", total_chapters: 31 },
+      { title: "Ecclesiastes", type: "bible_book", category: "Old Testament", total_chapters: 12 },
+      { title: "Isaiah", type: "bible_book", category: "Old Testament", total_chapters: 66 },
+      { title: "Jeremiah", type: "bible_book", category: "Old Testament", total_chapters: 52 },
+      { title: "Daniel", type: "bible_book", category: "Old Testament", total_chapters: 12 },
+      { title: "Discipleship 101: Foundations", type: "curriculum", category: "Topical Track", total_chapters: 8 },
+      { title: "Sacred Marriage by Gary Thomas", type: "curriculum", category: "Family & Marriage", total_chapters: 6 },
+      { title: "The Cost of Discipleship", type: "curriculum", category: "Discipleship Track", total_chapters: 10 }
     ];
 
-    const map = new Map<string, { title: string; type: string; category: string; authorOrVerse?: string }>();
+    const map = new Map<string, { title: string; type: string; category: string; total_chapters: number }>();
     [...churchTopics, ...bibleBooks].forEach(item => {
       if (!map.has(item.title.toLowerCase().trim())) {
-        map.set(item.title.toLowerCase().trim(), item);
+        map.set(item.title.toLowerCase().trim(), {
+          ...item,
+          total_chapters: item.total_chapters || getBookTotalChapters(item.title, studySummary?.topics || [])
+        });
       }
     });
     return Array.from(map.values());
@@ -283,10 +328,16 @@ export const BibleStudyPage: React.FC = () => {
     if (!q) return allCurricula;
     return allCurricula.filter(c =>
       c.title.toLowerCase().includes(q) ||
-      (c.category && c.category.toLowerCase().includes(q)) ||
-      (c.authorOrVerse && c.authorOrVerse.toLowerCase().includes(q))
+      (c.category && c.category.toLowerCase().includes(q))
     );
   }, [allCurricula, curriculumQuery]);
+
+  const completedGroups = useMemo(() => {
+    return groups.filter(g => g.progress_stage === "completed");
+  }, [groups]);
+
+  const completedCount = completedGroups.length;
+  const completionRate = groups.length > 0 ? Math.round((completedCount / groups.length) * 100) : 0;
 
   // Combined locations
   const allLocations = useMemo(() => {
@@ -299,7 +350,6 @@ export const BibleStudyPage: React.FC = () => {
       "Main Sanctuary",
       "Prayer Room / Chapel",
       "Online / Zoom Video Conference",
-      "Santos Residence (Home Group)",
       "Member Home / Off-Campus"
     ];
     return Array.from(new Set([...systemLocations, ...defaultLocations]));
@@ -326,7 +376,7 @@ export const BibleStudyPage: React.FC = () => {
         return prev.filter(id => id !== memberId);
       } else {
         if (prev.length >= (Number(formData.max_capacity) || 12)) {
-          alert(`Max capacity of ${formData.max_capacity} members reached!`);
+          showAlert("Capacity Limit Reached", `Max capacity of ${formData.max_capacity} members reached for this study group.`, "warning");
           return prev;
         }
         return [...prev, memberId];
@@ -352,18 +402,35 @@ export const BibleStudyPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadGroups();
-  }, [filterMinistry, selectedCategory, filterDay]);
+    loadGroups(groups.length === 0);
+  }, []);
 
-  const loadGroups = async () => {
+  // Real-time synchronization
+  useSocketEvent("groups:changed", () => {
+    loadGroups(false);
+    loadMembersForEnrollment();
+  });
+  useSocketEvent("study_topics:changed", () => {
+    loadGroups(false);
+  });
+  useSocketEvent("lookups:changed", () => {
+    loadLookups();
+  });
+  useSocketEvent("members:changed", () => {
+    loadMembersForEnrollment(formData.ministry_id); // was loadMembers()
+  });
+  useSocketEvent("users:changed", () => {
+    loadLeadersList(); // was loadLeaders()
+  });
+
+  const loadGroups = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) {
+        setLoading(true);
+      }
+      const ministryScope = isRestricted && allowedMinistries.length > 0 ? allowedMinistries[0].id : undefined;
       const [res, summary] = await Promise.all([
-        api.getGroups({
-          ministry_id: filterMinistry ? Number(filterMinistry) : undefined,
-          category: selectedCategory !== "all" ? selectedCategory : undefined,
-          meeting_day: filterDay !== "all" && filterDay !== "All Days" ? filterDay : undefined
-        }),
+        api.getGroups({ ministry_id: ministryScope }),
         api.getStudyTopics()
       ]);
       setGroups(res);
@@ -371,7 +438,9 @@ export const BibleStudyPage: React.FC = () => {
     } catch (err) {
       console.error("Failed to load Bible study groups:", err);
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setLoading(false);
+      }
     }
   };
 
@@ -440,11 +509,11 @@ export const BibleStudyPage: React.FC = () => {
         prev.map(g =>
           g.id === progressGroupModal.id
             ? {
-                ...g,
-                current_chapter: progressFormData.current_chapter,
-                progress_stage: progressFormData.progress_stage,
-                progress_notes: progressFormData.progress_notes
-              }
+              ...g,
+              current_chapter: progressFormData.current_chapter,
+              progress_stage: progressFormData.progress_stage,
+              progress_notes: progressFormData.progress_notes
+            }
             : g
         )
       );
@@ -461,7 +530,7 @@ export const BibleStudyPage: React.FC = () => {
       setIsJoinSuccess(`Updated study progress for ${progressGroupModal.name}!`);
       setProgressGroupModal(null);
     } catch (err: any) {
-      alert(err.message || "Failed to update study chapter progress");
+      showAlert("Update Failed", err.message || "Failed to update study chapter progress", "danger");
     } finally {
       setIsSavingProgress(false);
     }
@@ -525,12 +594,12 @@ export const BibleStudyPage: React.FC = () => {
         prev.map(g =>
           g.id === rescheduleGroupModal.id
             ? {
-                ...g,
-                is_rescheduled: isRescheduled,
-                rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
-                rescheduled_time: isRescheduled ? formattedTime : null,
-                reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
-              }
+              ...g,
+              is_rescheduled: isRescheduled,
+              rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
+              rescheduled_time: isRescheduled ? formattedTime : null,
+              reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
+            }
             : g
         )
       );
@@ -552,7 +621,7 @@ export const BibleStudyPage: React.FC = () => {
       );
       setRescheduleGroupModal(null);
     } catch (err: any) {
-      alert(err.message || "Failed to update reschedule status");
+      showAlert("Reschedule Failed", err.message || "Failed to update reschedule status", "danger");
     } finally {
       setIsSavingReschedule(false);
     }
@@ -563,11 +632,12 @@ export const BibleStudyPage: React.FC = () => {
     setSelectedMemberIds([]);
     setMemberQuery("");
     setIsMemberDropdownOpen(false);
+    const initialMin = isRestricted && allowedMinistries.length > 0 ? String(allowedMinistries[0].id) : "";
     setFormData({
       name: "",
       description: "",
       curriculum: "",
-      ministry_id: isRestricted && allowedMinistries.length > 0 ? String(allowedMinistries[0].id) : "",
+      ministry_id: initialMin,
       leader_name: "",
       leader_contact: "",
       meeting_day: "Wednesday",
@@ -580,6 +650,8 @@ export const BibleStudyPage: React.FC = () => {
       progress_stage: "in_progress",
       progress_notes: ""
     });
+    loadLeadersList(initialMin);
+    loadMembersForEnrollment(initialMin);
     setIsCreateModalOpen(true);
   };
 
@@ -626,6 +698,8 @@ export const BibleStudyPage: React.FC = () => {
       progress_stage: group.progress_stage || "in_progress",
       progress_notes: group.progress_notes || ""
     });
+    loadLeadersList(group.ministry_id || undefined);
+    loadMembersForEnrollment(group.ministry_id || undefined);
     setSelectedGroup(null);
     setIsCreateModalOpen(true);
   };
@@ -686,16 +760,71 @@ export const BibleStudyPage: React.FC = () => {
         progress_stage: "in_progress",
         progress_notes: ""
       });
-      loadGroups();
+      loadGroups(false);
     } catch (err: any) {
-      alert(err.message || "Failed to save Bible study group");
+      showAlert("Save Group Failed", err.message || "Failed to save Bible study group", "danger");
     }
   };
 
+  const cleanUser = user ? user.name.replace(/\(.*?\)/g, "").trim().toLowerCase() : "";
+  const userEmail = user ? user.email.trim().toLowerCase() : "";
+  const userUsername = user?.username ? user.username.trim().toLowerCase() : "";
+  const userMemberId = (user as any)?.member_id;
+  const userLinkedName = ((user as any)?.linked_member_name || "").trim().toLowerCase();
+
+  const isUserDesignatedInGroup = (g: BibleStudyGroup) => {
+    if (!user) return false;
+    // 1. Leader name matching
+    const cleanLeader = (g.leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
+    if (cleanLeader) {
+      if (cleanUser === cleanLeader || cleanUser.includes(cleanLeader) || cleanLeader.includes(cleanUser)) return true;
+      if (userLinkedName && (userLinkedName === cleanLeader || userLinkedName.includes(cleanLeader) || cleanLeader.includes(userLinkedName))) return true;
+    }
+    // 2. Leader contact matching
+    const cleanContact = (g.leader_contact || "").trim().toLowerCase();
+    if (cleanContact && (cleanContact === userEmail || cleanContact === userUsername)) return true;
+    // 3. Member in group (as disciple/member)
+    if (g.members && g.members.length > 0) {
+      return g.members.some((m: any) => {
+        if (userMemberId && m.member_id === userMemberId) return true;
+        const mName = (m.member_name || `${m.first_name || ""} ${m.last_name || ""}`).trim().toLowerCase();
+        return mName && (mName === cleanUser || cleanUser.includes(mName) || mName.includes(cleanUser));
+      });
+    }
+    return false;
+  };
+
+  const isUserLeaderOfGroup = (g: BibleStudyGroup) => {
+    if (!user) return false;
+    const cleanLeader = (g.leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
+    if (cleanLeader && (cleanUser === cleanLeader || cleanUser.includes(cleanLeader) || cleanLeader.includes(cleanUser))) return true;
+    if (userLinkedName && (userLinkedName === cleanLeader || userLinkedName.includes(cleanLeader) || cleanLeader.includes(userLinkedName))) return true;
+    const cleanContact = (g.leader_contact || "").trim().toLowerCase();
+    if (cleanContact && (cleanContact === userEmail || cleanContact === userUsername)) return true;
+    return false;
+  };
+
+  const myGroupsCount = useMemo(() => {
+    return groups.filter(isUserDesignatedInGroup).length;
+  }, [groups, user?.id, user?.name]);
+
   const filteredGroups = useMemo(() => {
     return groups.filter(g => {
+      // Ministry filter (instant)
+      if (filterMinistry && String(g.ministry_id) !== filterMinistry) {
+        return false;
+      }
+      // Category filter (instant)
+      if (selectedCategory !== "all" && g.category !== selectedCategory) {
+        return false;
+      }
+      // Meeting day filter (instant)
+      if (filterDay !== "all" && filterDay !== "All Days" && g.meeting_day !== filterDay) {
+        return false;
+      }
+      // Search query
       if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       return (
         g.name.toLowerCase().includes(q) ||
         g.leader_name.toLowerCase().includes(q) ||
@@ -704,13 +833,17 @@ export const BibleStudyPage: React.FC = () => {
         (g.description && g.description.toLowerCase().includes(q))
       );
     });
-  }, [groups, searchQuery]);
+  }, [groups, filterMinistry, selectedCategory, filterDay, searchQuery]);
 
   const totalMembersEnrolled = useMemo(() => {
     return groups.reduce((sum, g) => sum + (g.current_member_count || 0), 0);
   }, [groups]);
 
   const canCreate = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+
+  if (loading && groups.length === 0) {
+    return <BibleStudyPageSkeleton />;
+  }
 
   return (
     <div className="space-y-6">
@@ -746,10 +879,10 @@ export const BibleStudyPage: React.FC = () => {
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => setIsCompletedModalOpen(true)}
-            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-all active:scale-95"
+            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
           >
             <Award className="w-4 h-4 text-emerald-600" />
-            <span>Completed Books ({studySummary?.completed_count || 0})</span>
+            <span>Completed Groups ({completedCount})</span>
           </button>
           {canCreate && (
             <button
@@ -806,13 +939,13 @@ export const BibleStudyPage: React.FC = () => {
         >
           <div>
             <p className="text-xs font-bold text-emerald-800 flex items-center gap-1">
-              <span>Completed Books</span>
+              <span>Completed Studies</span>
               <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-extrabold">
-                {studySummary?.completion_rate || 0}%
+                {completionRate}%
               </span>
             </p>
             <h3 className="text-2xl font-black text-emerald-900 mt-0.5">
-              {studySummary?.completed_count || 0} Books
+              {completedCount} Groups
             </h3>
             <p className="text-[10px] text-emerald-700 font-bold mt-1 underline">
               View completed archive →
@@ -825,9 +958,9 @@ export const BibleStudyPage: React.FC = () => {
       </div>
 
       {/* Multi-Level Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-indigo-100/80 shadow-2xs space-y-3">
-        {/* Category Pills Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      <div className="bg-white p-4 rounded-3xl border border-indigo-100/80 shadow-2xs space-y-3.5">
+        {/* Category Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-gray-100 no-scrollbar">
           <span className="text-xs font-bold text-charcoal/60 mr-1 flex items-center gap-1 shrink-0">
             <Filter className="w-3.5 h-3.5 text-amber-600" /> Category:
           </span>
@@ -835,18 +968,18 @@ export const BibleStudyPage: React.FC = () => {
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat === "All" ? "all" : cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${(selectedCategory === "all" && cat === "All") || selectedCategory === cat
-                ? "bg-indigo text-white shadow-2xs ring-2 ring-indigo-200"
-                : "bg-ivory-light text-charcoal/70 hover:bg-gray-100"
-                }`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${(selectedCategory === "all" && cat === "All") || selectedCategory === cat
+                  ? "bg-indigo text-white shadow-2xs ring-2 ring-indigo-200"
+                  : "bg-ivory-light text-charcoal/70 hover:bg-gray-100"
+                  }`}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        {/* Dropdowns & Search */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3 pt-2 border-t border-gray-100">
+        {/* Row 2: Dropdowns & Search */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
             {/* Ministry Filter */}
             <div className="flex items-center gap-1.5">
@@ -870,7 +1003,7 @@ export const BibleStudyPage: React.FC = () => {
               <select
                 value={filterDay}
                 onChange={(e) => setFilterDay(e.target.value)}
-                className="bg-ivory-light px-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-semibold text-charcoal"
+                className="bg-ivory-light px-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-semibold text-charcoal cursor-pointer"
               >
                 {daysOfWeek.map((day) => (
                   <option key={day} value={day === "All Days" ? "all" : day}>{day}</option>
@@ -887,15 +1020,17 @@ export const BibleStudyPage: React.FC = () => {
               placeholder="Search by topic, leader, room..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-ivory-light pl-9 pr-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo"
+              className="w-full bg-ivory-light pl-9 pr-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-medium"
             />
           </div>
         </div>
       </div>
 
       {/* Groups Grid */}
-      {filteredGroups.length === 0 ? (
-        <div className="bg-white p-12 rounded-2xl border border-indigo-100 text-center space-y-3">
+      {loading && groups.length === 0 ? (
+        <CardGridSkeleton count={6} columns={3} />
+      ) : filteredGroups.length === 0 ? (
+        <div className="bg-white p-12 rounded-3xl border border-indigo-100 text-center space-y-3 shadow-2xs">
           <BookOpen className="w-10 h-10 text-charcoal/30 mx-auto" />
           <h3 className="text-sm font-bold text-charcoal">No Bible Study Groups Found</h3>
           <p className="text-xs text-charcoal/50 max-w-sm mx-auto">
@@ -907,11 +1042,19 @@ export const BibleStudyPage: React.FC = () => {
           {filteredGroups.map((g) => {
             const memberCount = g.current_member_count || 0;
             const capacityPercent = Math.min(100, Math.round((memberCount / (g.max_capacity || 12)) * 100));
+            const isLeaderOfThis = isUserLeaderOfGroup(g);
+            const isDesignatedOfThis = isUserDesignatedInGroup(g);
 
             return (
               <div
                 key={g.id}
-                className="bg-white rounded-3xl p-5 border border-indigo-100/80 shadow-xs flex flex-col justify-between hover:border-indigo-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden"
+                className={`bg-white rounded-3xl p-5 border shadow-xs flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden ${
+                  isLeaderOfThis 
+                    ? "border-amber-300 ring-2 ring-amber-100/70" 
+                    : isDesignatedOfThis 
+                    ? "border-sky-300 ring-2 ring-sky-100/70" 
+                    : "border-indigo-100/80 hover:border-indigo-300"
+                }`}
               >
                 {/* Top Accent Gradient Bar */}
                 <div
@@ -920,13 +1063,28 @@ export const BibleStudyPage: React.FC = () => {
                 />
 
                 <div>
-                  {/* Category & Ministry Badges */}
-                  <div className="flex items-center justify-between gap-2 mb-2.5 pt-1">
-                    <span className="bg-indigo-50/90 text-indigo font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-100/60">
-                      {g.category}
-                    </span>
+                  {/* Category, Ministry, & Personal Designation Badges */}
+                  <div className="flex items-center justify-between gap-1.5 mb-2.5 pt-1 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="bg-indigo-50/90 text-indigo font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-100/60">
+                        {g.category}
+                      </span>
+                      {isLeaderOfThis && (
+                        <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 text-slate-950" />
+                          <span>Led by You</span>
+                        </span>
+                      )}
+                      {!isLeaderOfThis && isDesignatedOfThis && (
+                        <span className="bg-sky-100 text-sky-900 font-black text-[10px] px-2 py-0.5 rounded-full border border-sky-200 flex items-center gap-1">
+                          <Users className="w-2.5 h-2.5 text-sky-700" />
+                          <span>Your Group</span>
+                        </span>
+                      )}
+                    </div>
+
                     <span
-                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white shadow-2xs"
+                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white shadow-2xs shrink-0"
                       style={{ backgroundColor: g.ministry_color || "#2C3968" }}
                     >
                       {g.ministry_name || "All-Church"}
@@ -1022,11 +1180,10 @@ export const BibleStudyPage: React.FC = () => {
                           e.stopPropagation();
                           handleOpenRescheduleModal(g);
                         }}
-                        className={`text-[10px] font-bold px-2.5 py-1 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                          g.is_rescheduled
-                            ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300"
-                            : "bg-white hover:bg-amber-50 text-amber-900 border border-amber-200/80"
-                        }`}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 ${g.is_rescheduled
+                          ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300"
+                          : "bg-white hover:bg-amber-50 text-amber-900 border border-amber-200/80"
+                          }`}
                         title="Reschedule next upcoming session"
                       >
                         <CalendarClock className="w-3 h-3 text-amber-700" />
@@ -1083,9 +1240,8 @@ export const BibleStudyPage: React.FC = () => {
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          capacityPercent >= 90 ? "bg-rose" : capacityPercent >= 60 ? "bg-amber" : "bg-emerald-500"
-                        }`}
+                        className={`h-full rounded-full transition-all duration-300 ${capacityPercent >= 90 ? "bg-rose" : capacityPercent >= 60 ? "bg-amber" : "bg-emerald-500"
+                          }`}
                         style={{ width: `${capacityPercent}%` }}
                       ></div>
                     </div>
@@ -1118,10 +1274,10 @@ export const BibleStudyPage: React.FC = () => {
       )}
 
       {/* GROUP DETAILS & ROSTER MODAL */}
-      {selectedGroup && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
+      {selectedGroup && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-indigo-100">
-            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="bg-indigo-50 text-indigo text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
@@ -1155,7 +1311,7 @@ export const BibleStudyPage: React.FC = () => {
                 {/* Chapter & Progress Banner */}
                 <div className="p-2.5 bg-white/90 rounded-lg border border-indigo-100 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <Bookmark className="w-4 h-4 text-indigo-700" />
+                    <BookmarkCheck className="w-4 h-4 text-indigo-700" />
                     <div>
                       <span className="font-bold text-indigo-950 block text-xs">
                         {selectedGroup.current_chapter || "Chapter 1"}
@@ -1246,14 +1402,15 @@ export const BibleStudyPage: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* CREATE GROUP MODAL */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
+      {isCreateModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-xl md:max-w-2xl lg:max-w-3xl w-full p-6 sm:p-7 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto border border-indigo-100">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <h2 className="text-base sm:text-lg font-bold text-charcoal flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-indigo" />
                 <span>{editingGroupId ? "Edit Bible Study Group" : "Create New Bible Study Small Group"}</span>
@@ -1294,7 +1451,12 @@ export const BibleStudyPage: React.FC = () => {
                   <label className="block font-bold text-charcoal/70 mb-1">Ministry Scope</label>
                   <select
                     value={formData.ministry_id}
-                    onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
+                    onChange={(e) => {
+                      const minId = e.target.value;
+                      setFormData({ ...formData, ministry_id: minId });
+                      loadLeadersList(minId);
+                      loadMembersForEnrollment(minId);
+                    }}
                     disabled={isRestricted && allowedMinistries.length <= 1}
                     className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-indigo disabled:opacity-90 disabled:cursor-not-allowed"
                   >
@@ -1404,9 +1566,9 @@ export const BibleStudyPage: React.FC = () => {
                                 }`}>
                                 {item.category || (item.type === "curriculum" ? "Study Track" : "Bible Book")}
                               </span>
-                              {item.authorOrVerse && (
-                                <span className="truncate text-charcoal/50">• {item.authorOrVerse}</span>
-                              )}
+                              {item.total_chapters ? (
+                                <span className="truncate text-charcoal/50">• {item.total_chapters} chapters</span>
+                              ) : null}
                             </div>
                           </div>
                           {formData.curriculum === item.title && (
@@ -1439,10 +1601,16 @@ export const BibleStudyPage: React.FC = () => {
                         e.target.select();
                         setLeaderQuery("");
                         setIsLeaderDropdownOpen(true);
+                        if (leadersList.length === 0) {
+                          loadLeadersList(formData.ministry_id);
+                        }
                       }}
                       onClick={() => {
                         setLeaderQuery("");
                         setIsLeaderDropdownOpen(true);
+                        if (leadersList.length === 0) {
+                          loadLeadersList(formData.ministry_id);
+                        }
                       }}
                       onChange={(e) => {
                         setFormData({ ...formData, leader_name: e.target.value });
@@ -1748,8 +1916,18 @@ export const BibleStudyPage: React.FC = () => {
                     type="text"
                     placeholder="Search members by name or ministry to add (e.g. Elena Santos)..."
                     value={memberQuery}
-                    onFocus={() => setIsMemberDropdownOpen(true)}
-                    onClick={() => setIsMemberDropdownOpen(true)}
+                    onFocus={() => {
+                      setIsMemberDropdownOpen(true);
+                      if (membersList.length === 0) {
+                        loadMembersForEnrollment(formData.ministry_id);
+                      }
+                    }}
+                    onClick={() => {
+                      setIsMemberDropdownOpen(true);
+                      if (membersList.length === 0) {
+                        loadMembersForEnrollment(formData.ministry_id);
+                      }
+                    }}
                     onChange={(e) => {
                       setMemberQuery(e.target.value);
                       setIsMemberDropdownOpen(true);
@@ -1831,56 +2009,6 @@ export const BibleStudyPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              {/* Study Chapter Progress & Notice Section */}
-              <div className="p-4 bg-gradient-to-br from-indigo-50/70 to-ivory rounded-2xl border border-indigo-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
-                    <Bookmark className="w-3.5 h-3.5 text-indigo-700" />
-                    <span>Current Chapter & Study Progress</span>
-                  </label>
-                  <span className="text-[10px] text-charcoal/50">Where the group is currently studying</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-charcoal/70 mb-1">Current Chapter / Lesson *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Chapter 1, Introduction, Lesson 3"
-                      value={formData.current_chapter}
-                      onChange={(e) => setFormData({ ...formData, current_chapter: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold text-charcoal"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-charcoal/70 mb-1">Study Phase / Stage</label>
-                    <select
-                      value={formData.progress_stage}
-                      onChange={(e) => setFormData({ ...formData, progress_stage: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-semibold text-charcoal"
-                    >
-                      <option value="intro">🟢 Intro / Just Starting (No. 1 pa lang)</option>
-                      <option value="midway">🟡 Mid-way (Kalahati pa lang ng Chapter)</option>
-                      <option value="application">🟠 Discussion & Reflection Questions</option>
-                      <option value="completed">🔵 Chapter Completed / Ready for Next</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
-                    Lesson Notice & Details (Saan Banda Sila)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Maglagay ng notice o detalye (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide')..."
-                    value={formData.progress_notes}
-                    onChange={(e) => setFormData({ ...formData, progress_notes: e.target.value })}
-                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                  />
-                </div>
-              </div>
 
               <div>
                 <label className="block font-bold text-charcoal/70 mb-1">Description / Group Purpose</label>
@@ -1910,17 +2038,18 @@ export const BibleStudyPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ==================================================== */}
       {/* MODAL: Quick Update Chapter & Progress */}
       {/* ==================================================== */}
-      {progressGroupModal && (
-        <div className="fixed inset-0 z-50 bg-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {progressGroupModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-4 animate-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
                   <BookmarkCheck className="w-5 h-5" />
@@ -1940,118 +2069,175 @@ export const BibleStudyPage: React.FC = () => {
             </div>
 
             {/* Current Book Topic Banner */}
-            {progressGroupModal.curriculum && (
-              <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200/70 text-xs font-semibold text-amber-950 flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
-                <span>Book / Topic: <strong>{progressGroupModal.curriculum}</strong></span>
-              </div>
-            )}
+            {(() => {
+              const modalTotalChapters = getBookTotalChapters(progressGroupModal.curriculum, studySummary?.topics || []);
+              const modalChapterOptions = generateChapterOptions(modalTotalChapters);
 
-            <form onSubmit={handleSaveProgress} className="space-y-3.5 text-xs">
-              {/* Current Chapter / Lesson Input with Quick Chips */}
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1">
-                  What Chapter / Lesson na sila? *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Chapter 1, Introduction, Chapter 3 (Part 2)"
-                  value={progressFormData.current_chapter}
-                  onChange={(e) => setProgressFormData({ ...progressFormData, current_chapter: e.target.value })}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs"
-                />
-                {/* Quick Preset Chips */}
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {["Introduction", "Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5", "Chapter 6", "Lesson 1", "Review / Q&A"].map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => setProgressFormData({ ...progressFormData, current_chapter: chip })}
-                      className="px-2 py-0.5 rounded-md bg-ivory-light hover:bg-indigo-50 border border-gray-200 text-[10px] font-semibold text-charcoal/70 hover:text-indigo transition-colors cursor-pointer"
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Progress Stage Picker */}
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1.5">
-                  Study Progress Stage (Nasaan sila banda?)
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    { id: "intro", title: "🟢 Intro / Just Starting", desc: "No. 1 pa lang / Introduction / overview" },
-                    { id: "midway", title: "🟡 Mid-way (Kalahati)", desc: "Nasa kalahati pa lang ng ongoing verses" },
-                    { id: "application", title: "🟠 Discussion & Reflection", desc: "Tapos na reading, nasa group reflection" },
-                    { id: "completed", title: "🔵 Chapter Finished", desc: "Tapos na ang chapter, next lesson na" }
-                  ].map((st) => (
-                    <div
-                      key={st.id}
-                      onClick={() => setProgressFormData({ ...progressFormData, progress_stage: st.id })}
-                      className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
-                        progressFormData.progress_stage === st.id
-                          ? "bg-indigo-50/70 border-indigo ring-1 ring-indigo text-indigo-950 font-bold"
-                          : "bg-ivory-light border-gray-200 hover:border-gray-300 text-charcoal/80"
-                      }`}
-                    >
-                      <div className="text-xs font-bold">{st.title}</div>
-                      <div className="text-[10px] text-charcoal/60 mt-0.5">{st.desc}</div>
+              return (
+                <>
+                  {progressGroupModal.curriculum && (
+                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/70 text-xs font-semibold text-amber-950 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span>Book / Topic: <strong>{progressGroupModal.curriculum}</strong></span>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-200/70 text-amber-950 font-bold text-[10px] border border-amber-300">
+                        {modalTotalChapters} Chapters Total
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  )}
 
-              {/* Notice & Progress Description (Saan Banda Sila) */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-charcoal/70">
-                    Notice & Specific Location Description
-                  </label>
-                  <span className="text-[10px] text-indigo-600 font-semibold">Important details</span>
-                </div>
-                <textarea
-                  rows={3}
-                  placeholder="Maglagay ng notice o detalye kung nasaan sila banda (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide, itutuloy sa susunod na meeting')..."
-                  value={progressFormData.progress_notes}
-                  onChange={(e) => setProgressFormData({ ...progressFormData, progress_notes: e.target.value })}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                />
-              </div>
+                  <form onSubmit={handleSaveProgress} className="space-y-3.5 text-xs">
+                    {/* Current Chapter / Lesson Input with Quick Chips */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-charcoal/70">
+                          What Chapter / Lesson na sila? *
+                        </label>
+                        <span className="text-[10px] text-indigo-700 font-bold">
+                          {modalTotalChapters} Chapters in this Book
+                        </span>
+                      </div>
 
-              {/* Action Buttons */}
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setProgressGroupModal(null)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingProgress}
-                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{isSavingProgress ? "Saving..." : "Save Chapter Progress"}</span>
-                </button>
-              </div>
-            </form>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Chapter 1, Introduction, Chapter 3 (Part 2)"
+                          value={progressFormData.current_chapter}
+                          onChange={(e) => setProgressFormData({ ...progressFormData, current_chapter: e.target.value })}
+                          className="flex-1 bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs"
+                        />
+                        <select
+                          value={progressFormData.current_chapter}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              const isEnd = e.target.value === "Completed" || e.target.value === `Chapter ${modalTotalChapters}`;
+                              setProgressFormData({
+                                ...progressFormData,
+                                current_chapter: e.target.value,
+                                progress_stage: isEnd ? "completed" : progressFormData.progress_stage
+                              });
+                            }
+                          }}
+                          className="bg-indigo-50 text-indigo-950 font-bold text-xs p-2.5 rounded-xl border border-indigo-200 outline-none cursor-pointer"
+                        >
+                          <option value="">Select Chapter ▼</option>
+                          {modalChapterOptions.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Dynamic Preset Chapter Chips */}
+                      <div className="mt-2 space-y-1">
+                        <span className="text-[10px] text-charcoal/50 font-bold block uppercase tracking-wider">
+                          Select Chapter (1 to {modalTotalChapters}):
+                        </span>
+                        <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-1.5 bg-gray-50/80 rounded-xl border border-gray-100 no-scrollbar">
+                          {modalChapterOptions.map((chip) => (
+                            <button
+                              key={chip.value}
+                              type="button"
+                              onClick={() => {
+                                const isEnd = chip.value === "Completed" || chip.value === `Chapter ${modalTotalChapters}`;
+                                setProgressFormData({
+                                  ...progressFormData,
+                                  current_chapter: chip.value,
+                                  progress_stage: isEnd ? "completed" : progressFormData.progress_stage
+                                });
+                              }}
+                              className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${progressFormData.current_chapter === chip.value
+                                ? "bg-indigo text-white border-indigo shadow-2xs scale-105"
+                                : "bg-white hover:bg-indigo-50 border-gray-200 text-charcoal/75 hover:text-indigo"
+                                }`}
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress Stage Picker */}
+                    <div>
+                      <label className="block font-bold text-charcoal/70 mb-1.5">
+                        Study Progress Stage (Nasaan sila banda?)
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[
+                          { id: "intro", title: "🟢 Intro / Just Starting", desc: "No. 1 pa lang / Introduction / overview" },
+                          { id: "midway", title: "🟡 Mid-way (Kalahati)", desc: "Nasa kalahati pa lang ng ongoing verses" },
+                          { id: "application", title: "🟠 Discussion & Reflection", desc: "Tapos na reading, nasa group reflection" },
+                          { id: "completed", title: "🔵 Chapter Finished", desc: "Tapos na ang chapter, next lesson na" }
+                        ].map((st) => (
+                          <div
+                            key={st.id}
+                            onClick={() => setProgressFormData({ ...progressFormData, progress_stage: st.id })}
+                            className={`p-2.5 rounded-xl border cursor-pointer transition-all ${progressFormData.progress_stage === st.id
+                              ? "bg-indigo-50/70 border-indigo ring-1 ring-indigo text-indigo-950 font-bold"
+                              : "bg-ivory-light border-gray-200 hover:border-gray-300 text-charcoal/80"
+                              }`}
+                          >
+                            <div className="text-xs font-bold">{st.title}</div>
+                            <div className="text-[10px] text-charcoal/60 mt-0.5">{st.desc}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Notice & Progress Description (Saan Banda Sila) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-charcoal/70">
+                          Notice & Specific Location Description
+                        </label>
+                        <span className="text-[10px] text-indigo-600 font-semibold">Important details</span>
+                      </div>
+                      <textarea
+                        rows={3}
+                        placeholder="Maglagay ng notice o detalye kung nasaan sila banda (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide, itutuloy sa susunod na meeting')..."
+                        value={progressFormData.progress_notes}
+                        onChange={(e) => setProgressFormData({ ...progressFormData, progress_notes: e.target.value })}
+                        className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                      />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setProgressGroupModal(null)}
+                        className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingProgress}
+                        className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>{isSavingProgress ? "Saving..." : "Save Chapter Progress"}</span>
+                      </button>
+                    </div>
+                  </form>
+                </>
+              );
+            })()}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ==================================================== */}
       {/* MODAL: Reschedule Small Group Next Session */}
       {/* ==================================================== */}
-      {rescheduleGroupModal && (
-        <div className="fixed inset-0 z-50 bg-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+      {rescheduleGroupModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-amber-200 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
             {/* Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
                   <CalendarClock className="w-5 h-5 text-amber-700" />
@@ -2087,77 +2273,70 @@ export const BibleStudyPage: React.FC = () => {
             <form onSubmit={(e) => handleSaveReschedule(e, false)} className="space-y-4 text-xs">
               {/* Status Mode Selector */}
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1.5">
-                  Reschedule Status:
-                </label>
+                <label className="block font-bold text-charcoal/70 mb-1.5">Schedule Status *</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <div
+                  <button
+                    type="button"
                     onClick={() => setRescheduleFormData({ ...rescheduleFormData, is_rescheduled: true })}
-                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
-                      rescheduleFormData.is_rescheduled
-                        ? "bg-amber-50/90 border-amber-400 ring-1 ring-amber-400 text-amber-950 font-bold"
-                        : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
-                    }`}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${rescheduleFormData.is_rescheduled
+                      ? "bg-amber-50 border-amber-400 ring-2 ring-amber-400/20 text-amber-950 font-bold shadow-2xs"
+                      : "bg-white border-gray-200 text-charcoal/70 hover:border-gray-300"
+                      }`}
                   >
-                    <div className="w-4 h-4 rounded-full border border-amber-600 flex items-center justify-center shrink-0 mt-0.5">
-                      {rescheduleFormData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-amber-600"></div>}
+                    <div className="flex items-center gap-1.5 text-xs font-black text-amber-800 mb-0.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Rescheduled Date</span>
                     </div>
-                    <div>
-                      <div className="text-xs font-bold">⚠️ Reschedule Active</div>
-                      <div className="text-[10px] text-amber-800/80 font-normal mt-0.5">Move next meeting to a new date/time</div>
-                    </div>
-                  </div>
+                    <p className="text-[10px] font-medium text-amber-900/70">Move next meeting to a special day/time</p>
+                  </button>
 
-                  <div
+                  <button
+                    type="button"
                     onClick={() => setRescheduleFormData({ ...rescheduleFormData, is_rescheduled: false })}
-                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
-                      !rescheduleFormData.is_rescheduled
-                        ? "bg-emerald-50/90 border-emerald-400 ring-1 ring-emerald-400 text-emerald-950 font-bold"
-                        : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
-                    }`}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${!rescheduleFormData.is_rescheduled
+                      ? "bg-emerald-50 border-emerald-400 ring-2 ring-emerald-400/20 text-emerald-950 font-bold shadow-2xs"
+                      : "bg-white border-gray-200 text-charcoal/70 hover:border-gray-300"
+                      }`}
                   >
-                    <div className="w-4 h-4 rounded-full border border-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
-                      {!rescheduleFormData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-emerald-600"></div>}
+                    <div className="flex items-center gap-1.5 text-xs font-black text-emerald-800 mb-0.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Regular Weekly</span>
                     </div>
-                    <div>
-                      <div className="text-xs font-bold">✓ Regular Schedule</div>
-                      <div className="text-[10px] text-emerald-800/80 font-normal mt-0.5">Follow normal meeting schedule</div>
-                    </div>
-                  </div>
+                    <p className="text-[10px] font-medium text-emerald-900/70">Keep normal weekly schedule</p>
+                  </button>
                 </div>
               </div>
 
-              {/* Conditional Reschedule Inputs */}
+              {/* Conditional Form Fields when Rescheduled is ON */}
               {rescheduleFormData.is_rescheduled && (
-                <div className="space-y-3.5 p-3.5 bg-gradient-to-br from-amber-50/60 to-ivory rounded-2xl border border-amber-200/80 animate-in fade-in">
-                  {/* New Date Picker */}
+                <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200/80 space-y-3 animate-in fade-in duration-150">
+                  {/* Rescheduled Date Picker */}
                   <div>
                     <label className="block font-bold text-amber-950 mb-1">
-                      New Rescheduled Meeting Date *
+                      New Meeting Date *
                     </label>
                     <input
                       type="date"
                       required={rescheduleFormData.is_rescheduled}
                       value={rescheduleFormData.rescheduled_date}
                       onChange={(e) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_date: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 font-bold text-charcoal text-xs cursor-pointer"
+                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 font-bold text-charcoal text-xs shadow-2xs"
                     />
                   </div>
 
-                  {/* Time In & Time Out using TimePickerInput */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Rescheduled Time Start & End */}
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
+                      <label className="block font-bold text-amber-950 mb-1">Start Time *</label>
                       <TimePickerInput
-                        label="New Time In (Start Time) *"
                         value={rescheduleFormData.rescheduled_time_start}
                         onChange={(val) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_time_start: val })}
-                        placeholder="e.g. 6:30 PM"
-                        required
+                        placeholder="e.g. 7:00 PM"
                       />
                     </div>
                     <div>
+                      <label className="block font-bold text-amber-950 mb-1">End Time</label>
                       <TimePickerInput
-                        label="New Time Out (End Time)"
                         value={rescheduleFormData.rescheduled_time_end}
                         onChange={(val) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_time_end: val })}
                         placeholder="e.g. 8:00 PM"
@@ -2233,42 +2412,43 @@ export const BibleStudyPage: React.FC = () => {
                     {isSavingReschedule
                       ? "Saving..."
                       : rescheduleFormData.is_rescheduled
-                      ? "Save Rescheduled Session"
-                      : "Save Regular Schedule"}
+                        ? "Save Rescheduled Session"
+                        : "Save Regular Schedule"}
                   </span>
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ==================================================== */}
       {/* MODAL: Completed Books of Study Archive */}
       {/* ==================================================== */}
-      {isCompletedModalOpen && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      {isCompletedModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-emerald-200 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
                   <Award className="w-5 h-5 text-emerald-700" />
                 </div>
                 <div>
                   <h3 className="font-black text-lg text-charcoal flex items-center gap-2">
-                    <span>Completed Books of Study</span>
+                    <span>Completed Bible Studies & Groups</span>
                     <span className="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-600 text-white">
-                      {studySummary?.completed_count || 0} Completed
+                      {completedCount} Completed
                     </span>
                   </h3>
                   <p className="text-xs text-charcoal/60">
-                    Library of completed Bible study books and church discipleship curriculum.
+                    Archive of small groups and discipleship tracks that have finished their curriculum.
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsCompletedModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/50 hover:text-charcoal transition-colors"
+                className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/50 hover:text-charcoal transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2277,32 +2457,30 @@ export const BibleStudyPage: React.FC = () => {
             {/* Summary Highlights */}
             <div className="grid grid-cols-3 gap-3 p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 text-center">
               <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Completed Books</span>
-                <span className="text-xl font-black text-emerald-900">{studySummary?.completed_count || 0}</span>
+                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Completed Groups</span>
+                <span className="text-xl font-black text-emerald-900">{completedCount}</span>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Chapters Studied</span>
-                <span className="text-xl font-black text-emerald-900">
-                  {studySummary?.completed_books?.reduce((acc, t) => acc + (t.total_chapters || 0), 0) || 0} chapters
-                </span>
+                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Active Groups</span>
+                <span className="text-xl font-black text-emerald-900">{groups.length}</span>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Curriculum Rate</span>
-                <span className="text-xl font-black text-emerald-900">{studySummary?.completion_rate || 0}%</span>
+                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Completion Rate</span>
+                <span className="text-xl font-black text-emerald-900">{completionRate}%</span>
               </div>
             </div>
 
-            {/* List of Completed Books */}
-            {(!studySummary?.completed_books || studySummary.completed_books.length === 0) ? (
+            {/* List of Completed Groups */}
+            {completedGroups.length === 0 ? (
               <div className="text-center py-10 bg-gray-50 rounded-xl space-y-2">
                 <BookOpen className="w-8 h-8 text-charcoal/30 mx-auto" />
-                <p className="text-xs text-charcoal/70 font-semibold">No books have been marked as completed yet.</p>
+                <p className="text-xs text-charcoal/70 font-semibold">No small groups have reached completed status yet.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {studySummary.completed_books.map((book, idx) => (
+                {completedGroups.map((grp, idx) => (
                   <div
-                    key={book.id}
+                    key={grp.id}
                     className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/30 hover:bg-white hover:shadow-2xs transition-all space-y-2.5"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -2311,14 +2489,19 @@ export const BibleStudyPage: React.FC = () => {
                           <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold">
                             {idx + 1}
                           </span>
-                          <h4 className="font-bold text-sm text-charcoal">{book.title}</h4>
-                          <span className="px-2 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo border border-indigo-100">
-                            {book.testament_or_category || "Bible Study"}
-                          </span>
+                          <h4 className="font-bold text-sm text-charcoal">{grp.name}</h4>
+                          {grp.curriculum && (
+                            <span className="text-xs font-bold text-indigo bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                              📖 {grp.curriculum}
+                            </span>
+                          )}
                         </div>
-                        {book.summary_notes && (
-                          <p className="text-xs text-charcoal/70 pl-7 leading-relaxed">
-                            {book.summary_notes}
+                        <p className="text-xs text-charcoal/70 pl-7">
+                          Facilitator: <strong>{grp.leader_name}</strong> • {grp.category}
+                        </p>
+                        {grp.progress_notes && (
+                          <p className="text-xs text-charcoal/70 pl-7 leading-relaxed italic bg-white/70 p-2 rounded-lg border border-emerald-100 mt-1">
+                            "{grp.progress_notes}"
                           </p>
                         )}
                       </div>
@@ -2326,22 +2509,15 @@ export const BibleStudyPage: React.FC = () => {
                       <div className="text-right shrink-0">
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>{book.completed_date ? `Completed: ${book.completed_date}` : "Completed"}</span>
+                          <span>Finished</span>
                         </span>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-charcoal/70 pl-7 pt-1 border-t border-emerald-100">
                       <div className="flex items-center gap-3 flex-wrap">
-                        <span>📖 <strong>{book.total_chapters} Chapters</strong></span>
-                        {book.lead_teacher && (
-                          <span>Teacher: <strong>{book.lead_teacher}</strong></span>
-                        )}
-                        {book.key_verse && (
-                          <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-medium border border-amber-200">
-                            {book.key_verse}
-                          </span>
-                        )}
+                        <span>Status: <strong>{grp.current_chapter || "Completed"}</strong></span>
+                        {grp.members && <span>👥 {grp.members.length} Participants</span>}
                       </div>
                     </div>
                   </div>
@@ -2353,14 +2529,30 @@ export const BibleStudyPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsCompletedModalOpen(false)}
-                className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs"
+                className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
                 Close Archive
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
+      {/* Reusable Confirmation & Alert Modal */}
+      <ConfirmationModal
+        isOpen={confirmModalConfig.isOpen}
+        title={confirmModalConfig.title}
+        description={confirmModalConfig.description}
+        type={confirmModalConfig.type}
+        confirmText={confirmModalConfig.confirmText}
+        cancelText={confirmModalConfig.cancelText}
+        isLoading={confirmModalConfig.isLoading}
+        onConfirm={confirmModalConfig.onConfirm}
+        onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };
+
+export default BibleStudyPage;

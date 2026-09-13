@@ -1,12 +1,31 @@
 import {
   Ministry, User, Role, Member, Household, AttendanceRecord, AttendanceRosterItem,
-  EventItem, Announcement, PrayerRequest, Fund, Donation,
+  EventItem, Announcement, Fund, Donation,
   DashboardMetrics, AuditLog, BibleStudyGroup, SystemLookup, SystemSetting,
   BirthdayCelebrant, BirthdaySummary, StudyTopic, StudyTopicsSummary,
-  DutyTeam, DutyTeamMember, SaturdayDutyScheduleResponse, DishwashingDutyItem, DishwashingCyclePayload, DishwashingResponse
+  DutyTeam, DutyTeamMember, SaturdayDutyScheduleResponse, DishwashingDutyItem, DishwashingCyclePayload, DishwashingResponse,
+  DishwashingTeam, SundayDutyScheduleResponse,
+  UpdateProfilePayload, ChangePasswordPayload, UserActivityStats,
+  BackupYearStats, BackupSummaryResponse, BackupYearDetailsResponse, BackupPreviewResponse, BackupExportPayload,
+  BibleReadingProgressResponse, BibleReadingToggleResponse, BibleReadingStatsResponse
 } from "./types";
 
-const API_BASE = "http://127.0.0.1:4000/api";
+export const getApiBase = () => {
+  if (typeof window !== "undefined") {
+    const configuredIp = localStorage.getItem("dpc_server_ip");
+    if (configuredIp && configuredIp.trim()) {
+      return `http://${configuredIp.trim()}:4000/api`;
+    }
+  }
+  const envUrl = (import.meta as any).env?.VITE_API_URL;
+  if (envUrl) return `${envUrl}/api`;
+  if (typeof window === "undefined") return "http://127.0.0.1:4000/api";
+  const { hostname, protocol } = window.location;
+  if (!hostname || hostname === "localhost" || hostname === "127.0.0.1" || protocol === "file:") {
+    return "http://127.0.0.1:4000/api";
+  }
+  return `${protocol}//${hostname}:4000/api`;
+};
 
 function getHeaders(): HeadersInit {
   const token = localStorage.getItem("chms_token");
@@ -17,7 +36,8 @@ function getHeaders(): HeadersInit {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const apiBase = getApiBase();
+  const res = await fetch(`${apiBase}${endpoint}`, {
     ...options,
     headers: {
       ...getHeaders(),
@@ -25,16 +45,22 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
   });
 
-  const data = await res.json();
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    // If response is not JSON
+  }
+
   if (!res.ok) {
-    throw new Error(data.error || "An unexpected error occurred");
+    throw new Error(data?.error || data?.message || `Server request failed with status ${res.status}`);
   }
   return data;
 }
 
 export const api = {
   // Auth
-  getSetupStatus: () => request<{ hasUsers: boolean; totalUsers: number; isFirstUser: boolean }>("/auth/setup-status"),
+  getSetupStatus: () => request<{ hasUsers: boolean; totalUsers: number; hasAdmin: boolean; totalAdmins: number; isFirstUser: boolean }>("/auth/setup-status"),
   register: (data: { name: string; username?: string; email: string; password: string; role_id?: number }) => request<{ token: string; user: User; isFirstUser: boolean }>("/auth/register", {
     method: "POST",
     body: JSON.stringify(data)
@@ -49,6 +75,15 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ emailOrUsername, password })
   }),
+  updateProfile: (data: UpdateProfilePayload) => request<{ message: string; user: User }>("/auth/profile", {
+    method: "PUT",
+    body: JSON.stringify(data)
+  }),
+  changePassword: (data: ChangePasswordPayload) => request<{ message: string }>("/auth/change-password", {
+    method: "PUT",
+    body: JSON.stringify(data)
+  }),
+  getProfileActivity: () => request<UserActivityStats>("/auth/profile-activity"),
 
   // Users & Roles Management
   getRoles: () => request<Role[]>("/roles"),
@@ -89,14 +124,27 @@ export const api = {
   }),
 
   // Members & Households
-  getMembers: (params?: { ministry_id?: number; search?: string; status?: string }) => {
+  getMembers: (params?: {
+    ministry_id?: number;
+    search?: string;
+    status?: string;
+    household_id?: number;
+    birthday_filter?: string;
+    page?: number;
+    limit?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.search) q.set("search", params.search);
     if (params?.status) q.set("status", params.status);
-    return request<Member[]>(`/members?${q.toString()}`);
+    if (params?.household_id) q.set("household_id", String(params.household_id));
+    if (params?.birthday_filter) q.set("birthday_filter", params.birthday_filter);
+    if (params?.page !== undefined) q.set("page", String(params.page));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    return request<any>(`/members?${q.toString()}`);
   },
   getAgingOutMembers: () => request<(Member & { current_age: number; suggested_next_ministry: Ministry })[]>("/members/aging-out"),
+  autoTransitionAgingOut: () => request<{ count: number; message: string }>("/members/auto-transition", { method: "POST" }),
   getBirthdays: (params?: { timeframe?: "today" | "this_week" | "this_month" | "next_30_days" | "all"; month?: number; ministry_id?: number }) => {
     const q = new URLSearchParams();
     if (params?.timeframe) q.set("timeframe", params.timeframe);
@@ -144,8 +192,8 @@ export const api = {
     if (params?.date) q.set("date", params.date);
     return request<AttendanceRosterItem[]>(`/attendance/roster?${q.toString()}`);
   },
-  checkIn: (data: { member_id: number; ministry_id?: number; event_id?: number; notes?: string; service_name?: string }) =>
-    request<{ id: number; message: string; security_code: string | null; member_name: string; ministry_name: string; medical_notes: string | null; checked_in_at: string; already_present?: boolean }>("/attendance/check-in", {
+  checkIn: (data: { member_id: number; ministry_id?: number; event_id?: number; notes?: string; service_name?: string; status?: "present" | "absent" | "excused"; reason?: string; target_date?: string }) =>
+    request<{ id: number; message: string; security_code: string | null; member_name: string; ministry_name: string; medical_notes: string | null; checked_in_at: string; attendance_status?: string; already_present?: boolean }>("/attendance/check-in", {
       method: "POST",
       body: JSON.stringify(data)
     }),
@@ -154,7 +202,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data)
     }),
-  checkOut: (data: { attendance_id?: number; member_id?: number; security_code?: string }) =>
+  checkOut: (data: { attendance_id?: number; member_id?: number; security_code?: string; force?: boolean }) =>
     request<{ message: string; checked_out_at: string }>("/attendance/check-out", {
       method: "POST",
       body: JSON.stringify(data)
@@ -194,25 +242,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data)
     }),
-  getPrayerRequests: (params?: { ministry_id?: number; status?: string }) => {
-    const q = new URLSearchParams();
-    if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
-    if (params?.status) q.set("status", params.status);
-    return request<PrayerRequest[]>(`/communications/prayer-requests?${q.toString()}`);
-  },
-  submitPrayerRequest: (data: { ministry_id?: number | null; request_text: string; is_anonymous?: boolean }) =>
-    request<{ id: number; message: string }>("/communications/prayer-requests", {
-      method: "POST",
-      body: JSON.stringify(data)
-    }),
-  updatePrayerStatus: (id: number, status: "open" | "answered" | "archived") =>
-    request<{ message: string }>(`/communications/prayer-requests/${id}/status`, {
-      method: "PATCH",
-      body: JSON.stringify({ status })
-    }),
 
   // Bible Study & Small Groups
   getGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
+    if (params?.category) q.set("category", params.category);
+    if (params?.meeting_day) q.set("meeting_day", params.meeting_day);
+    if (params?.search) q.set("search", params.search);
+    return request<BibleStudyGroup[]>(`/groups?${q.toString()}`);
+  },
+  getBibleStudyGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string }) => {
     const q = new URLSearchParams();
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.category) q.set("category", params.category);
@@ -264,9 +304,6 @@ export const api = {
   }),
   deleteStudyTopic: (id: number) => request<{ message: string }>(`/study-topics/${id}`, {
     method: "DELETE"
-  }),
-  toggleStudyTopicCompleted: (id: number) => request<{ message: string; status: string; completed_date?: string }>(`/study-topics/${id}/toggle-completed`, {
-    method: "POST"
   }),
 
   // Finance & Giving
@@ -333,12 +370,21 @@ export const api = {
     const q = ministry_id ? `?ministry_id=${ministry_id}` : "";
     return request<DutyTeam[]>(`/duty/teams${q}`);
   },
-  createDutyTeam: (data: { name: string; ministry_id?: number | null; leader_id?: number | null; leader_name?: string | null; color?: string; order_seq?: number; tasks_checklist?: string }) =>
+  createDutyTeam: (data: {
+    name: string;
+    ministry_id?: number | null;
+    leader_id?: number | null;
+    leader_name?: string | null;
+    color?: string;
+    order_seq?: number;
+    tasks_checklist?: string;
+    member_ids?: number[];
+  }) =>
     request<{ id: number; message: string }>("/duty/teams", {
       method: "POST",
       body: JSON.stringify(data)
     }),
-  updateDutyTeam: (id: number, data: Partial<DutyTeam>) =>
+  updateDutyTeam: (id: number, data: Partial<DutyTeam> & { member_ids?: number[] }) =>
     request<{ message: string }>(`/duty/teams/${id}`, {
       method: "PUT",
       body: JSON.stringify(data)
@@ -347,7 +393,7 @@ export const api = {
     request<{ message: string }>(`/duty/teams/${id}`, {
       method: "DELETE"
     }),
-  addDutyTeamMember: (teamId: number, data: { member_id: number; role?: string }) =>
+  addDutyTeamMember: (teamId: number, data: { member_id?: number; member_ids?: number[]; role?: string }) =>
     request<{ message: string }>(`/duty/teams/${teamId}/members`, {
       method: "POST",
       body: JSON.stringify(data)
@@ -373,7 +419,74 @@ export const api = {
       body: JSON.stringify(data)
     }),
 
-  // Dishwashing & Kitchen Fellowship Duty Roster
+  // Dishwashing & Kitchen Fellowship Duty Roster (Rotating Cycle)
+  getDishwashingTeams: (ministry_id?: number) => {
+    const q = ministry_id ? `?ministry_id=${ministry_id}` : "";
+    return request<DishwashingTeam[]>(`/dishwashing/teams${q}`);
+  },
+  createDishwashingTeam: (data: {
+    name: string;
+    cycle_mode?: "biblestudy_group" | "ministry" | "custom";
+    biblestudy_group_id?: number | null;
+    ministry_id?: number | null;
+    leader_id?: number | null;
+    leader_name?: string | null;
+    leader_contact?: string | null;
+    color?: string;
+    order_seq?: number;
+    tasks_checklist?: string;
+    volunteers_count?: number;
+    member_ids?: number[];
+  }) =>
+    request<{ id: number; message: string }>("/dishwashing/teams", {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+  updateDishwashingTeam: (id: number, data: Partial<DishwashingTeam> & { member_ids?: number[] }) =>
+    request<{ message: string }>(`/dishwashing/teams/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data)
+    }),
+  deleteDishwashingTeam: (id: number) =>
+    request<{ message: string }>(`/dishwashing/teams/${id}`, {
+      method: "DELETE"
+    }),
+  addDishwashingTeamMember: (teamId: number, data: { member_id: number; role?: string }) =>
+    request<{ message: string }>(`/dishwashing/teams/${teamId}/members`, {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+  batchAddDishwashingTeamMembers: (teamId: number, data: { member_ids: number[]; role?: string }) =>
+    request<{ message: string }>(`/dishwashing/teams/${teamId}/members/batch`, {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+  removeDishwashingTeamMember: (teamId: number, memberId: number) =>
+    request<{ message: string }>(`/dishwashing/teams/${teamId}/members/${memberId}`, {
+      method: "DELETE"
+    }),
+  getDishwashingSchedule: (params?: { count?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.count) q.set("count", String(params.count));
+    return request<SundayDutyScheduleResponse>(`/dishwashing/schedule?${q.toString()}`);
+  },
+  completeSundayDishwashingDuty: (data: { duty_date: string; team_id: number; notes?: string }) =>
+    request<{ message: string }>("/dishwashing/schedule/complete", {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+  swapSundayDishwashingDuty: (data: { date1: string; teamId1: number; date2: string; teamId2: number }) =>
+    request<{ message: string }>("/dishwashing/schedule/swap", {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+  overrideSundayDishwashingDuty: (data: { duty_date: string; team_id: number; notes?: string; status?: string }) =>
+    request<{ message: string }>("/dishwashing/schedule/override", {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+
+  // Legacy/Custom Dishwashing endpoints
   getDishwashingDuties: (params?: { status?: string; cycle_mode?: string }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
@@ -403,7 +516,45 @@ export const api = {
     request<{ message: string }>(`/dishwashing/${id}/swap`, {
       method: "POST",
       body: JSON.stringify({ target_duty_id })
-    })
+    }),
+
+  // Backup, Restore & Data Management
+  getBackupSummary: () => request<BackupSummaryResponse>("/backup/summary"),
+  getBackupYearDetails: (year: number) => request<BackupYearDetailsResponse>(`/backup/year-details/${year}`),
+  exportBackup: (year?: number | "all", password?: string) =>
+    request<BackupExportPayload>("/backup/export", {
+      method: "POST",
+      body: JSON.stringify({ year: year || "all", password: password || "" })
+    }),
+  previewBackup: (data: any) =>
+    request<BackupPreviewResponse>("/backup/preview", {
+      method: "POST",
+      body: JSON.stringify({ data })
+    }),
+  restoreBackup: (data: any, mode: "replace" | "merge" = "replace", password?: string) =>
+    request<{ success: boolean; message: string; restoredCounts: Record<string, number> }>("/backup/restore", {
+      method: "POST",
+      body: JSON.stringify({ data, mode, password: password || "" })
+    }),
+  deleteByYear: (year: number, confirmYear: number, password?: string) =>
+    request<{ success: boolean; message: string; deletedCounts: Record<string, number> }>("/backup/delete-by-year", {
+      method: "POST",
+      body: JSON.stringify({ year, confirmYear, password: password || "" })
+    }),
+
+  // Daily Bible Reading Plan
+  getBibleReadingProgress: () => request<BibleReadingProgressResponse>("/bible-reading/progress"),
+  toggleBibleReadingDay: (day_key: string, notes?: string) =>
+    request<BibleReadingToggleResponse>("/bible-reading/toggle", {
+      method: "POST",
+      body: JSON.stringify({ day_key, notes })
+    }),
+  markBatchBibleReadingDays: (day_keys: string[], completed: boolean = true) =>
+    request<{ success: boolean; count: number; completed: boolean }>("/bible-reading/mark-batch", {
+      method: "POST",
+      body: JSON.stringify({ day_keys, completed })
+    }),
+  getBibleReadingStats: () => request<BibleReadingStatsResponse>("/bible-reading/stats")
 };
 
 

@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { calculateAge } from "./ministries";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
@@ -61,10 +62,66 @@ function calculateBirthdayDetails(birthdateStr: string) {
   };
 }
 
-// Get list of members with search and filter
+// Get list of members with search, filter, and pagination
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { ministry_id, household_id, status, search } = req.query;
+    const { ministry_id, household_id, status, search, birthday_filter, page, limit } = req.query;
+
+    let whereClause = " WHERE 1=1";
+    const params: any[] = [];
+
+    if (ministry_id) {
+      params.push(ministry_id);
+      whereClause += ` AND m.ministry_id = $${params.length}`;
+    }
+
+    if (household_id) {
+      params.push(household_id);
+      whereClause += ` AND m.household_id = $${params.length}`;
+    }
+
+    if (status) {
+      params.push(status);
+      whereClause += ` AND m.status = $${params.length}`;
+    }
+
+    if (search && typeof search === "string" && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      const pIdx = params.length;
+      whereClause += ` AND (m.first_name ILIKE $${pIdx} OR m.last_name ILIKE $${pIdx} OR m.contact_email ILIKE $${pIdx} OR m.contact_phone ILIKE $${pIdx} OR m.address ILIKE $${pIdx} OR m.invited_by ILIKE $${pIdx})`;
+    }
+
+    if (birthday_filter && typeof birthday_filter === "string") {
+      if (birthday_filter === "today") {
+        whereClause += ` AND m.birthdate IS NOT NULL AND EXTRACT(MONTH FROM m.birthdate) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(DAY FROM m.birthdate) = EXTRACT(DAY FROM CURRENT_DATE)`;
+      } else if (birthday_filter === "this_month") {
+        whereClause += ` AND m.birthdate IS NOT NULL AND EXTRACT(MONTH FROM m.birthdate) = EXTRACT(MONTH FROM CURRENT_DATE)`;
+      } else if (birthday_filter.startsWith("month_")) {
+        const mNum = parseInt(birthday_filter.replace("month_", ""), 10);
+        if (!isNaN(mNum) && mNum >= 1 && mNum <= 12) {
+          params.push(mNum);
+          whereClause += ` AND m.birthdate IS NOT NULL AND EXTRACT(MONTH FROM m.birthdate) = $${params.length}`;
+        }
+      }
+    }
+
+    const isPaginated = page !== undefined || limit !== undefined;
+    let totalCount = 0;
+    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
+    const curLimit = Math.max(1, limit ? parseInt(String(limit), 10) : 30);
+
+    if (isPaginated) {
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM members m
+        LEFT JOIN ministries min ON m.ministry_id = min.id
+        LEFT JOIN households h ON m.household_id = h.id
+        LEFT JOIN users u ON m.user_id = u.id
+        ${whereClause}
+      `;
+      const countRes = await db.get<{ total: string | number }>(countQuery, params);
+      totalCount = parseInt(String(countRes?.total || 0), 10);
+    }
 
     let query = `
       SELECT m.*, 
@@ -75,34 +132,19 @@ router.get("/", async (req: Request, res: Response) => {
       LEFT JOIN ministries min ON m.ministry_id = min.id
       LEFT JOIN households h ON m.household_id = h.id
       LEFT JOIN users u ON m.user_id = u.id
-      WHERE 1=1
+      ${whereClause}
+      ORDER BY m.last_name ASC, m.first_name ASC
     `;
-    const params: any[] = [];
 
-    if (ministry_id) {
-      params.push(ministry_id);
-      query += ` AND m.ministry_id = $${params.length}`;
+    let members: any[] = [];
+    if (isPaginated) {
+      const offset = (curPage - 1) * curLimit;
+      const paginatedParams = [...params, curLimit, offset];
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      members = await db.all(query, paginatedParams);
+    } else {
+      members = await db.all(query, params);
     }
-
-    if (household_id) {
-      params.push(household_id);
-      query += ` AND m.household_id = $${params.length}`;
-    }
-
-    if (status) {
-      params.push(status);
-      query += ` AND m.status = $${params.length}`;
-    }
-
-    if (search && typeof search === "string") {
-      params.push(`%${search}%`);
-      const pIdx = params.length;
-      query += ` AND (m.first_name ILIKE $${pIdx} OR m.last_name ILIKE $${pIdx} OR m.contact_email ILIKE $${pIdx} OR m.contact_phone ILIKE $${pIdx})`;
-    }
-
-    query += " ORDER BY m.last_name ASC, m.first_name ASC";
-
-    const members = await db.all(query, params);
 
     // Attach calculated age, aging-out flag, and birthday calculation
     const enriched = members.map(m => {
@@ -127,7 +169,19 @@ router.get("/", async (req: Request, res: Response) => {
       };
     });
 
-    res.json(enriched);
+    if (isPaginated) {
+      res.json({
+        data: enriched,
+        pagination: {
+          total: totalCount,
+          page: curPage,
+          limit: curLimit,
+          totalPages: Math.ceil(totalCount / curLimit) || 1
+        }
+      });
+    } else {
+      res.json(enriched);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -317,6 +371,49 @@ router.get("/aging-out", async (req: Request, res: Response) => {
   }
 });
 
+// Auto-transition all aging out members to their respective age-bracket ministry
+router.post("/auto-transition", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+  try {
+    const members = await db.all(`
+      SELECT m.id, m.first_name, m.last_name, m.birthdate, m.ministry_id, min.name as current_min_name, min.max_age
+      FROM members m
+      JOIN ministries min ON m.ministry_id = min.id
+      WHERE m.status = 'active' AND min.max_age IS NOT NULL
+    `);
+
+    const ministries = await db.all("SELECT * FROM ministries ORDER BY min_age ASC");
+    let transitionedCount = 0;
+
+    for (const m of members) {
+      const birthdateStr = m.birthdate ? (typeof m.birthdate === "string" ? m.birthdate : new Date(m.birthdate).toISOString().split("T")[0]) : "";
+      const age = calculateAge(birthdateStr);
+
+      if (age > m.max_age) {
+        const nextMinistry = ministries.find(nextMin => {
+          const min = nextMin.min_age ?? 0;
+          const max = nextMin.max_age ?? 999;
+          return age >= min && age <= max && nextMin.id !== m.ministry_id;
+        });
+
+        if (nextMinistry) {
+          await db.run("UPDATE members SET ministry_id = $1 WHERE id = $2", [nextMinistry.id, m.id]);
+          transitionedCount++;
+        }
+      }
+    }
+
+    if (transitionedCount > 0) {
+      await logAuditAction(req.user?.id || null, "UPDATE", "members", 0, `Auto-transitioned ${transitionedCount} aging-out members to their matching age ministries`);
+      emitRealtimeEvent("members:changed", { action: "auto_transition", count: transitionedCount });
+      emitRealtimeEvent("reports:changed");
+    }
+
+    res.json({ count: transitionedCount, message: `Successfully transitioned ${transitionedCount} member(s) to their new ministries` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get specific member
 router.get("/:id", async (req: Request, res: Response) => {
   try {
@@ -472,6 +569,8 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user?.id || null, "CREATE", "members", newId, `Created member ${first_name} ${last_name}`);
 
+    emitRealtimeEvent("members:changed", { action: "create", id: newId });
+
     res.status(201).json({ id: newId, message: "Member created successfully", ministry_id: targetMinistryId });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -565,6 +664,9 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
     ]);
 
     await logAuditAction(req.user?.id || null, "UPDATE", "members", Number(id), `Updated member #${id}`);
+
+    emitRealtimeEvent("members:changed", { action: "update", id: Number(id) });
+
     res.json({ message: "Member updated successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -577,6 +679,9 @@ router.delete("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthReq
     const id = req.params.id;
     await db.run("DELETE FROM members WHERE id = $1", [id]);
     await logAuditAction(req.user?.id || null, "DELETE", "members", Number(id), `Deleted member #${id}`);
+
+    emitRealtimeEvent("members:changed", { action: "delete", id: Number(id) });
+
     res.json({ message: "Member deleted successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

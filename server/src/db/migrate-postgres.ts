@@ -5,7 +5,7 @@ import { getMigrationFilePath } from "./schema";
 
 dotenv.config();
 
-const connectionString = process.env.DATABASE_URL || "postgres://postgres:postgrespassword@localhost:5432/chms_db";
+const connectionString = process.env.DATABASE_URL || "postgres://postgres:admin123@localhost:5432/chms_db";
 
 export async function runPostgresMigrations() {
   console.log(`🔌 Connecting to PostgreSQL at: ${connectionString.replace(/:[^:@]+@/, ":****@")}`);

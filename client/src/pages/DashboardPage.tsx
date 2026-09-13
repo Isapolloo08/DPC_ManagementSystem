@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { ChurchLogo } from "../components/common/ChurchLogo";
 import { api } from "../api";
 import { DashboardMetrics, Ministry, Announcement, EventItem, Member, BirthdayCelebrant, BirthdaySummary, BibleStudyGroup, SaturdayDutyScheduleResponse, DishwashingResponse } from "../types";
+import { useSocketEvent } from "../socket";
+import { DashboardSkeleton } from "../components/common/SkeletonLoader";
 import {
   Users, UserCheck, Heart, MessageSquare, Calendar,
   AlertTriangle, ArrowRight, Sparkles, PlusCircle, CheckCircle2, Clock,
@@ -10,6 +13,7 @@ import {
   Utensils
 } from "lucide-react";
 import { NavTab } from "../components/layout/Sidebar";
+import { TodayBibleReadingWidget } from "../components/common/TodayBibleReadingWidget";
 
 interface DashboardPageProps {
   onNavigate: (tab: NavTab) => void;
@@ -45,6 +49,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   useEffect(() => {
     loadDashboard();
   }, [selectedMinistryId, coordinatorMinistryId]);
+
+  // Real-time synchronization
+  useSocketEvent("attendance:changed", () => loadDashboard());
+  useSocketEvent("members:changed", () => loadDashboard());
+  useSocketEvent("ministries:changed", () => loadDashboard());
+  useSocketEvent("events:changed", () => loadDashboard());
+  useSocketEvent("finance:changed", () => loadDashboard());
+  useSocketEvent("dishwashing:changed", () => loadDashboard());
+  useSocketEvent("duty:changed", () => loadDashboard());
+  useSocketEvent("groups:changed", () => loadDashboard());
+  useSocketEvent("communications:changed", () => loadDashboard());
 
   const loadDashboard = async () => {
     try {
@@ -127,6 +142,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const thisSundayDishwashing = dishwashingData?.thisSunday || dishwashingData?.duties?.[0] || null;
   const nextSundayDishwashing = dishwashingData?.nextSunday || (dishwashingData?.duties && dishwashingData.duties.length > 1 ? dishwashingData.duties[1] : null);
 
+  if (loading && !metrics) {
+    return <DashboardSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
@@ -185,6 +204,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      {/* Daily Bible Reading Today's Assignment Widget */}
+      <TodayBibleReadingWidget onNavigateToPlan={() => onNavigate("biblereading")} />
 
       {/* Aging Out / Ministry Transition Urgent Alert Banner */}
       {agingOutMembers.length > 0 && (
@@ -263,11 +285,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             tab: "biblestudy" as NavTab
           },
           {
-            title: "Open Prayers",
-            value: metrics?.metrics.open_prayer_requests ?? "...",
-            subtitle: "Active prayer requests",
-            icon: <MessageSquare className="w-4 h-4 text-rose-600" />,
-            bgColor: "bg-rose-50 text-rose-700 border-rose-200/60",
+            title: "Announcements",
+            value: metrics?.metrics.active_announcements ?? "...",
+            subtitle: "Church-wide bulletins",
+            icon: <MessageSquare className="w-4 h-4 text-emerald-600" />,
+            bgColor: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
             tab: "communications" as NavTab
           },
           {
@@ -512,10 +534,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                       <span>LifeGroup Discipleship & Biblical Stewardship</span>
                     </span>
                     <button
-                      onClick={() => onNavigate("curriculum")}
+                      onClick={() => onNavigate("leaderportal")}
                       className="text-amber-300 hover:text-amber-200 font-black text-xs flex items-center gap-1 cursor-pointer"
                     >
-                      <span>Study Topics</span> <ArrowRight className="w-3 h-3" />
+                      <span>Bible Study Group</span> <ArrowRight className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
@@ -539,11 +561,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                     </button>
 
                     <button
-                      onClick={() => onNavigate("curriculum")}
+                      onClick={() => onNavigate("leaderportal")}
                       className="p-2.5 rounded-xl bg-white hover:bg-indigo-50 border border-indigo-100 hover:border-indigo-300 text-charcoal hover:text-indigo-950 transition-all text-xs font-bold text-left flex items-center gap-2 cursor-pointer shadow-2xs"
                     >
                       <BookOpen className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span className="truncate">Curriculum</span>
+                      <span className="truncate">My Group</span>
                     </button>
 
                     <button
@@ -1016,10 +1038,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       </div>
 
       {/* Birthday Greeting Modal */}
-      {greetingMember && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+      {greetingMember && createPortal(
+        <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="p-2 rounded-xl bg-amber-100 text-amber-700">
                   <Cake className="w-5 h-5" />
@@ -1125,7 +1147,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,8 +1,16 @@
 import { Router, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
+
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 /**
  * Helper to calculate upcoming Saturdays
@@ -15,14 +23,11 @@ function getUpcomingSaturdays(count = 12): string[] {
   const currentDay = now.getDay();
   const daysUntilSaturday = (6 - currentDay + 7) % 7;
   
-  const nextSaturday = new Date(now);
-  nextSaturday.setDate(now.getDate() + daysUntilSaturday);
-  nextSaturday.setHours(0, 0, 0, 0);
+  const nextSaturday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilSaturday, 12, 0, 0);
 
   for (let i = 0; i < count; i++) {
-    const sat = new Date(nextSaturday);
-    sat.setDate(nextSaturday.getDate() + i * 7);
-    saturdays.push(sat.toISOString().split("T")[0]);
+    const sat = new Date(nextSaturday.getFullYear(), nextSaturday.getMonth(), nextSaturday.getDate() + i * 7, 12, 0, 0);
+    saturdays.push(formatLocalDate(sat));
   }
   return saturdays;
 }
@@ -78,7 +83,7 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
 // 2. Create Duty Team (e.g. Team 1, Team 2, Team 3)
 router.post("/teams", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
-    const { name, ministry_id, leader_id, leader_name, color, order_seq, tasks_checklist } = req.body;
+    const { name, ministry_id, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: "Team name is required" });
@@ -123,6 +128,18 @@ router.post("/teams", authMiddleware, requireRoles("Admin", "Coordinator"), asyn
       );
     }
 
+    // If batch members were provided, insert all of them
+    if (newTeamId && Array.isArray(member_ids) && member_ids.length > 0) {
+      for (const mId of member_ids) {
+        if (Number(mId) === Number(leader_id)) continue; // Leader already inserted
+        await db.run(
+          "INSERT INTO duty_team_members (team_id, member_id, role) VALUES ($1, $2, 'Member') ON CONFLICT (team_id, member_id) DO NOTHING",
+          [newTeamId, mId]
+        );
+      }
+    }
+
+    emitRealtimeEvent("duty:changed", { action: "create_team", id: newTeamId });
     res.status(201).json({ id: newTeamId, message: `Created ${name} successfully` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -133,7 +150,7 @@ router.post("/teams", authMiddleware, requireRoles("Admin", "Coordinator"), asyn
 router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
-    const { name, leader_id, leader_name, color, order_seq, tasks_checklist } = req.body;
+    const { name, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
 
     let resolvedLeaderName = leader_name;
     if (leader_id) {
@@ -160,6 +177,16 @@ router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator"), a
       );
     }
 
+    if (Array.isArray(member_ids) && member_ids.length > 0) {
+      for (const mId of member_ids) {
+        await db.run(
+          "INSERT INTO duty_team_members (team_id, member_id, role) VALUES ($1, $2, 'Member') ON CONFLICT (team_id, member_id) DO NOTHING",
+          [id, mId]
+        );
+      }
+    }
+
+    emitRealtimeEvent("duty:changed", { action: "update_team", id: Number(id) });
     res.json({ message: "Team updated successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -171,29 +198,40 @@ router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator")
   try {
     const id = req.params.id;
     await db.run("DELETE FROM duty_teams WHERE id = $1", [id]);
+    emitRealtimeEvent("duty:changed", { action: "delete_team", id: Number(id) });
     res.json({ message: "Team deleted successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 5. Add Member to Duty Team
+// 5. Add Member(s) to Duty Team (Supports Single or Batch)
 router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const teamId = req.params.id;
-    const { member_id, role = "Member" } = req.body;
+    const { member_id, member_ids, role = "Member" } = req.body;
 
-    if (!member_id) {
-      return res.status(400).json({ error: "Member is required" });
+    const idsToInsert: number[] = [];
+    if (Array.isArray(member_ids) && member_ids.length > 0) {
+      idsToInsert.push(...member_ids.map(Number));
+    } else if (member_id) {
+      idsToInsert.push(Number(member_id));
     }
 
-    await db.run(`
-      INSERT INTO duty_team_members (team_id, member_id, role)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (team_id, member_id) DO UPDATE SET role = EXCLUDED.role
-    `, [teamId, member_id, role]);
+    if (idsToInsert.length === 0) {
+      return res.status(400).json({ error: "At least one member is required" });
+    }
 
-    res.status(201).json({ message: "Member added to team" });
+    for (const mId of idsToInsert) {
+      await db.run(`
+        INSERT INTO duty_team_members (team_id, member_id, role)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (team_id, member_id) DO UPDATE SET role = EXCLUDED.role
+      `, [teamId, mId, role]);
+    }
+
+    emitRealtimeEvent("duty:changed", { action: "add_members", team_id: Number(teamId), count: idsToInsert.length });
+    res.status(201).json({ message: `${idsToInsert.length} member(s) added to team` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -204,6 +242,7 @@ router.delete("/teams/:id/members/:memberId", authMiddleware, requireRoles("Admi
   try {
     const { id, memberId } = req.params;
     await db.run("DELETE FROM duty_team_members WHERE team_id = $1 AND member_id = $2", [id, memberId]);
+    emitRealtimeEvent("duty:changed", { action: "remove_member", team_id: Number(id), member_id: Number(memberId) });
     res.json({ message: "Member removed from team" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -239,6 +278,7 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
 
     const upcomingSaturdays = getUpcomingSaturdays(numSaturdays);
     const todayStr = new Date().toISOString().split("T")[0];
+    const anchorSat = new Date(2026, 0, 3, 0, 0, 0, 0).getTime();
 
     // Fetch any saved overrides/completions from duty_schedules
     const savedSchedules = await db.all(`
@@ -250,7 +290,8 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
 
     const scheduleList = upcomingSaturdays.map((satDate, idx) => {
       const isThisSaturday = idx === 0;
-      const dObj = new Date(satDate);
+      const isNextSaturday = idx === 1;
+      const dObj = new Date(satDate + "T00:00:00");
       const formattedDate = dObj.toLocaleDateString("en-US", {
         weekday: "short",
         month: "short",
@@ -258,11 +299,14 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
         year: "numeric"
       });
 
+      const satTime = dObj.getTime();
+      const diffWeeks = Math.floor(Math.round((satTime - anchorSat) / 86400000) / 7);
+
       // Check for saved record
       const saved = savedSchedules.find(s => s.duty_date === satDate || s.duty_date?.toString().startsWith(satDate));
 
       let assignedTeam = null;
-      if (saved) {
+      if (saved && saved.team_id) {
         assignedTeam = teamsWithMembers.find(t => t.id === saved.team_id) || {
           id: saved.team_id,
           name: saved.team_name,
@@ -272,8 +316,8 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
           members: []
         };
       } else if (teamsWithMembers.length > 0) {
-        // Automatically cycle every Saturday
-        const cycleIndex = idx % teamsWithMembers.length;
+        // Automatically cycle every Saturday across all registered teams
+        const cycleIndex = ((diffWeeks % teamsWithMembers.length) + teamsWithMembers.length) % teamsWithMembers.length;
         assignedTeam = teamsWithMembers[cycleIndex];
       }
 
@@ -282,6 +326,7 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
         date_formatted: formattedDate,
         week_number: idx + 1,
         is_this_saturday: isThisSaturday,
+        is_next_saturday: isNextSaturday,
         is_past: satDate < todayStr,
         status: saved?.status || (isThisSaturday ? "on_duty" : "scheduled"),
         completed_at: saved?.completed_at || null,
@@ -318,6 +363,7 @@ router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Coordin
           completed_at = CURRENT_TIMESTAMP
     `, [duty_date, team_id, ministry_id || null, notes || "Saturday cleaning & duties completed"]);
 
+    emitRealtimeEvent("duty:changed", { action: "complete_duty", duty_date, team_id });
     res.json({ message: "Saturday duty marked as completed" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -347,6 +393,7 @@ router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Coordinator
       ON CONFLICT (duty_date, team_id) DO UPDATE SET team_id = $2, status = 'swapped'
     `, [date2, teamId1, ministry_id || null]);
 
+    emitRealtimeEvent("duty:changed", { action: "swap_duty", date1, teamId1, date2, teamId2 });
     res.json({ message: "Saturday duty teams swapped successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -21,7 +21,7 @@ router.get("/roles", async (req: Request, res: Response) => {
       "Coordinator": "Ministry department leader: manages age-bracket ministries, events, volunteer assignments, and discipleship curriculum.",
       "Leader": "Small group / Ministry leader: leads Bible study groups, records discipleship progress, and facilitates group fellowship.",
       "Volunteer": "Ministry helper: facilitates Sunday check-ins, attendance tracking, and event logistics.",
-      "Member": "Regular church attendee / covenant member: views community announcements, submits prayer requests, registers for events, and joins Bible studies."
+      "Member": "Regular church attendee / covenant member: views community announcements, registers for events, and joins Bible studies."
     };
 
     const formatted = roles.map(r => ({

@@ -1,0 +1,5 @@
+{
+  "name": "plantuml",
+  "description": "PlantUML MCP Server for generating ERD, flowcharts, sequence diagrams, and architecture models",
+  "version": "1.0.0"
+}

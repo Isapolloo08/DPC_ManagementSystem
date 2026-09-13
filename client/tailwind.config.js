@@ -72,6 +72,7 @@ export default {
       },
       fontFamily: {
         sans: ["Outfit", "Inter", "system-ui", "-apple-system", "sans-serif"],
+        display: ["'Bebas Neue'", "Outfit", "sans-serif"],
         serif: ["Playfair Display", "Georgia", "serif"],
       }
     },

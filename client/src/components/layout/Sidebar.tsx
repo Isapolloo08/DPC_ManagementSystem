@@ -1,14 +1,15 @@
 import React, { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { ChurchLogo } from "../common/ChurchLogo";
-import { 
-  LayoutDashboard, Users, UserCheck, Calendar, MessageSquare, 
+import {
+  LayoutDashboard, Users, UserCheck, Calendar, MessageSquare,
   Heart, BarChart3, ShieldAlert, Sparkles, BookOpen, BookMarked, LogOut, Sliders, UserCog, CalendarCheck,
   X, ChevronLeft, ChevronRight, Utensils
 } from "lucide-react";
 
-export type NavTab = 
+export type NavTab =
   | "dashboard"
+  | "biblereading"
   | "leaderportal"
   | "leader-dashboard"
   | "leader-members"
@@ -24,16 +25,18 @@ export type NavTab =
   | "reports"
   | "users"
   | "audit"
-  | "settings";
+  | "settings"
+  | "profile";
 
 interface SidebarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   isOpen?: boolean;
   onClose?: () => void;
+  onOpenProfile?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpen = false, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpen = false, onClose, onOpenProfile }) => {
   const { user, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -42,22 +45,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
 
   // Dedicated navigation for Small Group / Discipleship Leaders (Leader Folder Only)
   const leaderNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: "leader-dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Leader" },
-    { id: "leader-members", label: "Members (Disciples)", icon: <Users className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Roster" },
-    { id: "leader-biblestudy", label: "Bible Study Groups", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Groups" },
+    { id: "leader-dashboard", label: "My Group", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Member" },
+    { id: "leader-members", label: "Lead Group", icon: <Users className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Leader" },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-500" />, badge: "1-Yr" },
   ];
 
   // Standard full church management navigation for Admin, Coordinator, Volunteer, Member
   const defaultNavItems: { id: NavTab; label: string; icon: React.ReactNode; roles?: string[]; badge?: string }[] = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
     { id: "attendance", label: "Sunday Attendance", icon: <UserCheck className="w-4 h-4 shrink-0" />, badge: "Live" },
     { id: "members", label: "Members & Families", icon: <Users className="w-4 h-4 shrink-0" /> },
-    { id: "biblestudy", label: "Bible Study Groups", icon: <BookOpen className="w-4 h-4 shrink-0" />, badge: "Groups" },
-    { id: "curriculum", label: "Topics & Books of Study", icon: <BookMarked className="w-4 h-4 shrink-0" />, badge: "Books" },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />, badge: "My Group" },
     { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "Duty" },
     { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-amber-500" />, roles: ["Admin"], badge: "Cycle" },
     { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
-    { id: "communications", label: "Announcements & Prayer", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
+    { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "reports", label: "Analytics & Trends", icon: <BarChart3 className="w-4 h-4 shrink-0" /> },
     { id: "users", label: "User Management", icon: <UserCog className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "Admin" },
     { id: "settings", label: "Settings & Lookups", icon: <Sliders className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "CRUD" },
@@ -73,32 +76,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
     }
   };
 
-  const ministryList = (isCoordinator && user?.ministries && user.ministries.length > 0 
+  const ministryList = (isCoordinator && user?.ministries && user.ministries.length > 0
     ? [
-        { name: "Kinder", age: "3-5 yrs", color: "bg-[#E07A5F]" },
-        { name: "Elementary", age: "6-12 yrs", color: "bg-[#D9A441]" },
-        { name: "Highschool", age: "13-16 yrs", color: "bg-[#B85C56]" },
-        { name: "Youth", age: "17-21 yrs", color: "bg-[#6E8B74]" },
-        { name: "Young Adult", age: "22-35 yrs", color: "bg-[#2C3968]" },
-        { name: "Junior Adult", age: "36-55 yrs", color: "bg-[#4A5568]" },
-        { name: "Old Adult", age: "56+ yrs", color: "bg-[#8D5B4C]" },
-      ].filter(m => user.ministries.some(um => um.name.toLowerCase().includes(m.name.toLowerCase())))
+      { name: "Kinder", age: "3-5 yrs", color: "bg-[#E07A5F]" },
+      { name: "Elementary", age: "6-12 yrs", color: "bg-[#D9A441]" },
+      { name: "Highschool", age: "13-16 yrs", color: "bg-[#B85C56]" },
+      { name: "Youth", age: "17-21 yrs", color: "bg-[#6E8B74]" },
+      { name: "Young Adult", age: "22-35 yrs", color: "bg-[#2C3968]" },
+      { name: "Junior Adult", age: "36-55 yrs", color: "bg-[#4A5568]" },
+      { name: "Old Adult", age: "56+ yrs", color: "bg-[#8D5B4C]" },
+    ].filter(m => user.ministries.some(um => um.name.toLowerCase().includes(m.name.toLowerCase())))
     : [
-        { name: "Kinder", age: "3-5 yrs", color: "bg-[#E07A5F]" },
-        { name: "Elementary", age: "6-12 yrs", color: "bg-[#D9A441]" },
-        { name: "Highschool", age: "13-16 yrs", color: "bg-[#B85C56]" },
-        { name: "Youth", age: "17-21 yrs", color: "bg-[#6E8B74]" },
-        { name: "Young Adult", age: "22-35 yrs", color: "bg-[#2C3968]" },
-        { name: "Junior Adult", age: "36-55 yrs", color: "bg-[#4A5568]" },
-        { name: "Old Adult", age: "56+ yrs", color: "bg-[#8D5B4C]" },
-      ]
+      { name: "Kinder", age: "3-5 yrs", color: "bg-[#E07A5F]" },
+      { name: "Elementary", age: "6-12 yrs", color: "bg-[#D9A441]" },
+      { name: "Highschool", age: "13-16 yrs", color: "bg-[#B85C56]" },
+      { name: "Youth", age: "17-21 yrs", color: "bg-[#6E8B74]" },
+      { name: "Young Adult", age: "22-35 yrs", color: "bg-[#2C3968]" },
+      { name: "Junior Adult", age: "36-55 yrs", color: "bg-[#4A5568]" },
+      { name: "Old Adult", age: "56+ yrs", color: "bg-[#8D5B4C]" },
+    ]
   );
 
   return (
     <>
       {/* Mobile Drawer Backdrop Overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden transition-opacity"
           onClick={onClose}
           aria-hidden="true"
@@ -127,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
               >
                 {/* Professional Church Logo */}
                 <ChurchLogo className="w-6 h-6 text-indigo-950 transition-all duration-200 group-hover:opacity-0 group-hover:scale-75" />
-                
+
                 {/* Hover State: Arrow Icon smoothly appearing */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-amber-400 rounded-xl">
                   <ChevronRight className="w-6 h-6 text-indigo-950 stroke-[3]" />
@@ -195,11 +198,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
                   key={item.id}
                   onClick={() => handleTabClick(item.id)}
                   title={item.label}
-                  className={`w-full flex items-center ${isCollapsed ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2"} rounded-xl text-xs transition-all cursor-pointer ${
-                    isActive
+                  className={`w-full flex items-center ${isCollapsed ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2"} rounded-xl text-xs transition-all cursor-pointer ${isActive
                       ? "bg-indigo text-white shadow-sm font-bold"
                       : "text-charcoal/80 hover:bg-indigo-50/70 hover:text-indigo font-medium"
-                  }`}
+                    }`}
                 >
                   <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-2.5 min-w-0 pr-1"}`}>
                     <span className={isActive ? "text-amber-400" : "text-indigo/70"}>
@@ -208,11 +210,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
                     {!isCollapsed && <span className="truncate">{item.label}</span>}
                   </div>
                   {!isCollapsed && item.badge && (
-                    <span className={`text-[9px] uppercase font-black px-1.5 py-0.5 rounded shrink-0 ${
-                      isActive 
-                        ? "bg-amber text-charcoal" 
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${isActive
+                        ? "bg-amber text-charcoal font-black"
                         : "bg-indigo-50 text-indigo border border-indigo-100/80"
-                    }`}>
+                      }`}>
                       {item.badge}
                     </span>
                   )}
@@ -236,15 +237,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
             <div className="pt-4 border-t border-indigo-50">
               <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-charcoal/50 mb-2.5 flex items-center gap-1">
                 <BookOpen className="w-3 h-3 text-indigo" />
-                {isCoordinator && user?.ministries && user.ministries.length > 0 
-                  ? "Designated Ministry" 
+                {isCoordinator && user?.ministries && user.ministries.length > 0
+                  ? "Designated Ministry"
                   : "7 Active Ministries"}
               </p>
               <div className="space-y-1.5 px-3">
                 {ministryList.map((m) => (
-                  <div key={m.name} className={`flex items-center justify-between text-xs py-1 px-2 rounded-lg ${
-                    isCoordinator ? "bg-indigo-50/70 border border-indigo-100 font-bold" : "py-0.5"
-                  }`}>
+                  <div key={m.name} className={`flex items-center justify-between text-xs py-1 px-2 rounded-lg ${isCoordinator ? "bg-indigo-50/70 border border-indigo-100 font-bold" : "py-0.5"
+                    }`}>
                     <div className="flex items-center gap-2">
                       <span className={`w-2.5 h-2.5 rounded-full ${m.color}`}></span>
                       <span className="text-charcoal font-bold">{m.name} Ministry</span>
@@ -259,8 +259,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
           )}
         </div>
 
-        {/* STICKY BOTTOM FOOTER: Logout Action & Info Card */}
+        {/* STICKY BOTTOM FOOTER: Profile, Logout Action & Info Card */}
         <div className="p-3.5 pt-2 border-t border-indigo-100/80 bg-white shrink-0 space-y-2 z-10">
+          <button
+            onClick={() => handleTabClick("profile")}
+            title="My Profile & Account Settings"
+            className={`w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all shadow-2xs active:scale-98 cursor-pointer ${currentTab === "profile"
+                ? "bg-indigo text-white border-indigo shadow-md font-black"
+                : "border-indigo-100 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950"
+              }`}
+          >
+            <UserCog className={`w-4 h-4 shrink-0 ${currentTab === "profile" ? "text-amber-400" : "text-indigo-700"}`} />
+            {!isCollapsed && <span>My Profile & Settings</span>}
+          </button>
+
           <button
             onClick={logout}
             title="Sign Out of Account"

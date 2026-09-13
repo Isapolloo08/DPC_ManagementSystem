@@ -2,11 +2,155 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==================================================== */
+/* LOCAL CUSTOM TYPOGRAPHY (Barlow, Barlow Condensed, Bebas Neue) */
+/* ==================================================== */
+
+/* Barlow (Regular & Weights) */
+@font-face {
+  font-family: 'Barlow';
+  src: url('./assets/Barlow/Barlow-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  src: url('./assets/Barlow/Barlow-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  src: url('./assets/Barlow/Barlow-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  src: url('./assets/Barlow/Barlow-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  src: url('./assets/Barlow/Barlow-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  src: url('./assets/Barlow/Barlow-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow';
+  src: url('./assets/Barlow/Barlow-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Barlow Condensed */
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./assets/Barlow_Condensed/BarlowCondensed-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./assets/Barlow_Condensed/BarlowCondensed-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./assets/Barlow_Condensed/BarlowCondensed-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./assets/Barlow_Condensed/BarlowCondensed-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./assets/Barlow_Condensed/BarlowCondensed-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./assets/Barlow_Condensed/BarlowCondensed-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./assets/Barlow_Condensed/BarlowCondensed-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Bebas Neue */
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url('./assets/Bebas_Neue/BebasNeue-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
+  html {
+    font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
-    @apply bg-ivory-light text-charcoal font-sans;
+    font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+    @apply bg-ivory-light text-charcoal;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  input, select, textarea, button {
+    font-family: inherit;
   }
 }
+
 
 /* ==================================================== */
 /* GLOBAL INVISIBLE SCROLLBARS (SYSTEM-WIDE & ALL PAGES) */
@@ -133,4 +277,40 @@ body {
 .anim-delay-400 { animation-delay: 400ms; }
 .anim-delay-500 { animation-delay: 500ms; }
 .anim-delay-600 { animation-delay: 600ms; }
+
+/* ==================================================== */
+/* SKELETON SHIMMER ANIMATION & PLACEHOLDERS           */
+/* ==================================================== */
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-box {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #EDF2F7 0%, #E2E8F0 50%, #EDF2F7 100%);
+  background-size: 200% 100%;
+}
+
+.skeleton-box::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.6) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: skeleton-shimmer 1.4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  content: '';
+}
 

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
@@ -87,7 +88,8 @@ router.get("/", async (req: Request, res: Response) => {
 
     res.json(summary);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error("GET /api/ministries error:", err);
+    res.status(500).json({ error: err?.message || String(err) });
   }
 });
 
@@ -148,6 +150,7 @@ router.post("/", authMiddleware, requireRoles("Admin"), async (req: AuthRequest,
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user?.id || null, "CREATE", "ministries", newId, `Created ministry ${name.trim()}`);
+    emitRealtimeEvent("ministries:changed", { action: "create", id: newId });
     res.status(201).json({ id: newId, message: "Ministry created successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -168,24 +171,36 @@ router.put("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthReques
       if (duplicate) return res.status(400).json({ error: "Another ministry already has this name" });
     }
 
+    const hasMinAge = "min_age" in req.body;
+    const hasMaxAge = "max_age" in req.body;
+    const minAgeVal = hasMinAge ? (min_age !== null && min_age !== "" && min_age !== undefined ? Number(min_age) : null) : current.min_age;
+    const maxAgeVal = hasMaxAge ? (max_age !== null && max_age !== "" && max_age !== undefined ? Number(max_age) : null) : current.max_age;
+
     await db.run(`
       UPDATE ministries
       SET name = COALESCE($1, name),
-          min_age = COALESCE($2, min_age),
-          max_age = COALESCE($3, max_age),
+          min_age = $2,
+          max_age = $3,
           description = COALESCE($4, description),
           color = COALESCE($5, color)
       WHERE id = $6
     `, [
       name !== undefined ? name.trim() : null,
-      min_age !== undefined && min_age !== "" ? Number(min_age) : null,
-      max_age !== undefined && max_age !== "" ? Number(max_age) : null,
+      minAgeVal,
+      maxAgeVal,
       description !== undefined ? description : null,
       color !== undefined ? color : null,
       id
     ]);
 
-    await logAuditAction(req.user?.id || null, "UPDATE", "ministries", Number(id), `Updated ministry ${name || current.name}`);
+    await logAuditAction(req.user?.id || null, "UPDATE", "ministries", Number(id), `Updated ministry ${name || current.name} age range (${minAgeVal ?? 'all'}-${maxAgeVal ?? 'all'})`);
+    
+    // Emit real-time events so all pages recalculate members aging-out, ministry metrics, and reports
+    emitRealtimeEvent("ministries:changed", { action: "update", id: Number(id) });
+    emitRealtimeEvent("members:changed", { action: "ministry_age_update", ministry_id: Number(id) });
+    emitRealtimeEvent("reports:changed");
+    emitRealtimeEvent("settings:changed");
+
     res.json({ message: "Ministry updated successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -204,6 +219,7 @@ router.delete("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthReq
     await db.run("DELETE FROM ministries WHERE id = $1", [id]);
 
     await logAuditAction(req.user?.id || null, "DELETE", "ministries", Number(id), `Deleted ministry ${current.name}`);
+    emitRealtimeEvent("ministries:changed", { action: "delete", id: Number(id) });
     res.json({ message: `Ministry '${current.name}' deleted successfully` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

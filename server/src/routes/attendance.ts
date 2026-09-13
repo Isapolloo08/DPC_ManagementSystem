@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
@@ -64,7 +65,18 @@ router.get("/roster", async (req: Request, res: Response) => {
              m.household_id, h.name as household_name, h.primary_contact_phone as parent_phone,
              a.id as attendance_id, a.checked_in_at, a.checked_out_at, a.security_code,
              a.notes as attendance_notes, u.name as checked_in_by_name,
-             CASE WHEN a.id IS NOT NULL THEN 1 ELSE 0 END as is_present
+             CASE 
+               WHEN a.id IS NOT NULL AND (a.notes ILIKE '%[ABSENT]%' OR a.notes ILIKE '%[EXCUSED]%') THEN 0
+               WHEN a.id IS NOT NULL THEN 1 
+               ELSE 0 
+             END as is_present,
+             CASE
+               WHEN a.notes ILIKE '%[ABSENT]%' THEN 'absent'
+               WHEN a.notes ILIKE '%[EXCUSED]%' THEN 'excused'
+               WHEN a.checked_out_at IS NOT NULL THEN 'checked_out'
+               WHEN a.id IS NOT NULL THEN 'present'
+               ELSE 'unmarked'
+             END as attendance_status
       FROM members m
       LEFT JOIN ministries min ON m.ministry_id = min.id
       LEFT JOIN households h ON m.household_id = h.id
@@ -103,10 +115,10 @@ router.get("/roster", async (req: Request, res: Response) => {
   }
 });
 
-// Check-in member (Kiosk / Volunteer / Coordinator / Sunday Usher)
+// Check-in member / Mark attendance (Present, Absent, Excused)
 router.post("/check-in", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
-    const { member_id, ministry_id, event_id, notes, service_name } = req.body;
+    const { member_id, ministry_id, event_id, notes, service_name, status = "present", reason, target_date } = req.body;
 
     if (!member_id) {
       return res.status(400).json({ error: "member_id is required" });
@@ -123,32 +135,69 @@ router.post("/check-in", authMiddleware, requireRoles("Admin", "Coordinator", "V
       return res.status(404).json({ error: "Ministry not found" });
     }
 
-    // Check if member already has an open check-in today
+    const dateClause = target_date ? "DATE(checked_in_at) = $2" : "DATE(checked_in_at) = CURRENT_DATE";
+    const dateParams = target_date ? [member_id, target_date] : [member_id];
+
+    // Check if member already has an attendance record for this date
     const existing = await db.get(`
       SELECT * FROM attendance
-      WHERE member_id = $1 AND DATE(checked_in_at) = CURRENT_DATE AND checked_out_at IS NULL
-    `, [member_id]);
+      WHERE member_id = $1 AND ${dateClause}
+    `, dateParams);
+
+    let securityCode: string | null = null;
+    let combinedNotes = "";
+
+    if (status === "absent") {
+      combinedNotes = `[ABSENT] ${reason || notes || "Absent from Sunday Service"}`;
+    } else if (status === "excused") {
+      combinedNotes = `[EXCUSED] ${reason || notes || "Excused Absence"}`;
+    } else {
+      // Present - Generate security tag for Kinder and Elementary minors
+      if (ministry.name === "Kinder" || ministry.name === "Elementary" || (ministry.max_age && ministry.max_age <= 12)) {
+        securityCode = generateSecurityCode(ministry.name);
+      }
+      combinedNotes = [service_name || "Sunday Divine Worship", notes].filter(Boolean).join(" • ");
+    }
 
     if (existing) {
+      // Update existing record with new status
+      await db.run(`
+        UPDATE attendance
+        SET ministry_id = $1,
+            security_code = $2,
+            notes = $3,
+            checked_out_at = NULL,
+            checked_in_by = $4
+        WHERE id = $5
+      `, [
+        assignedMinistryId,
+        securityCode,
+        combinedNotes || null,
+        req.user?.id || null,
+        existing.id
+      ]);
+
+      await logAuditAction(req.user?.id || null, "UPDATE_ATTENDANCE", "attendance", existing.id, `Updated attendance status to ${status.toUpperCase()} for ${member.first_name} ${member.last_name}`);
+      emitRealtimeEvent("attendance:changed", { action: "update_status", memberId: member_id, ministryId: assignedMinistryId, status });
+
       return res.json({
-        message: "Member is already marked present for today's service.",
-        attendance: existing,
-        already_present: true
+        id: existing.id,
+        message: `${member.first_name} ${member.last_name} marked as ${status.toUpperCase()}!`,
+        security_code: securityCode,
+        member_name: `${member.first_name} ${member.last_name}`,
+        ministry_name: ministry.name,
+        medical_notes: member.medical_notes,
+        attendance_status: status,
+        checked_in_at: existing.checked_in_at
       });
     }
 
-    // Generate security tag for Kinder and Elementary minors
-    let securityCode: string | null = null;
-    if (ministry.name === "Kinder" || ministry.name === "Elementary" || (ministry.max_age && ministry.max_age <= 12)) {
-      securityCode = generateSecurityCode(ministry.name);
-    }
-
-    const combinedNotes = [service_name || "Sunday Divine Worship", notes].filter(Boolean).join(" • ");
+    const checkinTimestamp = target_date ? `${target_date} 09:30:00` : new Date().toISOString();
 
     const result = await db.run(`
       INSERT INTO attendance (
-        member_id, ministry_id, event_id, security_code, checked_in_by, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6)
+        member_id, ministry_id, event_id, security_code, checked_in_by, notes, checked_in_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id
     `, [
       member_id,
@@ -156,20 +205,24 @@ router.post("/check-in", authMiddleware, requireRoles("Admin", "Coordinator", "V
       event_id || null,
       securityCode,
       req.user?.id || null,
-      combinedNotes || null
+      combinedNotes || null,
+      checkinTimestamp
     ]);
 
     const newId = result.lastInsertRowid;
-    await logAuditAction(req.user?.id || null, "CHECK_IN", "attendance", newId, `Sunday Worship Attendance: ${member.first_name} ${member.last_name} (${ministry.name})`);
+    await logAuditAction(req.user?.id || null, "CHECK_IN", "attendance", newId, `Sunday Worship Attendance (${status.toUpperCase()}): ${member.first_name} ${member.last_name} (${ministry.name})`);
+
+    emitRealtimeEvent("attendance:changed", { action: "check_in", memberId: member_id, ministryId: assignedMinistryId, status });
 
     res.status(201).json({
       id: newId,
-      message: `${member.first_name} ${member.last_name} marked present for Sunday Worship!`,
+      message: `${member.first_name} ${member.last_name} marked as ${status.toUpperCase()}!`,
       security_code: securityCode,
       member_name: `${member.first_name} ${member.last_name}`,
       ministry_name: ministry.name,
       medical_notes: member.medical_notes,
-      checked_in_at: new Date().toISOString()
+      attendance_status: status,
+      checked_in_at: checkinTimestamp
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -219,6 +272,8 @@ router.post("/batch-check-in", authMiddleware, requireRoles("Admin", "Coordinato
 
     await logAuditAction(req.user?.id || null, "CHECK_IN", "attendance", null, `Batch check-in performed for ${checkedInMembers.length} members`);
 
+    emitRealtimeEvent("attendance:changed", { action: "batch_check_in", count: checkedInMembers.length });
+
     res.status(201).json({
       message: `Successfully checked in ${checkedInMembers.length} member(s)`,
       checked_in: checkedInMembers
@@ -228,10 +283,10 @@ router.post("/batch-check-in", authMiddleware, requireRoles("Admin", "Coordinato
   }
 });
 
-// Check-out member (Kinder & Elementary security tag matching)
+// Check-out member (Kinder & Elementary security tag matching or direct verification)
 router.post("/check-out", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
-    const { attendance_id, member_id, security_code } = req.body;
+    const { attendance_id, member_id, security_code, force = false } = req.body;
 
     let record: any = null;
     if (attendance_id) {
@@ -254,10 +309,10 @@ router.post("/check-out", authMiddleware, requireRoles("Admin", "Coordinator", "
       return res.status(404).json({ error: "Active check-in record not found" });
     }
 
-    // Security code matching for Kinder & Elementary
-    if (record.security_code && security_code) {
+    // Security code matching for Kinder & Elementary minors unless forced/verified directly
+    if (!force && record.security_code && security_code) {
       if (record.security_code.trim().toUpperCase() !== security_code.trim().toUpperCase()) {
-        return res.status(400).json({ error: `Security code mismatch! Provided: ${security_code}, Expected code from parent tag.` });
+        return res.status(400).json({ error: `Security code mismatch! Provided: ${security_code}, Expected matching parent security tag code.` });
       }
     }
 
@@ -269,6 +324,8 @@ router.post("/check-out", authMiddleware, requireRoles("Admin", "Coordinator", "
     `, [now, record.id]);
 
     await logAuditAction(req.user?.id || null, "CHECK_OUT", "attendance", record.id, `Checked out attendance #${record.id}`);
+
+    emitRealtimeEvent("attendance:changed", { action: "check_out", attendanceId: record.id });
 
     res.json({
       message: "Member checked out successfully",
@@ -288,6 +345,8 @@ router.delete("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Volu
 
     await db.run("DELETE FROM attendance WHERE id = $1", [id]);
     await logAuditAction(req.user?.id || null, "DELETE", "attendance", Number(id), `Undid attendance mark for ${current.first_name} ${current.last_name}`);
+
+    emitRealtimeEvent("attendance:changed", { action: "delete", attendanceId: Number(id) });
 
     res.json({ message: `Attendance mark for ${current.first_name} ${current.last_name} removed.` });
   } catch (err: any) {

@@ -5,6 +5,7 @@ import { Sidebar, NavTab } from "./components/layout/Sidebar";
 
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { BibleReadingPage } from "./pages/BibleReadingPage";
 import { MembersPage } from "./pages/MembersPage";
 import { BibleStudyPage } from "./pages/BibleStudyPage";
 import { CurriculumPage } from "./pages/CurriculumPage";
@@ -18,6 +19,9 @@ import { UsersPage } from "./pages/UsersPage";
 import { CheckInPage } from "./pages/CheckInPage";
 import { DishwashingPage } from "./pages/DishwashingPage";
 import { LeaderPortalPage } from "./pages/leader";
+import { ProfilePage } from "./pages/ProfilePage";
+import { ProfileModal } from "./components/profile/ProfileModal";
+import { SystemConfigurationModal } from "./components/common/SystemConfigurationModal";
 
 const MainLayout: React.FC = () => {
   const { user } = useAuth();
@@ -26,16 +30,27 @@ const MainLayout: React.FC = () => {
     isLeader ? "leader-dashboard" : "dashboard"
   );
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     if (user?.role_name === "Leader") {
-      if (!["leader-dashboard", "leader-members", "leader-biblestudy"].includes(currentTab)) {
+      if (!["leader-dashboard", "leader-members", "leader-biblestudy", "biblereading", "profile"].includes(currentTab)) {
         setCurrentTab("leader-dashboard");
       }
     }
   }, [user?.role_name]);
 
   const renderActiveView = () => {
+    // Direct profile page access for any role including leaders
+    if (currentTab === "profile") {
+      return <ProfilePage />;
+    }
+
+    // Direct Bible reading page access for all roles including leaders
+    if (currentTab === "biblereading") {
+      return <BibleReadingPage />;
+    }
+
     // Role Authorization: When logged in as Leader, only render views from the leader folder
     if (isLeader) {
       if (currentTab === "leader-members") {
@@ -94,6 +109,7 @@ const MainLayout: React.FC = () => {
         onSelectTab={setCurrentTab}
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
+        onOpenProfile={() => setCurrentTab("profile")}
       />
 
       {/* Main Workspace Column */}
@@ -104,6 +120,7 @@ const MainLayout: React.FC = () => {
           <Navbar
             currentTab={currentTab}
             onToggleSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
+            onOpenProfile={() => setCurrentTab("profile")}
           />
         </div>
 
@@ -114,29 +131,61 @@ const MainLayout: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {/* Profile Management Modal for Quick Pop-up Access */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </div>
   );
 };
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const [isSystemConfigOpen, setIsSystemConfigOpen] = useState(false);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-indigo-950 flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-12 h-12 border-4 border-white/20 border-t-amber rounded-full animate-spin mx-auto"></div>
-          <p className="font-bold text-sm text-indigo-200">Loading Daet Presbyterian Church ChMS...</p>
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        setIsSystemConfigOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  return (
+    <>
+      {loading ? (
+        <div className="min-h-screen bg-indigo-950 flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <div className="w-12 h-12 border-4 border-white/20 border-t-amber rounded-full animate-spin mx-auto"></div>
+            <p className="font-bold text-sm text-indigo-200">Loading Daet Presbyterian Church ChMS...</p>
+          </div>
         </div>
-      </div>
-    );
-  }
+      ) : !user ? (
+        <LoginPage />
+      ) : (
+        <MainLayout />
+      )}
 
-  if (!user) {
-    return <LoginPage />;
-  }
-
-  return <MainLayout />;
+      {/* Global System Database Server IP Configuration Modal (Ctrl + P / Cmd + P) */}
+      <SystemConfigurationModal
+        isOpen={isSystemConfigOpen}
+        onClose={() => setIsSystemConfigOpen(false)}
+        onConfigSaved={() => {
+          setTimeout(() => {
+            window.location.reload();
+          }, 350);
+        }}
+      />
+    </>
+  );
 };
 
 export function App() {

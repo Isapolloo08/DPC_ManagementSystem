@@ -1,0 +1,183 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 12
+skinparam roundCorner 10
+skinparam shadowing true
+
+skinparam activity {
+    BackgroundColor #F8FAFC
+    BorderColor #334155
+    FontColor #0F172A
+    ArrowColor #1E40AF
+    BarColor #1E40AF
+}
+
+skinparam activityDiamond {
+    BackgroundColor #EFF6FF
+    BorderColor #2563EB
+    FontColor #1E3A8A
+}
+
+skinparam partition {
+    BorderColor #94A3B8
+    FontColor #0F172A
+    BackgroundColor #F1F5F9
+}
+
+title DPC Management System (ChMS) - End-to-End System Flowchart
+
+start
+
+:User enters credentials in Login Interface;
+:System authenticates against Database (Users & Roles);
+
+if (Authentication Valid?) then (No)
+    :Show Authentication Error;
+    stop
+else (Yes)
+    :Load Role Permissions & Scoped Ministries;
+    :Route to Dynamic Dashboard;
+endif
+
+switch (User Access Level / Module Selection)
+
+case ( Member & Household Directory )
+    partition "Member Directory & Households" {
+        :Access Member Registry;
+        split
+            :Add / Update Member Demographics;
+            :Link to Household & Guardian Details;
+            :Assign Age-Bracket Ministry;
+        split again
+            :Track Membership Status & Application Date;
+            :View Family Units & Class Schedules;
+        endsplit
+        :Log changes to Audit Trail;
+    }
+
+case ( Small Groups & Discipleship )
+    partition "Bible Study & Discipleship" {
+        :Manage Bible Study Groups;
+        split
+            :Assign Leader, Meeting Day, Time & Location;
+            :Enroll Group Members & Track Capacity;
+        split again
+            :Set Curriculum Topics & Track Chapters;
+            :Record Progress Stages & Notes;
+        split again
+            :Manage Rescheduling & Notifications;
+        endsplit
+    }
+
+case ( Events, Registration & Check-In )
+    partition "Events & Attendance Lifecycle" {
+        :Create Event (Title, Ministry, Schedule, Capacity);
+        :Publish Event & Broadcast Announcements;
+        
+        partition "Registration & RSVP" {
+            :Members register online / RSVP;
+            if (Event at Maximum Capacity?) then (Yes)
+                :Place registrant on Waitlist;
+            else (No)
+                :Confirm Registration & Issue QR Code;
+            endif
+        }
+        
+        partition "Event Day Attendance & Security" {
+            :Attendee arrives at venue;
+            if (Check-In Method?) then (QR Scanner)
+                :Scan Attendee QR Code;
+            else (Manual Lookup)
+                :Search Member by Name / ID;
+            endif
+            :Generate Child / Family Security Tag;
+            :Log Timestamp & Set Status (Present / Late);
+        }
+        
+        partition "Post-Event Analytics" {
+            :Auto-calculate Attendance % & Metrics;
+            if (Certificates Required?) then (Yes)
+                :Bulk-generate Personalized PDF Certificates;
+            endif
+        }
+    }
+
+case ( Service Rosters & Duty Schedules )
+    partition "Duty Teams & Dishwashing Rosters" {
+        split
+            :Saturday Cleaning / Service Teams;
+            :Assign Team Leader & Checklist;
+            :Track Saturday Rotation Cycles & Completion;
+        split again
+            :Sunday Fellowship Meal Roster;
+            :Auto-cycle Bible Study Groups / Ministries;
+            :Assign Primary & Joint Partner Volunteers;
+            :Track Roster Status (Scheduled / Completed);
+        endsplit
+    }
+
+case ( Stewardship & Financials )
+    partition "Giving, Funds & Stewardship" {
+        split
+            :Define Stewardship Campaigns / Funds & Goals;
+        split again
+            :Record Donations, Tithes, Offerings & Pledges;
+            :Select Payment Method (Cash, Online, Bank Transfer);
+        split again
+            :Track Budget Allocations vs Actuals;
+            :Generate Financial Summary Statements;
+        endsplit
+    }
+
+case ( Document Workflow & Approvals )
+    partition "Document Creation & Governance" {
+        :Officer drafts Proposal / Budget / Resolution;
+        :Auto-populate Organization Header, Logo & Figures;
+        :Generate Standardized Document PDF;
+        :Submit Document (Status: UNDER_REVIEW);
+        
+        :President / Adviser reviews Document;
+        if (Review Outcome?) then (Approved)
+            :Set Status = APPROVED;
+            :Digitally Archive & Lock Version;
+            :Notify Requesting Officers;
+        elseif (Revision Requested) then (Revision)
+            :Set Status = REVISION_REQUIRED;
+            :Send Feedback to Author for Resubmission;
+        else (Rejected)
+            :Set Status = REJECTED;
+            :Log Rejection Reason;
+        endif
+    }
+
+case ( Communication & Community )
+    partition "Announcements & Church Board" {
+        :Publish Pinned / Ministry Announcements;
+        :Church Members & Groups View Live Bulletins;
+    }
+
+case ( Administration & System Lookups )
+    partition "System Administration" {
+        split
+            :Manage Users, Staff & Ministry Assignments;
+        split again
+            :Configure System Lookups & Categories;
+        split again
+            :View Security Audit Logs & Compliance Trail;
+        split again
+            :Update System Settings & App Configuration;
+        endsplit
+    }
+
+endswitch
+
+partition "System Persistence & Unified Sync" {
+    :Persist to PostgreSQL Database;
+    :Emit Audit Log Entry;
+    :Update Real-Time Dashboard KPI Cards;
+    :Broadcast In-App Notifications;
+}
+
+stop
+@enduml

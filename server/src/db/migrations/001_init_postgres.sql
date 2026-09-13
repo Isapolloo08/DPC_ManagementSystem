@@ -206,16 +206,7 @@ CREATE TABLE IF NOT EXISTS bible_study_members (
 CREATE TABLE IF NOT EXISTS bible_study_topics (
   id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
-  type VARCHAR(50) NOT NULL DEFAULT 'book',
-  testament_or_category VARCHAR(100),
   total_chapters INT DEFAULT 1,
-  completed_chapters INT DEFAULT 0,
-  status VARCHAR(50) NOT NULL DEFAULT 'in_progress',
-  completed_date VARCHAR(50),
-  assigned_group_id INT REFERENCES bible_study_groups(id) ON DELETE SET NULL,
-  assigned_ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL,
-  lead_teacher VARCHAR(255),
-  key_verse VARCHAR(255),
   summary_notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

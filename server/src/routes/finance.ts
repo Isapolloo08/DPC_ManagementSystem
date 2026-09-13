@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.post("/funds", authMiddleware, requireRoles("Admin"), async (req: AuthReq
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user!.id, "CREATE", "funds", newId, `Created fund: ${name}`);
+    emitRealtimeEvent("finance:changed", { action: "create_fund", id: newId });
 
     res.status(201).json({ id: newId, message: "Fund created successfully" });
   } catch (err: any) {
@@ -75,6 +77,7 @@ router.put("/funds/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
     `, [name, description, target_amount !== undefined ? Number(target_amount) : null, id]);
 
     await logAuditAction(req.user!.id, "UPDATE", "funds", Number(id), `Updated fund #${id}`);
+    emitRealtimeEvent("finance:changed", { action: "update_fund", id: Number(id) });
     res.json({ message: "Fund updated successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -87,6 +90,7 @@ router.delete("/funds/:id", authMiddleware, requireRoles("Admin"), async (req: A
     const id = req.params.id;
     await db.run("DELETE FROM funds WHERE id = $1", [id]);
     await logAuditAction(req.user!.id, "DELETE", "funds", Number(id), `Deleted fund #${id}`);
+    emitRealtimeEvent("finance:changed", { action: "delete_fund", id: Number(id) });
     res.json({ message: "Fund deleted successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -169,6 +173,7 @@ router.post("/donations", authMiddleware, async (req: AuthRequest, res: Response
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user!.id, "DONATION", "donations", newId, `Recorded donation of $${amount} to fund #${fund_id}`);
+    emitRealtimeEvent("finance:changed", { action: "create_donation", id: newId, fund_id, amount });
 
     res.status(201).json({ id: newId, message: "Donation recorded successfully" });
   } catch (err: any) {

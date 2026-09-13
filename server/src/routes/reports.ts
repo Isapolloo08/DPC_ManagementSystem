@@ -27,7 +27,7 @@ router.get("/dashboard", authMiddleware, async (req: AuthRequest, res: Response)
     const totalHouseholds = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM households");
     const todayCheckins = await db.get<{ count: string | number }>(todayCheckinsQuery, queryParams);
     const totalDonationsYTD = await db.get<{ total: string | number }>("SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE EXTRACT(YEAR FROM donated_at) = EXTRACT(YEAR FROM CURRENT_DATE)");
-    const openPrayers = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM prayer_requests WHERE status = 'open'");
+    const totalAnnouncements = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM announcements");
     const upcomingEvents = await db.get<{ count: string | number }>(upcomingEventsQuery, queryParams);
 
     // Ministry member breakdown
@@ -78,7 +78,7 @@ router.get("/dashboard", authMiddleware, async (req: AuthRequest, res: Response)
         total_households: Number(totalHouseholds?.count || 0),
         today_checkins: Number(todayCheckins?.count || 0),
         ytd_giving_amount: Number(totalDonationsYTD?.total || 0),
-        open_prayer_requests: Number(openPrayers?.count || 0),
+        active_announcements: Number(totalAnnouncements?.count || 0),
         upcoming_events_count: Number(upcomingEvents?.count || 0),
         aging_out_alerts_count: agingOutAlerts
       },

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
@@ -59,6 +60,7 @@ router.post("/announcements", authMiddleware, requireRoles("Admin", "Coordinator
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user!.id, "CREATE", "announcements", newId, `Created announcement: ${title}`);
+    emitRealtimeEvent("communications:changed", { action: "create_announcement", id: newId });
 
     res.status(201).json({ id: newId, message: "Announcement created successfully" });
   } catch (err: any) {
@@ -72,96 +74,12 @@ router.delete("/announcements/:id", authMiddleware, requireRoles("Admin", "Coord
     const id = req.params.id;
     await db.run("DELETE FROM announcements WHERE id = $1", [id]);
     await logAuditAction(req.user!.id, "DELETE", "announcements", Number(id), `Deleted announcement #${id}`);
+    emitRealtimeEvent("communications:changed", { action: "delete_announcement", id: Number(id) });
     res.json({ message: "Announcement deleted successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// List prayer requests
-router.get("/prayer-requests", async (req: Request, res: Response) => {
-  try {
-    const { ministry_id, status } = req.query;
-
-    let query = `
-      SELECT p.*,
-             min.name as ministry_name, min.color as ministry_color,
-             CASE WHEN p.is_anonymous = TRUE THEN 'Anonymous Member' 
-                  ELSE (m.first_name || ' ' || m.last_name) END as submitter_name
-      FROM prayer_requests p
-      LEFT JOIN ministries min ON p.ministry_id = min.id
-      LEFT JOIN members m ON p.member_id = m.id
-      WHERE 1=1
-    `;
-    const params: any[] = [];
-
-    if (ministry_id) {
-      params.push(ministry_id);
-      query += ` AND (p.ministry_id = $${params.length} OR p.ministry_id IS NULL)`;
-    }
-
-    if (status && status !== "all") {
-      params.push(status);
-      query += ` AND p.status = $${params.length}`;
-    }
-
-    query += " ORDER BY p.created_at DESC";
-
-    const prayers = await db.all(query, params);
-    res.json(prayers);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Submit prayer request
-router.post("/prayer-requests", authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const { ministry_id, request_text, is_anonymous = false, member_id } = req.body;
-
-    if (!request_text) {
-      return res.status(400).json({ error: "Request text is required" });
-    }
-
-    let targetMemberId = member_id;
-    if (!targetMemberId && !is_anonymous) {
-      const linkedMember = await db.get("SELECT id FROM members WHERE user_id = $1", [req.user!.id]);
-      if (linkedMember) targetMemberId = linkedMember.id;
-    }
-
-    const result = await db.run(`
-      INSERT INTO prayer_requests (member_id, ministry_id, request_text, is_anonymous, status)
-      VALUES ($1, $2, $3, $4, 'open')
-      RETURNING id
-    `, [
-      is_anonymous ? null : (targetMemberId || null),
-      ministry_id || null,
-      request_text,
-      Boolean(is_anonymous)
-    ]);
-
-    const newId = result.lastInsertRowid;
-    res.status(201).json({ id: newId, message: "Prayer request submitted successfully" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Update prayer request status (open/answered/archived)
-router.patch("/prayer-requests/:id/status", authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const { status } = req.body;
-    const id = req.params.id;
-
-    if (!["open", "answered", "archived"].includes(status)) {
-      return res.status(400).json({ error: "Invalid status value" });
-    }
-
-    await db.run("UPDATE prayer_requests SET status = $1 WHERE id = $2", [status, id]);
-    res.json({ message: "Prayer request status updated", status });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 export default router;
+

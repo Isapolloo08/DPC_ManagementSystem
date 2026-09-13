@@ -1,19 +1,23 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
-import { DutyTeam, SaturdayDutyScheduleItem, Member } from "../types";
-import { 
-  CalendarCheck, Users, ShieldCheck, CheckCircle2, Clock, Plus, 
-  Trash2, Edit, RefreshCw, ArrowLeftRight, Sparkles, Check, X, 
+import { useSocketEvent } from "../socket";
+import { DutyPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
+import { DutyTeam, SaturdayDutyScheduleItem, Member, Ministry } from "../types";
+import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
+import {
+  CalendarCheck, Users, ShieldCheck, CheckCircle2, Clock, Plus,
+  Trash2, Edit, RefreshCw, ArrowLeftRight, Sparkles, Check, X,
   AlertCircle, ChevronRight, Phone, CheckSquare, Sparkle, Calendar,
-  Crown, UserPlus
+  Crown, UserPlus, Search, Filter
 } from "lucide-react";
 
 export const DutyPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
   const isCoordinator = user?.role_name === "Coordinator";
-  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0 
-    ? user.ministries[0].id 
+  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
+    ? user.ministries[0].id
     : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
   const coordinatorMinistryName = user?.ministries && user.ministries.length > 0 ? user.ministries[0].name : "Youth";
   const activeScope = coordinatorMinistryId ?? selectedMinistryId ?? undefined;
@@ -22,50 +26,108 @@ export const DutyPage: React.FC = () => {
   const [teams, setTeams] = useState<DutyTeam[]>([]);
   const [schedule, setSchedule] = useState<SaturdayDutyScheduleItem[]>([]);
   const [churchMembers, setChurchMembers] = useState<Member[]>([]);
+  const [allMinistries, setAllMinistries] = useState<Ministry[]>(ministries || []);
   const [loading, setLoading] = useState(true);
+
+  // Custom Confirmation & Alert Modal State
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    type: ModalType;
+    confirmText?: string;
+    cancelText?: string | null;
+    isLoading?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    type: "info",
+    confirmText: "Confirm",
+    onConfirm: () => {}
+  });
+
+  const showAlert = (title: string, message: string, type: ModalType = "danger") => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title,
+      type,
+      confirmText: "Okay",
+      cancelText: null,
+      description: <p className="text-xs text-charcoal/80 text-center">{message}</p>,
+      onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
 
   // Team modal state
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<DutyTeam | null>(null);
-  const [teamForm, setTeamForm] = useState({
+  const [teamForm, setTeamForm] = useState<{
+    name: string;
+    order_seq: number;
+    leader_id: string;
+    color: string;
+    tasks_checklist: string;
+    selectedMemberIds: number[];
+  }>({
     name: "",
     order_seq: 1,
     leader_id: "",
     color: "#2C3968",
-    tasks_checklist: "Sanctuary Cleaning, Sound Setup, Trash Disposal, Restroom Sanitization"
+    tasks_checklist: "Sanctuary Cleaning, Sound Setup, Trash Disposal, Restroom Sanitization",
+    selectedMemberIds: []
   });
 
-  // Add member modal state
-  const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  // Multi-member selector modal state
+  const [isMultiMemberSelectorOpen, setIsMultiMemberSelectorOpen] = useState(false);
+  const [selectorTarget, setSelectorTarget] = useState<"team_form" | "existing_team">("team_form");
   const [targetTeam, setTargetTeam] = useState<DutyTeam | null>(null);
-  const [selectedMemberId, setSelectedMemberId] = useState("");
-  const [memberRole, setMemberRole] = useState<"Member" | "Team Leader">("Member");
-  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [selectorSearchQuery, setSelectorSearchQuery] = useState("");
+  const [selectorMinistryFilter, setSelectorMinistryFilter] = useState("");
+  const [selectorSelectedIds, setSelectorSelectedIds] = useState<Set<number>>(new Set());
 
   // Swap modal state
   const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
   const [swapItem1, setSwapItem1] = useState<SaturdayDutyScheduleItem | null>(null);
   const [swapTargetDate, setSwapTargetDate] = useState<string>("");
 
-  // Complete duty modal state
-  const [completingItem, setCompletingItem] = useState<SaturdayDutyScheduleItem | null>(null);
-  const [completionNotes, setCompletionNotes] = useState("");
+  useEffect(() => {
+    if (ministries && ministries.length > 0) {
+      setAllMinistries(ministries);
+    }
+  }, [ministries]);
 
   useEffect(() => {
     loadDutyData();
   }, [selectedMinistryId, coordinatorMinistryId]);
 
+  // Real-time synchronization
+  useSocketEvent("duty:changed", () => {
+    loadDutyData();
+  });
+  useSocketEvent("members:changed", () => {
+    loadDutyData();
+  });
+  useSocketEvent("ministries:changed", () => {
+    loadDutyData();
+  });
+
   const loadDutyData = async () => {
     try {
       setLoading(true);
-      const [teamsData, scheduleData, membersData] = await Promise.all([
+      const [teamsData, scheduleData, membersData, ministriesData] = await Promise.all([
         api.getDutyTeams(activeScope),
         api.getDutySchedule({ ministry_id: activeScope, count: 12 }),
-        api.getMembers({ ministry_id: activeScope, status: "active" })
+        api.getMembers({ status: "active" }), // fetch all church members across all ministries
+        api.getMinistries().catch(() => [])
       ]);
       setTeams(teamsData);
       setSchedule(scheduleData.schedule);
       setChurchMembers(membersData);
+      if (ministriesData && ministriesData.length > 0) {
+        setAllMinistries(ministriesData);
+      }
     } catch (err) {
       console.error("Failed to load duty roster:", err);
     } finally {
@@ -81,7 +143,8 @@ export const DutyPage: React.FC = () => {
       order_seq: nextNum,
       leader_id: "",
       color: nextNum % 2 === 1 ? "#2C3968" : "#E07A5F",
-      tasks_checklist: "Sanctuary Cleaning, Trash Disposal, Sound & Audio Checks, Restroom Sanitization"
+      tasks_checklist: "Sanctuary Cleaning, Trash Disposal, Sound & Audio Checks, Restroom Sanitization",
+      selectedMemberIds: []
     });
     setIsTeamModalOpen(true);
   };
@@ -93,7 +156,8 @@ export const DutyPage: React.FC = () => {
       order_seq: team.order_seq,
       leader_id: team.leader_id ? String(team.leader_id) : "",
       color: team.color,
-      tasks_checklist: team.tasks_checklist || ""
+      tasks_checklist: team.tasks_checklist || "",
+      selectedMemberIds: team.members?.map(m => m.member_id) || []
     });
     setIsTeamModalOpen(true);
   };
@@ -107,7 +171,8 @@ export const DutyPage: React.FC = () => {
           order_seq: Number(teamForm.order_seq),
           leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : null,
           color: teamForm.color,
-          tasks_checklist: teamForm.tasks_checklist
+          tasks_checklist: teamForm.tasks_checklist,
+          member_ids: teamForm.selectedMemberIds
         });
       } else {
         await api.createDutyTeam({
@@ -116,57 +181,183 @@ export const DutyPage: React.FC = () => {
           ministry_id: coordinatorMinistryId || null,
           leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : null,
           color: teamForm.color,
-          tasks_checklist: teamForm.tasks_checklist
+          tasks_checklist: teamForm.tasks_checklist,
+          member_ids: teamForm.selectedMemberIds
         });
       }
       setIsTeamModalOpen(false);
       loadDutyData();
     } catch (err: any) {
-      alert(err.message || "Failed to save team");
+      showAlert("Save Failed", err.message || "Failed to save team", "danger");
     }
   };
 
-  const handleDeleteTeam = async (teamId: number, name: string) => {
-    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
-    try {
-      await api.deleteDutyTeam(teamId);
-      loadDutyData();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete team");
-    }
+  const handleDeleteTeam = (teamId: number, name: string) => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Delete Duty Team",
+      type: "delete",
+      confirmText: "Yes, Delete Team",
+      cancelText: "Cancel",
+      description: (
+        <p className="text-xs text-charcoal/80 text-center">
+          Are you sure you want to delete <strong>"{name}"</strong> from the Saturday rotation roster?
+        </p>
+      ),
+      onConfirm: async () => {
+        try {
+          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
+          await api.deleteDutyTeam(teamId);
+          loadDutyData();
+          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: "Delete Failed",
+            type: "danger",
+            confirmText: "Close",
+            cancelText: null,
+            description: err.message || "Failed to delete team.",
+            onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+          });
+        }
+      }
+    });
+  };
+
+  const handleOpenSelectorForForm = () => {
+    setSelectorTarget("team_form");
+    setSelectorSelectedIds(new Set(teamForm.selectedMemberIds));
+    setSelectorSearchQuery("");
+    setSelectorMinistryFilter("");
+    setIsMultiMemberSelectorOpen(true);
+  };
+
+  const handleRemoveMemberFromForm = (memberId: number) => {
+    setTeamForm(prev => ({
+      ...prev,
+      selectedMemberIds: prev.selectedMemberIds.filter(id => id !== memberId)
+    }));
   };
 
   const handleOpenAddMember = (team: DutyTeam) => {
     setTargetTeam(team);
-    setSelectedMemberId("");
-    setMemberRole("Member");
-    setMemberSearchQuery("");
-    setIsAddMemberModalOpen(true);
+    setSelectorTarget("existing_team");
+    const existingIds = new Set(team.members?.map(m => m.member_id) || []);
+    setSelectorSelectedIds(new Set(existingIds));
+    setSelectorSearchQuery("");
+    setSelectorMinistryFilter("");
+    setIsMultiMemberSelectorOpen(true);
   };
 
-  const handleAddMemberToTeam = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetTeam || !selectedMemberId) return;
-    try {
-      await api.addDutyTeamMember(targetTeam.id, {
-        member_id: Number(selectedMemberId),
-        role: memberRole
-      });
-      setIsAddMemberModalOpen(false);
-      loadDutyData();
-    } catch (err: any) {
-      alert(err.message || "Failed to add member to team");
+  const handleToggleMemberSelection = (memberId: number) => {
+    setSelectorSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) {
+        next.delete(memberId);
+      } else {
+        next.add(memberId);
+      }
+      return next;
+    });
+  };
+
+  const filteredSelectorMembers = churchMembers.filter((m) => {
+    const matchesSearch =
+      !selectorSearchQuery ||
+      `${m.first_name} ${m.last_name}`.toLowerCase().includes(selectorSearchQuery.toLowerCase()) ||
+      (m.contact_phone && m.contact_phone.includes(selectorSearchQuery)) ||
+      (m.contact_email && m.contact_email.toLowerCase().includes(selectorSearchQuery.toLowerCase()));
+
+    const matchesMinistry =
+      !selectorMinistryFilter ||
+      String(m.ministry_id) === selectorMinistryFilter ||
+      (m.ministry_name && m.ministry_name.toLowerCase() === selectorMinistryFilter.toLowerCase()) ||
+      (allMinistries.find(min => String(min.id) === selectorMinistryFilter)?.name.toLowerCase() === m.ministry_name?.toLowerCase());
+
+    return matchesSearch && matchesMinistry;
+  });
+
+  const handleSelectAllFiltered = () => {
+    setSelectorSelectedIds((prev) => {
+      const next = new Set(prev);
+      filteredSelectorMembers.forEach((m) => next.add(m.id));
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectorSelectedIds(new Set());
+  };
+
+  const handleConfirmSelector = async () => {
+    if (selectorTarget === "team_form") {
+      setTeamForm(prev => ({
+        ...prev,
+        selectedMemberIds: Array.from(selectorSelectedIds)
+      }));
+      setIsMultiMemberSelectorOpen(false);
+    } else if (selectorTarget === "existing_team" && targetTeam) {
+      const existingMemberIds = new Set(targetTeam.members?.map(m => m.member_id) || []);
+      const newlyAddedIds = Array.from(selectorSelectedIds).filter(id => !existingMemberIds.has(id));
+
+      if (newlyAddedIds.length === 0) {
+        setIsMultiMemberSelectorOpen(false);
+        return;
+      }
+
+      try {
+        await api.addDutyTeamMember(targetTeam.id, {
+          member_ids: newlyAddedIds,
+          role: "Member"
+        });
+        setIsMultiMemberSelectorOpen(false);
+        loadDutyData();
+      } catch (err: any) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: "Failed to Add Members",
+          type: "danger",
+          confirmText: "Close",
+          cancelText: null,
+          description: err.message || "Failed to add members to team.",
+          onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+        });
+      }
     }
   };
 
-  const handleRemoveMember = async (teamId: number, memberId: number, memberName: string) => {
-    if (!confirm(`Remove ${memberName} from this duty team?`)) return;
-    try {
-      await api.removeDutyTeamMember(teamId, memberId);
-      loadDutyData();
-    } catch (err: any) {
-      alert(err.message || "Failed to remove member");
-    }
+  const handleRemoveMember = (teamId: number, memberId: number, memberName: string) => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Remove Team Member",
+      type: "warning",
+      confirmText: "Remove Disciple",
+      cancelText: "Cancel",
+      description: (
+        <p className="text-xs text-charcoal/80 text-center">
+          Remove <strong>"{memberName}"</strong> from this Saturday duty team?
+        </p>
+      ),
+      onConfirm: async () => {
+        try {
+          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
+          await api.removeDutyTeamMember(teamId, memberId);
+          loadDutyData();
+          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: "Action Failed",
+            type: "danger",
+            confirmText: "Close",
+            cancelText: null,
+            description: err.message || "Failed to remove member.",
+            onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+          });
+        }
+      }
+    });
   };
 
   const handleOpenSwapModal = (item: SaturdayDutyScheduleItem) => {
@@ -181,7 +372,7 @@ export const DutyPage: React.FC = () => {
     if (!swapItem1 || !swapTargetDate) return;
     const targetItem = schedule.find(s => s.duty_date === swapTargetDate);
     if (!targetItem || !swapItem1.team || !targetItem.team) {
-      alert("Both Saturdays must have teams assigned to swap");
+      showAlert("Cannot Swap", "Both Saturdays must have teams assigned to swap.", "warning");
       return;
     }
 
@@ -196,29 +387,16 @@ export const DutyPage: React.FC = () => {
       setIsSwapModalOpen(false);
       loadDutyData();
     } catch (err: any) {
-      alert(err.message || "Failed to swap duty teams");
-    }
-  };
-
-  const handleCompleteDuty = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!completingItem || !completingItem.team) return;
-    try {
-      await api.completeSaturdayDuty({
-        duty_date: completingItem.duty_date,
-        team_id: completingItem.team.id,
-        ministry_id: coordinatorMinistryId || null,
-        notes: completionNotes || completingItem.notes || "Completed on schedule"
-      });
-      setCompletingItem(null);
-      loadDutyData();
-    } catch (err: any) {
-      alert(err.message || "Failed to complete duty");
+      showAlert("Swap Failed", err.message || "Failed to swap duty teams", "danger");
     }
   };
 
   // Find this Saturday's item
   const thisSaturday = schedule[0] || null;
+
+  if (loading && teams.length === 0) {
+    return <DutyPageSkeleton />;
+  }
 
   return (
     <div className="space-y-6">
@@ -253,7 +431,7 @@ export const DutyPage: React.FC = () => {
           </button>
           <button
             onClick={handleOpenCreateTeam}
-            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-4.5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4 text-indigo-950" />
             <span>Create Team</span>
@@ -288,8 +466,8 @@ export const DutyPage: React.FC = () => {
               <div>
                 <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
                   <span>{thisSaturday.team.name}</span>
-                  <span 
-                    className="w-4 h-4 rounded-full ring-2 ring-white/60 shadow-md inline-block" 
+                  <span
+                    className="w-4 h-4 rounded-full ring-2 ring-white/60 shadow-md inline-block"
                     style={{ backgroundColor: thisSaturday.team.color }}
                   ></span>
                 </h2>
@@ -321,23 +499,10 @@ export const DutyPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0">
-              {thisSaturday.status !== "completed" ? (
-                <button
-                  onClick={() => {
-                    setCompletingItem(thisSaturday);
-                    setCompletionNotes("");
-                  }}
-                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs py-3 px-5 rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Mark Duty Completed</span>
-                </button>
-              ) : (
-                <div className="text-xs text-emerald-300 font-bold bg-emerald-950/70 border border-emerald-500/40 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Finished for {thisSaturday.date_formatted}</span>
-                </div>
-              )}
+              <div className="text-xs text-amber-200 font-bold bg-white/10 border border-white/20 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs backdrop-blur-xs">
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Active Rotation • {thisSaturday.date_formatted}</span>
+              </div>
 
               <button
                 onClick={() => handleOpenSwapModal(thisSaturday)}
@@ -374,11 +539,10 @@ export const DutyPage: React.FC = () => {
       <div className="flex items-center bg-white/95 p-1.5 rounded-2xl border border-indigo-100/90 shadow-2xs w-fit gap-1.5">
         <button
           onClick={() => setActiveTab("teams")}
-          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === "teams"
-              ? "bg-indigo-950 text-white shadow-xs"
-              : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
-          }`}
+          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "teams"
+            ? "bg-indigo-950 text-white shadow-xs"
+            : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
+            }`}
         >
           <Users className="w-4 h-4" />
           <span>Duty Teams ({teams.length})</span>
@@ -386,11 +550,10 @@ export const DutyPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab("schedule")}
-          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === "schedule"
-              ? "bg-indigo-950 text-white shadow-xs"
-              : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
-          }`}
+          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "schedule"
+            ? "bg-indigo-950 text-white shadow-xs"
+            : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
+            }`}
         >
           <Calendar className="w-4 h-4" />
           <span>Saturday Rotation Cycle ({schedule.length} Weeks)</span>
@@ -398,11 +561,10 @@ export const DutyPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab("tasks")}
-          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === "tasks"
-              ? "bg-indigo-950 text-white shadow-xs"
-              : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
-          }`}
+          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "tasks"
+            ? "bg-indigo-950 text-white shadow-xs"
+            : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
+            }`}
         >
           <CheckSquare className="w-4 h-4" />
           <span>Duty Checklist</span>
@@ -412,124 +574,128 @@ export const DutyPage: React.FC = () => {
       {/* TAB 1: TEAMS MANAGEMENT */}
       {activeTab === "teams" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {teams.map((team) => (
-              <div
-                key={team.id}
-                className="bg-white/95 rounded-3xl border border-indigo-100/90 hover:border-amber-400 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between space-y-4"
-              >
-                <div>
-                  {/* Team Card Header */}
-                  <div className="flex items-center justify-between pb-3.5 border-b border-indigo-50">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="w-4 h-4 rounded-full shadow-inner ring-2 ring-white"
-                        style={{ backgroundColor: team.color }}
-                      ></span>
-                      <div>
-                        <h3 className="font-black text-base text-indigo-950">{team.name}</h3>
-                        <span className="text-[10px] text-indigo-950 font-black bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
-                          Turn #{team.order_seq}
-                        </span>
+          {loading && teams.length === 0 ? (
+            <CardGridSkeleton count={6} columns={3} />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {teams.map((team) => (
+                <div
+                  key={team.id}
+                  className="bg-white/95 rounded-3xl border border-indigo-100/90 hover:border-amber-400 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between space-y-4"
+                >
+                  <div>
+                    {/* Team Card Header */}
+                    <div className="flex items-center justify-between pb-3.5 border-b border-indigo-50">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="w-4 h-4 rounded-full shadow-inner ring-2 ring-white"
+                          style={{ backgroundColor: team.color }}
+                        ></span>
+                        <div>
+                          <h3 className="font-black text-base text-indigo-950">{team.name}</h3>
+                          <span className="text-[10px] text-indigo-950 font-black bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
+                            Turn #{team.order_seq}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleOpenEditTeam(team)}
-                        className="p-2 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
-                        title="Edit Team"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTeam(team.id, team.name)}
-                        className="p-2 text-charcoal/50 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                        title="Delete Team"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Leader Banner */}
-                  <div className="mt-3.5 bg-ivory-light/70 p-3 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2.5">
-                      <Crown className="w-4 h-4 text-amber-500" />
-                      <div>
-                        <span className="text-[10px] text-charcoal/50 block font-bold">Team Leader</span>
-                        <span className="font-black text-indigo-950">{team.leader_name || "Unassigned"}</span>
-                      </div>
-                    </div>
-                    {team.leader_phone && (
-                      <span className="text-[10px] text-indigo-900 font-mono font-bold">{team.leader_phone}</span>
-                    )}
-                  </div>
-
-                  {/* Member Roster Chips */}
-                  <div className="mt-4 space-y-2.5">
-                    <div className="flex items-center justify-between text-xs font-black text-indigo-950">
-                      <span>Assigned Disciples ({team.members?.length || 0})</span>
-                      <button
-                        onClick={() => handleOpenAddMember(team)}
-                        className="text-indigo-950 hover:text-amber-600 text-[11px] flex items-center gap-1 font-black cursor-pointer transition-colors"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Add Member</span>
-                      </button>
-                    </div>
-
-                    {team.members && team.members.length > 0 ? (
-                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                        {team.members.map((m) => (
-                          <div
-                            key={m.member_id}
-                            className="flex items-center justify-between p-2.5 rounded-xl bg-ivory-light/60 hover:bg-ivory-light border border-indigo-50/80 text-xs transition-colors"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                              <span className="font-bold text-indigo-950">
-                                {m.first_name} {m.last_name}
-                              </span>
-                              {m.team_role === "Team Leader" && (
-                                <span className="text-[9px] bg-amber-100 text-amber-950 font-black px-2 py-0.2 rounded-md border border-amber-300">
-                                  Lead
-                                </span>
-                              )}
-                            </div>
-
-                            <button
-                              onClick={() => handleRemoveMember(team.id, m.member_id, `${m.first_name} ${m.last_name}`)}
-                              className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
-                              title="Remove from team"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 rounded-2xl border border-dashed border-indigo-200 text-center text-xs text-charcoal/50">
-                        No members assigned yet.
+                      <div className="flex items-center gap-1.5">
                         <button
-                          onClick={() => handleOpenAddMember(team)}
-                          className="block mx-auto mt-1 text-indigo-950 font-bold underline cursor-pointer"
+                          onClick={() => handleOpenEditTeam(team)}
+                          className="p-2 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+                          title="Edit Team"
                         >
-                          + Add first member
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTeam(team.id, team.name)}
+                          className="p-2 text-charcoal/50 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                          title="Delete Team"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    )}
+                    </div>
+
+                    {/* Leader Banner */}
+                    <div className="mt-3.5 bg-ivory-light/70 p-3 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <Crown className="w-4 h-4 text-amber-500" />
+                        <div>
+                          <span className="text-[10px] text-charcoal/50 block font-bold">Team Leader</span>
+                          <span className="font-black text-indigo-950">{team.leader_name || "Unassigned"}</span>
+                        </div>
+                      </div>
+                      {team.leader_phone && (
+                        <span className="text-[10px] text-indigo-900 font-mono font-bold">{team.leader_phone}</span>
+                      )}
+                    </div>
+
+                    {/* Member Roster Chips */}
+                    <div className="mt-4 space-y-2.5">
+                      <div className="flex items-center justify-between text-xs font-black text-indigo-950">
+                        <span>Assigned Disciples ({team.members?.length || 0})</span>
+                        <button
+                          onClick={() => handleOpenAddMember(team)}
+                          className="text-indigo-950 hover:text-amber-600 text-[11px] flex items-center gap-1 font-black cursor-pointer transition-colors"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Add Member</span>
+                        </button>
+                      </div>
+
+                      {team.members && team.members.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {team.members.map((m) => (
+                            <div
+                              key={m.member_id}
+                              className="flex items-center justify-between p-2.5 rounded-xl bg-ivory-light/60 hover:bg-ivory-light border border-indigo-50/80 text-xs transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                <span className="font-bold text-indigo-950">
+                                  {m.first_name} {m.last_name}
+                                </span>
+                                {m.team_role === "Team Leader" && (
+                                  <span className="text-[9px] bg-amber-100 text-amber-950 font-black px-2 py-0.2 rounded-md border border-amber-300">
+                                    Lead
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                onClick={() => handleRemoveMember(team.id, m.member_id, `${m.first_name} ${m.last_name}`)}
+                                className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                                title="Remove from team"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-2xl border border-dashed border-indigo-200 text-center text-xs text-charcoal/50">
+                          No members assigned yet.
+                          <button
+                            onClick={() => handleOpenAddMember(team)}
+                            className="block mx-auto mt-1 text-indigo-950 font-bold underline cursor-pointer"
+                          >
+                            + Add first member
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Team Footer Checklist Preview */}
+                  <div className="pt-3 border-t border-indigo-50 text-[11px] text-charcoal/60 line-clamp-2">
+                    <span className="font-bold text-charcoal/80">Duty Checklist:</span>{" "}
+                    {team.tasks_checklist || "General Saturday sanctuary cleaning and preparations."}
                   </div>
                 </div>
-
-                {/* Team Footer Checklist Preview */}
-                <div className="pt-3 border-t border-indigo-50 text-[11px] text-charcoal/60 line-clamp-2">
-                  <span className="font-bold text-charcoal/80">Duty Checklist:</span>{" "}
-                  {team.tasks_checklist || "General Saturday sanctuary cleaning and preparations."}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {teams.length === 0 && !loading && (
             <div className="p-12 text-center bg-white rounded-3xl border border-indigo-100 shadow-sm">
@@ -571,13 +737,12 @@ export const DutyPage: React.FC = () => {
             {schedule.map((item, idx) => (
               <div
                 key={idx}
-                className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${
-                  item.is_this_saturday
-                    ? "bg-gradient-to-r from-indigo-50 via-white to-amber-50/30 border-amber-300 shadow-xs ring-2 ring-amber-300/30"
-                    : item.status === "completed"
+                className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${item.is_this_saturday
+                  ? "bg-gradient-to-r from-indigo-50 via-white to-amber-50/30 border-amber-300 shadow-xs ring-2 ring-amber-300/30"
+                  : item.status === "completed"
                     ? "bg-emerald-50/40 border-emerald-200/80"
                     : "bg-white border-indigo-100/70 hover:border-indigo-200"
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-4">
                   {/* Week & Date badge */}
@@ -621,22 +786,20 @@ export const DutyPage: React.FC = () => {
 
                 {/* Status & Actions */}
                 <div className="flex items-center gap-2 self-end md:self-center">
-                  {item.status === "completed" ? (
-                    <span className="bg-emerald-100 text-emerald-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-emerald-300">
-                      <Check className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Duty Completed</span>
+                  {item.is_this_saturday ? (
+                    <span className="bg-indigo-100 text-indigo-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-300 shadow-2xs">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-700" />
+                      <span>Active This Saturday</span>
+                    </span>
+                  ) : item.is_next_saturday ? (
+                    <span className="bg-amber-50 text-amber-950 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-amber-200">
+                      <Clock className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Next in Turn</span>
                     </span>
                   ) : (
-                    <button
-                      onClick={() => {
-                        setCompletingItem(item);
-                        setCompletionNotes("");
-                      }}
-                      className="bg-white hover:bg-emerald-50 text-indigo-950 hover:text-emerald-950 font-black text-xs px-3.5 py-1.5 rounded-xl border border-indigo-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Mark Complete</span>
-                    </button>
+                    <span className="bg-slate-50 text-charcoal/70 text-xs font-medium px-3 py-1.5 rounded-xl border border-slate-200">
+                      Turn #{item.team?.order_seq || item.week_number}
+                    </span>
                   )}
 
                   <button
@@ -705,9 +868,9 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/80">
-                <span className="font-bold text-emerald-950 block mb-1">✨ Verification & Sunday Readiness</span>
+                <span className="font-bold text-emerald-950 block mb-1">✨ Automatic Weekly Rota</span>
                 <p className="text-[11px] text-emerald-900">
-                  Once all areas are verified clean and sound checks complete, click <strong>"Mark Duty Completed"</strong> on the dashboard.
+                  The system automatically cycles to the next scheduled team every week according to the turn order.
                 </p>
               </div>
             </div>
@@ -716,10 +879,10 @@ export const DutyPage: React.FC = () => {
       )}
 
       {/* MODAL 1: Create / Edit Duty Team */}
-      {isTeamModalOpen && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
+      {isTeamModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
                 <Users className="w-5 h-5 text-indigo" />
                 <span>{editingTeam ? "Edit Duty Team" : "Create New Duty Team"}</span>
@@ -779,13 +942,65 @@ export const DutyPage: React.FC = () => {
                       key={c}
                       type="button"
                       onClick={() => setTeamForm({ ...teamForm, color: c })}
-                      className={`w-7 h-7 rounded-full transition-all ${
-                        teamForm.color === c ? "ring-3 ring-indigo-400 scale-110 shadow-sm" : "opacity-80"
-                      }`}
+                      className={`w-7 h-7 rounded-full transition-all ${teamForm.color === c ? "ring-3 ring-indigo-400 scale-110 shadow-sm" : "opacity-80"
+                        }`}
                       style={{ backgroundColor: c }}
                     ></button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block font-bold text-charcoal/70">
+                    Assigned Team Members ({teamForm.selectedMemberIds.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleOpenSelectorForForm}
+                    className="flex items-center gap-1.5 text-indigo-950 hover:text-amber-600 bg-amber-400 hover:bg-amber-300 px-3 py-1 rounded-xl font-black text-[11px] transition-all cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>+ Add Members</span>
+                  </button>
+                </div>
+
+                {teamForm.selectedMemberIds.length > 0 ? (
+                  <div className="max-h-36 overflow-y-auto p-2 rounded-xl bg-ivory-light border border-gray-200 space-y-1.5">
+                    {teamForm.selectedMemberIds.map((mId) => {
+                      const member = churchMembers.find(m => m.id === mId);
+                      if (!member) return null;
+                      return (
+                        <div key={mId} className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-indigo-50 shadow-2xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                            <span className="font-bold text-indigo-950 text-xs">{member.first_name} {member.last_name}</span>
+                            {member.ministry_name && (
+                              <span className="text-[10px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.5 rounded">
+                                {member.ministry_name}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMemberFromForm(mId)}
+                            className="text-charcoal/40 hover:text-rose-600 p-0.5 rounded cursor-pointer transition-colors"
+                            title="Remove member"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div
+                    onClick={handleOpenSelectorForForm}
+                    className="p-3 rounded-xl border border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 cursor-pointer text-center text-[11px] text-charcoal/60 transition-colors"
+                  >
+                    No disciples added yet. Click <strong className="text-indigo-950 underline">+ Add Members</strong> to select multiple disciples at once.
+                  </div>
+                )}
               </div>
 
               <div>
@@ -803,129 +1018,245 @@ export const DutyPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsTeamModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md"
+                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md cursor-pointer active:scale-95"
                 >
                   {editingTeam ? "Save Changes" : "Create Team"}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* MODAL 2: Add Member to Team */}
-      {isAddMemberModalOpen && targetTeam && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+      {/* MODAL 2: Multi-Member Selector Modal (Batch Add Disciples) */}
+      {isMultiMemberSelectorOpen && createPortal(
+        <div className="fixed inset-0 z-[110] bg-charcoal/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-indigo-50 shrink-0">
               <div>
-                <h2 className="text-base font-bold text-charcoal">Add Member to {targetTeam.name}</h2>
-                <span className="text-[10px] text-charcoal/50">Assign disciples to this Saturday duty rotation</span>
+                <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-600" />
+                  <span>Select Team Members</span>
+                </h2>
+                <p className="text-xs text-charcoal/60 mt-0.5">
+                  {selectorTarget === "existing_team" && targetTeam
+                    ? `Batch add disciples to ${targetTeam.name}`
+                    : "Select multiple disciples to assign to this duty team"}
+                </p>
               </div>
-              <button onClick={() => setIsAddMemberModalOpen(false)} className="p-1 text-charcoal/50 hover:text-charcoal">
+              <button
+                onClick={() => setIsMultiMemberSelectorOpen(false)}
+                className="p-1.5 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddMemberToTeam} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Search & Select Disciple *</label>
-                <input
-                  type="text"
-                  placeholder="Filter disciples by name..."
-                  value={memberSearchQuery}
-                  onChange={(e) => setMemberSearchQuery(e.target.value)}
-                  className="w-full mb-2 bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                />
-                <select
-                  required
-                  value={selectedMemberId}
-                  onChange={(e) => setSelectedMemberId(e.target.value)}
-                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                  size={5}
-                >
-                  {churchMembers
-                    .filter(m => `${m.first_name} ${m.last_name}`.toLowerCase().includes(memberSearchQuery.toLowerCase()))
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.first_name} {m.last_name} ({m.ministry_name || "General"})
-                      </option>
-                    ))}
-                </select>
+            {/* Filter & Search Bar */}
+            <div className="space-y-3 shrink-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal/40" />
+                  <input
+                    type="text"
+                    placeholder="Search disciple name..."
+                    value={selectorSearchQuery}
+                    onChange={(e) => setSelectorSearchQuery(e.target.value)}
+                    className="w-full bg-ivory-light pl-9 pr-3 py-2 rounded-xl border border-indigo-100 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Filter className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal/40 pointer-events-none" />
+                  <select
+                    value={selectorMinistryFilter}
+                    onChange={(e) => setSelectorMinistryFilter(e.target.value)}
+                    className="w-full bg-ivory-light pl-9 pr-3 py-2 rounded-xl border border-indigo-100 text-xs focus:outline-none focus:border-indigo-500 font-medium cursor-pointer"
+                  >
+                    <option value="">All Ministries ({ministries.length} Ministries)</option>
+                    {allMinistries.map((min) => {
+                      const count = churchMembers.filter(
+                        m => m.ministry_id === min.id || (m.ministry_name && m.ministry_name.toLowerCase() === min.name.toLowerCase())
+                      ).length;
+                      return (
+                        <option key={min.id} value={String(min.id)}>
+                          {min.name} ({count})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Role in Team</label>
-                <select
-                  value={memberRole}
-                  onChange={(e) => setMemberRole(e.target.value as any)}
-                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                >
-                  <option value="Member">Regular Team Member</option>
-                  <option value="Team Leader">Team Leader</option>
-                </select>
-              </div>
+              {/* Quick Batch Controls & Counter */}
+              <div className="flex items-center justify-between text-xs pt-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllFiltered}
+                    className="text-[11px] font-bold text-indigo-950 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer active:scale-95"
+                  >
+                    Select All Filtered ({filteredSelectorMembers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="text-[11px] font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer active:scale-95"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                <span className="font-black text-xs text-indigo-950 bg-amber-100 border border-amber-300 px-3 py-0.5 rounded-full shadow-2xs">
+                  {selectorSelectedIds.size} Selected
+                </span>
+              </div>
+            </div>
+
+            {/* Member List Grid */}
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[220px]">
+              {filteredSelectorMembers.length > 0 ? (
+                filteredSelectorMembers.map((member) => {
+                  const isSelected = selectorSelectedIds.has(member.id);
+                  const isAlreadyInTeam = selectorTarget === "existing_team" && targetTeam?.members?.some(m => m.member_id === member.id);
+
+                  return (
+                    <div
+                      key={member.id}
+                      onClick={() => handleToggleMemberSelection(member.id)}
+                      className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${isSelected
+                        ? "bg-indigo-50/80 border-indigo-300 ring-2 ring-indigo-200/50 shadow-2xs"
+                        : "bg-white hover:bg-gray-50/80 border-indigo-100/70"
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => { }} // handled by parent onClick
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-800 to-indigo-950 text-amber-300 font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                          {member.first_name[0]}{member.last_name[0]}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-xs text-indigo-950">
+                              {member.first_name} {member.last_name}
+                            </span>
+                            {member.ministry_name && (
+                              <span className="text-[10px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-100/80 px-2 py-0.2 rounded-md">
+                                {member.ministry_name}
+                              </span>
+                            )}
+                            {isAlreadyInTeam && (
+                              <span className="text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.2 rounded-md">
+                                Already in Team
+                              </span>
+                            )}
+                          </div>
+                          {member.contact_phone && (
+                            <span className="text-[11px] text-charcoal/50 font-mono">
+                              {member.contact_phone}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-xs">
+                        {isSelected ? (
+                          <span className="flex items-center gap-1 font-bold text-indigo-700 bg-indigo-100/70 px-2.5 py-1 rounded-xl">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Selected</span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-charcoal/40 font-medium">Click to select</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 text-xs text-charcoal/50">
+                  No disciples match the current search / filter criteria.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-indigo-50 flex items-center justify-between shrink-0">
+              <span className="text-xs text-charcoal/60">
+                <strong>{selectorSelectedIds.size}</strong> disciples chosen
+              </span>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddMemberModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200"
+                  onClick={() => setIsMultiMemberSelectorOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-xs text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md"
+                  type="button"
+                  onClick={handleConfirmSelector}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
-                  Confirm Assignment
+                  <Check className="w-4 h-4" />
+                  <span>Confirm & Add ({selectorSelectedIds.size}) Disciples</span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* MODAL 3: Swap Saturday Duty */}
-      {isSwapModalOpen && swapItem1 && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      {isSwapModalOpen && swapItem1 && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
-                <ArrowLeftRight className="w-5 h-5 text-indigo" />
-                <span>Swap Saturday Duty Teams</span>
+              <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+                <ArrowLeftRight className="w-5 h-5 text-indigo-700" />
+                <span>Swap Saturday Duty Turn</span>
               </h2>
-              <button onClick={() => setIsSwapModalOpen(false)} className="p-1 text-charcoal/50 hover:text-charcoal">
+              <button
+                onClick={() => setIsSwapModalOpen(false)}
+                className="p-1.5 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleExecuteSwap} className="space-y-4 text-xs">
-              <div className="bg-ivory-light p-3 rounded-xl border border-gray-200">
-                <span className="text-[10px] text-charcoal/50 block font-bold">Current Assignment</span>
-                <span className="text-xs font-bold text-charcoal">{swapItem1.date_formatted}</span>
-                <div className="text-indigo font-black mt-0.5">{swapItem1.team?.name}</div>
+              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-1">
+                <span className="text-[10px] font-black uppercase text-indigo-600 block">Currently Selected Turn:</span>
+                <span className="text-sm font-black text-indigo-950 block">{swapItem1.date_formatted}</span>
+                <span className="text-xs text-charcoal/70 font-semibold block">Team: <strong>{swapItem1.team?.name}</strong></span>
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Swap With Another Saturday *</label>
+                <label className="block font-bold text-indigo-950 mb-1.5">Swap with which upcoming Saturday? *</label>
                 <select
                   required
                   value={swapTargetDate}
                   onChange={(e) => setSwapTargetDate(e.target.value)}
-                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-indigo-100 focus:outline-none focus:border-indigo font-bold text-indigo-950 cursor-pointer text-xs"
                 >
+                  <option value="">-- Choose Saturday to Swap With --</option>
                   {schedule
-                    .filter(s => s.duty_date !== swapItem1.duty_date && s.team)
+                    .filter((s) => s.duty_date !== swapItem1.duty_date)
                     .map((s) => (
                       <option key={s.duty_date} value={s.duty_date}>
-                        {s.date_formatted} — {s.team?.name}
+                        {s.date_formatted} — {s.team?.name || "Unassigned"} (Turn #{s.team?.order_seq || s.week_number})
                       </option>
                     ))}
                 </select>
@@ -935,75 +1266,35 @@ export const DutyPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsSwapModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
                 >
-                  <ArrowLeftRight className="w-4 h-4" />
-                  <span>Execute Swap</span>
+                  Confirm Swap
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* MODAL 4: Mark Duty Complete */}
-      {completingItem && (
-        <div className="fixed inset-0 z-50 bg-charcoal/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>Verify Saturday Duty Completion</span>
-              </h2>
-              <button onClick={() => setCompletingItem(null)} className="p-1 text-charcoal/50 hover:text-charcoal">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCompleteDuty} className="space-y-4 text-xs">
-              <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200">
-                <span className="text-[10px] text-emerald-900 block font-bold">Duty Record</span>
-                <span className="text-xs font-black text-emerald-950">{completingItem.date_formatted}</span>
-                <div className="text-emerald-800 font-bold mt-0.5">{completingItem.team?.name}</div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Completion Notes / Inspection Remarks</label>
-                <textarea
-                  rows={3}
-                  value={completionNotes}
-                  onChange={(e) => setCompletionNotes(e.target.value)}
-                  placeholder="e.g. All areas sanitized, sound tested, garbage disposed."
-                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                ></textarea>
-              </div>
-
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCompletingItem(null)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md flex items-center gap-1.5"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Confirm Duty Completed</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Reusable Confirmation & Alert Modal */}
+      <ConfirmationModal
+        isOpen={confirmModalConfig.isOpen}
+        title={confirmModalConfig.title}
+        description={confirmModalConfig.description}
+        type={confirmModalConfig.type}
+        confirmText={confirmModalConfig.confirmText}
+        cancelText={confirmModalConfig.cancelText}
+        isLoading={confirmModalConfig.isLoading}
+        onConfirm={confirmModalConfig.onConfirm}
+        onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

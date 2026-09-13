@@ -1,1343 +1,2040 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
-import { DishwashingDutyItem, DishwashingResponse } from "../types";
-import { 
-  Sparkles, Calendar, Users, CheckCircle2, 
-  RotateCw, Plus, ArrowRight, Clock, 
-  ArrowLeftRight, Trash2, CalendarCheck, Utensils, 
-  Check, Edit, X, Building2, BookOpen, UserCheck, Handshake, Users2
+import { useSocketEvent } from "../socket";
+import { DishwashingPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
+import { DishwashingTeam, SundayDutyScheduleItem, Member, BibleStudyGroup, Ministry } from "../types";
+import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
+import {
+  Utensils, Sparkles, Calendar, CalendarCheck, Users, CheckCircle2, Clock, Plus,
+  Trash2, Edit, RefreshCw, ArrowLeftRight, Check, X,
+  AlertCircle, ChevronRight, Phone, CheckSquare, Crown, UserPlus,
+  BookOpen, Building2, Layers, ShieldCheck, ArrowRight,
+  Droplets, Flame, Search, Filter, Sparkle, CalendarDays, Award,
+  ListOrdered, HeartHandshake, Eye
 } from "lucide-react";
-
-interface FormTeamItem {
-  id: string;
-  cycle_mode: "biblestudy_group" | "ministry";
-  biblestudy_group_id: string;
-  ministry_id: string;
-  assigned_name: string;
-  leader_name: string;
-}
 
 export const DishwashingPage: React.FC = () => {
   const { user } = useAuth();
   const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Coordinator";
 
-  const [duties, setDuties] = useState<DishwashingDutyItem[]>([]);
-  const [thisSunday, setThisSunday] = useState<DishwashingDutyItem | null>(null);
-  const [nextSunday, setNextSunday] = useState<DishwashingDutyItem | null>(null);
-  const [cycleOptions, setCycleOptions] = useState<DishwashingResponse["cycleOptions"]>({ groups: [], ministries: [] });
-  const [loading, setLoading] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterMode, setFilterMode] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"teams" | "schedule" | "tasks">("teams");
+  const [teams, setTeams] = useState<DishwashingTeam[]>([]);
+  const [schedule, setSchedule] = useState<SundayDutyScheduleItem[]>([]);
+  const [churchMembers, setChurchMembers] = useState<Member[]>([]);
+  const [bsGroups, setBsGroups] = useState<BibleStudyGroup[]>([]);
+  const [ministriesList, setMinistriesList] = useState<Ministry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Modals state
-  const [isCycleModalOpen, setIsCycleModalOpen] = useState(false);
-  const [isDutyModalOpen, setIsDutyModalOpen] = useState(false);
-  const [editingDutyId, setEditingDutyId] = useState<number | null>(null);
-  const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
-  const [selectedDutyForSwap, setSelectedDutyForSwap] = useState<DishwashingDutyItem | null>(null);
-  const [targetDutyId, setTargetDutyId] = useState<string>("");
-  const [actionLoading, setActionLoading] = useState(false);
-
-  // Auto Cycle Generator Form
-  const [cycleForm, setCycleForm] = useState({
-    cycle_mode: "biblestudy_group" as "biblestudy_group" | "ministry",
-    start_date: "2026-08-30",
-    weeks_count: 8,
-    replace_existing: true,
-    teams_per_turn: 1 as 1 | 2
+  // Custom Confirmation & Alert Modal State
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: React.ReactNode;
+    type: ModalType;
+    confirmText?: string;
+    cancelText?: string | null;
+    isLoading?: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    type: "info",
+    confirmText: "Confirm",
+    onConfirm: () => { }
   });
 
-  // Dynamic Teams List inside Add/Edit Modal
-  const [dutyDate, setDutyDate] = useState("2026-08-30");
-  const [dutyStatus, setDutyStatus] = useState<"scheduled" | "completed" | "swapped">("scheduled");
-  const [dutyNotes, setDutyNotes] = useState("");
-  const [formTeams, setFormTeams] = useState<FormTeamItem[]>([]);
+  const showAlert = (title: string, message: string, type: ModalType = "danger") => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title,
+      type,
+      confirmText: "Okay",
+      cancelText: null,
+      description: <p className="text-xs text-slate-600 text-center">{message}</p>,
+      onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
+
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "biblestudy_group" | "ministry" | "custom">("all");
+
+  // Team modal state (Add / Edit Rotating Unit)
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<DishwashingTeam | null>(null);
+  const [teamForm, setTeamForm] = useState({
+    cycle_mode: "biblestudy_group" as "biblestudy_group" | "ministry" | "custom",
+    biblestudy_group_id: "",
+    ministry_id: "",
+    name: "",
+    order_seq: 1,
+    leader_id: "",
+    leader_name: "",
+    leader_contact: "",
+    color: "#0D9488",
+    volunteers_count: 5,
+    tasks_checklist: "Plates & Cutleries Pre-rinse, 3-Compartment Washing & Sanitization, Dish Drying & Storage, Kitchen Counter & Sink Deep Wipe, Trash Disposal & Clean Linens",
+    selectedMemberIds: [] as number[]
+  });
+
+  // Add member modal state
+  const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [targetTeam, setTargetTeam] = useState<DishwashingTeam | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  const [memberRole, setMemberRole] = useState<string>("Regular Crew Member");
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberTab, setMemberTab] = useState<"group" | "all">("group");
+  const [batchLoading, setBatchLoading] = useState(false);
+
+  // Swap modal state
+  const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
+  const [swapItem1, setSwapItem1] = useState<SundayDutyScheduleItem | null>(null);
+  const [swapTargetDate, setSwapTargetDate] = useState<string>("");
+
+  // Single Sunday Override modal state ("Mababago lang yan kapag nag edit")
+  const [overrideItem, setOverrideItem] = useState<SundayDutyScheduleItem | null>(null);
+  const [overrideTeamId, setOverrideTeamId] = useState<string>("");
+  const [overrideStatus, setOverrideStatus] = useState<string>("scheduled");
+  const [overrideNotes, setOverrideNotes] = useState("");
+
 
   useEffect(() => {
-    loadDuties();
-  }, [filterStatus, filterMode]);
+    loadDishwashingData();
+  }, []);
 
-  const loadDuties = async () => {
+  // Real-time synchronization
+  useSocketEvent("dishwashing:changed", () => {
+    loadDishwashingData();
+  });
+  useSocketEvent("members:changed", () => {
+    loadDishwashingData();
+  });
+  useSocketEvent("groups:changed", () => {
+    loadDishwashingData();
+  });
+  useSocketEvent("ministries:changed", () => {
+    loadDishwashingData();
+  });
+
+  const loadDishwashingData = async () => {
     try {
       setLoading(true);
-      const res = await api.getDishwashingDuties({
-        status: filterStatus !== "all" ? filterStatus : undefined,
-        cycle_mode: filterMode !== "all" ? filterMode : undefined
-      });
-      setDuties(res.duties || []);
-      setThisSunday(res.thisSunday || null);
-      setNextSunday(res.nextSunday || null);
-      setCycleOptions(res.cycleOptions || { groups: [], ministries: [] });
+      const [teamsData, scheduleData, membersData, groupsData, ministriesData] = await Promise.all([
+        api.getDishwashingTeams().catch(() => []),
+        api.getDishwashingSchedule({ count: 16 }).catch(() => ({ total_teams: 0, cycle_interval_weeks: 0, thisSunday: null, nextSunday: null, schedule: [] })),
+        api.getMembers({ status: "active" }).catch(() => []),
+        api.getGroups().catch(() => []),
+        api.getMinistries().catch(() => [])
+      ]);
+      setTeams(teamsData || []);
+      setSchedule(scheduleData?.schedule || []);
+      setChurchMembers(membersData || []);
+      setBsGroups(groupsData || []);
+      setMinistriesList(ministriesData || []);
     } catch (err) {
-      console.error("Failed to load dishwashing duties:", err);
+      console.error("Failed to load dishwashing roster:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGenerateCycle = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setActionLoading(true);
-      const res = await api.generateDishwashingCycle(cycleForm);
-      alert(res.message || "Cycle generated successfully!");
-      setIsCycleModalOpen(false);
-      loadDuties();
-    } catch (err: any) {
-      alert(err.message || "Failed to generate cycle");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleOpenAddModal = () => {
-    setEditingDutyId(null);
-    setDutyDate("2026-08-30");
-    setDutyStatus("scheduled");
-    setDutyNotes("");
-
-    const firstGroup = cycleOptions.groups[0];
-    setFormTeams([
-      {
-        id: "team-1",
-        cycle_mode: "biblestudy_group",
-        biblestudy_group_id: firstGroup?.id ? String(firstGroup.id) : "",
-        ministry_id: "",
-        assigned_name: firstGroup?.name || "",
-        leader_name: firstGroup?.leader_name || ""
-      }
-    ]);
-    setIsDutyModalOpen(true);
-  };
-
-  const handleOpenEditModal = (duty: DishwashingDutyItem) => {
-    setEditingDutyId(duty.id);
-    setDutyDate(duty.duty_date ? duty.duty_date.split("T")[0] : "2026-08-30");
-    setDutyStatus(duty.status || "scheduled");
-    setDutyNotes(duty.notes || "");
-
-    const initialTeams: FormTeamItem[] = [];
-
-    // Team 1
-    const firstGroup = duty.biblestudy_group_id 
-      ? cycleOptions.groups.find(g => g.id === duty.biblestudy_group_id)
-      : null;
-    const firstMin = duty.ministry_id 
-      ? cycleOptions.ministries.find(m => m.id === duty.ministry_id)
-      : null;
-
-    initialTeams.push({
-      id: "team-1",
-      cycle_mode: duty.cycle_mode || (firstGroup ? "biblestudy_group" : "ministry"),
-      biblestudy_group_id: duty.biblestudy_group_id ? String(duty.biblestudy_group_id) : (firstGroup ? String(firstGroup.id) : ""),
-      ministry_id: duty.ministry_id ? String(duty.ministry_id) : (firstMin ? String(firstMin.id) : ""),
-      assigned_name: duty.assigned_name || (firstGroup?.name || firstMin?.name || ""),
-      leader_name: duty.leader_name || (firstGroup?.leader_name || firstMin?.coordinator_name || "")
+  // Filtered teams list
+  const filteredTeams = useMemo(() => {
+    return teams.filter(t => {
+      const matchSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.leader_name && t.leader_name.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchMode = filterMode === "all" || t.cycle_mode === filterMode;
+      return matchSearch && matchMode;
     });
+  }, [teams, searchQuery, filterMode]);
 
-    // Partner / Team 2+
-    if (duty.partner_assigned_name) {
-      const pNames = duty.partner_assigned_name.split(" & ");
-      const pLeaders = (duty.partner_leader_name || "").split(" & ");
+  // Derived rotation milestones
+  const thisSunday = schedule[0] || null;
+  const nextSunday = schedule[1] || null;
+  const thirdSunday = schedule[2] || null;
+  const completedCount = schedule.filter(s => s.status === "completed").length;
 
-      pNames.forEach((name, idx) => {
-        const pGrp = cycleOptions.groups.find(g => g.name === name);
-        const pMin = cycleOptions.ministries.find(m => `${m.name} Ministry` === name || m.name === name);
-
-        initialTeams.push({
-          id: `team-partner-${idx + 1}`,
-          cycle_mode: pMin ? "ministry" : "biblestudy_group",
-          biblestudy_group_id: pGrp ? String(pGrp.id) : (duty.partner_biblestudy_group_id ? String(duty.partner_biblestudy_group_id) : ""),
-          ministry_id: pMin ? String(pMin.id) : (duty.partner_ministry_id ? String(duty.partner_ministry_id) : ""),
-          assigned_name: name,
-          leader_name: pLeaders[idx] || (pGrp?.leader_name || pMin?.coordinator_name || "")
-        });
-      });
+  // Helper: Match leader string with registered church members
+  const findMemberByLeaderName = (leaderName?: string, leaderId?: number | null) => {
+    if (leaderId) {
+      const found = churchMembers.find(m => m.id === leaderId);
+      if (found) return found;
     }
+    if (!leaderName) return null;
+    const clean = leaderName
+      .replace(/^(pastor|ptr\.|ate|kuya|bro\.|brother|sis\.|sister)\s+/i, "")
+      .replace(/\(.*?\)/g, "")
+      .trim()
+      .toLowerCase();
 
-    setFormTeams(initialTeams);
-    setIsDutyModalOpen(true);
+    if (!clean) return null;
+
+    return churchMembers.find(m => {
+      const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
+      return fullName === clean || fullName.includes(clean) || clean.includes(fullName);
+    });
   };
 
-  const handleAddAnotherTeam = () => {
-    const nextIdx = formTeams.length;
-    const nextGroup = cycleOptions.groups[nextIdx % cycleOptions.groups.length] || cycleOptions.groups[0];
-    
-    setFormTeams(prev => [
+  const handleOpenCreateTeam = () => {
+    setEditingTeam(null);
+    const nextNum = teams.length + 1;
+    const firstGroup = bsGroups[0];
+    const matchedLeader = firstGroup ? findMemberByLeaderName(firstGroup.leader_name, firstGroup.leader_id) : null;
+    const groupMemberIds = firstGroup?.members?.map(m => m.member_id).filter(Boolean) || [];
+
+    setTeamForm({
+      cycle_mode: "biblestudy_group",
+      biblestudy_group_id: firstGroup ? String(firstGroup.id) : "",
+      ministry_id: "",
+      name: firstGroup ? firstGroup.name : `Kitchen Crew ${nextNum}`,
+      order_seq: nextNum,
+      leader_id: matchedLeader ? String(matchedLeader.id) : "",
+      leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (firstGroup?.leader_name || ""),
+      leader_contact: matchedLeader
+        ? (matchedLeader.contact_phone || matchedLeader.contact_email || firstGroup?.leader_contact || "")
+        : (firstGroup?.leader_contact || ""),
+      color: ["#0D9488", "#0284C7", "#7C3AED", "#EA580C", "#059669", "#D97706", "#DB2777"][nextNum % 7],
+      volunteers_count: Math.max(groupMemberIds.length || 4, 4),
+      tasks_checklist: "Plates & Cutleries Pre-rinse, 3-Compartment Washing & Sanitization, Dish Drying & Storage, Kitchen Counter & Sink Deep Wipe, Trash Disposal & Clean Linens",
+      selectedMemberIds: groupMemberIds
+    });
+    setIsTeamModalOpen(true);
+  };
+
+  const handleOpenEditTeam = (team: DishwashingTeam) => {
+    setEditingTeam(team);
+    const linkedGroup = bsGroups.find(g => g.id === team.biblestudy_group_id || g.name === team.name);
+    const existingMemberIds = team.members?.map(m => m.member_id) || [];
+    const groupMemberIds = linkedGroup?.members?.map(m => m.member_id).filter(Boolean) || [];
+    const combinedMemberIds = Array.from(new Set([...existingMemberIds, ...groupMemberIds]));
+    const matchedLeader = findMemberByLeaderName(team.leader_name, team.leader_id);
+
+    setTeamForm({
+      cycle_mode: team.cycle_mode || "custom",
+      biblestudy_group_id: team.biblestudy_group_id ? String(team.biblestudy_group_id) : (linkedGroup ? String(linkedGroup.id) : ""),
+      ministry_id: team.ministry_id ? String(team.ministry_id) : "",
+      name: team.name,
+      order_seq: team.order_seq,
+      leader_id: team.leader_id ? String(team.leader_id) : (matchedLeader ? String(matchedLeader.id) : ""),
+      leader_name: team.leader_name || (matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : ""),
+      leader_contact: team.leader_contact || team.leader_phone || (matchedLeader?.contact_phone || matchedLeader?.contact_email || ""),
+      color: team.color || "#0D9488",
+      volunteers_count: team.volunteers_count || Math.max(combinedMemberIds.length, 4),
+      tasks_checklist: team.tasks_checklist || "Plates & Cutleries Pre-rinse, 3-Compartment Washing & Sanitization, Dish Drying & Storage, Kitchen Counter & Sink Deep Wipe, Trash Disposal & Clean Linens",
+      selectedMemberIds: combinedMemberIds.length > 0 ? combinedMemberIds : existingMemberIds
+    });
+    setIsTeamModalOpen(true);
+  };
+
+  const handleCycleModeChange = (mode: "biblestudy_group" | "ministry" | "custom") => {
+    if (mode === "biblestudy_group") {
+      const g = bsGroups[0];
+      const matchedLeader = g ? findMemberByLeaderName(g.leader_name, g.leader_id) : null;
+      const groupMemberIds = g?.members?.map(m => m.member_id).filter(Boolean) || [];
+
+      setTeamForm(prev => ({
+        ...prev,
+        cycle_mode: "biblestudy_group",
+        biblestudy_group_id: g ? String(g.id) : "",
+        ministry_id: "",
+        name: g ? g.name : prev.name,
+        leader_id: matchedLeader ? String(matchedLeader.id) : "",
+        leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (g?.leader_name || ""),
+        leader_contact: matchedLeader
+          ? (matchedLeader.contact_phone || matchedLeader.contact_email || g?.leader_contact || "")
+          : (g?.leader_contact || ""),
+        selectedMemberIds: groupMemberIds,
+        volunteers_count: Math.max(groupMemberIds.length, 4)
+      }));
+    } else if (mode === "ministry") {
+      const m = ministriesList[0];
+      const coordName = m?.coordinators?.[0]?.name;
+      const matchedLeader = coordName ? findMemberByLeaderName(coordName) : null;
+      const ministryMemberIds = churchMembers.filter(cm => cm.ministry_id === m?.id).map(cm => cm.id);
+
+      setTeamForm(prev => ({
+        ...prev,
+        cycle_mode: "ministry",
+        biblestudy_group_id: "",
+        ministry_id: m ? String(m.id) : "",
+        name: m ? `${m.name} Ministry` : prev.name,
+        color: m?.color || prev.color,
+        leader_id: matchedLeader ? String(matchedLeader.id) : "",
+        leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (coordName || ""),
+        leader_contact: matchedLeader ? (matchedLeader.contact_phone || matchedLeader.contact_email || "") : "",
+        selectedMemberIds: ministryMemberIds.slice(0, 10),
+        volunteers_count: Math.max(ministryMemberIds.length, 4)
+      }));
+    } else {
+      setTeamForm(prev => ({
+        ...prev,
+        cycle_mode: "custom",
+        biblestudy_group_id: "",
+        ministry_id: "",
+        selectedMemberIds: []
+      }));
+    }
+  };
+
+  const handleSelectGroup = (groupIdStr: string) => {
+    const g = bsGroups.find(x => String(x.id) === groupIdStr);
+    const matchedLeader = g ? findMemberByLeaderName(g.leader_name, g.leader_id) : null;
+    const groupMemberIds = g?.members?.map(m => m.member_id).filter(Boolean) || [];
+
+    setTeamForm(prev => ({
       ...prev,
-      {
-        id: `team-${Date.now()}-${Math.random()}`,
-        cycle_mode: "biblestudy_group",
-        biblestudy_group_id: nextGroup?.id ? String(nextGroup.id) : "",
-        ministry_id: "",
-        assigned_name: nextGroup?.name || "",
-        leader_name: nextGroup?.leader_name || ""
-      }
-    ]);
+      biblestudy_group_id: groupIdStr,
+      name: g ? g.name : prev.name,
+      leader_id: matchedLeader ? String(matchedLeader.id) : (prev.leader_id || ""),
+      leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (g?.leader_name || prev.leader_name),
+      leader_contact: matchedLeader
+        ? (matchedLeader.contact_phone || matchedLeader.contact_email || g?.leader_contact || "")
+        : (g?.leader_contact || prev.leader_contact),
+      selectedMemberIds: groupMemberIds,
+      volunteers_count: Math.max(groupMemberIds.length, 4)
+    }));
   };
 
-  const handleRemoveTeam = (indexToRemove: number) => {
-    if (formTeams.length <= 1) return;
-    setFormTeams(prev => prev.filter((_, idx) => idx !== indexToRemove));
-  };
+  const handleSelectPointPerson = (selId: string) => {
+    if (!selId) {
+      setTeamForm(prev => ({
+        ...prev,
+        leader_id: "",
+        leader_name: "",
+        leader_contact: ""
+      }));
+      return;
+    }
 
-  const handleUpdateTeamMode = (index: number, mode: "biblestudy_group" | "ministry") => {
-    setFormTeams(prev => {
-      const updated = [...prev];
-      if (mode === "biblestudy_group") {
-        const grp = cycleOptions.groups[0];
-        updated[index] = {
-          ...updated[index],
-          cycle_mode: "biblestudy_group",
-          biblestudy_group_id: grp?.id ? String(grp.id) : "",
-          ministry_id: "",
-          assigned_name: grp?.name || "",
-          leader_name: grp?.leader_name || ""
-        };
-      } else {
-        const min = cycleOptions.ministries[0];
-        updated[index] = {
-          ...updated[index],
-          cycle_mode: "ministry",
-          biblestudy_group_id: "",
-          ministry_id: min?.id ? String(min.id) : "",
-          assigned_name: min ? `${min.name} Ministry` : "",
-          leader_name: min?.coordinator_name || "Ministry Coordinator"
-        };
-      }
-      return updated;
+    const m = churchMembers.find(x => String(x.id) === selId);
+    if (!m) return;
+
+    // Find if this leader has an assigned Bible Study Group
+    const matchedGroup = bsGroups.find(g => {
+      if (g.leader_id && Number(g.leader_id) === Number(selId)) return true;
+      if (!g.leader_name) return false;
+      const cleanGLeader = g.leader_name.toLowerCase().replace(/^(pastor|ptr\.|pt\.|ate|kuya|bro\.|brother|sis\.|sister)\s+/i, "").trim();
+      const memFullName = `${m.first_name} ${m.last_name}`.toLowerCase();
+      return cleanGLeader.includes(m.first_name.toLowerCase()) || memFullName.includes(cleanGLeader);
+    });
+
+    const groupMemberIds = matchedGroup?.members?.map(gm => gm.member_id).filter(Boolean) || [];
+
+    setTeamForm(prev => {
+      const shouldUpdateGroup = prev.cycle_mode === "biblestudy_group" && matchedGroup;
+      const newSelected = groupMemberIds.length > 0 ? groupMemberIds : prev.selectedMemberIds;
+      return {
+        ...prev,
+        leader_id: selId,
+        leader_name: `${m.first_name} ${m.last_name}`,
+        leader_contact: m.contact_phone || m.contact_email || matchedGroup?.leader_contact || prev.leader_contact,
+        biblestudy_group_id: shouldUpdateGroup ? String(matchedGroup.id) : prev.biblestudy_group_id,
+        name: shouldUpdateGroup ? matchedGroup.name : prev.name,
+        selectedMemberIds: newSelected,
+        volunteers_count: groupMemberIds.length > 0 ? Math.max(groupMemberIds.length, 4) : prev.volunteers_count
+      };
     });
   };
 
-  const handleUpdateTeamSelection = (index: number, selectedId: string) => {
-    setFormTeams(prev => {
-      const updated = [...prev];
-      const team = updated[index];
-      if (team.cycle_mode === "biblestudy_group") {
-        const grp = cycleOptions.groups.find(g => String(g.id) === selectedId);
-        updated[index] = {
-          ...team,
-          biblestudy_group_id: selectedId,
-          assigned_name: grp?.name || "",
-          leader_name: grp?.leader_name || ""
-        };
-      } else {
-        const min = cycleOptions.ministries.find(m => String(m.id) === selectedId);
-        updated[index] = {
-          ...team,
-          ministry_id: selectedId,
-          assigned_name: min ? `${min.name} Ministry` : "",
-          leader_name: min?.coordinator_name || "Ministry Coordinator"
-        };
-      }
-      return updated;
-    });
+  const handleSelectMinistry = (minIdStr: string) => {
+    const m = ministriesList.find(x => String(x.id) === minIdStr);
+    const coordName = m?.coordinators?.[0]?.name;
+    const matchedLeader = coordName ? findMemberByLeaderName(coordName) : null;
+    const ministryMemberIds = churchMembers.filter(cm => cm.ministry_id === m?.id).map(cm => cm.id);
+
+    setTeamForm(prev => ({
+      ...prev,
+      ministry_id: minIdStr,
+      name: m ? `${m.name} Ministry` : prev.name,
+      color: m?.color || prev.color,
+      leader_id: matchedLeader ? String(matchedLeader.id) : "",
+      leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (coordName || prev.leader_name),
+      leader_contact: matchedLeader ? (matchedLeader.contact_phone || matchedLeader.contact_email || "") : prev.leader_contact,
+      selectedMemberIds: ministryMemberIds.slice(0, 10),
+      volunteers_count: Math.max(ministryMemberIds.length, 4)
+    }));
   };
 
-  const handleUpdateTeamLeader = (index: number, leaderName: string) => {
-    setFormTeams(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], leader_name: leaderName };
-      return updated;
-    });
-  };
-
-  const handleSaveDuty = async (e: React.FormEvent) => {
+  const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formTeams.length === 0) return;
-
     try {
-      setActionLoading(true);
-
-      const team1 = formTeams[0];
-      const partnerTeams = formTeams.slice(1);
-      const isJoint = partnerTeams.length > 0;
-
-      const partnerAssignedName = isJoint 
-        ? partnerTeams.map(t => t.assigned_name).filter(Boolean).join(" & ") 
-        : null;
-      const partnerLeaderName = isJoint 
-        ? partnerTeams.map(t => t.leader_name).filter(Boolean).join(" & ") 
-        : null;
-
       const payload = {
-        duty_date: dutyDate,
-        cycle_mode: team1.cycle_mode,
-        assigned_name: team1.assigned_name,
-        leader_name: team1.leader_name,
-        partner_assigned_name: partnerAssignedName,
-        partner_leader_name: partnerLeaderName,
-        partner_biblestudy_group_id: partnerTeams[0]?.cycle_mode === "biblestudy_group" && partnerTeams[0].biblestudy_group_id ? Number(partnerTeams[0].biblestudy_group_id) : null,
-        partner_ministry_id: partnerTeams[0]?.cycle_mode === "ministry" && partnerTeams[0].ministry_id ? Number(partnerTeams[0].ministry_id) : null,
-        is_joint_duty: isJoint,
-        status: dutyStatus,
-        volunteers_count: isJoint ? Math.max(6, formTeams.length * 3) : 4,
-        notes: dutyNotes,
-        biblestudy_group_id: team1.cycle_mode === "biblestudy_group" && team1.biblestudy_group_id ? Number(team1.biblestudy_group_id) : null,
-        ministry_id: team1.cycle_mode === "ministry" && team1.ministry_id ? Number(team1.ministry_id) : null
+        name: teamForm.name,
+        cycle_mode: teamForm.cycle_mode,
+        biblestudy_group_id: teamForm.biblestudy_group_id ? Number(teamForm.biblestudy_group_id) : null,
+        ministry_id: teamForm.ministry_id ? Number(teamForm.ministry_id) : null,
+        order_seq: Number(teamForm.order_seq),
+        leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : null,
+        leader_name: teamForm.leader_name || null,
+        leader_contact: teamForm.leader_contact || null,
+        color: teamForm.color,
+        volunteers_count: Number(teamForm.volunteers_count),
+        tasks_checklist: teamForm.tasks_checklist,
+        member_ids: teamForm.selectedMemberIds
       };
 
-      if (editingDutyId) {
-        await api.updateDishwashingDuty(editingDutyId, payload);
+      if (editingTeam) {
+        await api.updateDishwashingTeam(editingTeam.id, payload);
       } else {
-        await api.createDishwashingDuty(payload);
+        await api.createDishwashingTeam(payload);
       }
-
-      setIsDutyModalOpen(false);
-      loadDuties();
+      setIsTeamModalOpen(false);
+      loadDishwashingData();
     } catch (err: any) {
-      alert(err.message || "Failed to save dishwashing duty");
-    } finally {
-      setActionLoading(false);
+      showAlert("Save Failed", err.message || "Failed to save dishwashing team", "danger");
     }
   };
 
-  const handleToggleComplete = async (duty: DishwashingDutyItem) => {
+  const handleDeleteTeam = (teamId: number, name: string) => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Remove Dishwashing Unit",
+      type: "delete",
+      confirmText: "Yes, Remove Unit",
+      cancelText: "Cancel",
+      description: (
+        <p className="text-xs text-slate-600 text-center">
+          Are you sure you want to remove <strong>"{name}"</strong> from the Sunday rotation cycle?
+        </p>
+      ),
+      onConfirm: async () => {
+        try {
+          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
+          await api.deleteDishwashingTeam(teamId);
+          loadDishwashingData();
+          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          showAlert("Delete Failed", err.message || "Failed to delete team", "danger");
+        }
+      }
+    });
+  };
+
+  const handleOpenAddMember = (team: DishwashingTeam) => {
+    setTargetTeam(team);
+    setSelectedMemberId("");
+    setMemberRole("Member");
+    setMemberSearchQuery("");
+
+    // Identify linked BS group and whether there are unassigned disciples
+    const linkedGroup = bsGroups.find(g => g.id === team.biblestudy_group_id || g.name === team.name);
+    const existingIds = new Set(team.members?.map(m => m.member_id) || []);
+    const unassignedCount = (linkedGroup?.members || []).filter(m => !existingIds.has(m.member_id)).length;
+
+    setMemberTab(linkedGroup && unassignedCount > 0 ? "group" : "all");
+    setIsAddMemberModalOpen(true);
+  };
+
+  const handleBatchAddGroupDisciples = async (teamId: number, memberIds: number[]) => {
+    if (memberIds.length === 0) return;
     try {
-      const nextStatus = duty.status === "completed" ? "scheduled" : "completed";
-      await api.updateDishwashingDuty(duty.id, {
-        status: nextStatus,
-        notes: nextStatus === "completed" ? `Completed on ${new Date().toLocaleDateString()}` : ""
-      });
-      loadDuties();
+      setBatchLoading(true);
+      await api.batchAddDishwashingTeamMembers(teamId, { member_ids: memberIds, role: "Member" });
+      setIsAddMemberModalOpen(false);
+      loadDishwashingData();
+      showAlert("Disciples Imported", `Successfully imported ${memberIds.length} disciples from the Bible study group into the dishwashing roster!`, "success");
     } catch (err: any) {
-      alert(err.message || "Failed to update status");
+      showAlert("Failed to Add Disciples", err.message || "Failed to batch add disciples", "danger");
+    } finally {
+      setBatchLoading(false);
     }
   };
 
-  const handleOpenSwap = (duty: DishwashingDutyItem) => {
-    setSelectedDutyForSwap(duty);
-    setTargetDutyId("");
+  const handleAddMemberToTeam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetTeam || !selectedMemberId) return;
+    try {
+      await api.addDishwashingTeamMember(targetTeam.id, {
+        member_id: Number(selectedMemberId),
+        role: memberRole
+      });
+      setIsAddMemberModalOpen(false);
+      loadDishwashingData();
+    } catch (err: any) {
+      showAlert("Failed to Add Member", err.message || "Failed to add member to team", "danger");
+    }
+  };
+
+  const handleRemoveMember = (teamId: number, memberId: number, memberName: string) => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Remove Roster Member",
+      type: "warning",
+      confirmText: "Remove",
+      cancelText: "Cancel",
+      description: (
+        <p className="text-xs text-slate-600 text-center">
+          Remove <strong>"{memberName}"</strong> from this dishwashing team?
+        </p>
+      ),
+      onConfirm: async () => {
+        try {
+          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
+          await api.removeDishwashingTeamMember(teamId, memberId);
+          loadDishwashingData();
+          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          showAlert("Remove Failed", err.message || "Failed to remove member", "danger");
+        }
+      }
+    });
+  };
+
+  const handleOpenSwapModal = (item: SundayDutyScheduleItem) => {
+    setSwapItem1(item);
+    const otherSundays = schedule.filter(s => s.duty_date !== item.duty_date && s.team);
+    setSwapTargetDate(otherSundays[0]?.duty_date || "");
     setIsSwapModalOpen(true);
   };
 
   const handleExecuteSwap = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDutyForSwap || !targetDutyId) return;
+    if (!swapItem1 || !swapItem1.team || !swapTargetDate) return;
+
+    const targetItem = schedule.find(s => s.duty_date === swapTargetDate);
+    if (!targetItem || !targetItem.team) {
+      showAlert("Invalid Target", "Please select a valid target Sunday with an assigned team", "warning");
+      return;
+    }
 
     try {
-      setActionLoading(true);
-      await api.swapDishwashingDuty(selectedDutyForSwap.id, Number(targetDutyId));
+      await api.swapSundayDishwashingDuty({
+        date1: swapItem1.duty_date,
+        teamId1: swapItem1.team.id,
+        date2: targetItem.duty_date,
+        teamId2: targetItem.team.id
+      });
       setIsSwapModalOpen(false);
-      loadDuties();
+      loadDishwashingData();
     } catch (err: any) {
-      alert(err.message || "Failed to swap duty turns");
-    } finally {
-      setActionLoading(false);
+      showAlert("Swap Failed", err.message || "Failed to swap dishwashing turns", "danger");
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm("Are you sure you want to remove this duty date from the schedule?")) return;
+  const handleOpenOverrideModal = (item: SundayDutyScheduleItem) => {
+    setOverrideItem(item);
+    setOverrideTeamId(item.team ? String(item.team.id) : (teams[0] ? String(teams[0].id) : ""));
+    setOverrideStatus(item.status || "scheduled");
+    setOverrideNotes(item.notes || "");
+  };
+
+  const handleSaveOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overrideItem || !overrideTeamId) return;
     try {
-      await api.deleteDishwashingDuty(id);
-      loadDuties();
+      await api.overrideSundayDishwashingDuty({
+        duty_date: overrideItem.duty_date,
+        team_id: Number(overrideTeamId),
+        status: overrideStatus,
+        notes: overrideNotes
+      });
+      setOverrideItem(null);
+      loadDishwashingData();
     } catch (err: any) {
-      alert(err.message || "Failed to delete duty");
+      showAlert("Override Failed", err.message || "Failed to override Sunday assignment", "danger");
     }
   };
 
-  // Filter list by search query
-  const filteredDuties = duties.filter(d => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      d.assigned_name.toLowerCase().includes(q) ||
-      (d.partner_assigned_name && d.partner_assigned_name.toLowerCase().includes(q)) ||
-      (d.leader_name && d.leader_name.toLowerCase().includes(q)) ||
-      (d.partner_leader_name && d.partner_leader_name.toLowerCase().includes(q)) ||
-      d.duty_date.includes(q) ||
-      (d.notes && d.notes.toLowerCase().includes(q))
-    );
-  });
+  if (loading && teams.length === 0) {
+    return <DishwashingPageSkeleton />;
+  }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in">
-      
-      {/* PAGE HEADER & PRIMARY CRUD ACTIONS */}
-      <div className="relative overflow-hidden bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-200/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="relative z-10 space-y-2">
+    <div className="space-y-6">
+      {/* TOP HEADER: Culinary Fellowship Command */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+            <span className="p-2.5 rounded-2xl bg-gradient-to-tr from-teal-600 via-emerald-600 to-teal-400 text-white shadow-md ring-4 ring-teal-50">
               <Utensils className="w-5 h-5" />
             </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-charcoal tracking-tight">
-              Dishwashing & Kitchen Roster
-            </h1>
-            <span className="px-3 py-1 rounded-full text-xs font-black bg-indigo-50 text-indigo-900 border border-indigo-200/80 flex items-center gap-1.5 shadow-2xs">
-              <Handshake className="w-3.5 h-3.5 text-amber-500" />
-              <span>Multi-Team Rotation</span>
-            </span>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span>Sunday Dishwashing & Kitchen Care</span>
+                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200/70">
+                  Rotating Loop
+                </span>
+              </h1>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed">
-            Coordinate post-fellowship meal dishwashing and kitchen cleanup with automated leader autofills, joint team-ups, and round-robin cycle tracking.
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl font-medium">
+            Automated weekly post-fellowship dishwashing cycle across Bible Study Groups and Church Ministries.
           </p>
         </div>
 
-        {isAdminOrCoordinator && (
-          <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
-            <button
-              onClick={() => setIsCycleModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-indigo-50/60 text-charcoal text-xs font-bold border border-indigo-200/80 transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
-            >
-              <RotateCw className="w-4 h-4 text-indigo" />
-              <span>Auto-Cycle Generator</span>
-            </button>
-
-            <button
-              onClick={handleOpenAddModal}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-indigo-950" />
-              <span>+ Schedule Duty</span>
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={loadDishwashingData}
+            className="p-2.5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-all shadow-2xs cursor-pointer active:scale-95"
+            title="Refresh schedule"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-teal-600" : ""}`} />
+          </button>
+          <button
+            onClick={handleOpenCreateTeam}
+            className="flex items-center gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <Plus className="w-4 h-4 text-white" />
+            <span>Add Team to Cycle</span>
+          </button>
+        </div>
       </div>
 
-      {/* TOP DUAL ALERT CARDS: THIS SUNDAY'S DUTY + NEXT ON DECK */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        
-        {/* CARD 1: THIS SUNDAY'S DISHWASHING IN-CHARGE (PRIMARY ALERT) */}
-        <div className="lg:col-span-7 bg-gradient-to-br from-[#1b2342] via-[#243058] to-[#1b2342] rounded-3xl p-6 sm:p-8 text-white relative overflow-hidden shadow-xl border border-white/10 flex flex-col justify-between">
-          
-          {/* Decorative Background Accents */}
-          <div className="absolute top-0 right-0 w-72 h-72 bg-amber-400/15 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none -ml-16 -mb-16"></div>
+      {/* QUICK STATS ROW */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-teal-50 text-teal-600 border border-teal-100">
+            <ListOrdered className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Rotating Units</span>
+            <span className="text-lg font-black text-slate-800">{teams.length} Teams in Loop</span>
+          </div>
+        </div>
+
+        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+            <CalendarDays className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Turn Repeat</span>
+            <span className="text-lg font-black text-slate-800">Every {teams.length || 1} Weeks</span>
+          </div>
+        </div>
+
+        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Completed Cleanups</span>
+            <span className="text-lg font-black text-slate-800">{completedCount} Verified</span>
+          </div>
+        </div>
+
+        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-amber-50 text-amber-600 border border-amber-100">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">This Sunday</span>
+            <span className="text-sm font-black text-slate-800 truncate block max-w-[140px]">
+              {thisSunday?.team?.name || "Pending Assign"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* DUAL SHOWCASE HERO: [THIS SUNDAY SPOTLIGHT (7 cols)] + [UPCOMING ROTATION FORECAST CONTAINER (5 cols)] */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* LEFT CONTAINER: THIS SUNDAY SPOTLIGHT */}
+        <div className="lg:col-span-7 relative overflow-hidden bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-teal-800/40 flex flex-col justify-between space-y-5">
+          {/* Subtle Ambient Glow */}
+          <div className="absolute -top-12 -right-12 w-64 h-64 bg-teal-500/15 pointer-events-none rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-10 -left-10 w-52 h-52 bg-emerald-500/10 pointer-events-none rounded-full blur-2xl"></div>
 
           <div className="relative z-10 space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[11px] font-black tracking-wider uppercase shadow-xs">
-                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                <span>THIS SUNDAY'S DISHWASHING IN-CHARGE</span>
-              </div>
-
-              {thisSunday && (
-                <div className="flex items-center gap-2">
-                  {thisSunday.partner_assigned_name && (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-indigo-950 flex items-center gap-1 shadow-2xs">
-                      <Handshake className="w-3 h-3" />
-                      <span>Joint Duty</span>
-                    </span>
-                  )}
-                  <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase border ${
-                    thisSunday.status === "completed" 
-                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40" 
-                      : "bg-amber-500/20 text-amber-300 border-amber-400/40 animate-pulse"
-                  }`}>
-                    {thisSunday.status === "completed" ? "✓ Completed" : "⏳ Active On Duty"}
+            {/* Header Badge Row */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
+                  <Droplets className="w-3.5 h-3.5 text-slate-950" />
+                  <span>THIS SUNDAY ON DISHWASHING</span>
+                </span>
+                {thisSunday && (
+                  <span className="text-xs text-teal-100 font-bold bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+                    {thisSunday.date_formatted}
                   </span>
-                </div>
-              )}
-            </div>
-
-            {thisSunday ? (
-              <div className="space-y-3">
-                <div className="flex items-baseline gap-3 flex-wrap">
-                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2 flex-wrap">
-                    <span>{thisSunday.assigned_name}</span>
-                    {thisSunday.partner_assigned_name && (
-                      <>
-                        <span className="text-amber-400 font-bold">&</span>
-                        <span>{thisSunday.partner_assigned_name}</span>
-                      </>
-                    )}
-                  </h2>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-white/10 text-indigo-100 border border-white/10">
-                    {thisSunday.cycle_mode === "biblestudy_group" ? "📖 Bible Study Group" : "🏛️ Ministry Department"}
-                  </span>
-                  {thisSunday.partner_assigned_name && (
-                    <span className="px-3 py-1 rounded-xl text-xs font-bold bg-amber-400/20 text-amber-200 border border-amber-400/30 flex items-center gap-1">
-                      <Users2 className="w-3.5 h-3.5" />
-                      <span>Teamed Up Pair</span>
-                    </span>
-                  )}
-                </div>
-
-                <p className="text-xs sm:text-sm text-indigo-200/90 leading-relaxed max-w-xl">
-                  Assigned turn for post-worship fellowship lunch kitchen cleaning and ware sanitation.
-                </p>
-              </div>
-            ) : (
-              <div className="py-6 text-center text-indigo-200/80 text-sm">
-                No upcoming dishwashing duty scheduled. Click <strong>"+ Schedule Duty"</strong> or <strong>"Auto-Cycle Generator"</strong> to add one!
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Info Bar for This Sunday */}
-          {thisSunday && (
-            <div className="relative z-10 mt-6 pt-5 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-4 text-xs text-indigo-100">
-                <div className="flex items-center gap-1.5 font-bold bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
-                  <Calendar className="w-4 h-4 text-amber-300 shrink-0" />
-                  <span>{new Date(thisSunday.duty_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
-                </div>
-                {thisSunday.leader_name && (
-                  <div className="flex items-center gap-1.5 font-medium">
-                    <UserCheck className="w-4 h-4 text-amber-300 shrink-0" />
-                    <span>In-Charge: <strong className="text-white font-bold">{thisSunday.leader_name}</strong> {thisSunday.partner_leader_name ? `& ${thisSunday.partner_leader_name}` : ''}</span>
-                  </div>
                 )}
               </div>
 
-              {isAdminOrCoordinator && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleOpenEditModal(thisSunday)}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer flex items-center gap-1.5 border border-white/10"
-                  >
-                    <Edit className="w-3.5 h-3.5" />
-                    <span>Edit</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleComplete(thisSunday)}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-                      thisSunday.status === "completed"
-                        ? "bg-white/20 text-white hover:bg-white/30"
-                        : "bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black"
-                    }`}
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{thisSunday.status === "completed" ? "Mark Incomplete" : "Mark as Completed"}</span>
-                  </button>
-                </div>
+              {thisSunday?.status === "completed" && (
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  <span>Sanitation Done</span>
+                </span>
               )}
             </div>
-          )}
-        </div>
 
-        {/* CARD 2: NEXT ON DECK (ADVANCE ALERT) */}
-        <div className="lg:col-span-5 bg-white/95 rounded-3xl p-6 sm:p-7 border border-indigo-100/90 shadow-sm flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider">
-                <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                <span>NEXT SUNDAY IN ROTATION</span>
-              </div>
-              <span className="text-[11px] font-bold text-charcoal/50">Next Turn</span>
-            </div>
-
-            {nextSunday ? (
-              <div className="space-y-3">
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <h3 className="text-xl font-black text-charcoal">
-                    {nextSunday.assigned_name}
-                    {nextSunday.partner_assigned_name && (
-                      <span className="text-indigo ml-1.5 font-bold">& {nextSunday.partner_assigned_name}</span>
-                    )}
-                  </h3>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-gray-100 text-charcoal/70 font-black">
-                    {nextSunday.cycle_mode === "biblestudy_group" ? "Bible Study Group" : "Ministry"}
-                  </span>
-                  {nextSunday.partner_assigned_name && (
-                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black flex items-center gap-1">
-                      <Handshake className="w-3 h-3" />
-                      <span>Joint Team-Up</span>
+            {/* Main Team Info */}
+            {thisSunday?.team ? (
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    {thisSunday.team.name}
+                  </h2>
+                  <span
+                    className="w-3.5 h-3.5 rounded-full ring-2 ring-white/60 shadow-md inline-block"
+                    style={{ backgroundColor: thisSunday.team.color }}
+                  ></span>
+                  {thisSunday.team.cycle_mode === "biblestudy_group" && (
+                    <span className="text-[10px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <BookOpen className="w-3 h-3" />
+                      <span>Bible Study Group</span>
+                    </span>
+                  )}
+                  {thisSunday.team.cycle_mode === "ministry" && (
+                    <span className="text-[10px] bg-teal-500/30 text-teal-200 border border-teal-400/30 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Building2 className="w-3 h-3" />
+                      <span>Ministry Unit</span>
                     </span>
                   )}
                 </div>
-                
-                <p className="text-xs text-charcoal/70 leading-relaxed">
-                  Scheduled for next Sunday fellowship meal. Please give advance notice to assigned teams and coordinators.
+
+                <p className="text-xs text-teal-100/85 mt-2 leading-relaxed max-w-xl">
+                  {thisSunday.notes || thisSunday.team.tasks_checklist || "Fellowship dinnerware pre-rinse, sudsy washing, sanitizing dip, drying rack storage & kitchen counter wipedown."}
                 </p>
 
-                <div className="bg-ivory-light/90 p-4 rounded-2xl border border-indigo-100/70 space-y-2 text-xs">
-                  <div className="flex items-center justify-between text-charcoal/80 font-medium">
-                    <span className="text-charcoal/60">Date:</span>
-                    <strong className="text-indigo font-black">
-                      {new Date(nextSunday.duty_date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                    </strong>
-                  </div>
-                  {nextSunday.leader_name && (
-                    <div className="flex items-center justify-between text-charcoal/80 font-medium">
-                      <span className="text-charcoal/60">In-Charge / Leaders:</span>
-                      <strong className="text-charcoal font-bold">{nextSunday.leader_name} {nextSunday.partner_leader_name ? `& ${nextSunday.partner_leader_name}` : ''}</strong>
+                {/* Point Person & Volunteers row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-2.5">
+                    <Crown className="w-4 h-4 text-amber-300 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-[10px] text-teal-200/70 block uppercase font-bold">Crew Leader / Contact</span>
+                      <span className="text-xs font-black text-white truncate block">
+                        {thisSunday.team.leader_name || "Assigned Point Person"}
+                      </span>
+                      {(thisSunday.team.leader_contact || thisSunday.team.leader_phone) && (
+                        <span className="text-[10px] text-teal-300 font-mono block">
+                          {thisSunday.team.leader_contact || thisSunday.team.leader_phone}
+                        </span>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-2.5">
+                    <Users className="w-4 h-4 text-emerald-300 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-teal-200/70 block uppercase font-bold">Volunteer Crew</span>
+                      <span className="text-xs font-black text-white">
+                        {thisSunday.team.members?.length || thisSunday.team.members_count || thisSunday.team.volunteers_count || 5} Members Assigned
+                      </span>
+                      <span className="text-[10px] text-emerald-300 block">Ready for fellowship duty</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="py-8 text-center text-charcoal/40 text-xs">
-                No next group scheduled in cycle.
+              <div className="py-6 text-center text-teal-200/60 text-xs">
+                No dishwashing team active for this Sunday.
               </div>
             )}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-charcoal/60">
-            <span className="font-medium">Continuous cycle active</span>
-            {isAdminOrCoordinator && nextSunday && (
-              <div className="flex items-center gap-3">
+          {/* Action Row */}
+          {thisSunday?.team && (
+            <div className="relative z-10 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-teal-200 font-bold bg-white/10 border border-white/20 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs backdrop-blur-xs">
+                  <Sparkles className="w-4 h-4 text-teal-300" />
+                  <span>Active Live Cycle • {thisSunday.date_formatted}</span>
+                </div>
+
                 <button
-                  onClick={() => handleOpenEditModal(nextSunday)}
-                  className="text-xs font-bold text-charcoal/70 hover:text-indigo flex items-center gap-1 cursor-pointer transition-colors"
+                  onClick={() => handleOpenSwapModal(thisSunday)}
+                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs py-2 px-3.5 rounded-xl border border-white/15 transition-all active:scale-95 cursor-pointer"
                 >
-                  <Edit className="w-3.5 h-3.5" />
-                  <span>Edit</span>
-                </button>
-                <button
-                  onClick={() => handleOpenSwap(nextSunday)}
-                  className="text-xs font-black text-indigo hover:text-indigo-700 flex items-center gap-1 cursor-pointer transition-colors bg-indigo-50 px-2.5 py-1 rounded-xl"
-                >
-                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-teal-300" />
                   <span>Swap Turn</span>
                 </button>
               </div>
-            )}
-          </div>
-        </div>
 
-      </div>
-
-      {/* ACTIVE CYCLE ORDER VISUALIZER */}
-      <div className="bg-white/95 p-6 rounded-3xl border border-indigo-100/90 shadow-sm space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-indigo-50 text-indigo-700">
-              <RotateCw className="w-4 h-4" />
-            </span>
-            <div>
-              <h3 className="text-sm font-black text-charcoal tracking-tight">
-                Active Round-Robin Cycle Sequence
-              </h3>
-              <p className="text-[11px] text-charcoal/60">Continuous Sunday loop distribution across groups & ministries</p>
+              {thisSunday.team.members && thisSunday.team.members.length > 0 && (
+                <div className="flex items-center -space-x-1.5 overflow-hidden">
+                  {thisSunday.team.members.slice(0, 4).map((m, i) => (
+                    <div
+                      key={i}
+                      className="w-7 h-7 rounded-full bg-teal-800 border-2 border-slate-900 flex items-center justify-center text-[10px] font-black text-white"
+                      title={`${m.first_name} ${m.last_name}`}
+                    >
+                      {m.first_name.charAt(0)}
+                    </div>
+                  ))}
+                  {thisSunday.team.members.length > 4 && (
+                    <div className="w-7 h-7 rounded-full bg-teal-900 border-2 border-slate-900 flex items-center justify-center text-[10px] font-black text-teal-200">
+                      +{thisSunday.team.members.length - 4}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-          <span className="text-xs font-black text-indigo-900 bg-indigo-50 border border-indigo-200/80 px-3 py-1 rounded-full shadow-2xs">
-            {duties.length} Total Assigned Sundays
-          </span>
+          )}
         </div>
 
-        {/* Horizontal Visual Cycle Steps */}
-        <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar">
-          {duties.slice(0, 8).map((item, idx) => {
-            const isThis = thisSunday?.id === item.id;
-            const isNext = nextSunday?.id === item.id;
-            const isDone = item.status === "completed";
+        {/* RIGHT CONTAINER: UPCOMING ROTATION FORECAST CONTAINER */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-slate-50 via-teal-50/40 to-emerald-50/30 rounded-3xl p-6 border border-teal-200/70 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-teal-100">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-xl bg-teal-100 text-teal-800">
+                  <Calendar className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Upcoming Rotation Queue</h3>
+                  <span className="text-[11px] text-slate-500">Next scheduled kitchen steward units</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
+                16-Wk Forecast
+              </span>
+            </div>
 
-            return (
-              <React.Fragment key={item.id}>
-                <div className={`shrink-0 p-4 rounded-2xl border transition-all text-xs space-y-2 min-w-[200px] shadow-2xs hover:shadow-xs ${
-                  isThis 
-                    ? "bg-gradient-to-br from-[#1b2342] to-[#243058] text-white border-indigo-700 shadow-md scale-102 ring-2 ring-amber-400/40" 
-                    : isNext
-                    ? "bg-amber-50/70 border-amber-200/90 text-charcoal"
-                    : isDone
-                    ? "bg-emerald-50/40 border-emerald-200/60 text-charcoal/80"
-                    : "bg-white border-indigo-100/80 text-charcoal"
-                }`}>
-                  <div className="flex items-center justify-between text-[10px] font-black">
-                    <span className={isThis ? "text-amber-300" : "text-charcoal/60"}>
-                      Turn #{item.cycle_order_index || idx + 1}
-                    </span>
-                    {isThis && <span className="bg-amber-400 text-indigo-950 px-2 py-0.5 rounded-full font-black shadow-2xs">THIS SUN</span>}
-                    {isNext && <span className="bg-indigo-900 text-white px-2 py-0.5 rounded-full font-black">NEXT</span>}
-                    {isDone && <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-black">✓ DONE</span>}
-                  </div>
-                  <h4 className={`font-black text-sm truncate ${isThis ? "text-white" : "text-charcoal"}`}>
-                    {item.assigned_name}
-                    {item.partner_assigned_name && ` & ${item.partner_assigned_name}`}
-                  </h4>
-                  <p className={`text-[11px] font-medium truncate ${isThis ? "text-indigo-200" : "text-charcoal/60"}`}>
-                    {new Date(item.duty_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </p>
+            {/* Next Sunday Card */}
+            {nextSunday ? (
+              <div className="mt-4 p-4 rounded-2xl bg-white border border-teal-200/80 shadow-2xs space-y-2.5 relative overflow-hidden group hover:border-teal-400 transition-all">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                    NEXT SUNDAY • {nextSunday.date_formatted}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-bold">Week #{nextSunday.week_number}</span>
                 </div>
 
-                {idx < Math.min(duties.length - 1, 7) && (
-                  <ArrowRight className="w-4 h-4 text-indigo-300/80 shrink-0" />
-                )}
-              </React.Fragment>
-            );
-          })}
-          {duties.length > 8 && (
-            <div className="shrink-0 text-xs font-black text-indigo-900 px-4 py-3 bg-indigo-50 border border-indigo-200/80 rounded-2xl">
-              +{duties.length - 8} more turns
-            </div>
-          )}
-        </div>
-      </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className="w-3.5 h-3.5 rounded-full ring-2 ring-slate-100"
+                      style={{ backgroundColor: nextSunday.team?.color || "#0D9488" }}
+                    ></span>
+                    <div>
+                      <h4 className="font-black text-sm text-slate-900">{nextSunday.team?.name || "Unassigned"}</h4>
+                      <span className="text-[11px] text-slate-500">
+                        Lead: <strong className="text-slate-700">{nextSunday.team?.leader_name || "Team Leader"}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleOpenSwapModal(nextSunday)}
+                    className="p-1.5 rounded-lg bg-slate-50 hover:bg-teal-50 text-slate-400 hover:text-teal-700 transition-colors cursor-pointer"
+                    title="Swap this upcoming date"
+                  >
+                    <ArrowLeftRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 text-center text-xs text-slate-400">No next Sunday data</div>
+            )}
 
-      {/* FILTER & SEARCH TOOLBAR */}
-      <div className="bg-white/95 p-4 sm:p-5 rounded-3xl border border-indigo-100/90 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {/* Status filter */}
-          <div className="flex items-center gap-2 text-xs font-bold text-charcoal/70">
-            <span>Status:</span>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-ivory-light px-3.5 py-2 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 font-bold text-indigo-900 cursor-pointer text-xs shadow-2xs"
-            >
-              <option value="all">All Statuses</option>
-              <option value="scheduled">⏳ Scheduled Only</option>
-              <option value="completed">✓ Completed Only</option>
-              <option value="swapped">🔁 Swapped Turns</option>
-            </select>
-          </div>
-
-          {/* Mode filter */}
-          <div className="flex items-center gap-2 text-xs font-bold text-charcoal/70">
-            <span>Assignment Type:</span>
-            <select
-              value={filterMode}
-              onChange={(e) => setFilterMode(e.target.value)}
-              className="bg-ivory-light px-3.5 py-2 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 font-bold text-indigo-900 cursor-pointer text-xs shadow-2xs"
-            >
-              <option value="all">All Types (Ministries & Groups)</option>
-              <option value="biblestudy_group">Bible Study Groups</option>
-              <option value="ministry">Ministries</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="w-full md:w-80">
-          <input
-            type="text"
-            placeholder="Search group, ministry, leader, date..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-ivory-light px-4 py-2 rounded-2xl text-xs border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 font-medium placeholder:text-charcoal/40"
-          />
-        </div>
-      </div>
-
-      {/* DUTIES SCHEDULE TABLE */}
-      <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
-        <div className="p-5 sm:p-6 border-b border-indigo-100/70 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 font-black text-charcoal text-sm">
-            <span className="p-2 rounded-xl bg-indigo-50 text-indigo-700">
-              <CalendarCheck className="w-4 h-4" />
-            </span>
-            <span>Full Dishwashing Schedule & Roster</span>
-            <span className="text-xs text-charcoal/50 font-normal">({filteredDuties.length} dates listed)</span>
-          </div>
-
-          {isAdminOrCoordinator && (
-            <button
-              onClick={handleOpenAddModal}
-              className="text-xs font-black text-indigo hover:text-indigo-700 flex items-center gap-1 cursor-pointer bg-indigo-50 px-3 py-1.5 rounded-xl transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Schedule New Date</span>
-            </button>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="p-16 text-center text-charcoal/40 text-xs font-medium">
-            Loading dishwashing schedule...
-          </div>
-        ) : filteredDuties.length === 0 ? (
-          <div className="p-16 text-center text-charcoal/50 text-xs space-y-3">
-            <p className="font-bold text-charcoal/70">No dishwashing duties scheduled yet.</p>
-            {isAdminOrCoordinator && (
-              <button
-                onClick={handleOpenAddModal}
-                className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs rounded-2xl shadow-md cursor-pointer inline-flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add First Duty Date</span>
-              </button>
+            {/* Third Sunday Card (On Deck) */}
+            {thirdSunday && (
+              <div className="mt-2.5 p-3.5 rounded-2xl bg-white/70 border border-slate-200/80 shadow-2xs flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: thirdSunday.team?.color || "#64748B" }}
+                  ></span>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                      ON DECK • {thirdSunday.date_formatted}
+                    </span>
+                    <span className="font-black text-slate-800">{thirdSunday.team?.name}</span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                  Turn #{thirdSunday.team?.order_seq || 3}
+                </span>
+              </div>
             )}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-indigo-50/40 text-charcoal/80 font-black border-b border-indigo-100/80 text-[11px] uppercase tracking-wider">
-                  <th className="py-3.5 px-5">Sunday Date</th>
-                  <th className="py-3.5 px-5">Assigned Entity (Teamed Up Groups/Ministries)</th>
-                  <th className="py-3.5 px-5">Assignment Type</th>
-                  <th className="py-3.5 px-5">In-Charge / Leaders</th>
-                  <th className="py-3.5 px-5">Status</th>
-                  <th className="py-3.5 px-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-indigo-50 font-medium">
-                {filteredDuties.map((d) => {
-                  const isThis = thisSunday?.id === d.id;
-                  const isCompleted = d.status === "completed";
-                  const isJoint = Boolean(d.is_joint_duty || d.partner_assigned_name);
 
-                  return (
-                    <tr 
-                      key={d.id} 
-                      className={`hover:bg-indigo-50/30 transition-colors ${
-                        isThis ? "bg-amber-50/60 font-semibold" : ""
-                      }`}
-                    >
-                      <td className="py-4 px-5 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-charcoal">
-                            {new Date(d.duty_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                          </span>
-                          {isThis && (
-                            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-amber-400 text-indigo-950 shadow-2xs">
-                              THIS SUN
-                            </span>
-                          )}
-                        </div>
-                      </td>
+          {/* Quick Rotation Indicator */}
+          <div className="pt-3 border-t border-teal-100 flex items-center justify-between text-xs font-bold text-slate-600">
+            <span className="flex items-center gap-1.5 text-teal-800">
+              <Sparkle className="w-3.5 h-3.5 text-teal-600" />
+              <span>Full 16-Week Schedule is Active</span>
+            </span>
+            <button
+              onClick={() => setActiveTab("schedule")}
+              className="text-teal-700 hover:text-teal-900 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>View Timeline</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
 
-                      <td className="py-4 px-5">
-                        <div className="space-y-1">
-                          <div className="font-black text-charcoal flex items-center gap-2 flex-wrap">
-                            <span>{d.assigned_name}</span>
-                            {d.partner_assigned_name && (
-                              <>
-                                <span className="text-amber-500 font-black">&</span>
-                                <span className="text-indigo-900">{d.partner_assigned_name}</span>
-                              </>
-                            )}
-                          </div>
-                          {isJoint && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-100/80 text-amber-950 border border-amber-300">
-                              <Handshake className="w-3 h-3 text-amber-700" />
-                              <span>Teamed Up (Joint Duty)</span>
-                            </span>
-                          )}
-                        </div>
-                      </td>
+      {/* FILTER & TAB CONTROLS BAR */}
+      <div className="bg-white/95 rounded-3xl p-3 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+          <button
+            onClick={() => setActiveTab("teams")}
+            className={`flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "teams"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Duty Units & Teams ({teams.length})</span>
+          </button>
 
-                      <td className="py-4 px-5 whitespace-nowrap">
-                        <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-gray-100 text-charcoal/80 uppercase">
-                          {d.cycle_mode === "biblestudy_group" ? "Bible Study Group" : "Ministry Department"}
-                        </span>
-                      </td>
+          <button
+            onClick={() => setActiveTab("schedule")}
+            className={`flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "schedule"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+          >
+            <CalendarCheck className="w-4 h-4" />
+            <span>16-Week Rotation Timeline ({schedule.length})</span>
+          </button>
 
-                      <td className="py-4 px-5 whitespace-nowrap">
-                        <div className="text-xs">
-                          <span className="font-bold text-charcoal">
-                            {d.leader_name || "Unassigned"}
-                            {d.partner_leader_name ? ` & ${d.partner_leader_name}` : ''}
-                          </span>
-                        </div>
-                      </td>
+          <button
+            onClick={() => setActiveTab("tasks")}
+            className={`flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "tasks"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+          >
+            <CheckSquare className="w-4 h-4" />
+            <span>Kitchen Sanitation Protocol</span>
+          </button>
+        </div>
 
-                      <td className="py-4 px-5 whitespace-nowrap">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1.5 ${
-                          isCompleted
-                            ? "bg-emerald-100 text-emerald-950 border border-emerald-300 font-black"
-                            : d.status === "swapped"
-                            ? "bg-blue-100 text-blue-900 border border-blue-200"
-                            : "bg-amber-100 text-amber-950 border border-amber-300 font-black"
-                        }`}>
-                          {isCompleted ? <Check className="w-3 h-3 text-emerald-700" /> : <Clock className="w-3 h-3 text-amber-700" />}
-                          <span>{d.status}</span>
-                        </span>
-                      </td>
+        {/* Filter & Search Bar (Active in Teams Tab) */}
+        {activeTab === "teams" && (
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search unit or leader..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 w-44 sm:w-56 font-medium"
+              />
+            </div>
 
-                      <td className="py-4 px-5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          {isAdminOrCoordinator && (
-                            <>
-                              <button
-                                onClick={() => handleToggleComplete(d)}
-                                title={isCompleted ? "Mark Incomplete" : "Mark Completed"}
-                                className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                                  isCompleted
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                    : "bg-ivory-light text-charcoal/70 border-indigo-100 hover:bg-indigo-50/60"
-                                }`}
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                onClick={() => handleOpenEditModal(d)}
-                                title="Edit Duty Details"
-                                className="p-2 rounded-xl bg-ivory-light text-indigo hover:bg-indigo-50 border border-indigo-100 transition-all cursor-pointer"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                onClick={() => handleOpenSwap(d)}
-                                title="Swap Turn with another date"
-                                className="p-2 rounded-xl bg-ivory-light text-amber-600 hover:bg-amber-50 border border-indigo-100 transition-all cursor-pointer"
-                              >
-                                <ArrowLeftRight className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                onClick={() => handleDelete(d.id)}
-                                title="Delete duty"
-                                className="p-2 rounded-xl bg-ivory-light text-rose hover:bg-rose-50 border border-indigo-100 transition-all cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <select
+              value={filterMode}
+              onChange={(e) => setFilterMode(e.target.value as any)}
+              className="py-1.5 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold text-slate-700 cursor-pointer"
+            >
+              <option value="all">All Types</option>
+              <option value="biblestudy_group">Bible Study Groups</option>
+              <option value="ministry">Ministries</option>
+              <option value="custom">Custom Teams</option>
+            </select>
           </div>
         )}
       </div>
 
-      {/* CRUD MODAL: ADD / EDIT DISHWASHING DUTY WITH DYNAMIC (+) TEAM-UP BUTTON */}
-      {isDutyModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-scale-up max-h-[90vh] overflow-y-auto">
-            
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-indigo text-white">
-                  <Utensils className="w-4 h-4 text-amber-300" />
-                </span>
-                <div>
-                  <h3 className="font-bold text-base text-charcoal">
-                    {editingDutyId ? "Edit Dishwashing Duty" : "Schedule Dishwashing Duty"}
-                  </h3>
-                  <p className="text-xs text-charcoal/60">
-                    Assign one group or click <strong>"+ Add Team"</strong> to team up as many groups as you want!
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setIsDutyModalOpen(false)} className="p-1 text-charcoal/40 hover:text-charcoal cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* ========================================================================= */}
+      {/* TAB 1: DISHWASHING UNITS & TEAMS MANAGEMENT */}
+      {/* ========================================================================= */}
+      {activeTab === "teams" && (
+        <div className="space-y-4">
+          {loading && teams.length === 0 ? (
+            <CardGridSkeleton count={6} columns={3} />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5">
+              {filteredTeams.map((team) => (
+                <div
+                  key={team.id}
+                  className="bg-white rounded-3xl border border-slate-200/90 hover:border-teal-400 shadow-sm hover:shadow-md transition-all p-5 sm:p-6 flex flex-col justify-between space-y-4 relative overflow-hidden group"
+                >
+                  {/* Top Color Accent Line */}
+                  <div
+                    className="absolute top-0 left-0 right-0 h-1.5"
+                    style={{ backgroundColor: team.color }}
+                  ></div>
 
-            <form onSubmit={handleSaveDuty} className="space-y-4 text-xs">
-              
-              {/* DYNAMIC LIST OF ASSIGNED TEAMS */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-charcoal text-xs flex items-center gap-1.5">
-                    <Users2 className="w-4 h-4 text-indigo" />
-                    <span>Assigned Teams & In-Charge ({formTeams.length} {formTeams.length === 1 ? 'Team' : 'Teams Teamed Up'})</span>
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={handleAddAnotherTeam}
-                    className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs hover:shadow-xs active:scale-95"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Another Team</span>
-                  </button>
-                </div>
-
-                {formTeams.map((team, idx) => {
-                  const isPrimary = idx === 0;
-
-                  return (
-                    <div 
-                      key={team.id}
-                      className={`p-4 rounded-2xl border transition-all space-y-3 ${
-                        isPrimary 
-                          ? "bg-ivory-light/80 border-gray-200" 
-                          : "bg-amber-50/50 border-amber-200/80 animate-fade-in"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
-                            isPrimary ? "bg-indigo text-white" : "bg-amber-400 text-indigo-950"
-                          }`}>
-                            {idx + 1}
-                          </span>
-                          <span className="font-bold text-charcoal">
-                            {isPrimary ? "Primary Team / Group" : `Teamed-Up Partner Team #${idx + 1}`}
-                          </span>
+                  <div>
+                    {/* Team Header */}
+                    <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className="w-4 h-4 rounded-full ring-2 ring-slate-100 shadow-inner"
+                          style={{ backgroundColor: team.color }}
+                        ></span>
+                        <div>
+                          <h3 className="font-black text-base text-slate-900 group-hover:text-teal-700 transition-colors">
+                            {team.name}
+                          </h3>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-teal-900 font-black bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                              Turn #{team.order_seq} in Loop
+                            </span>
+                            {team.cycle_mode === "biblestudy_group" && (
+                              <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
+                                <BookOpen className="w-2.5 h-2.5" />
+                                <span>BS Group</span>
+                              </span>
+                            )}
+                            {team.cycle_mode === "ministry" && (
+                              <span className="text-[10px] text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1">
+                                <Building2 className="w-2.5 h-2.5" />
+                                <span>Ministry</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
-
-                        {!isPrimary && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTeam(idx)}
-                            className="text-charcoal/40 hover:text-rose p-1 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors flex items-center gap-1 text-[11px] font-semibold"
-                            title="Remove this teamed-up team"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Remove</span>
-                          </button>
-                        )}
                       </div>
 
-                      {/* SEGMENTED SWITCH: BIBLE STUDY GROUP VS MINISTRY */}
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center gap-1">
                         <button
-                          type="button"
-                          onClick={() => handleUpdateTeamMode(idx, "biblestudy_group")}
-                          className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer flex items-center gap-2 ${
-                            team.cycle_mode === "biblestudy_group"
-                              ? "bg-indigo text-white border-indigo shadow-xs"
-                              : "bg-white text-charcoal/70 border-gray-200 hover:bg-gray-50"
-                          }`}
+                          onClick={() => handleOpenEditTeam(team)}
+                          className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                          title="Edit Unit"
                         >
-                          <BookOpen className={`w-3.5 h-3.5 shrink-0 ${team.cycle_mode === "biblestudy_group" ? "text-amber-300" : "text-indigo"}`} />
-                          <span>Bible Study Group</span>
+                          <Edit className="w-3.5 h-3.5" />
                         </button>
-
                         <button
-                          type="button"
-                          onClick={() => handleUpdateTeamMode(idx, "ministry")}
-                          className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer flex items-center gap-2 ${
-                            team.cycle_mode === "ministry"
-                              ? "bg-indigo text-white border-indigo shadow-xs"
-                              : "bg-white text-charcoal/70 border-gray-200 hover:bg-gray-50"
-                          }`}
+                          onClick={() => handleDeleteTeam(team.id, team.name)}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                          title="Remove Unit"
                         >
-                          <Building2 className={`w-3.5 h-3.5 shrink-0 ${team.cycle_mode === "ministry" ? "text-amber-300" : "text-indigo"}`} />
-                          <span>Ministry Department</span>
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      </div>
-
-                      {/* SELECTION DROPDOWN */}
-                      {team.cycle_mode === "biblestudy_group" ? (
-                        <div>
-                          <label className="block font-bold text-charcoal mb-1">Select Bible Study Group *</label>
-                          <select
-                            required
-                            value={team.biblestudy_group_id}
-                            onChange={(e) => handleUpdateTeamSelection(idx, e.target.value)}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-indigo cursor-pointer"
-                          >
-                            <option value="">-- Choose Bible Study Group --</option>
-                            {cycleOptions.groups.map(g => (
-                              <option key={g.id} value={g.id}>
-                                {g.name} (Leader: {g.leader_name || "Unassigned"})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="block font-bold text-charcoal mb-1">Select Ministry Department *</label>
-                          <select
-                            required
-                            value={team.ministry_id}
-                            onChange={(e) => handleUpdateTeamSelection(idx, e.target.value)}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-indigo cursor-pointer"
-                          >
-                            <option value="">-- Choose Ministry --</option>
-                            {cycleOptions.ministries.map(m => (
-                              <option key={m.id} value={m.id}>
-                                {m.name} Ministry {m.coordinator_name ? `(Coord: ${m.coordinator_name})` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block font-bold text-charcoal mb-0.5">
-                          {team.cycle_mode === "biblestudy_group" ? "Team Leader" : "Ministry Coordinator"} <span className="text-[10px] text-indigo font-normal">(Auto-filled)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={team.leader_name}
-                          onChange={(e) => handleUpdateTeamLeader(idx, e.target.value)}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal"
-                        />
                       </div>
                     </div>
-                  );
-                })}
 
-                {/* PROMINENT + ADD TEAM BUTTON */}
-                <button
-                  type="button"
-                  onClick={handleAddAnotherTeam}
-                  className="w-full py-3 px-4 border-2 border-dashed border-amber-300 hover:border-amber-400 bg-amber-50/40 hover:bg-amber-50/80 rounded-2xl text-amber-900 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
-                >
-                  <Plus className="w-4 h-4 text-amber-600" />
-                  <span>+ Team Up Another Bible Group or Ministry</span>
-                </button>
-              </div>
+                    {/* Point Person Info */}
+                    <div className="mt-3.5 bg-slate-50/90 p-3 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-amber-500 shrink-0" />
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold block">Point Person / Leader</span>
+                          <span className="font-black text-slate-800">{team.leader_name || "Unassigned"}</span>
+                        </div>
+                      </div>
+                      {(team.leader_contact || team.leader_phone) && (
+                        <span className="text-[10px] text-teal-800 font-mono font-bold">
+                          {team.leader_contact || team.leader_phone}
+                        </span>
+                      )}
+                    </div>
 
-              {/* DATE & STATUS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div>
-                  <label className="block font-bold text-charcoal mb-1">Duty Date (Sunday) *</label>
-                  <input
-                    type="date"
-                    required
-                    value={dutyDate}
-                    onChange={(e) => setDutyDate(e.target.value)}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-indigo"
-                  />
+                    {/* Volunteer Roster */}
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-black text-slate-800 flex-wrap gap-1">
+                        <span>Assigned Disciples ({team.members?.length || 0})</span>
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const linkedGroup = bsGroups.find(g => g.id === team.biblestudy_group_id || g.name === team.name);
+                            const existingIds = new Set(team.members?.map(m => m.member_id) || []);
+                            const unassigned = (linkedGroup?.members || []).filter(m => m.member_id && !existingIds.has(m.member_id));
+                            if (unassigned.length > 0) {
+                              return (
+                                <button
+                                  type="button"
+                                  disabled={batchLoading}
+                                  onClick={() => handleBatchAddGroupDisciples(team.id, unassigned.map(m => m.member_id))}
+                                  className="text-teal-800 hover:text-teal-950 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-colors cursor-pointer"
+                                  title={`Import ${unassigned.length} disciples from ${linkedGroup?.name}`}
+                                >
+                                  <Sparkles className="w-3 h-3 text-teal-600" />
+                                  <span>Sync Group (+{unassigned.length})</span>
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
+                          <button
+                            onClick={() => handleOpenAddMember(team)}
+                            className="text-teal-700 hover:text-teal-900 text-[11px] flex items-center gap-1 font-black cursor-pointer transition-colors"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Add Disciple</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {team.members && team.members.length > 0 ? (
+                        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                          {team.members.map((m) => (
+                            <div
+                              key={m.member_id}
+                              className="flex items-center justify-between p-2 rounded-xl bg-slate-50/70 hover:bg-slate-100 border border-slate-100 text-xs transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+                                <span className="font-bold text-slate-800">
+                                  {m.first_name} {m.last_name}
+                                </span>
+                                {m.team_role === "Team Leader" && (
+                                  <span className="text-[9px] bg-amber-100 text-amber-900 font-black px-1.5 py-0.2 rounded-md border border-amber-300">
+                                    Lead
+                                  </span>
+                                )}
+                              </div>
+
+                              <button
+                                onClick={() => handleRemoveMember(team.id, m.member_id, `${m.first_name} ${m.last_name}`)}
+                                className="p-1 text-slate-300 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                                title="Remove from unit"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-3.5 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
+                          No members assigned yet.
+                          <button
+                            onClick={() => handleOpenAddMember(team)}
+                            className="block mx-auto mt-1 text-teal-700 font-bold underline cursor-pointer"
+                          >
+                            + Add first disciple
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tasks Preview */}
+                  <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-500 line-clamp-2">
+                    <span className="font-bold text-slate-700">Checklist:</span>{" "}
+                    {team.tasks_checklist || "Plates & Cutleries Pre-rinse, 3-Compartment Washing, Kitchen Counter & Sink Deep Wipe, Trash Disposal."}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {filteredTeams.length === 0 && !loading && (
+            <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-sm">
+              <Utensils className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <h3 className="font-black text-slate-900 text-base">No Matching Dishwashing Units</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                {searchQuery || filterMode !== "all"
+                  ? "Try resetting your search filter to see all active rotating teams."
+                  : "Add Bible Study Groups, Ministries, or Custom Teams to start the automatic Sunday duty cycle."}
+              </p>
+              <button
+                onClick={handleOpenCreateTeam}
+                className="mt-4 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-5 py-2.5 rounded-2xl shadow-sm cursor-pointer"
+              >
+                + Add First Dishwashing Team
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: 16-WEEK PERPETUAL ROTATION SCHEDULE TIMELINE */}
+      {/* ========================================================================= */}
+      {activeTab === "schedule" && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <CalendarCheck className="w-5 h-5 text-teal-600" />
+                <span>16-Week Continuous Sunday Rotation Roster</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Teams cycle seamlessly every Sunday based on their turn sequence. Individual dates can be swapped or edited without altering other weeks.
+              </p>
+            </div>
+            <span className="text-xs font-black text-teal-900 bg-teal-50 border border-teal-200 px-3.5 py-1 rounded-full">
+              Loop Interval: {teams.length} Weeks
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {schedule.map((item, idx) => (
+              <div
+                key={idx}
+                className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${item.is_this_sunday
+                  ? "bg-gradient-to-r from-teal-50/90 via-white to-emerald-50/40 border-teal-400 shadow-sm ring-2 ring-teal-400/20"
+                  : item.status === "completed"
+                    ? "bg-emerald-50/40 border-emerald-200/80"
+                    : item.status === "swapped"
+                      ? "bg-amber-50/40 border-amber-200/80"
+                      : "bg-white border-slate-200 hover:border-slate-300"
+                  }`}
+              >
+                <div className="flex items-center gap-4">
+                  {/* Date & Week badge */}
+                  <div className="w-32 shrink-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Week {item.week_number}
+                    </span>
+                    <span className="text-xs font-black text-slate-900 block">
+                      {item.date_formatted}
+                    </span>
+                    {item.is_this_sunday && (
+                      <span className="text-[9px] bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-black px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
+                        This Sunday
+                      </span>
+                    )}
+                    {item.is_next_sunday && (
+                      <span className="text-[9px] bg-indigo-100 text-indigo-900 font-bold px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5">
+                        Next Sunday
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Team Assignment */}
+                  {item.team ? (
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="w-4 h-4 rounded-full shrink-0 shadow-inner ring-1 ring-white"
+                        style={{ backgroundColor: item.team.color }}
+                      ></span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-black text-sm text-slate-900">{item.team.name}</h4>
+                          <span className="text-[10px] text-slate-400 font-bold">
+                            ({item.team.members?.length || item.team.members_count || item.team.volunteers_count || 5} Volunteers)
+                          </span>
+                          {item.team.cycle_mode === "biblestudy_group" && (
+                            <span className="text-[9px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.2 rounded border border-indigo-100">
+                              BS Group
+                            </span>
+                          )}
+                          {item.team.cycle_mode === "ministry" && (
+                            <span className="text-[9px] bg-teal-50 text-teal-900 font-bold px-1.5 py-0.2 rounded border border-teal-100">
+                              Ministry
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-600">
+                          Leader: <strong className="text-slate-800 font-bold">{item.team.leader_name || "Assigned"}</strong>
+                          {(item.team.leader_contact || item.team.leader_phone) && ` • ${item.team.leader_contact || item.team.leader_phone}`}
+                        </span>
+                        {item.notes && (
+                          <div className="text-[10px] text-slate-500 italic mt-0.5">
+                            Note: {item.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-rose-600 font-bold">No unit assigned</span>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block font-bold text-charcoal mb-1">Status</label>
-                  <select
-                    value={dutyStatus}
-                    onChange={(e) => setDutyStatus(e.target.value as any)}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-semibold text-charcoal"
+                {/* Status & Actions */}
+                <div className="flex items-center gap-2 self-end md:self-center">
+                  {item.is_this_sunday ? (
+                    <span className="bg-teal-100 text-teal-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-teal-300 shadow-2xs">
+                      <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                      <span>On Duty This Sunday</span>
+                    </span>
+                  ) : item.is_next_sunday ? (
+                    <span className="bg-indigo-50 text-indigo-950 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-200">
+                      <Clock className="w-3.5 h-3.5 text-indigo-700" />
+                      <span>Next in Turn</span>
+                    </span>
+                  ) : (
+                    <span className="bg-slate-50 text-slate-600 text-xs font-medium px-3 py-1.5 rounded-xl border border-slate-200">
+                      Turn #{item.team?.order_seq || item.week_number}
+                    </span>
+                  )}
+
+                  <button
+                    onClick={() => handleOpenSwapModal(item)}
+                    className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                    title="Swap with another Sunday"
                   >
-                    <option value="scheduled">⏳ Scheduled</option>
-                    <option value="completed">✓ Completed</option>
-                    <option value="swapped">🔁 Swapped</option>
-                  </select>
+                    <ArrowLeftRight className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenOverrideModal(item)}
+                    className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                    title="Edit/Override single date"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-
-              <div>
-                <label className="block font-bold text-charcoal mb-1">Notes / Remarks (Optional)</label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Joint fellowship lunch cleaning after anniversary service..."
-                  value={dutyNotes}
-                  onChange={(e) => setDutyNotes(e.target.value)}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDutyModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md cursor-pointer disabled:opacity-50"
-                >
-                  {actionLoading ? "Saving..." : (editingDutyId ? "Save Changes" : "Schedule Duty")}
-                </button>
-              </div>
-            </form>
+            ))}
           </div>
         </div>
       )}
 
-      {/* MODAL: AUTO-CYCLE GENERATOR */}
-      {isCycleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-scale-up">
-            
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-indigo text-white">
-                  <RotateCw className="w-4 h-4 animate-spin-slow" />
+      {/* ========================================================================= */}
+      {/* TAB 3: SANITATION PROTOCOL & KITCHEN SOPs */}
+      {/* ========================================================================= */}
+      {activeTab === "tasks" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <span className="p-2.5 rounded-2xl bg-teal-50 text-teal-700 border border-teal-100">
+                <Utensils className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-black text-base text-slate-900">1. Pre-Scraping & Washing Protocol</h3>
+                <p className="text-xs text-slate-500">Fellowship cutlery, plates, and bowls handling</p>
+              </div>
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-700">
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                <span>Scrape all leftover food waste into the garbage disposal bin with rubber scrapers.</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                <span>Pre-rinse plates with warm water spray before loading into Sink 1.</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                <span>Wash dinnerware in Sink 1 with warm soapy water (110°F+ with food-grade detergent).</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                <span>Rinse thoroughly in Sink 2 with clear hot running water.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <span className="p-2.5 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+                <ShieldCheck className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-black text-base text-slate-900">2. Sanitizing & Air-Drying Standard</h3>
+                <p className="text-xs text-slate-500">3-Compartment chemical dip & air-drying standard</p>
+              </div>
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-700">
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>Submerge clean wares in Sink 3 sanitizing solution for at least 60 seconds.</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>Stack vertically in designated drying racks. Allow 100% air-drying (do not towel dry).</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>Return dried and sanitized dinnerware to closed kitchen cupboards.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <span className="p-2.5 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100">
+                <Sparkles className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-black text-base text-slate-900">3. Countertops & Appliance Disinfection</h3>
+                <p className="text-xs text-slate-500">Fellowship counter, microwave, and coffee maker care</p>
+              </div>
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-700">
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>Wipe all stainless steel food prep surfaces with sanitizing disinfectant spray.</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>Clean coffee maker carafes, empty coffee grounds, and turn off heating plates.</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>Wipe microwave interior and exterior handle. Clean food splatter immediately.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <span className="p-2.5 rounded-2xl bg-rose-50 text-rose-700 border border-rose-100">
+                <Trash2 className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-black text-base text-slate-900">4. Trash Disposal & Kitchen Closing</h3>
+                <p className="text-xs text-slate-500">Final checks before leaving the fellowship hall</p>
+              </div>
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-slate-700">
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>Tie up all kitchen food waste bags and dispose in outside dumpster.</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>Line trash bins with fresh heavy-duty garbage bags.</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              </li>
+            </ul>
+            <div className="space-y-3 text-xs text-slate-600">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                  1
                 </span>
                 <div>
-                  <h3 className="font-bold text-base text-charcoal">Generate Round-Robin Cycle</h3>
-                  <p className="text-xs text-charcoal/60">Automate upcoming Sunday dishwashing turns in continuous loop</p>
+                  <strong className="text-slate-900 font-bold block mb-0.5">Scrape & Pre-Rinse (Sink 1)</strong>
+                  <span>Dispose solid food waste in green garbage bins. Pre-rinse remaining sauce with warm water faucet.</span>
                 </div>
               </div>
-              <button onClick={() => setIsCycleModalOpen(false)} className="p-1 text-charcoal/40 hover:text-charcoal cursor-pointer">
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                  2
+                </span>
+                <div>
+                  <strong className="text-slate-900 font-bold block mb-0.5">Soapy Hot Wash (Sink 2)</strong>
+                  <span>Submerge in hot water with approved antibacterial dish soap. Scrub using non-abrasive sponges.</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                  3
+                </span>
+                <div>
+                  <strong className="text-slate-900 font-bold block mb-0.5">Sanitize & Air Dry (Sink 3)</strong>
+                  <span>Dip in food-safe sanitizing solution for 30 seconds. Place upside down on ventilated stainless steel drying racks.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                <span className="p-2.5 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+                  <ShieldCheck className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="font-black text-base text-slate-900">2. Kitchen Close-out Checklist</h3>
+                  <p className="text-xs text-slate-500">Post-fellowship sanitation & safety standards</p>
+                </div>
+              </div>
+
+              <div className="mt-3.5 space-y-2.5 text-xs">
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <CheckSquare className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span className="font-medium text-slate-700">Wipe down all food prep countertops & stainless tables with disinfectant spray</span>
+                </div>
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <CheckSquare className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span className="font-medium text-slate-700">Clean food strainers in sinks and pour boiling water down drainage traps</span>
+                </div>
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <CheckSquare className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span className="font-medium text-slate-700">Tie all kitchen garbage bags and transfer them to the outdoor disposal bin</span>
+                </div>
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <CheckSquare className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span className="font-medium text-slate-700">Hang damp dish towels to dry and ensure gas/water main shut-off valves are closed</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-900 to-slate-900 text-white space-y-1.5">
+              <div className="flex items-center gap-2 text-teal-300 text-xs font-black">
+                <Award className="w-4 h-4" />
+                <span>Kitchen Stewards Fellowship</span>
+              </div>
+              <p className="text-[11px] text-teal-100/80 leading-relaxed">
+                Thank you for ministering through kitchen stewardship. Your service provides a clean, safe, and welcoming environment for our church family!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODALS */}
+      {/* ========================================================================= */}
+
+      {/* MODAL 1: Create / Edit Team */}
+      {isTeamModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-black text-slate-900">
+                  {editingTeam ? "Edit Dishwashing Unit" : "Create Dishwashing Unit"}
+                </h2>
+                <span className="text-[11px] text-slate-500">
+                  Assign a Bible Study Group, Ministry, or Custom Team to the rotating turn order
+                </span>
+              </div>
+              <button
+                onClick={() => setIsTeamModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleGenerateCycle} className="space-y-4 text-xs">
-              
+            <form onSubmit={handleSaveTeam} className="space-y-3.5 text-xs">
+              {/* Unit Mode Picker */}
               <div>
-                <label className="block font-bold text-charcoal mb-1">Rotation Mode *</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="block font-bold text-slate-700 mb-1.5">Unit Classification</label>
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setCycleForm({ ...cycleForm, cycle_mode: "biblestudy_group" })}
-                    className={`p-3 rounded-2xl border text-left font-bold transition-all cursor-pointer ${
-                      cycleForm.cycle_mode === "biblestudy_group"
-                        ? "bg-indigo text-white border-indigo shadow-sm"
-                        : "bg-ivory-light text-charcoal/70 border-gray-200 hover:bg-gray-100"
-                    }`}
+                    onClick={() => handleCycleModeChange("biblestudy_group")}
+                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "biblestudy_group"
+                      ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-400"
+                      }`}
                   >
-                    <span>By Bible Study Group</span>
-                    <span className={`block text-[10px] font-normal mt-0.5 ${cycleForm.cycle_mode === "biblestudy_group" ? "text-indigo-200" : "text-charcoal/50"}`}>
-                      Auto-fills respective group leaders
-                    </span>
+                    <BookOpen className="w-4 h-4" />
+                    <span>BS Group</span>
                   </button>
-
                   <button
                     type="button"
-                    onClick={() => setCycleForm({ ...cycleForm, cycle_mode: "ministry" })}
-                    className={`p-3 rounded-2xl border text-left font-bold transition-all cursor-pointer ${
-                      cycleForm.cycle_mode === "ministry"
-                        ? "bg-indigo text-white border-indigo shadow-sm"
-                        : "bg-ivory-light text-charcoal/70 border-gray-200 hover:bg-gray-100"
-                    }`}
+                    onClick={() => handleCycleModeChange("ministry")}
+                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "ministry"
+                      ? "bg-teal-700 text-white border-teal-700 shadow-sm"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-400"
+                      }`}
                   >
-                    <span>By Ministry Department</span>
-                    <span className={`block text-[10px] font-normal mt-0.5 ${cycleForm.cycle_mode === "ministry" ? "text-indigo-200" : "text-charcoal/50"}`}>
-                      Auto-fills respective coordinators
-                    </span>
+                    <Building2 className="w-4 h-4" />
+                    <span>Ministry</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCycleModeChange("custom")}
+                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "custom"
+                      ? "bg-emerald-700 text-white border-emerald-700 shadow-sm"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-400"
+                      }`}
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span>Custom Unit</span>
                   </button>
                 </div>
               </div>
 
-              {/* TEAM-UP STRUCTURE */}
-              <div>
-                <label className="block font-bold text-charcoal mb-1">Teams Assigned per Sunday *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCycleForm({ ...cycleForm, teams_per_turn: 1 })}
-                    className={`p-3 rounded-2xl border text-left font-bold transition-all cursor-pointer ${
-                      cycleForm.teams_per_turn === 1
-                        ? "bg-indigo text-white border-indigo shadow-sm"
-                        : "bg-ivory-light text-charcoal/70 border-gray-200 hover:bg-gray-100"
-                    }`}
+              {/* Conditional Selection Fields */}
+              {teamForm.cycle_mode === "biblestudy_group" && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Select Bible Study Group *</label>
+                  <select
+                    value={teamForm.biblestudy_group_id}
+                    onChange={(e) => handleSelectGroup(e.target.value)}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium cursor-pointer"
                   >
-                    <span>1 Team / Group Only</span>
-                    <span className={`block text-[10px] font-normal mt-0.5 ${cycleForm.teams_per_turn === 1 ? "text-indigo-200" : "text-charcoal/50"}`}>
-                      Standard single team rotation
-                    </span>
-                  </button>
+                    <option value="">-- Choose Bible Study Group --</option>
+                    {bsGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} (Leader: {g.leader_name || "Unassigned"})
+                      </option>
+                    ))}
+                  </select>
 
-                  <button
-                    type="button"
-                    onClick={() => setCycleForm({ ...cycleForm, teams_per_turn: 2 })}
-                    className={`p-3 rounded-2xl border text-left font-bold transition-all cursor-pointer ${
-                      cycleForm.teams_per_turn === 2
-                        ? "bg-indigo text-white border-indigo shadow-sm"
-                        : "bg-ivory-light text-charcoal/70 border-gray-200 hover:bg-gray-100"
-                    }`}
-                  >
-                    <span className="flex items-center gap-1">
-                      <Handshake className="w-3.5 h-3.5 text-amber-300" />
-                      <span>2 Teams Teaming Up</span>
-                    </span>
-                    <span className={`block text-[10px] font-normal mt-0.5 ${cycleForm.teams_per_turn === 2 ? "text-indigo-200" : "text-charcoal/50"}`}>
-                      Pairs 2 groups/ministries per Sunday
-                    </span>
-                  </button>
+                  {/* Visual chips of covered disciples in this group */}
+                  {(() => {
+                    const selGroup = bsGroups.find(g => String(g.id) === String(teamForm.biblestudy_group_id));
+                    const groupMembers = selGroup?.members || [];
+                    return (
+                      <div className="mt-2.5 p-3 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-teal-950">
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-teal-700" />
+                            <span>Covered Group Disciples ({groupMembers.length})</span>
+                          </span>
+                          {groupMembers.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allIds = groupMembers.map(m => m.member_id).filter(Boolean) as number[];
+                                setTeamForm(prev => ({ ...prev, selectedMemberIds: allIds }));
+                              }}
+                              className="text-[10px] text-teal-700 hover:text-teal-900 underline font-black cursor-pointer"
+                            >
+                              Select All Disciples
+                            </button>
+                          )}
+                        </div>
+
+                        {groupMembers.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                            {groupMembers.map((sm) => {
+                              const isChecked = teamForm.selectedMemberIds.includes(sm.member_id as number);
+                              return (
+                                <button
+                                  key={sm.id || sm.member_id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (!sm.member_id) return;
+                                    setTeamForm(prev => ({
+                                      ...prev,
+                                      selectedMemberIds: isChecked
+                                        ? prev.selectedMemberIds.filter(id => id !== sm.member_id)
+                                        : [...prev.selectedMemberIds, sm.member_id as number]
+                                    }));
+                                  }}
+                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${isChecked
+                                    ? "bg-teal-600 text-white shadow-xs"
+                                    : "bg-white text-slate-700 border border-teal-200 hover:bg-teal-100/60"
+                                    }`}
+                                >
+                                  {isChecked ? <Check className="w-3 h-3 text-white" /> : <Plus className="w-3 h-3 text-teal-600" />}
+                                  <span>{sm.display_name || sm.member_name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-slate-500 italic">
+                            No disciples registered in this Bible study group yet. Disciples will appear here once assigned to this leader.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
-              </div>
+              )}
+
+              {teamForm.cycle_mode === "ministry" && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Select Ministry *</label>
+                  <select
+                    value={teamForm.ministry_id}
+                    onChange={(e) => handleSelectMinistry(e.target.value)}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium cursor-pointer"
+                  >
+                    <option value="">-- Choose Ministry --</option>
+                    {ministriesList.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} Ministry ({m.coordinators?.[0]?.name ? `Coord: ${m.coordinators[0].name}` : "Active"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-charcoal mb-1">Starting Sunday *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Display Team Name *</label>
                   <input
-                    type="date"
+                    type="text"
                     required
-                    value={cycleForm.start_date}
-                    onChange={(e) => setCycleForm({ ...cycleForm, start_date: e.target.value })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-indigo"
+                    placeholder="e.g. Wednesday BS Group, Youth Ministry"
+                    value={teamForm.name}
+                    onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
                   />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Rotation Order (Turn #)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={teamForm.order_seq}
+                    onChange={(e) => setTeamForm({ ...teamForm, order_seq: Number(e.target.value) })}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Point Person / Leader */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Assigned Point Person</label>
+                  <select
+                    value={teamForm.leader_id}
+                    onChange={(e) => handleSelectPointPerson(e.target.value)}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium cursor-pointer"
+                  >
+                    <option value="">Select Church Member</option>
+                    {churchMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.first_name} {m.last_name} ({m.ministry_name || "Member"})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal mb-1">Duration (Weeks) *</label>
-                  <select
-                    value={cycleForm.weeks_count}
-                    onChange={(e) => setCycleForm({ ...cycleForm, weeks_count: Number(e.target.value) })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-indigo cursor-pointer"
-                  >
-                    <option value={4}>4 Weeks (1 Month)</option>
-                    <option value={8}>8 Weeks (2 Months)</option>
-                    <option value={12}>12 Weeks (1 Quarter)</option>
-                    <option value={24}>24 Weeks (Half Year)</option>
-                  </select>
+                  <label className="block font-bold text-slate-700 mb-1">Contact Phone / Email</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 0917-123-4567"
+                    value={teamForm.leader_contact}
+                    onChange={(e) => setTeamForm({ ...teamForm, leader_contact: e.target.value })}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                  />
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="replaceFuture"
-                  checked={cycleForm.replace_existing}
-                  onChange={(e) => setCycleForm({ ...cycleForm, replace_existing: e.target.checked })}
-                  className="rounded text-indigo cursor-pointer"
-                />
-                <label htmlFor="replaceFuture" className="font-medium text-charcoal/80 cursor-pointer">
-                  Replace any scheduled future turns starting from {cycleForm.start_date}
-                </label>
+              {/* Color & Volunteers Target */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1.5">Color Badge</label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {["#0D9488", "#0284C7", "#7C3AED", "#EA580C", "#059669", "#D97706", "#DB2777", "#475569"].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setTeamForm({ ...teamForm, color: c })}
+                        className={`w-6 h-6 rounded-full transition-all cursor-pointer ${teamForm.color === c ? "ring-3 ring-teal-500 scale-110 shadow-sm" : "opacity-80"
+                          }`}
+                        style={{ backgroundColor: c }}
+                      ></button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Volunteers Target</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={teamForm.volunteers_count}
+                    onChange={(e) => setTeamForm({ ...teamForm, volunteers_count: Number(e.target.value) })}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                  />
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Kitchen Tasks / Checklist</label>
+                <textarea
+                  rows={2}
+                  value={teamForm.tasks_checklist}
+                  onChange={(e) => setTeamForm({ ...teamForm, tasks_checklist: e.target.value })}
+                  placeholder="e.g. Wash plates and cups, sanitize counters, take out trash..."
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                ></textarea>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCycleModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal cursor-pointer"
+                  onClick={() => setIsTeamModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={actionLoading}
-                  className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
                 >
-                  {actionLoading ? "Generating..." : "Generate Full Cycle"}
+                  {editingTeam ? "Save Changes" : "Create Unit"}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* MODAL: SWAP DUTY TURN */}
-      {isSwapModalOpen && selectedDutyForSwap && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-4 animate-scale-up">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-              <h3 className="font-bold text-base text-charcoal flex items-center gap-2">
-                <ArrowLeftRight className="w-4 h-4 text-indigo" />
-                <span>Swap Dishwashing Turn</span>
-              </h3>
-              <button onClick={() => setIsSwapModalOpen(false)} className="p-1 text-charcoal/40 cursor-pointer">
+      {/* MODAL 2: Add Member to Team */}
+      {isAddMemberModalOpen && targetTeam && (() => {
+        const targetGroup = bsGroups.find(g => g.id === targetTeam.biblestudy_group_id || g.name === targetTeam.name);
+        const existingMemberIds = new Set(targetTeam.members?.map(m => m.member_id) || []);
+
+        const groupMembersList = (targetGroup?.members || []).map(m => {
+          const cm = m.member_id ? churchMembers.find(c => c.id === m.member_id) : null;
+          return cm || { id: m.member_id || m.id, first_name: m.display_name || m.member_name || "Disciple", last_name: "", ministry_name: targetGroup?.name || "BS Group" };
+        });
+
+        const unassignedGroupMembers = groupMembersList.filter(m => !existingMemberIds.has(m.id));
+        const allEligibleChurchMembers = churchMembers.filter(m => !existingMemberIds.has(m.id));
+
+        const activeList = memberTab === "group" && targetGroup ? unassignedGroupMembers : allEligibleChurchMembers;
+        const filteredList = activeList.filter(m =>
+          `${m.first_name} ${m.last_name}`.toLowerCase().includes(memberSearchQuery.toLowerCase())
+        );
+
+        return createPortal(
+          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Add Disciple to {targetTeam.name}</h2>
+                  <span className="text-[11px] text-slate-500">Assign disciples to this Sunday dishwashing crew</span>
+                </div>
+                <button
+                  onClick={() => setIsAddMemberModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Segmented Tab: Group Disciples vs All Members */}
+              {targetGroup && (
+                <div className="p-1 bg-slate-100 rounded-2xl flex items-center gap-1 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => { setMemberTab("group"); setSelectedMemberId(""); }}
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${memberTab === "group"
+                      ? "bg-white text-teal-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-900"
+                      }`}
+                  >
+                    🎯 Group Disciples ({unassignedGroupMembers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMemberTab("all"); setSelectedMemberId(""); }}
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${memberTab === "all"
+                      ? "bg-white text-teal-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-900"
+                      }`}
+                  >
+                    👥 All Members ({allEligibleChurchMembers.length})
+                  </button>
+                </div>
+              )}
+
+              {/* Quick Batch Import from Group */}
+              {memberTab === "group" && targetGroup && unassignedGroupMembers.length > 0 && (
+                <div className="p-3 bg-teal-50 border border-teal-200 rounded-2xl flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-teal-950">
+                    <strong className="block">{unassignedGroupMembers.length} Disciples Unassigned</strong>
+                    <span>Import entire group to this crew at once</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleBatchAddGroupDisciples(targetTeam.id, unassignedGroupMembers.map(m => m.id))}
+                    disabled={batchLoading}
+                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer shrink-0 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add All ({unassignedGroupMembers.length})</span>
+                  </button>
+                </div>
+              )}
+
+              <form onSubmit={handleAddMemberToTeam} className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Search & Select Disciple *
+                  </label>
+                  <div className="relative mb-2">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filter disciples by name..."
+                      value={memberSearchQuery}
+                      onChange={(e) => setMemberSearchQuery(e.target.value)}
+                      className="w-full bg-slate-50 pl-8.5 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium text-xs"
+                    />
+                  </div>
+
+                  <select
+                    required
+                    size={5}
+                    value={selectedMemberId}
+                    onChange={(e) => setSelectedMemberId(e.target.value)}
+                    className="w-full bg-slate-50 p-2 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium text-xs"
+                  >
+                    {filteredList.map((m) => (
+                      <option key={m.id} value={m.id} className="p-1.5 rounded-lg hover:bg-teal-50">
+                        {m.first_name} {m.last_name} ({m.ministry_name || "General"})
+                      </option>
+                    ))}
+                    {filteredList.length === 0 && (
+                      <option disabled value="" className="p-2 text-slate-400 italic">
+                        No eligible disciples found
+                      </option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Role in Crew</label>
+                  <select
+                    value={memberRole}
+                    onChange={(e) => setMemberRole(e.target.value)}
+                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                  >
+                    <option value="Regular Crew Member">Regular Crew Member</option>
+                    <option value="Assistant Leader">Assistant Leader</option>
+                    <option value="Sanitation Steward">Sanitation Steward</option>
+                    <option value="Drying & Storage Lead">Drying & Storage Lead</option>
+                  </select>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddMemberModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!selectedMemberId}
+                    className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                  >
+                    Confirm Assignment
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
+
+      {/* MODAL 3: Swap Sunday Dishwashing Turns */}
+      {isSwapModalOpen && swapItem1 && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <ArrowLeftRight className="w-5 h-5 text-teal-600" />
+                <span>Swap Sunday Dishwashing Turn</span>
+              </h2>
+              <button
+                onClick={() => setIsSwapModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-charcoal/70">
-              Swap duty turn for <strong>{selectedDutyForSwap.assigned_name}</strong> on <strong>{selectedDutyForSwap.duty_date}</strong> with another scheduled Sunday.
-            </p>
-
             <form onSubmit={handleExecuteSwap} className="space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-1">
+                <span className="text-[10px] font-black uppercase text-teal-700 block">Currently Selected Turn:</span>
+                <span className="text-sm font-black text-slate-900 block">{swapItem1.date_formatted}</span>
+                <span className="text-xs text-slate-600 font-semibold block">Team: <strong>{swapItem1.team?.name}</strong></span>
+              </div>
+
               <div>
-                <label className="block font-bold text-charcoal mb-1">Select Target Sunday to Swap With *</label>
+                <label className="block font-bold text-slate-700 mb-1.5">Swap with which upcoming Sunday? *</label>
                 <select
                   required
-                  value={targetDutyId}
-                  onChange={(e) => setTargetDutyId(e.target.value)}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-indigo cursor-pointer"
+                  value={swapTargetDate}
+                  onChange={(e) => setSwapTargetDate(e.target.value)}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-bold text-slate-900 cursor-pointer text-xs"
                 >
-                  <option value="">-- Pick Sunday to Swap with --</option>
-                  {duties
-                    .filter(d => d.id !== selectedDutyForSwap.id)
-                    .map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.duty_date} — {d.assigned_name} {d.partner_assigned_name ? `& ${d.partner_assigned_name}` : ''} ({d.status})
+                  <option value="">-- Choose Sunday to Swap With --</option>
+                  {schedule
+                    .filter((s) => s.duty_date !== swapItem1.duty_date)
+                    .map((s) => (
+                      <option key={s.duty_date} value={s.duty_date}>
+                        {s.date_formatted} — {s.team?.name || "Unassigned"} (Turn #{s.team?.order_seq || s.week_number})
                       </option>
                     ))}
                 </select>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsSwapModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={actionLoading || !targetDutyId}
-                  className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
                 >
-                  {actionLoading ? "Swapping..." : "Confirm Swap"}
+                  Confirm Swap
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
+      {/* ========================================================================= */}
+      {/* MODAL 5: Single Date Override Modal ("Mababago lang yan kapag nag edit") */}
+      {/* ========================================================================= */}
+      {overrideItem && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Edit className="w-4 h-4 text-teal-600" />
+                  <span>Edit Assignment for {overrideItem.date_formatted}</span>
+                </h2>
+                <span className="text-[10px] text-slate-500">Overrides this single Sunday without altering subsequent recurring turns</span>
+              </div>
+              <button onClick={() => setOverrideItem(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOverride} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Assign Team / Unit *</label>
+                <select
+                  required
+                  value={overrideTeamId}
+                  onChange={(e) => setOverrideTeamId(e.target.value)}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                >
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} (Turn #{t.order_seq} • {t.cycle_mode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Status</label>
+                <select
+                  value={overrideStatus}
+                  onChange={(e) => setOverrideStatus(e.target.value)}
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                >
+                  <option value="scheduled">Scheduled</option>
+                  <option value="on_duty">On Duty</option>
+                  <option value="completed">Completed</option>
+                  <option value="swapped">Swapped</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Special Notes / Reasons for Override</label>
+                <textarea
+                  rows={3}
+                  value={overrideNotes}
+                  onChange={(e) => setOverrideNotes(e.target.value)}
+                  placeholder="e.g. Assigned to Youth Ministry for Fellowship Sunday celebration."
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
+                ></textarea>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOverrideItem(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md cursor-pointer"
+                >
+                  Save Override
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Reusable Confirmation & Alert Modal */}
+      <ConfirmationModal
+        isOpen={confirmModalConfig.isOpen}
+        title={confirmModalConfig.title}
+        description={confirmModalConfig.description}
+        type={confirmModalConfig.type}
+        confirmText={confirmModalConfig.confirmText}
+        cancelText={confirmModalConfig.cancelText}
+        isLoading={confirmModalConfig.isLoading}
+        onConfirm={confirmModalConfig.onConfirm}
+        onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

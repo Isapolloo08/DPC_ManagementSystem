@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
@@ -30,16 +31,10 @@ const DEFAULT_LOOKUPS = [
   { type: "event_category", name: "Leadership Meeting", description: "Session and ministry leader strategy", color: "#7C3AED", sort_order: 5 },
   { type: "event_category", name: "Community Outreach", description: "Medical mission, feeding, and charity work", color: "#E07A5F", sort_order: 6 },
 
-  // Prayer & Announcement topics
-  { type: "prayer_topic", name: "Healing & Health", description: "Physical, emotional, and mental healing", color: "#BE185D", sort_order: 1 },
-  { type: "prayer_topic", name: "Family & Marriage", description: "Parenting, marital peace, and home blessings", color: "#7C3AED", sort_order: 2 },
-  { type: "prayer_topic", name: "Financial Provision", description: "Employment, business, and debt freedom", color: "#059669", sort_order: 3 },
-  { type: "prayer_topic", name: "Spiritual Growth", description: "Discipleship, devotion, and sanctification", color: "#1E40AF", sort_order: 4 },
-  { type: "prayer_topic", name: "Church & Missions", description: "Pastors, church plants, and missionary support", color: "#D97706", sort_order: 5 },
-
+  // Announcement categories
   { type: "announcement_category", name: "General Announcement", description: "Important church-wide notices", color: "#2C3968", sort_order: 1 },
   { type: "announcement_category", name: "Ministry Update", description: "Reports from departments and coordinators", color: "#059669", sort_order: 2 },
-  { type: "announcement_category", name: "Urgent Prayer", description: "Immediate intercession requests", color: "#BE185D", sort_order: 3 },
+  { type: "announcement_category", name: "Urgent Bulletin", description: "Immediate church-wide notifications", color: "#BE185D", sort_order: 3 },
   { type: "announcement_category", name: "Volunteer Opportunity", description: "Calls for service helpers and teachers", color: "#D97706", sort_order: 4 },
 
   // Member statuses
@@ -151,6 +146,8 @@ router.post("/lookups", authMiddleware, requireRoles("Admin"), async (req: AuthR
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user?.id || null, "CREATE", "system_lookups", newId, `Created ${type}: ${name.trim()}`);
+    emitRealtimeEvent("lookups:changed", { action: "create", type, id: newId });
+    emitRealtimeEvent("settings:changed");
 
     res.status(201).json({ id: newId, message: "Lookup created successfully" });
   } catch (err: any) {
@@ -192,6 +189,8 @@ router.put("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req: Au
     ]);
 
     await logAuditAction(req.user?.id || null, "UPDATE", "system_lookups", Number(id), `Updated ${current.type}: ${updatedName}`);
+    emitRealtimeEvent("lookups:changed", { action: "update", type: current.type, id: Number(id) });
+    emitRealtimeEvent("settings:changed");
     res.json({ message: "Lookup updated successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -207,6 +206,8 @@ router.delete("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req:
 
     await db.run("DELETE FROM system_lookups WHERE id = $1", [id]);
     await logAuditAction(req.user?.id || null, "DELETE", "system_lookups", Number(id), `Deleted ${current.type}: ${current.name}`);
+    emitRealtimeEvent("lookups:changed", { action: "delete", type: current.type, id: Number(id) });
+    emitRealtimeEvent("settings:changed");
 
     res.json({ message: "Lookup deleted successfully" });
   } catch (err: any) {
@@ -229,6 +230,8 @@ router.post("/lookups/reset", authMiddleware, requireRoles("Admin"), async (req:
       `, [item.type, item.name, item.description, item.color, item.sort_order]);
     }
     await logAuditAction(req.user?.id || null, "UPDATE", "system_lookups", null, "Reset system lookups to defaults");
+    emitRealtimeEvent("lookups:changed", { action: "reset" });
+    emitRealtimeEvent("settings:changed");
     res.json({ message: "Default system lookups restored successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

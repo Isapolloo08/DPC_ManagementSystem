@@ -1,13 +1,16 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { User, Role, Ministry, Member } from "../types";
+import { UsersPageSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import {
   UserCog, Plus, Search, Filter, Shield, ShieldCheck,
   UserCheck, Users, HeartHandshake, UserPlus, Edit2, Trash2,
   Lock, Mail, Key, CheckCircle2, AlertCircle, RefreshCw, X,
   Check, ArrowRight, Eye, Sparkles, Building2, UserCircle2, BookOpen
 } from "lucide-react";
+import { useSocketEvent } from "../socket";
 
 export const UsersPage: React.FC = () => {
   const { user: currentUser, switchDemoUser, ministries } = useAuth();
@@ -37,6 +40,24 @@ export const UsersPage: React.FC = () => {
     ministry_ids: [] as number[],
     member_id: "" as string | number
   });
+  const [memberSearch, setMemberSearch] = useState("");
+
+  const filteredMembersForLink = useMemo(() => {
+    if (!memberSearch.trim()) return members;
+    const q = memberSearch.toLowerCase();
+    return members.filter(m => {
+      const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
+      const ministry = (m.ministry_name || "").toLowerCase();
+      const email = (m.contact_email || "").toLowerCase();
+      const phone = (m.contact_phone || "").toLowerCase();
+      return fullName.includes(q) || ministry.includes(q) || email.includes(q) || phone.includes(q);
+    });
+  }, [members, memberSearch]);
+
+  const selectedLinkedMember = useMemo(() => {
+    if (!formData.member_id) return null;
+    return members.find(m => String(m.id) === String(formData.member_id)) || null;
+  }, [members, formData.member_id]);
 
   const showToast = (text: string, type: "success" | "error" = "success") => {
     setToastMessage({ text, type });
@@ -44,12 +65,19 @@ export const UsersPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadAllData();
+    loadAllData(users.length === 0);
   }, []);
 
-  const loadAllData = async () => {
+  // Real-time synchronization
+  useSocketEvent("users:changed", () => loadAllData(false));
+  useSocketEvent("members:changed", () => loadAllData(false));
+  useSocketEvent("ministries:changed", () => loadAllData(false));
+
+  const loadAllData = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) {
+        setLoading(true);
+      }
       const [usersRes, rolesRes, membersRes] = await Promise.all([
         api.getUsers().catch(async () => {
           const demo = await api.getDemoUsers().catch(() => []);
@@ -70,7 +98,9 @@ export const UsersPage: React.FC = () => {
     } catch (err: any) {
       console.error("Failed to load user management data:", err);
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setLoading(false);
+      }
     }
   };
 
@@ -103,6 +133,7 @@ export const UsersPage: React.FC = () => {
   };
 
   const handleOpenUserModal = (targetUser?: User) => {
+    setMemberSearch("");
     if (targetUser) {
       setEditingUser(targetUser);
       setFormData({
@@ -271,15 +302,18 @@ export const UsersPage: React.FC = () => {
     }
   };
 
+  if (loading && users.length === 0) {
+    return <UsersPageSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${
-          toastMessage.type === "success" 
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${toastMessage.type === "success"
             ? "bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20"
             : "bg-rose-900 text-white border-rose-700 shadow-rose-950/20"
-        }`}>
+          }`}>
           {toastMessage.type === "success" ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
           ) : (
@@ -335,13 +369,12 @@ export const UsersPage: React.FC = () => {
       {/* 5 Core Roles KPI Overview Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* 1. Admin */}
-        <div 
+        <div
           onClick={() => setSelectedRole(selectedRole === "admin" ? "all" : "admin")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
-            selectedRole === "admin" 
-              ? "border-indigo ring-2 ring-indigo/20 bg-indigo-50/30" 
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "admin"
+              ? "border-indigo ring-2 ring-indigo/20 bg-indigo-50/30"
               : "border-indigo-100/90 hover:border-indigo-300"
-          }`}
+            }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
@@ -357,13 +390,12 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* 2. Coordinator */}
-        <div 
+        <div
           onClick={() => setSelectedRole(selectedRole === "coordinator" ? "all" : "coordinator")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
-            selectedRole === "coordinator" 
-              ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/30" 
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "coordinator"
+              ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/30"
               : "border-emerald-100/90 hover:border-emerald-300"
-          }`}
+            }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
@@ -379,13 +411,12 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* 3. Leader */}
-        <div 
+        <div
           onClick={() => setSelectedRole(selectedRole === "leader" ? "all" : "leader")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
-            selectedRole === "leader" 
-              ? "border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/30" 
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "leader"
+              ? "border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/30"
               : "border-sky-100/90 hover:border-sky-300"
-          }`}
+            }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
@@ -401,13 +432,12 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* 4. Volunteer */}
-        <div 
+        <div
           onClick={() => setSelectedRole(selectedRole === "volunteer" ? "all" : "volunteer")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
-            selectedRole === "volunteer" 
-              ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30" 
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "volunteer"
+              ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30"
               : "border-amber-100/90 hover:border-amber-300"
-          }`}
+            }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
@@ -423,13 +453,12 @@ export const UsersPage: React.FC = () => {
         </div>
 
         {/* 5. Member */}
-        <div 
+        <div
           onClick={() => setSelectedRole(selectedRole === "member" ? "all" : "member")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${
-            selectedRole === "member" 
-              ? "border-slate-500 ring-2 ring-slate-500/20 bg-slate-50/40" 
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "member"
+              ? "border-slate-500 ring-2 ring-slate-500/20 bg-slate-50/40"
               : "border-slate-100/90 hover:border-slate-300"
-          }`}
+            }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
@@ -514,12 +543,12 @@ export const UsersPage: React.FC = () => {
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Join & Study</td>
                 </tr>
                 <tr>
-                  <td className="py-2.5 px-3 font-bold">Announcements & Prayer Wall</td>
+                  <td className="py-2.5 px-3 font-bold">Announcements & Church Board</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Pin & Moderate</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Post & Moderate</td>
-                  <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Post & Moderate</td>
-                  <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Pray & View</td>
-                  <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Submit & Pray</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— View Only</td>
+                  <td className="py-2.5 px-3 text-emerald-600 font-black">✓ View Bulletins</td>
+                  <td className="py-2.5 px-3 text-emerald-600 font-black">✓ View Bulletins</td>
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-bold">Security Audit Logs</td>
@@ -551,17 +580,15 @@ export const UsersPage: React.FC = () => {
               <button
                 key={filter.id}
                 onClick={() => setSelectedRole(filter.id)}
-                className={`px-3.5 py-2 rounded-2xl text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
-                  selectedRole === filter.id
+                className={`px-3.5 py-2 rounded-2xl text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${selectedRole === filter.id
                     ? "bg-indigo text-white shadow-md shadow-indigo-950/20"
                     : "bg-indigo-50/50 text-charcoal/70 hover:bg-indigo-50 border border-indigo-100/60"
-                }`}
+                  }`}
               >
                 {filter.icon}
                 <span>{filter.label}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  selectedRole === filter.id ? "bg-white/20 text-white" : "bg-white text-charcoal/70 shadow-2xs"
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${selectedRole === filter.id ? "bg-white/20 text-white" : "bg-white text-charcoal/70 shadow-2xs"
+                  }`}>
                   {filter.count}
                 </span>
               </button>
@@ -584,11 +611,8 @@ export const UsersPage: React.FC = () => {
 
       {/* Users Table */}
       <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16 space-x-2 text-indigo">
-            <RefreshCw className="w-5 h-5 animate-spin" />
-            <span className="text-xs font-bold">Loading user directory...</span>
-          </div>
+        {loading && users.length === 0 ? (
+          <TableSkeleton rows={7} columns={5} />
         ) : filteredUsers.length === 0 ? (
           <div className="text-center py-16 space-y-3">
             <Users className="w-10 h-10 text-charcoal/30 mx-auto" />
@@ -716,11 +740,10 @@ export const UsersPage: React.FC = () => {
                           <button
                             onClick={() => setDeleteConfirmUser(u)}
                             disabled={u.id === 1 || isCurrentSessionUser}
-                            className={`p-2 rounded-xl transition-colors ${
-                              u.id === 1 || isCurrentSessionUser
+                            className={`p-2 rounded-xl transition-colors ${u.id === 1 || isCurrentSessionUser
                                 ? "text-gray-300 cursor-not-allowed"
                                 : "hover:bg-rose-50 text-rose-600 cursor-pointer"
-                            }`}
+                              }`}
                             title={u.id === 1 ? "Cannot delete root admin" : isCurrentSessionUser ? "Cannot delete own account" : "Delete user account"}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -739,10 +762,10 @@ export const UsersPage: React.FC = () => {
       {/* ==================================================== */}
       {/* MODAL: Create / Edit User Account */}
       {/* ==================================================== */}
-      {isUserModalOpen && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      {isUserModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-bold border border-indigo-100">
                   <UserCog className="w-4 h-4" />
@@ -766,28 +789,104 @@ export const UsersPage: React.FC = () => {
 
             <form onSubmit={handleSaveUser} className="space-y-4">
               {/* Link to Church Member Profile (Placed at Top for Quick Auto-Fill) */}
-              <div className="space-y-1.5 p-3.5 rounded-2xl bg-sky-50/60 border border-sky-200">
-                <label className="text-xs font-bold text-sky-950 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
+              <div className="space-y-2 p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-sky-700" />
                     <span>Link to Church Member Profile (Auto-Fills Details)</span>
-                  </span>
-                  <span className="text-[10px] text-sky-800 font-bold bg-sky-100 px-2 py-0.5 rounded-md">
+                  </label>
+                  <span className="text-[10px] text-sky-800 font-bold bg-sky-100 px-2 py-0.5 rounded-md border border-sky-200">
                     Fast Auto-Fill
                   </span>
-                </label>
-                <select
-                  value={formData.member_id}
-                  onChange={(e) => handleMemberSelect(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-sky-200 text-xs bg-white focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none font-medium text-charcoal"
-                >
-                  <option value="">-- Choose Member to Auto-Fill Credentials --</option>
-                  {members.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.first_name} {m.last_name} ({m.ministry_name || "General"} • {m.status})
-                    </option>
-                  ))}
-                </select>
+                </div>
+
+                {selectedLinkedMember ? (
+                  <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-sky-200 shadow-2xs">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 font-black text-xs flex items-center justify-center shrink-0">
+                        {selectedLinkedMember.first_name?.[0] || ""}{selectedLinkedMember.last_name?.[0] || ""}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-xs text-charcoal truncate">
+                            {selectedLinkedMember.first_name} {selectedLinkedMember.last_name}
+                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                            {selectedLinkedMember.ministry_name || "General"}
+                          </span>
+                          <span className="text-[10px] text-charcoal/50 capitalize font-medium">
+                            • {selectedLinkedMember.status}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-charcoal/60 truncate font-medium">
+                          {selectedLinkedMember.contact_email || "No email registered"} {selectedLinkedMember.contact_phone ? `• ${selectedLinkedMember.contact_phone}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleMemberSelect("");
+                        setMemberSearch("");
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
+                      title="Unlink member profile"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {/* Search Input Filter */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-sky-600 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={memberSearch}
+                        onChange={(e) => setMemberSearch(e.target.value)}
+                        placeholder="Search member by name, ministry, or email..."
+                        className="w-full pl-8.5 pr-8 py-2 rounded-xl border border-sky-200 text-xs bg-white focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none font-medium text-charcoal placeholder:text-slate-400"
+                      />
+                      {memberSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setMemberSearch("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-md cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filtered Dropdown */}
+                    <select
+                      value={formData.member_id}
+                      onChange={(e) => {
+                        handleMemberSelect(e.target.value);
+                        setMemberSearch("");
+                      }}
+                      size={filteredMembersForLink.length > 0 && memberSearch ? Math.min(filteredMembersForLink.length + 1, 6) : 1}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-sky-200 text-xs bg-white focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none font-medium text-charcoal cursor-pointer"
+                    >
+                      <option value="">
+                        {memberSearch
+                          ? `-- Found ${filteredMembersForLink.length} disciples (Click to select) --`
+                          : "-- Choose Member to Auto-Fill Credentials --"}
+                      </option>
+                      {filteredMembersForLink.map(m => (
+                        <option key={m.id} value={m.id} className="py-1">
+                          {m.first_name} {m.last_name} ({m.ministry_name || "General"} • {m.status})
+                        </option>
+                      ))}
+                      {filteredMembersForLink.length === 0 && (
+                        <option disabled value="">
+                          No church members found matching "{memberSearch}"
+                        </option>
+                      )}
+                    </select>
+                  </div>
+                )}
+
                 <p className="text-[10px] text-sky-800/80 leading-tight">
                   Selecting a member automatically populates their Full Name, suggested Username, and Email.
                 </p>
@@ -872,11 +971,10 @@ export const UsersPage: React.FC = () => {
                       <div
                         key={r.id}
                         onClick={() => setFormData({ ...formData, role_id: r.id })}
-                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
-                          formData.role_id === r.id
+                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${formData.role_id === r.id
                             ? "border-indigo bg-indigo-50/60 ring-2 ring-indigo/20 shadow-xs"
                             : "border-gray-200 hover:border-indigo-200 bg-white"
-                        }`}
+                          }`}
                       >
                         <div className="p-1.5 rounded-xl bg-white shadow-2xs shrink-0 mt-0.5 border border-gray-100">
                           {meta.icon}
@@ -911,11 +1009,10 @@ export const UsersPage: React.FC = () => {
                             type="button"
                             key={min.id}
                             onClick={() => toggleMinistrySelection(min.id)}
-                            className={`px-3 py-2 rounded-xl text-xs font-bold border text-left flex items-center justify-between transition-all cursor-pointer ${
-                              isChecked
+                            className={`px-3 py-2 rounded-xl text-xs font-bold border text-left flex items-center justify-between transition-all cursor-pointer ${isChecked
                                 ? "bg-indigo text-white border-indigo shadow-2xs"
                                 : "bg-white text-charcoal/80 border-gray-200 hover:border-gray-300"
-                            }`}
+                              }`}
                           >
                             <span className="truncate">{min.name}</span>
                             {isChecked && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0 ml-1" />}
@@ -945,14 +1042,15 @@ export const UsersPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ==================================================== */}
       {/* MODAL: Delete Confirmation */}
       {/* ==================================================== */}
-      {deleteConfirmUser && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+      {deleteConfirmUser && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-center">
             <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
               <Trash2 className="w-6 h-6" />
@@ -980,7 +1078,8 @@ export const UsersPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
