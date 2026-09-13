@@ -41,6 +41,6 @@ Thumbs.db
 *.sw?
 
 # Desktop App
-dist_electron/electron/
+dist_electron/
 release/
 dist/
