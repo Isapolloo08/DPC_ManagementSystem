@@ -18,7 +18,16 @@ for (const envPath of envCandidates) {
   }
 }
 
-const connectionString = process.env.DATABASE_URL || "postgres://postgres:admin123@localhost:5432/chms_db";
+export function cleanDbConnectionString(raw?: string): string {
+  let url = (raw || "").trim();
+  if (url.startsWith("DATABASE_URL=")) {
+    url = url.substring("DATABASE_URL=".length).trim();
+  }
+  url = url.replace(/^["']+|["']+$/g, "");
+  return url || "postgres://postgres:admin123@localhost:5432/chms_db";
+}
+
+const connectionString = cleanDbConnectionString(process.env.DATABASE_URL);
 
 const isSupabaseOrRemote = connectionString.includes("supabase") || connectionString.includes("render") || connectionString.includes("sslmode=require") || process.env.NODE_ENV === "production";
 

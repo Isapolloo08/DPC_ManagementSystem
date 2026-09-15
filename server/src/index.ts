@@ -28,7 +28,8 @@ dotenv.config();
 
 const app = express();
 const httpServer = http.createServer(app);
-const PORT = process.env.PORT || 4000;
+const rawPort = process.env.PORT;
+const PORT: number = rawPort && !isNaN(Number(rawPort)) ? Number(rawPort) : (process.env.NODE_ENV === "production" ? 10000 : 4000);
 
 // Initialize Socket.IO
 initSocketServer(httpServer);
@@ -81,8 +82,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 async function start() {
   await initSchema();
 
-  httpServer.listen(PORT, () => {
-    console.log(`✨ ChMS Backend API & Socket.IO running on http://localhost:${PORT}`);
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`✨ ChMS Backend API & Socket.IO running on http://0.0.0.0:${PORT}`);
   });
 }
 

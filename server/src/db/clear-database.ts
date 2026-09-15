@@ -1,9 +1,10 @@
 import postgres from "postgres";
 import dotenv from "dotenv";
+import { cleanDbConnectionString } from "./schema";
 
 dotenv.config();
 
-const connectionString = process.env.DATABASE_URL || "postgres://postgres:admin123@localhost:5432/chms_db";
+const connectionString = cleanDbConnectionString(process.env.DATABASE_URL);
 
 export async function clearDatabase() {
   console.log(`🧹 Connecting to PostgreSQL to remove all seed & mock data...`);
