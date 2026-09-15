@@ -10,15 +10,39 @@ import {
   BibleReadingProgressResponse, BibleReadingToggleResponse, BibleReadingStatsResponse
 } from "./types";
 
+export const normalizeServerUrl = (rawInput?: string | null): string => {
+  if (!rawInput || !rawInput.trim()) return "";
+  const input = rawInput.trim();
+
+  // If already starts with http:// or https://
+  if (/^https?:\/\//i.test(input)) {
+    return input.replace(/\/+$/, "");
+  }
+
+  // If contains a custom port (e.g., 192.168.1.5:4000 or localhost:4000)
+  if (input.includes(":")) {
+    return `http://${input}`.replace(/\/+$/, "");
+  }
+
+  // If it's a domain name (e.g., onrender.com, vercel.app, church.org)
+  if (input.includes(".") && !/^(\d{1,3}\.){3}\d{1,3}$/.test(input)) {
+    return `https://${input}`.replace(/\/+$/, "");
+  }
+
+  // Default LAN IP or local hostname -> assume HTTP :4000
+  return `http://${input}:4000`.replace(/\/+$/, "");
+};
+
 export const getApiBase = () => {
   if (typeof window !== "undefined") {
     const configuredIp = localStorage.getItem("dpc_server_ip");
     if (configuredIp && configuredIp.trim()) {
-      return `http://${configuredIp.trim()}:4000/api`;
+      const normalized = normalizeServerUrl(configuredIp);
+      return `${normalized}/api`;
     }
   }
   const envUrl = (import.meta as any).env?.VITE_API_URL;
-  if (envUrl) return `${envUrl}/api`;
+  if (envUrl) return `${normalizeServerUrl(envUrl)}/api`;
   if (typeof window === "undefined") return "http://127.0.0.1:4000/api";
   const { hostname, protocol } = window.location;
   if (!hostname || hostname === "localhost" || hostname === "127.0.0.1" || protocol === "file:") {
@@ -199,6 +223,18 @@ export const api = {
     }),
   batchCheckIn: (data: { member_ids: number[]; service_name?: string }) =>
     request<{ message: string; checked_in: any[] }>("/attendance/batch-check-in", {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+  batchMarkAttendance: (data: {
+    present_ids?: number[];
+    absent_ids?: number[];
+    excused_ids?: number[];
+    unmark_ids?: number[];
+    target_date?: string;
+    service_name?: string;
+  }) =>
+    request<{ success: boolean; message: string; stats: { present: number; absent: number; excused: number; unmarked: number; total: number } }>("/attendance/batch-mark", {
       method: "POST",
       body: JSON.stringify(data)
     }),

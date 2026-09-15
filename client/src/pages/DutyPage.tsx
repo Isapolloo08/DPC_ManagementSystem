@@ -16,6 +16,7 @@ import {
 export const DutyPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
   const isCoordinator = user?.role_name === "Coordinator";
+  const canManage = user?.role_name === "Admin" || user?.role_name === "Coordinator";
   const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
     ? user.ministries[0].id
     : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
@@ -429,13 +430,15 @@ export const DutyPage: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo" : ""}`} />
           </button>
-          <button
-            onClick={handleOpenCreateTeam}
-            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-4 h-4 text-indigo-950" />
-            <span>Create Team</span>
-          </button>
+          {canManage && (
+            <button
+              onClick={handleOpenCreateTeam}
+              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-4 h-4 text-indigo-950" />
+              <span>Create Team</span>
+            </button>
+          )}
         </div>
       </div>
 

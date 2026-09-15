@@ -51,15 +51,34 @@ const MainLayout: React.FC = () => {
       return <BibleReadingPage />;
     }
 
-    // Role Authorization: When logged in as Leader, only render views from the leader folder
+    // Role Authorization: When logged in as Leader, support all leader tabs
     if (isLeader) {
+      if (currentTab === "leaderportal") {
+        return <LeaderPortalPage onNavigateGeneralTab={setCurrentTab} />;
+      }
+      if (currentTab === "curriculum") {
+        return <CurriculumPage />;
+      }
+      if (currentTab === "duty") {
+        return <DutyPage />;
+      }
+      if (currentTab === "dishwashing") {
+        return <DishwashingPage />;
+      }
+      if (currentTab === "events") {
+        return <EventsPage />;
+      }
+      if (currentTab === "communications") {
+        return <CommunicationsPage />;
+      }
+      // For dashboard (and legacy leader-* subtabs), render DashboardPage which loads LeaderDashboardPage
       if (currentTab === "leader-members") {
-        return <LeaderPortalPage initialTab="members" onTabChange={(t) => setCurrentTab(`leader-${t}` as NavTab)} />;
+        return <LeaderPortalPage initialTab="members" onNavigateGeneralTab={setCurrentTab} />;
       }
       if (currentTab === "leader-biblestudy") {
-        return <LeaderPortalPage initialTab="biblestudy" onTabChange={(t) => setCurrentTab(`leader-${t}` as NavTab)} />;
+        return <LeaderPortalPage initialTab="biblestudy" onNavigateGeneralTab={setCurrentTab} />;
       }
-      return <LeaderPortalPage initialTab="dashboard" onTabChange={(t) => setCurrentTab(`leader-${t}` as NavTab)} />;
+      return <DashboardPage onNavigate={setCurrentTab} />;
     }
 
     switch (currentTab) {

@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS members (
   facebook_account VARCHAR(100),
   family_details TEXT,
   application_date DATE,
+  civil_status VARCHAR(50) DEFAULT 'Single',
+  spouse_name VARCHAR(255),
+  spouse_id INT REFERENCES members(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

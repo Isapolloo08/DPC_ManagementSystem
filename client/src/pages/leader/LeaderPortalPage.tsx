@@ -16,14 +16,18 @@ import { LeaderDashboard } from "./LeaderDashboard";
 import { LeaderMembers } from "./LeaderMembers";
 import { LeaderBibleStudy } from "./LeaderBibleStudy";
 import { DashboardSkeleton } from "../../components/common/SkeletonLoader";
+import { NavTab } from "../../components/layout/Sidebar";
+
 interface LeaderPortalPageProps {
   initialTab?: "dashboard" | "members" | "biblestudy";
   onTabChange?: (tab: "dashboard" | "members" | "biblestudy") => void;
+  onNavigateGeneralTab?: (tab: NavTab) => void;
 }
 
 export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   initialTab = "dashboard",
-  onTabChange
+  onTabChange,
+  onNavigateGeneralTab
 }) => {
   const { user, selectedMinistryId } = useAuth();
   const isLeaderOrHigher = user?.role_name === "Leader" || user?.role_name === "Coordinator" || user?.role_name === "Admin";
@@ -467,13 +471,14 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       {/* Render Sub-Views */}
       {activeTab === "dashboard" && (
         <LeaderDashboard
-          activeGroup={activeMemberGroup}
-          groupDisciples={activeMemberGroup?.members || []}
+          activeGroup={myLedGroups.length > 0 ? (activeLedGroup || myLedGroups[0]) : activeMemberGroup}
+          groupDisciples={(myLedGroups.length > 0 ? (activeLedGroup?.members || myLedGroups[0]?.members) : activeMemberGroup?.members) || []}
           studyTopics={studyTopics}
           designatedDuties={designatedDuties}
           designatedDishwashing={designatedDishwashing}
-          isMemberView={true}
+          isMemberView={myLedGroups.length === 0 && user?.role_name !== "Leader"}
           onNavigateTab={setActiveTab}
+          onNavigateGeneralTab={onNavigateGeneralTab}
         />
       )}
 

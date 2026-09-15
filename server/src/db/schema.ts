@@ -20,10 +20,13 @@ for (const envPath of envCandidates) {
 
 const connectionString = process.env.DATABASE_URL || "postgres://postgres:admin123@localhost:5432/chms_db";
 
+const isSupabaseOrRemote = connectionString.includes("supabase") || connectionString.includes("render") || connectionString.includes("sslmode=require") || process.env.NODE_ENV === "production";
+
 export const sql = postgres(connectionString, {
   max: 10,
   idle_timeout: 20,
-  connect_timeout: 10,
+  connect_timeout: 15,
+  ssl: isSupabaseOrRemote ? "require" : undefined,
   onnotice: () => {}, // Silence harmless PostgreSQL NOTICE logs
   transform: {
     undefined: null
@@ -173,7 +176,10 @@ export async function initSchema() {
         ADD COLUMN IF NOT EXISTS previous_church VARCHAR(255),
         ADD COLUMN IF NOT EXISTS facebook_account VARCHAR(100),
         ADD COLUMN IF NOT EXISTS family_details TEXT,
-        ADD COLUMN IF NOT EXISTS application_date DATE;
+        ADD COLUMN IF NOT EXISTS application_date DATE,
+        ADD COLUMN IF NOT EXISTS civil_status VARCHAR(50) DEFAULT 'Single',
+        ADD COLUMN IF NOT EXISTS spouse_name VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS spouse_id INT REFERENCES members(id) ON DELETE SET NULL;
       `;
     } catch {}
 

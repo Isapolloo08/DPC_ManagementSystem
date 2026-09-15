@@ -25,7 +25,7 @@ export interface User {
   email: string;
   role_id: number;
   role_name: string;
-  ministries: { id: number; name: string; color: string }[];
+  ministries: { id: number; name: string; color: string; min_age?: number | null; max_age?: number | null }[];
   contact_phone?: string | null;
   contact_email?: string | null;
   created_at?: string;
@@ -97,6 +97,27 @@ export interface Member {
   facebook_account?: string | null;
   family_details?: string | null;
   application_date?: string | null;
+  civil_status?: "Single" | "Married" | "Widowed" | "Separated" | string | null;
+  spouse_name?: string | null;
+  spouse_id?: number | null;
+  linked_spouse_first_name?: string | null;
+  linked_spouse_last_name?: string | null;
+  linked_spouse_birthdate?: string | null;
+  linked_spouse_ministry_id?: number | null;
+  linked_spouse_ministry_name?: string | null;
+  partner_record?: {
+    first_name: string;
+    last_name: string;
+    birthdate?: string;
+    gender?: string;
+    contact_phone?: string;
+    contact_email?: string;
+    occupation?: string;
+    facebook_account?: string;
+    medical_notes?: string;
+    hobbies?: string;
+    address?: string;
+  };
   created_at?: string;
   age?: number;
   is_aging_out?: boolean;

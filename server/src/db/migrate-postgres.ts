@@ -10,10 +10,13 @@ const connectionString = process.env.DATABASE_URL || "postgres://postgres:admin1
 export async function runPostgresMigrations() {
   console.log(`🔌 Connecting to PostgreSQL at: ${connectionString.replace(/:[^:@]+@/, ":****@")}`);
 
+  const isSupabaseOrRemote = connectionString.includes("supabase") || connectionString.includes("render") || connectionString.includes("sslmode=require") || process.env.NODE_ENV === "production";
+
   const sql = postgres(connectionString, {
     max: 1,
-    connect_timeout: 10,
+    connect_timeout: 15,
     idle_timeout: 10,
+    ssl: isSupabaseOrRemote ? "require" : undefined,
     onnotice: () => {}
   });
 

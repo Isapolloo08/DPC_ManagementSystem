@@ -127,11 +127,13 @@ router.get("/", async (req: Request, res: Response) => {
       SELECT m.*, 
              min.name as ministry_name, min.color as ministry_color, min.min_age, min.max_age,
              h.name as household_name, h.primary_contact_phone as household_phone,
-             u.email as user_email
+             u.email as user_email,
+             sp.first_name as linked_spouse_first_name, sp.last_name as linked_spouse_last_name
       FROM members m
       LEFT JOIN ministries min ON m.ministry_id = min.id
       LEFT JOIN households h ON m.household_id = h.id
       LEFT JOIN users u ON m.user_id = u.id
+      LEFT JOIN members sp ON m.spouse_id = sp.id
       ${whereClause}
       ORDER BY m.last_name ASC, m.first_name ASC
     `;
@@ -420,10 +422,15 @@ router.get("/:id", async (req: Request, res: Response) => {
     const member = await db.get(`
       SELECT m.*, 
              min.name as ministry_name, min.color as ministry_color, min.min_age, min.max_age,
-             h.name as household_name, h.address as household_address, h.primary_contact_phone as household_phone
+             h.name as household_name, h.address as household_address, h.primary_contact_phone as household_phone,
+             sp.first_name as linked_spouse_first_name, sp.last_name as linked_spouse_last_name,
+             sp.birthdate as linked_spouse_birthdate, sp.ministry_id as linked_spouse_ministry_id,
+             sp_min.name as linked_spouse_ministry_name
       FROM members m
       LEFT JOIN ministries min ON m.ministry_id = min.id
       LEFT JOIN households h ON m.household_id = h.id
+      LEFT JOIN members sp ON m.spouse_id = sp.id
+      LEFT JOIN ministries sp_min ON sp.ministry_id = sp_min.id
       WHERE m.id = $1
     `, [req.params.id]);
 
@@ -505,7 +512,11 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       previous_church,
       facebook_account,
       family_details,
-      application_date
+      application_date,
+      civil_status = "Single",
+      spouse_name,
+      spouse_id,
+      partner_record
     } = req.body;
 
     if (!first_name || !last_name || !birthdate) {
@@ -514,14 +525,72 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
 
     let targetMinistryId = ministry_id;
     if (!targetMinistryId) {
-      const age = calculateAge(birthdate);
       const ministries = await db.all("SELECT * FROM ministries ORDER BY min_age ASC");
-      const match = ministries.find(m => {
-        const min = m.min_age ?? 0;
-        const max = m.max_age ?? 999;
-        return age >= min && age <= max;
-      });
-      targetMinistryId = match ? match.id : (ministries[ministries.length - 1]?.id || null);
+      if (civil_status === "Married") {
+        const jaMin = ministries.find(m => m.name.toLowerCase().includes("junior") || m.name.toLowerCase().includes("adult"));
+        targetMinistryId = jaMin ? jaMin.id : (ministries[ministries.length - 1]?.id || null);
+      } else {
+        const age = calculateAge(birthdate);
+        const match = ministries.find(m => {
+          const min = m.min_age ?? 0;
+          const max = m.max_age ?? 999;
+          return age >= min && age <= max;
+        });
+        targetMinistryId = match ? match.id : (ministries[ministries.length - 1]?.id || null);
+      }
+    }
+
+    let resolvedSpouseId = spouse_id || null;
+    let resolvedSpouseName = spouse_name || null;
+
+    // If a partner record was supplied to be created simultaneously
+    if (partner_record && partner_record.first_name && partner_record.last_name) {
+      const partnerRes = await db.run(`
+        INSERT INTO members (
+          first_name, last_name, birthdate, gender, contact_email, contact_phone,
+          household_id, ministry_id, status, medical_notes, grade_level,
+          address, guardian_names, guardian_phone, invited_by, school_name,
+          program_major, class_schedule, occupation, hobbies, previous_church,
+          facebook_account, family_details, application_date, civil_status, spouse_name
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11,
+          $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21,
+          $22, $23, $24, $25, $26
+        )
+        RETURNING id
+      `, [
+        partner_record.first_name,
+        partner_record.last_name,
+        partner_record.birthdate || birthdate,
+        partner_record.gender || (gender === "Male" ? "Female" : "Male"),
+        partner_record.contact_email || null,
+        partner_record.contact_phone || null,
+        household_id || null,
+        targetMinistryId,
+        "active",
+        partner_record.medical_notes || null,
+        null,
+        address || partner_record.address || null,
+        null,
+        null,
+        invited_by || null,
+        null,
+        null,
+        null,
+        partner_record.occupation || null,
+        partner_record.hobbies || null,
+        previous_church || null,
+        partner_record.facebook_account || null,
+        null,
+        application_date || null,
+        "Married",
+        `${first_name} ${last_name}`
+      ]);
+
+      resolvedSpouseId = partnerRes.lastInsertRowid;
+      resolvedSpouseName = `${partner_record.first_name} ${partner_record.last_name}`;
     }
 
     const result = await db.run(`
@@ -530,13 +599,13 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
         household_id, ministry_id, status, medical_notes, grade_level,
         address, guardian_names, guardian_phone, invited_by, school_name,
         program_major, class_schedule, occupation, hobbies, previous_church,
-        facebook_account, family_details, application_date
+        facebook_account, family_details, application_date, civil_status, spouse_name, spouse_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11,
         $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21,
-        $22, $23, $24
+        $22, $23, $24, $25, $26, $27
       )
       RETURNING id
     `, [
@@ -563,15 +632,35 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       previous_church || null,
       facebook_account || null,
       family_details || null,
-      application_date || null
+      application_date || null,
+      civil_status || "Single",
+      resolvedSpouseName || null,
+      resolvedSpouseId || null
     ]);
 
     const newId = result.lastInsertRowid;
+
+    // Reciprocally update spouse if spouse_id was linked
+    if (resolvedSpouseId) {
+      await db.run(`
+        UPDATE members 
+        SET spouse_id = $1, 
+            spouse_name = $2, 
+            civil_status = 'Married'
+        WHERE id = $3
+      `, [newId, `${first_name} ${last_name}`, resolvedSpouseId]);
+    }
+
     await logAuditAction(req.user?.id || null, "CREATE", "members", newId, `Created member ${first_name} ${last_name}`);
 
     emitRealtimeEvent("members:changed", { action: "create", id: newId });
 
-    res.status(201).json({ id: newId, message: "Member created successfully", ministry_id: targetMinistryId });
+    res.status(201).json({ 
+      id: newId, 
+      message: "Member created successfully", 
+      ministry_id: targetMinistryId,
+      spouse_id: resolvedSpouseId 
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -605,7 +694,10 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
       previous_church,
       facebook_account,
       family_details,
-      application_date
+      application_date,
+      civil_status,
+      spouse_name,
+      spouse_id
     } = req.body;
 
     await db.run(`
@@ -633,8 +725,11 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
           previous_church = COALESCE($21, previous_church),
           facebook_account = COALESCE($22, facebook_account),
           family_details = COALESCE($23, family_details),
-          application_date = COALESCE($24, application_date)
-      WHERE id = $25
+          application_date = COALESCE($24, application_date),
+          civil_status = COALESCE($25, civil_status),
+          spouse_name = COALESCE($26, spouse_name),
+          spouse_id = COALESCE($27, spouse_id)
+      WHERE id = $28
     `, [
       first_name,
       last_name,
@@ -660,8 +755,25 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
       facebook_account,
       family_details,
       application_date,
+      civil_status,
+      spouse_name,
+      spouse_id,
       id
     ]);
+
+    // Reciprocally update spouse if spouse_id was provided
+    if (spouse_id) {
+      const currentMember = await db.get("SELECT first_name, last_name FROM members WHERE id = $1", [id]);
+      if (currentMember) {
+        await db.run(`
+          UPDATE members 
+          SET spouse_id = $1, 
+              spouse_name = $2, 
+              civil_status = 'Married'
+          WHERE id = $3
+        `, [id, `${currentMember.first_name} ${currentMember.last_name}`, spouse_id]);
+      }
+    }
 
     await logAuditAction(req.user?.id || null, "UPDATE", "members", Number(id), `Updated member #${id}`);
 

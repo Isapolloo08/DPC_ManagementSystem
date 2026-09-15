@@ -1,15 +1,16 @@
 import { io, Socket } from "socket.io-client";
 import { useEffect, useState, useRef } from "react";
+import { normalizeServerUrl } from "./api";
 
 export const getSocketUrl = () => {
   if (typeof window !== "undefined") {
     const configuredIp = localStorage.getItem("dpc_server_ip");
     if (configuredIp && configuredIp.trim()) {
-      return `http://${configuredIp.trim()}:4000`;
+      return normalizeServerUrl(configuredIp);
     }
   }
   const envUrl = (import.meta as any).env?.VITE_API_URL;
-  if (envUrl) return envUrl;
+  if (envUrl) return normalizeServerUrl(envUrl);
   if (typeof window === "undefined") return "http://127.0.0.1:4000";
   const { hostname, protocol } = window.location;
   if (!hostname || hostname === "localhost" || hostname === "127.0.0.1" || protocol === "file:") {

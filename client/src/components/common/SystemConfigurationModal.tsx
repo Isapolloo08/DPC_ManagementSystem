@@ -5,7 +5,7 @@ import {
   Link2, CheckCircle2, XCircle, RefreshCw, Server, Wifi, Globe,
   Activity, Cpu, Copy, Check, Zap, ShieldCheck, HelpCircle
 } from "lucide-react";
-import { getApiBase } from "../../api";
+import { getApiBase, normalizeServerUrl } from "../../api";
 
 interface SystemConfigurationModalProps {
   isOpen: boolean;
@@ -44,12 +44,15 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
     setTestStatus(null);
     setSavedSuccess(false);
 
-    const targetHost = ipAddress.trim() || "127.0.0.1";
-    const testUrl = `http://${targetHost}:4000/api/health`;
+    const cleanInput = ipAddress.trim();
+    const baseUrl = cleanInput ? normalizeServerUrl(cleanInput) : "http://127.0.0.1:4000";
+    const testUrl = `${baseUrl}/api/health`;
+    const isCloud = baseUrl.includes("onrender.com") || baseUrl.startsWith("https://");
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
+      const timeoutMs = isCloud ? 18000 : 5000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const startTime = performance.now();
       const res = await fetch(testUrl, {
@@ -64,14 +67,14 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
         setTestStatus({
           success: true,
           message: `Connected to Database Server! (${latency}ms)`,
-          details: `Master endpoint verified at http://${targetHost}:4000. ${data.service ? `• ${data.service}` : ""}`,
+          details: `Endpoint verified at ${baseUrl}. ${data.service ? `• ${data.service}` : ""}`,
           latency
         });
       } else {
         setTestStatus({
           success: false,
           message: `Server responded with HTTP ${res.status}`,
-          details: `Reached host http://${targetHost}:4000, but health check returned an unexpected status.`,
+          details: `Reached ${baseUrl}, but health check returned an unexpected status code ${res.status}.`,
           latency
         });
       }
@@ -79,8 +82,10 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
       const isTimeout = err.name === "AbortError";
       setTestStatus({
         success: false,
-        message: isTimeout ? "Connection Timed Out (4.5s)" : "Could Not Reach Database Server",
-        details: `Unable to connect to http://${targetHost}:4000. Ensure the Master PC is running, connected to the same Wi-Fi/LAN, and port 4000 is allowed through Windows Firewall.`
+        message: isTimeout ? (isCloud ? "Cloud Server Starting Up / Timed Out" : "Connection Timed Out (5s)") : "Could Not Reach Database Server",
+        details: isCloud
+          ? `Unable to connect to ${testUrl}. If your Render backend is on the Free tier and sleeping, it may take 30-50s to wake up. Please verify your Render service is 'Live' and try again.`
+          : `Unable to connect to ${testUrl}. Ensure the server is running, connected to the same Wi-Fi/LAN, and port 4000 is allowed through Windows Firewall.`
       });
     } finally {
       setTesting(false);
@@ -95,12 +100,14 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
       localStorage.setItem("dpc_server_ip", cleanIp);
     }
 
+    const resolved = cleanIp ? normalizeServerUrl(cleanIp) : "localhost:4000";
+
     setSavedSuccess(true);
     setTestStatus({
       success: true,
       message: "Server configuration saved successfully!",
       details: cleanIp
-        ? `This terminal will now connect to Master Database at http://${cleanIp}:4000`
+        ? `This terminal will now connect to Database Server at ${resolved}`
         : "Reverted to Standalone / Master Computer mode (localhost:4000)."
     });
 
@@ -122,7 +129,7 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-indigo-950/70 backdrop-blur-md animate-in fade-in duration-200 select-none">
       <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-indigo-100/80 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col relative max-h-[92vh]">
-        
+
         {/* Top Decorative Ambient Gradient Glow */}
         <div className="absolute -right-16 -top-16 w-56 h-56 bg-gradient-to-br from-indigo-500/10 via-amber-500/10 to-transparent rounded-full blur-2xl pointer-events-none" />
 
@@ -137,11 +144,10 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
                 <h2 className="text-lg font-black text-indigo tracking-tight truncate">
                   System Configuration
                 </h2>
-                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-2xs ${
-                  isClientNode
+                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-2xs ${isClientNode
                     ? "bg-blue-50 text-blue-800 border-blue-200"
                     : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                }`}>
+                  }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${isClientNode ? "bg-blue-500" : "bg-emerald-500 animate-pulse"}`} />
                   {isClientNode ? "Client Node" : "Master Host"}
                 </span>
@@ -164,16 +170,16 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
 
         {/* Modal Body */}
         <div className="p-6 space-y-5 flex-1 overflow-y-auto relative z-10">
-          
+
           {/* Information Card */}
           <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-300 text-amber-950 rounded-2xl p-4 flex items-start gap-3 text-xs leading-relaxed shadow-2xs">
             <div className="p-1.5 rounded-xl bg-amber-100 text-amber-800 shrink-0 mt-0.5">
               <AlertCircle className="w-4 h-4" />
             </div>
             <div className="space-y-1">
-              <div className="font-bold text-amber-900">Multi-Computer Network Setup</div>
+              <div className="font-bold text-amber-900">Network & Cloud Server Setup</div>
               <p className="text-[11px] text-amber-900/90 leading-relaxed font-medium">
-                This setting is used to connect this specific computer to the <strong className="font-black text-amber-950">Master Database</strong> on your local church network.
+                Connect this terminal to a local <strong className="font-black text-amber-950">Master PC</strong> on church Wi-Fi or your online <strong className="font-black text-amber-950">Cloud Backend</strong> (e.g. Render / VPS).
               </p>
             </div>
           </div>
@@ -183,7 +189,7 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
             <div className="flex items-center justify-between">
               <label className="text-xs font-black tracking-wide text-indigo flex items-center gap-2 uppercase">
                 <Wifi className="w-3.5 h-3.5 text-indigo" />
-                <span>DATABASE SERVER IP ADDRESS</span>
+                <span>DATABASE SERVER IP / CLOUD URL</span>
               </label>
               {ipAddress.trim() && (
                 <button
@@ -206,7 +212,7 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
                 <Globe className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="e.g. 192.168.1.118"
+                  placeholder="e.g. 192.168.1.118 or https://dpc-server.onrender.com"
                   value={ipAddress}
                   onChange={(e) => {
                     setIpAddress(e.target.value);
@@ -247,11 +253,11 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
             <div className="text-[11px] text-charcoal/60 space-y-1 pt-1 border-t border-indigo-100/50">
               <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                <span>Leave this <strong className="font-bold text-charcoal">blank</strong> if this is the Master computer.</span>
+                <span>Leave <strong className="font-bold text-charcoal">blank</strong> if running locally on this computer.</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-                <span>Enter the <strong className="font-bold text-charcoal">Master IP</strong> if this is a Client terminal.</span>
+                <span>Enter <strong className="font-bold text-charcoal">LAN IP</strong> (e.g. 192.168.1.5) or <strong className="font-bold text-charcoal">Render Cloud URL</strong> (e.g. https://*.onrender.com).</span>
               </div>
             </div>
           </div>
@@ -259,11 +265,10 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
           {/* Test or Save Result Alert */}
           {testStatus && (
             <div
-              className={`p-4 rounded-2xl border text-xs flex items-start gap-3 shadow-2xs animate-in fade-in duration-200 ${
-                testStatus.success
+              className={`p-4 rounded-2xl border text-xs flex items-start gap-3 shadow-2xs animate-in fade-in duration-200 ${testStatus.success
                   ? "bg-emerald-50/90 border-emerald-300 text-emerald-950"
                   : "bg-rose-50/90 border-rose-300 text-rose-950"
-              }`}
+                }`}
             >
               <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${testStatus.success ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
                 {testStatus.success ? (

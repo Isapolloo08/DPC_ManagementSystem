@@ -84,6 +84,9 @@ export const MembersPage: React.FC = () => {
     last_name: "",
     birthdate: "",
     gender: "Male",
+    civil_status: "Single",
+    spouse_name: "",
+    spouse_id: "",
     contact_email: "",
     contact_phone: "",
     household_id: "",
@@ -105,6 +108,22 @@ export const MembersPage: React.FC = () => {
     application_date: new Date().toISOString().split("T")[0],
     status: "active"
   });
+
+  // Spouse creation sub-form state (if spouse is not yet in member directory)
+  const [createNewSpouseRecord, setCreateNewSpouseRecord] = useState<boolean>(false);
+  const [spouseFormData, setSpouseFormData] = useState({
+    first_name: "",
+    last_name: "",
+    birthdate: "",
+    gender: "Female",
+    contact_phone: "",
+    contact_email: "",
+    occupation: "",
+    facebook_account: "",
+    medical_notes: "",
+    hobbies: ""
+  });
+
   const [youthStatus, setYouthStatus] = useState<"student" | "graduated">("student");
   const [gradWorkStatus, setGradWorkStatus] = useState<"with_work" | "no_work">("with_work");
   const [suggestedMinistryInfo, setSuggestedMinistryInfo] = useState<{ age: number; ministry: Ministry | null } | null>(null);
@@ -240,13 +259,17 @@ export const MembersPage: React.FC = () => {
     // Instant local calculation for zero-latency UI autofill
     const age = calculateClientAge(birthdateVal);
     const localSuggested = getSuggestedMinistryForAge(age);
+    const jaMin = effectiveMinistries.find(m => m.name.toLowerCase().includes("junior"));
+
     if (localSuggested) {
       setSuggestedMinistryInfo({ age, ministry: localSuggested });
       if (!coordinatorMinistryId) {
         setFormData(prev => ({
           ...prev,
           birthdate: birthdateVal,
-          ministry_id: prev.ministry_id ? prev.ministry_id : String(localSuggested.id)
+          ministry_id: prev.civil_status === "Married" && jaMin
+            ? String(jaMin.id)
+            : (prev.ministry_id ? prev.ministry_id : String(localSuggested.id))
         }));
       } else {
         setFormData(prev => ({ ...prev, birthdate: birthdateVal }));
@@ -259,7 +282,7 @@ export const MembersPage: React.FC = () => {
     try {
       const res = await api.suggestMinistry(birthdateVal);
       setSuggestedMinistryInfo({ age: res.calculated_age, ministry: res.suggested_ministry });
-      if (res.suggested_ministry?.id && !coordinatorMinistryId) {
+      if (res.suggested_ministry?.id && !coordinatorMinistryId && formData.civil_status !== "Married") {
         setFormData(prev => ({
           ...prev,
           ministry_id: prev.ministry_id ? prev.ministry_id : String(res.suggested_ministry.id)
@@ -270,6 +293,30 @@ export const MembersPage: React.FC = () => {
     }
   };
 
+  const handleCivilStatusChange = (status: string) => {
+    if (status === "Married") {
+      const jaMin = effectiveMinistries.find(
+        m => m.name.toLowerCase().includes("junior")
+      );
+      setFormData(prev => ({
+        ...prev,
+        civil_status: "Married",
+        ministry_id: jaMin && !coordinatorMinistryId ? String(jaMin.id) : prev.ministry_id
+      }));
+    } else {
+      const age = calculateClientAge(formData.birthdate);
+      const suggested = getSuggestedMinistryForAge(age);
+      setFormData(prev => ({
+        ...prev,
+        civil_status: status,
+        spouse_id: "",
+        spouse_name: "",
+        ministry_id: suggested && !coordinatorMinistryId ? String(suggested.id) : prev.ministry_id
+      }));
+      setCreateNewSpouseRecord(false);
+    }
+  };
+
   const handleOpenAdd = () => {
     setEditingMember(null);
     setFormData({
@@ -277,6 +324,9 @@ export const MembersPage: React.FC = () => {
       last_name: "",
       birthdate: "",
       gender: "Male",
+      civil_status: "Single",
+      spouse_name: "",
+      spouse_id: "",
       contact_email: "",
       contact_phone: "",
       household_id: "",
@@ -297,6 +347,19 @@ export const MembersPage: React.FC = () => {
       family_details: "",
       application_date: new Date().toISOString().split("T")[0],
       status: "active"
+    });
+    setCreateNewSpouseRecord(false);
+    setSpouseFormData({
+      first_name: "",
+      last_name: "",
+      birthdate: "",
+      gender: "Female",
+      contact_phone: "",
+      contact_email: "",
+      occupation: "",
+      facebook_account: "",
+      medical_notes: "",
+      hobbies: ""
     });
     setYouthStatus("student");
     setGradWorkStatus("with_work");
@@ -322,6 +385,8 @@ export const MembersPage: React.FC = () => {
       if (parsed.last_name) { updated.last_name = parsed.last_name; autoFilledKeys.push("Last Name"); }
       if (parsed.birthdate) { updated.birthdate = parsed.birthdate; autoFilledKeys.push("Birthdate"); }
       if (parsed.gender) { updated.gender = parsed.gender; }
+      if (parsed.civil_status) { updated.civil_status = parsed.civil_status; autoFilledKeys.push("Civil Status"); }
+      if (parsed.spouse_name) { updated.spouse_name = parsed.spouse_name; autoFilledKeys.push("Spouse Name"); }
       if (parsed.contact_email) { updated.contact_email = parsed.contact_email; autoFilledKeys.push("Email"); }
       if (parsed.contact_phone) { updated.contact_phone = parsed.contact_phone; autoFilledKeys.push("Phone"); }
       if (parsed.address) { updated.address = parsed.address; autoFilledKeys.push("Address"); }
@@ -340,8 +405,14 @@ export const MembersPage: React.FC = () => {
       if (parsed.family_details) { updated.family_details = parsed.family_details; autoFilledKeys.push("Family Details"); }
       if (parsed.application_date) { updated.application_date = parsed.application_date; }
 
-      // Also trigger age calculation & suggested ministry if birthday was extracted
-      if (parsed.birthdate) {
+      // If marked married or extracted as married, assign to Junior Adult
+      if (parsed.civil_status === "Married" || updated.civil_status === "Married") {
+        const jaMin = effectiveMinistries.find(m => m.name.toLowerCase().includes("junior"));
+        if (jaMin && !coordinatorMinistryId) {
+          updated.ministry_id = String(jaMin.id);
+        }
+      } else if (parsed.birthdate) {
+        // Also trigger age calculation & suggested ministry if birthday was extracted
         const calculatedAge = calculateClientAge(parsed.birthdate);
         const matched = effectiveMinistries.find(
           (m) => (m.min_age ?? 0) <= calculatedAge && (m.max_age ?? 999) >= calculatedAge
@@ -364,7 +435,6 @@ export const MembersPage: React.FC = () => {
     });
   };
 
-
   const handleOpenEdit = (member: Member) => {
     setEditingMember(member);
     setFormData({
@@ -372,6 +442,9 @@ export const MembersPage: React.FC = () => {
       last_name: member.last_name || "",
       birthdate: member.birthdate || "",
       gender: member.gender || "Male",
+      civil_status: member.civil_status || "Single",
+      spouse_name: member.spouse_name || "",
+      spouse_id: member.spouse_id ? String(member.spouse_id) : "",
       contact_email: member.contact_email || "",
       contact_phone: member.contact_phone || "",
       household_id: member.household_id ? String(member.household_id) : "",
@@ -392,6 +465,19 @@ export const MembersPage: React.FC = () => {
       family_details: member.family_details || "",
       application_date: member.application_date || new Date().toISOString().split("T")[0],
       status: member.status || "active"
+    });
+    setCreateNewSpouseRecord(false);
+    setSpouseFormData({
+      first_name: "",
+      last_name: "",
+      birthdate: "",
+      gender: member.gender === "Male" ? "Female" : "Male",
+      contact_phone: "",
+      contact_email: "",
+      occupation: "",
+      facebook_account: "",
+      medical_notes: "",
+      hobbies: ""
     });
 
     if (member.occupation && member.occupation.trim() !== "") {
@@ -425,13 +511,37 @@ export const MembersPage: React.FC = () => {
   const handleSubmitMember = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const jaMin = effectiveMinistries.find(m => m.name.toLowerCase().includes("junior"));
+      const finalMinistryId = coordinatorMinistryId
+        ? coordinatorMinistryId
+        : (formData.civil_status === "Married" && jaMin
+          ? jaMin.id
+          : (formData.ministry_id ? Number(formData.ministry_id) : null));
+
       const payload: any = {
         ...formData,
+        civil_status: formData.civil_status || "Single",
+        spouse_name: formData.spouse_name || null,
+        spouse_id: formData.spouse_id ? Number(formData.spouse_id) : null,
         household_id: formData.household_id ? Number(formData.household_id) : null,
-        ministry_id: coordinatorMinistryId
-          ? coordinatorMinistryId
-          : (formData.ministry_id ? Number(formData.ministry_id) : null)
+        ministry_id: finalMinistryId
       };
+
+      if (formData.civil_status === "Married" && createNewSpouseRecord && spouseFormData.first_name.trim()) {
+        payload.partner_record = {
+          first_name: spouseFormData.first_name.trim(),
+          last_name: (spouseFormData.last_name || formData.last_name).trim(),
+          birthdate: spouseFormData.birthdate || formData.birthdate || "1990-01-01",
+          gender: spouseFormData.gender || (formData.gender === "Male" ? "Female" : "Male"),
+          contact_phone: spouseFormData.contact_phone || null,
+          contact_email: spouseFormData.contact_email || null,
+          occupation: spouseFormData.occupation || null,
+          facebook_account: spouseFormData.facebook_account || null,
+          medical_notes: spouseFormData.medical_notes || null,
+          hobbies: spouseFormData.hobbies || null,
+          address: formData.address || null
+        };
+      }
 
       if (editingMember) {
         await api.updateMember(editingMember.id, payload);
@@ -441,11 +551,29 @@ export const MembersPage: React.FC = () => {
         }
       } else {
         await api.createMember(payload);
+        if (payload.partner_record) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: "Couple Registered Successfully! 🎉",
+            type: "success",
+            confirmText: "Awesome",
+            cancelText: null,
+            description: (
+              <div className="text-center space-y-2 text-xs">
+                <p>
+                  Both <strong>{formData.first_name} {formData.last_name}</strong> and partner <strong>{payload.partner_record.first_name} {payload.partner_record.last_name}</strong> have been created in the <strong>Junior Adult Ministry</strong> and linked as spouses!
+                </p>
+              </div>
+            ),
+            onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+          });
+        }
       }
 
       setIsAddModalOpen(false);
       setEditingMember(null);
       setSuggestedMinistryInfo(null);
+      setCreateNewSpouseRecord(false);
       loadData();
     } catch (err: any) {
       setConfirmModalConfig({
@@ -623,6 +751,23 @@ export const MembersPage: React.FC = () => {
       ]
     }));
   }, [members]);
+
+  // Autocomplete suggestions for Spouse / Partner Search
+  const spouseMemberSuggestions = React.useMemo(() => {
+    return members
+      .filter((m) => !editingMember || m.id !== editingMember.id)
+      .map((m) => ({
+        title: `${m.first_name} ${m.last_name}`,
+        category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
+        subtitle: `${m.gender || "Member"} • ${m.age || 0} yrs old${m.contact_phone ? ` • ${m.contact_phone}` : ""}`,
+        aliases: [
+          m.first_name,
+          m.last_name,
+          `${m.last_name}, ${m.first_name}`,
+          `${m.first_name[0]}. ${m.last_name}`
+        ]
+      }));
+  }, [members, editingMember]);
 
   // Find who invited the currently selected member
   const inviterMember = selectedMember?.invited_by
@@ -934,7 +1079,18 @@ export const MembersPage: React.FC = () => {
                           {m.first_name[0]}{m.last_name[0]}
                         </div>
                         <div>
-                          <div className="text-xs font-black text-indigo-950 group-hover:text-amber-600 transition-colors">{m.first_name} {m.last_name}</div>
+                          <div className="text-xs font-black text-indigo-950 group-hover:text-amber-600 transition-colors flex items-center gap-1.5 flex-wrap">
+                            <span>{m.first_name} {m.last_name}</span>
+                            {m.civil_status === "Married" && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[9px] bg-amber-100 text-amber-950 border border-amber-300 font-black px-1.5 py-0.2 rounded-md shadow-2xs"
+                                title={m.spouse_name ? `Married to ${m.spouse_name}` : "Married"}
+                              >
+                                <span>💍</span>
+                                <span>{m.spouse_name ? `Spouse: ${m.spouse_name.split(" ")[0]}` : "Married"}</span>
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[10px] text-charcoal/50">{m.contact_email || m.contact_phone || "No direct contact"}</div>
                         </div>
                       </td>
@@ -1288,6 +1444,12 @@ export const MembersPage: React.FC = () => {
                   <span className="font-bold text-charcoal">{selectedMember.gender || "Unspecified"}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-charcoal/60">Civil Status:</span>
+                  <span className="font-black text-indigo-950">
+                    {selectedMember.civil_status === "Married" ? "💍 Married" : (selectedMember.civil_status || "Single")}
+                  </span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-charcoal/60">Grade Level:</span>
                   <span className="font-bold text-charcoal">{selectedMember.grade_level || "N/A"}</span>
                 </div>
@@ -1314,6 +1476,60 @@ export const MembersPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Dedicated Marriage & Spouse Card */}
+            {(selectedMember.civil_status === "Married" || selectedMember.spouse_name || selectedMember.spouse_id) && (
+              <div className="p-4 bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 rounded-2xl border border-amber-300/80 shadow-2xs space-y-2.5 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-amber-200/80">
+                  <span className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
+                    <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
+                    <span>Spouse & Marriage Information</span>
+                  </span>
+                  <span className="text-[10px] bg-amber-500 text-white font-black px-2.5 py-0.5 rounded-full shadow-2xs">
+                    💍 Married • Junior Adult Scope
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 bg-white/90 p-3 rounded-xl border border-amber-200 shadow-2xs flex-wrap">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 to-amber-700 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                      💍
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-charcoal/50 block font-bold">Married To (Spouse)</span>
+                      <h4 className="font-black text-xs text-indigo-950">
+                        {selectedMember.spouse_name || (selectedMember.linked_spouse_first_name ? `${selectedMember.linked_spouse_first_name} ${selectedMember.linked_spouse_last_name}` : "Registered Spouse")}
+                      </h4>
+                      {selectedMember.linked_spouse_ministry_name && (
+                        <span className="text-[10px] text-indigo-700 font-bold">
+                          {selectedMember.linked_spouse_ministry_name} Ministry
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const spouseObj = selectedMember.spouse_id
+                      ? members.find(m => m.id === selectedMember.spouse_id)
+                      : (selectedMember.spouse_name ? members.find(m => `${m.first_name} ${m.last_name}`.toLowerCase() === selectedMember.spouse_name?.toLowerCase()) : null);
+
+                    if (spouseObj) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMember(spouseObj)}
+                          className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-black text-[11px] transition-all flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
+                        >
+                          <span>View Spouse Profile</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+            )}
 
             {/* Card 3: Birthday & Milestone Celebration */}
             <div className="p-4 bg-gradient-to-br from-amber-500/10 via-rose-500/5 to-indigo-500/10 rounded-2xl border border-amber-200/80 space-y-3">
@@ -1858,6 +2074,232 @@ export const MembersPage: React.FC = () => {
                           placeholder="Select application date"
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {/* Civil Status / Marital Status Selector (for Non-Kinder/Non-Elementary) */}
+                  {(!isKinder && !isElementary) && (
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50/70 via-white to-indigo-50/70 border border-amber-200/90 shadow-2xs space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                          <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
+                          <span>Civil Status / Marital Status:</span>
+                        </label>
+                        {formData.civil_status === "Married" && (
+                          <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-200" />
+                            <span>Auto-routed to Junior Adult Ministry</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { id: "Single", label: "Single" },
+                          { id: "Married", label: "💍 Married", isSpecial: true },
+                          { id: "Widowed", label: "Widowed" },
+                          { id: "Separated", label: "Separated" }
+                        ].map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleCivilStatusChange(item.id)}
+                            className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                              formData.civil_status === item.id
+                                ? item.isSpecial
+                                  ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-xs scale-[1.02]"
+                                  : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                                : "bg-white text-charcoal/80 border-gray-200 hover:bg-amber-50/40 hover:border-amber-300"
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* When Married is Active: Show Spouse Search & Sub-Form Card */}
+                      {formData.civil_status === "Married" && (
+                        <div className="mt-3 p-3.5 rounded-2xl bg-white border border-amber-300/90 shadow-2xs space-y-3 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between pb-2 border-b border-amber-100 flex-wrap gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm">💍</span>
+                              <span className="font-black text-xs text-indigo-950">Spouse / Partner in Marriage</span>
+                            </div>
+                            <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md">
+                              Couples & Family Ministry
+                            </span>
+                          </div>
+
+                          {/* Selected Spouse Confirmation Badge (if matched/chosen) */}
+                          {formData.spouse_name && !createNewSpouseRecord ? (
+                            <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-amber-500 text-white font-black text-xs flex items-center justify-center shadow-2xs">
+                                  💍
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-charcoal/50 block font-bold">Linked Spouse</span>
+                                  <span className="font-black text-xs text-indigo-950">{formData.spouse_name}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setFormData(prev => ({ ...prev, spouse_name: "", spouse_id: "" }))}
+                                className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                              >
+                                Change / Remove
+                              </button>
+                            </div>
+                          ) : !createNewSpouseRecord ? (
+                            <div className="space-y-2">
+                              <SearchableAutocomplete
+                                label="Search Spouse in Church Directory"
+                                value={formData.spouse_name}
+                                onChange={(val) => {
+                                  const matched = members.find(
+                                    (m) => `${m.first_name} ${m.last_name}`.toLowerCase().trim() === val.toLowerCase().trim()
+                                  );
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    spouse_name: val,
+                                    spouse_id: matched ? String(matched.id) : ""
+                                  }));
+                                }}
+                                placeholder="Type to search existing member (e.g. Maria Clara)..."
+                                suggestions={spouseMemberSuggestions}
+                                icon={<Heart className="w-3.5 h-3.5 text-rose-500" />}
+                              />
+
+                              <div className="flex items-center justify-between pt-1">
+                                <span className="text-[11px] text-charcoal/50">
+                                  Can't find spouse in the list?
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCreateNewSpouseRecord(true);
+                                    setFormData(prev => ({ ...prev, spouse_id: "", spouse_name: "" }));
+                                    setSpouseFormData(prev => ({
+                                      ...prev,
+                                      last_name: prev.last_name || formData.last_name,
+                                      gender: formData.gender === "Male" ? "Female" : "Male"
+                                    }));
+                                  }}
+                                  className="text-[11px] font-black text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>+ Register Spouse as New Member</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {/* Inline Partner Registration Card (if not in member directory) */}
+                          {createNewSpouseRecord && (
+                            <div className="p-3.5 bg-gradient-to-br from-indigo-50/60 to-amber-50/60 rounded-xl border border-indigo-200 space-y-3 animate-in fade-in duration-150">
+                              <div className="flex items-center justify-between pb-1.5 border-b border-indigo-100">
+                                <span className="font-black text-xs text-indigo-950 flex items-center gap-1.5">
+                                  <span>📝 Register Partner as New Member</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setCreateNewSpouseRecord(false)}
+                                  className="text-[10px] font-bold text-charcoal/60 hover:text-charcoal cursor-pointer"
+                                >
+                                  ✕ Switch back to Search
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner First Name *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    required={createNewSpouseRecord}
+                                    placeholder="e.g. Maria"
+                                    value={spouseFormData.first_name}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, first_name: e.target.value })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner Last Name *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    required={createNewSpouseRecord}
+                                    placeholder="e.g. Almadrones"
+                                    value={spouseFormData.last_name}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, last_name: e.target.value })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div>
+                                  <DatePickerInput
+                                    label="Partner Birthday"
+                                    required={createNewSpouseRecord}
+                                    value={spouseFormData.birthdate}
+                                    onChange={(val) => setSpouseFormData({ ...spouseFormData, birthdate: val })}
+                                    placeholder="Select birthday"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner Gender *
+                                  </label>
+                                  <select
+                                    value={spouseFormData.gender}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, gender: e.target.value })}
+                                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo h-[41px] text-xs font-bold"
+                                  >
+                                    <option value="Female">Female</option>
+                                    <option value="Male">Male</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner Contact Phone
+                                  </label>
+                                  <input
+                                    type="tel"
+                                    placeholder="e.g. 0917 123 4567"
+                                    value={spouseFormData.contact_phone}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, contact_phone: e.target.value })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner Occupation
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Teacher, Nurse, Business"
+                                    value={spouseFormData.occupation}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, occupation: e.target.value })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="p-2 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-950 flex items-center gap-1.5 font-medium">
+                                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span>
+                                  Both member records will be automatically created in the <strong>Junior Adult Ministry</strong> and linked as husband & wife / spouses.
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 

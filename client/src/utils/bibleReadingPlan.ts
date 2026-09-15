@@ -171,65 +171,109 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 
 const DPC_ANCHOR_BOOK_KEY = "dpc_bible_anchor_book";
 const DPC_ANCHOR_CHAP_KEY = "dpc_bible_anchor_chapter";
-const DPC_OFFSET_STORAGE_KEY = "dpc_bible_reading_offset";
+const DPC_ANCHOR_DATE_KEY = "dpc_bible_anchor_date";
+const DPC_ANCHOR_MODE_KEY = "dpc_bible_anchor_mode";
 
-// Default church calibration anchor: Ezekiel 29 on current church benchmark
+// Default church calibration anchor: Sunday Sept 13, 2026 concludes on Ezekiel 29 (Ezekiel 25–29)
 export const DEFAULT_ANCHOR_BOOK = "Ezekiel";
 export const DEFAULT_ANCHOR_CHAPTER = 29;
+export const DEFAULT_ANCHOR_DATE = "2026-09-13";
+export const DEFAULT_ANCHOR_MODE: "ends_on" | "starts_on" = "ends_on";
+
+export interface ReadingPlanAnchorConfig {
+  book: string;
+  chapter: number;
+  dateString: string;
+  mode: "ends_on" | "starts_on";
+}
 
 /**
- * Get current church reading plan anchor (defaults to Ezekiel 29)
+ * Get current church reading plan anchor (defaults to Ezekiel 29 on 2026-09-13)
  */
-export function getReadingPlanAnchor(): { book: string; chapter: number } {
+export function getReadingPlanAnchor(): ReadingPlanAnchorConfig {
   if (typeof window === "undefined" || !window.localStorage) {
-    return { book: DEFAULT_ANCHOR_BOOK, chapter: DEFAULT_ANCHOR_CHAPTER };
+    return {
+      book: DEFAULT_ANCHOR_BOOK,
+      chapter: DEFAULT_ANCHOR_CHAPTER,
+      dateString: DEFAULT_ANCHOR_DATE,
+      mode: DEFAULT_ANCHOR_MODE
+    };
   }
   const storedBook = localStorage.getItem(DPC_ANCHOR_BOOK_KEY);
   const storedChap = localStorage.getItem(DPC_ANCHOR_CHAP_KEY);
+  const storedDate = localStorage.getItem(DPC_ANCHOR_DATE_KEY);
+  const storedMode = localStorage.getItem(DPC_ANCHOR_MODE_KEY) as "ends_on" | "starts_on" | null;
+
   if (storedBook && storedChap) {
     const chapNum = parseInt(storedChap, 10);
     if (!isNaN(chapNum) && chapNum > 0) {
-      return { book: storedBook, chapter: chapNum };
+      return {
+        book: storedBook,
+        chapter: chapNum,
+        dateString: storedDate || DEFAULT_ANCHOR_DATE,
+        mode: storedMode === "starts_on" ? "starts_on" : "ends_on"
+      };
     }
   }
-  return { book: DEFAULT_ANCHOR_BOOK, chapter: DEFAULT_ANCHOR_CHAPTER };
+  return {
+    book: DEFAULT_ANCHOR_BOOK,
+    chapter: DEFAULT_ANCHOR_CHAPTER,
+    dateString: DEFAULT_ANCHOR_DATE,
+    mode: DEFAULT_ANCHOR_MODE
+  };
 }
 
 /**
- * Set custom church reading plan anchor (e.g. Ezekiel 29) and notify components
+ * Set custom church reading plan anchor and notify components
  */
-export function setReadingPlanAnchor(bookName: string, chapterNum: number): void {
+export function setReadingPlanAnchor(
+  bookName: string,
+  chapterNum: number,
+  dateString: string = DEFAULT_ANCHOR_DATE,
+  mode: "ends_on" | "starts_on" = "ends_on"
+): void {
   if (typeof window !== "undefined" && window.localStorage) {
     localStorage.setItem(DPC_ANCHOR_BOOK_KEY, bookName);
     localStorage.setItem(DPC_ANCHOR_CHAP_KEY, String(chapterNum));
+    localStorage.setItem(DPC_ANCHOR_DATE_KEY, dateString);
+    localStorage.setItem(DPC_ANCHOR_MODE_KEY, mode);
   }
   clearPlanCache();
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("bible-plan-offset-changed", { detail: { book: bookName, chapter: chapterNum } }));
+    window.dispatchEvent(
+      new CustomEvent("bible-plan-offset-changed", {
+        detail: { book: bookName, chapter: chapterNum, dateString, mode }
+      })
+    );
   }
 }
 
 /**
- * Reset reading plan anchor to church default (Ezekiel 29)
+ * Reset reading plan anchor to church default (Ezekiel 29 on Sunday Sept 13, 2026)
  */
 export function resetReadingPlanOffset(toChurchDefault: boolean = true): void {
   if (toChurchDefault) {
-    setReadingPlanAnchor(DEFAULT_ANCHOR_BOOK, DEFAULT_ANCHOR_CHAPTER);
+    setReadingPlanAnchor(DEFAULT_ANCHOR_BOOK, DEFAULT_ANCHOR_CHAPTER, DEFAULT_ANCHOR_DATE, "ends_on");
   } else {
     // Standard Jan 1 start (Genesis 1)
-    setReadingPlanAnchor("Genesis", 1);
+    setReadingPlanAnchor("Genesis", 1, "2026-01-01", "starts_on");
   }
 }
 
 /**
- * Automatically sets the anchor so that today's reading begins at the specified book and chapter
+ * Automatically sets the anchor so that reading on a target date begins or ends at the specified book and chapter
  */
 export function alignPlanToChapterOnDate(
   bookName: string,
   chapterNum: number,
-  targetDate: Date = new Date()
+  targetDate: Date = new Date(),
+  mode: "ends_on" | "starts_on" = "starts_on"
 ): number {
-  setReadingPlanAnchor(bookName, chapterNum);
+  const y = targetDate.getFullYear();
+  const m = String(targetDate.getMonth() + 1).padStart(2, "0");
+  const d = String(targetDate.getDate()).padStart(2, "0");
+  const dateString = `${y}-${m}-${d}`;
+  setReadingPlanAnchor(bookName, chapterNum, dateString, mode);
   return 0;
 }
 
@@ -256,7 +300,7 @@ export function clearPlanCache(): void {
 
 /**
  * Generates the full 365-day (or 366-day) Bible Reading Plan for a specific year,
- * anchored directly to the church benchmark (e.g. Ezekiel 29 on today's date).
+ * anchored directly to the church benchmark (Sunday Sept 13, 2026 ends on Ezekiel 29).
  * Schedule rule:
  * - Monday to Saturday: 3 chapters
  * - Sunday: 5 chapters
@@ -274,28 +318,33 @@ export function generateAnnualBiblePlan(year: number = new Date().getFullYear())
   );
   const anchorGlobalIndex = targetIndex >= 0 ? targetIndex : 0;
 
-  // Determine targetDayIndex for today in this year
-  const now = new Date();
-  const targetDate = now.getFullYear() === year ? now : new Date(year, 0, 1);
+  // Determine anchor dayIndex for the given year
+  const [aYear, aMonth, aDay] = (anchor.dateString || DEFAULT_ANCHOR_DATE).split("-").map(Number);
+  const anchorDate = new Date(year, (aMonth || 9) - 1, aDay || 13);
   const startOfYear = new Date(year, 0, 1);
-  const diffTime = targetDate.getTime() - startOfYear.getTime();
+  const diffTime = anchorDate.getTime() - startOfYear.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  const todayDayIndex = Math.max(1, Math.min(totalDays, diffDays));
+  const anchorDayIndex = Math.max(1, Math.min(totalDays, diffDays));
 
-  // Count chapters scheduled before todayDayIndex
-  let chaptersBeforeToday = 0;
-  for (let d = 1; d < todayDayIndex; d++) {
+  // Count chapters scheduled before anchorDayIndex (days 1 to anchorDayIndex - 1)
+  let chaptersBeforeAnchor = 0;
+  for (let d = 1; d < anchorDayIndex; d++) {
     const dateObj = new Date(year, 0, d);
-    chaptersBeforeToday += (dateObj.getDay() === 0 ? 5 : 3);
+    chaptersBeforeAnchor += (dateObj.getDay() === 0 ? 5 : 3);
   }
 
-  // Today's reading count (5 for Sunday, 3 for weekday)
-  const todayIsSunday = targetDate.getDay() === 0;
-  const todayTargetCount = todayIsSunday ? 5 : 3;
+  // Anchor day target count (5 for Sunday, 3 for weekday)
+  const anchorIsSunday = anchorDate.getDay() === 0;
+  const anchorTargetCount = anchorIsSunday ? 5 : 3;
 
-  // Today concludes at anchorGlobalIndex (e.g. Ezekiel 29), so today starts at (anchorGlobalIndex - todayTargetCount + 1)
-  const todayStartChapterIndex = anchorGlobalIndex - todayTargetCount + 1;
-  let currentChapterIndex = todayStartChapterIndex - chaptersBeforeToday;
+  // If anchor mode is "ends_on", the last chapter of anchorDayIndex is anchorGlobalIndex
+  // If anchor mode is "starts_on", the first chapter of anchorDayIndex is anchorGlobalIndex
+  const anchorDayStartChapterIndex = anchor.mode === "starts_on"
+    ? anchorGlobalIndex
+    : anchorGlobalIndex - anchorTargetCount + 1;
+
+  // Day 1 start chapter index:
+  let currentChapterIndex = anchorDayStartChapterIndex - chaptersBeforeAnchor;
 
   for (let dayIndex = 1; dayIndex <= totalDays; dayIndex++) {
     const d = new Date(year, 0, dayIndex);
@@ -347,7 +396,7 @@ let cachedAnchorKey: string | null = null;
 
 export function getCachedPlanForYear(year: number = new Date().getFullYear()): DayReading[] {
   const anchor = getReadingPlanAnchor();
-  const currentKey = `${year}_${anchor.book}_${anchor.chapter}`;
+  const currentKey = `${year}_${anchor.book}_${anchor.chapter}_${anchor.dateString}_${anchor.mode}`;
   if (cachedYear === year && cachedPlan.length > 0 && cachedAnchorKey === currentKey) {
     return cachedPlan;
   }

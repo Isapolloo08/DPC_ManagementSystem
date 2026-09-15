@@ -573,13 +573,15 @@ export const DishwashingPage: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-teal-600" : ""}`} />
           </button>
-          <button
-            onClick={handleOpenCreateTeam}
-            className="flex items-center gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-4 h-4 text-white" />
-            <span>Add Team to Cycle</span>
-          </button>
+          {isAdminOrCoordinator && (
+            <button
+              onClick={handleOpenCreateTeam}
+              className="flex items-center gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-4 h-4 text-white" />
+              <span>Add Team to Cycle</span>
+            </button>
+          )}
         </div>
       </div>
 

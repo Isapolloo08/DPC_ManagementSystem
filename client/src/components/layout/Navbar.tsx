@@ -1,9 +1,11 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
-import { useSocketConnection } from "../../socket";
+import { useSocketConnection, } from "../../socket";
 import { ChurchLogo } from "../common/ChurchLogo";
 import { WindowControls } from "./WindowControls";
 import { Bell, UserCog } from "lucide-react";
+
+
 
 const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "dashboard": { title: "Executive Dashboard", subtitle: "Church overview, attendance & KPIs" },
@@ -35,8 +37,15 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onToggleSidebar, onOpenProfile }) => {
   const { user } = useAuth();
   const isConnected = useSocketConnection();
-  const currentTabMeta = TAB_TITLES[currentTab] || { title: "DPC Management System", subtitle: "Church portal" };
-  const isElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.isElectron);
+  const isElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.isElectron || (window as any).__electron__);
+  let currentTabMeta = TAB_TITLES[currentTab] || { title: "DPC Management System", subtitle: "Church portal" };
+  if (currentTab === "dashboard") {
+    if (user?.role_name?.toLowerCase() === "leader") {
+      currentTabMeta = { title: "Leader Dashboard", subtitle: "Small group discipleship & weekly overview" };
+    } else if (user?.role_name?.toLowerCase() === "volunteer") {
+      currentTabMeta = { title: "Volunteer Hub", subtitle: "Ministry service, duty rosters & check-in" };
+    }
+  }
 
   return (
     <header className="bg-indigo text-white border-b border-indigo-800/60 shadow-xs select-none relative">
@@ -98,12 +107,11 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           >
             {/* Real-time Socket.IO Live Indicator */}
-            <div 
-              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide border transition-all ${
-                isConnected 
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" 
-                  : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-              }`}
+            <div
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide border transition-all ${isConnected
+                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                }`}
               title={isConnected ? "Real-time Socket.IO connected across all church terminals" : "Connecting to real-time server..."}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>

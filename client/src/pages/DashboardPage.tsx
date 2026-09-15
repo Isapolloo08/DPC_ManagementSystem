@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { ChurchLogo } from "../components/common/ChurchLogo";
 import { api } from "../api";
-import { DashboardMetrics, Ministry, Announcement, EventItem, Member, BirthdayCelebrant, BirthdaySummary, BibleStudyGroup, SaturdayDutyScheduleResponse, DishwashingResponse } from "../types";
+import { DashboardMetrics, Ministry, Announcement, EventItem, Member, BirthdayCelebrant, BirthdaySummary, BibleStudyGroup, SaturdayDutyScheduleResponse, SundayDutyScheduleResponse } from "../types";
 import { useSocketEvent } from "../socket";
 import { DashboardSkeleton } from "../components/common/SkeletonLoader";
 import {
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { NavTab } from "../components/layout/Sidebar";
 import { TodayBibleReadingWidget } from "../components/common/TodayBibleReadingWidget";
+import { VolunteerDashboard } from "./volunteer/VolunteerDashboard";
+import { LeaderDashboardPage } from "./leader/LeaderDashboardPage";
 
 interface DashboardPageProps {
   onNavigate: (tab: NavTab) => void;
@@ -21,6 +23,17 @@ interface DashboardPageProps {
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const { user, ministries, selectedMinistryId } = useAuth();
+
+  // If logged in as Volunteer, render dedicated Volunteer Dashboard Hub
+  if (user?.role_name === "Volunteer") {
+    return <VolunteerDashboard onNavigate={onNavigate} />;
+  }
+
+  // If logged in as Leader, render dedicated Leader Dashboard
+  if (user?.role_name === "Leader") {
+    return <LeaderDashboardPage onNavigate={onNavigate} />;
+  }
+
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
@@ -28,7 +41,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [birthdaySummary, setBirthdaySummary] = useState<BirthdaySummary | null>(null);
   const [bibleStudyGroups, setBibleStudyGroups] = useState<BibleStudyGroup[]>([]);
   const [dutySchedule, setDutySchedule] = useState<SaturdayDutyScheduleResponse | null>(null);
-  const [dishwashingData, setDishwashingData] = useState<DishwashingResponse | null>(null);
+  const [dishwashingSchedule, setDishwashingSchedule] = useState<SundayDutyScheduleResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Greeting Modal State
@@ -76,7 +89,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         api.getBirthdays({ ministry_id: activeScope, timeframe: "all" }).catch(() => null),
         api.getGroups({ ministry_id: activeScope }).catch(() => []),
         api.getDutySchedule({ ministry_id: activeScope }).catch(() => null),
-        api.getDishwashingDuties().catch(() => null)
+        api.getDishwashingSchedule({ count: 8 }).catch(() => null)
       ]);
       if (m) setMetrics(m);
       setAnnouncements(a.slice(0, 3));
@@ -85,7 +98,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       if (b) setBirthdaySummary(b);
       setBibleStudyGroups(grps);
       if (dutyRes) setDutySchedule(dutyRes);
-      if (dishRes) setDishwashingData(dishRes);
+      if (dishRes) setDishwashingSchedule(dishRes);
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
     } finally {
@@ -139,8 +152,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     dutySchedule?.schedule?.[0] || null;
   const nextSaturdayDuty = dutySchedule?.schedule?.find(s => s !== thisSaturdayDuty && !s.is_past) || null;
 
-  const thisSundayDishwashing = dishwashingData?.thisSunday || dishwashingData?.duties?.[0] || null;
-  const nextSundayDishwashing = dishwashingData?.nextSunday || (dishwashingData?.duties && dishwashingData.duties.length > 1 ? dishwashingData.duties[1] : null);
+  const thisSundayDishwashing = dishwashingSchedule?.thisSunday || dishwashingSchedule?.schedule?.[0] || null;
+  const nextSundayDishwashing = dishwashingSchedule?.nextSunday || (dishwashingSchedule?.schedule && dishwashingSchedule.schedule.length > 1 ? dishwashingSchedule.schedule[1] : null);
 
   if (loading && !metrics) {
     return <DashboardSkeleton />;
@@ -861,38 +874,71 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   </span>
                 </div>
 
-                {thisSundayDishwashing ? (
+                {thisSundayDishwashing && (thisSundayDishwashing.team || (thisSundayDishwashing as any).assigned_name) ? (
                   <div className="space-y-3">
                     <div className="p-3 bg-white/95 rounded-2xl border border-indigo-200/60 shadow-2xs space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-charcoal/50 uppercase">Assigned Group</span>
+                        <span className="text-[10px] font-bold text-charcoal/50 uppercase">Assigned Unit</span>
                         <span className="text-[10px] font-black px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-900 border border-indigo-200">
                           {thisSundayDishwashing.status === "completed" ? "✓ Done" : "This Sunday"}
                         </span>
                       </div>
-                      <h5 className="text-sm font-black text-indigo-950 leading-tight">{thisSundayDishwashing.assigned_name}</h5>
-                      {thisSundayDishwashing.partner_assigned_name && (
-                        <p className="text-[11px] font-bold text-amber-800">
-                          + Teamed Up: {thisSundayDishwashing.partner_assigned_name}
+                      <div className="flex items-center gap-2">
+                        {thisSundayDishwashing.team?.color && (
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
+                            style={{ backgroundColor: thisSundayDishwashing.team.color }}
+                          />
+                        )}
+                        <h5 className="text-sm font-black text-indigo-950 leading-tight">
+                          {thisSundayDishwashing.team?.name || (thisSundayDishwashing as any).assigned_name}
+                        </h5>
+                      </div>
+                      {thisSundayDishwashing.team?.group_name && (
+                        <p className="text-[11px] font-bold text-indigo-700">
+                          Bible Study: {thisSundayDishwashing.team.group_name}
+                        </p>
+                      )}
+                      {thisSundayDishwashing.team?.ministry_name && !thisSundayDishwashing.team?.group_name && (
+                        <p className="text-[11px] font-bold text-indigo-700">
+                          {thisSundayDishwashing.team.ministry_name} Ministry
                         </p>
                       )}
                     </div>
 
                     <div className="space-y-1.5 text-xs text-charcoal/80 px-1">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-charcoal/60">In-Charge:</span>
-                        <strong className="text-indigo-950 truncate max-w-[150px]">{thisSundayDishwashing.leader_name || "Leader / Coordinator"}</strong>
+                        <span className="text-charcoal/60">In-Charge / Leader:</span>
+                        <strong className="text-indigo-950 truncate max-w-[150px]">
+                          {thisSundayDishwashing.team?.leader_name || (thisSundayDishwashing as any).leader_name || "Leader / Coordinator"}
+                        </strong>
                       </div>
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-charcoal/60">Cycle Mode:</span>
-                        <strong className="text-indigo-950 capitalize text-[10px]">{thisSundayDishwashing.cycle_mode === "biblestudy_group" ? "Bible Study Groups" : "Ministries"}</strong>
+                        <strong className="text-indigo-950 capitalize text-[10px]">
+                          {(thisSundayDishwashing.team?.cycle_mode || (thisSundayDishwashing as any).cycle_mode) === "biblestudy_group"
+                            ? "Bible Study Group"
+                            : (thisSundayDishwashing.team?.cycle_mode || (thisSundayDishwashing as any).cycle_mode) === "ministry"
+                            ? "Ministry"
+                            : "Custom Team"}
+                        </strong>
                       </div>
                     </div>
 
-                    {nextSundayDishwashing && (
+                    {nextSundayDishwashing && (nextSundayDishwashing.team || (nextSundayDishwashing as any).assigned_name) && (
                       <div className="text-[10px] text-charcoal/60 pt-2 border-t border-indigo-100 flex items-center justify-between">
                         <span>Next Sun:</span>
-                        <strong className="text-indigo-950 truncate max-w-[150px]">{nextSundayDishwashing.assigned_name}</strong>
+                        <div className="flex items-center gap-1.5 truncate max-w-[150px]">
+                          {nextSundayDishwashing.team?.color && (
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: nextSundayDishwashing.team.color }}
+                            />
+                          )}
+                          <strong className="text-indigo-950 truncate">
+                            {nextSundayDishwashing.team?.name || (nextSundayDishwashing as any).assigned_name}
+                          </strong>
+                        </div>
                       </div>
                     )}
                   </div>

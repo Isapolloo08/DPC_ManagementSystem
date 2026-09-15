@@ -229,6 +229,177 @@ router.post("/check-in", authMiddleware, requireRoles("Admin", "Coordinator", "V
   }
 });
 
+// Batch Mark Attendance (Fast bulk roll call: present, absent, excused, reset)
+router.post("/batch-mark", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      present_ids = [],
+      absent_ids = [],
+      excused_ids = [],
+      unmark_ids = [],
+      target_date,
+      service_name = "Sunday Divine Worship"
+    } = req.body;
+
+    const dateClause = target_date ? "DATE(checked_in_at) = $2" : "DATE(checked_in_at) = CURRENT_DATE";
+    const checkinTimestamp = target_date ? `${target_date} 09:30:00` : new Date().toISOString();
+
+    let markedPresentCount = 0;
+    let markedAbsentCount = 0;
+    let markedExcusedCount = 0;
+    let unmarkedCount = 0;
+
+    // 1. Process Present IDs
+    if (Array.isArray(present_ids) && present_ids.length > 0) {
+      for (const mId of present_ids) {
+        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
+        if (!member) continue;
+
+        const ministryId = member.ministry_id || 1;
+        const ministry = await db.get("SELECT * FROM ministries WHERE id = $1", [ministryId]);
+
+        let securityCode: string | null = null;
+        if (ministry && (ministry.name === "Kinder" || ministry.name === "Elementary" || (ministry.max_age && ministry.max_age <= 12))) {
+          securityCode = generateSecurityCode(ministry.name);
+        }
+
+        const dateParams = target_date ? [mId, target_date] : [mId];
+        const existing = await db.get(`SELECT id FROM attendance WHERE member_id = $1 AND ${dateClause}`, dateParams);
+
+        if (existing) {
+          await db.run(`
+            UPDATE attendance
+            SET ministry_id = $1,
+                security_code = COALESCE(security_code, $2),
+                notes = $3,
+                checked_out_at = NULL,
+                checked_in_by = $4
+            WHERE id = $5
+          `, [ministryId, securityCode, service_name, req.user?.id || null, existing.id]);
+        } else {
+          await db.run(`
+            INSERT INTO attendance (
+              member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+          `, [mId, ministryId, securityCode, req.user?.id || null, service_name, checkinTimestamp]);
+        }
+        markedPresentCount++;
+      }
+    }
+
+    // 2. Process Absent IDs
+    if (Array.isArray(absent_ids) && absent_ids.length > 0) {
+      for (const mId of absent_ids) {
+        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
+        if (!member) continue;
+
+        const ministryId = member.ministry_id || 1;
+        const absentNotes = `[ABSENT] Absent from ${service_name}`;
+
+        const dateParams = target_date ? [mId, target_date] : [mId];
+        const existing = await db.get(`SELECT id FROM attendance WHERE member_id = $1 AND ${dateClause}`, dateParams);
+
+        if (existing) {
+          await db.run(`
+            UPDATE attendance
+            SET ministry_id = $1,
+                security_code = NULL,
+                notes = $2,
+                checked_out_at = NULL,
+                checked_in_by = $3
+            WHERE id = $4
+          `, [ministryId, absentNotes, req.user?.id || null, existing.id]);
+        } else {
+          await db.run(`
+            INSERT INTO attendance (
+              member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
+            ) VALUES ($1, $2, NULL, $3, $4, $5)
+          `, [mId, ministryId, req.user?.id || null, absentNotes, checkinTimestamp]);
+        }
+        markedAbsentCount++;
+      }
+    }
+
+    // 3. Process Excused IDs
+    if (Array.isArray(excused_ids) && excused_ids.length > 0) {
+      for (const mId of excused_ids) {
+        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
+        if (!member) continue;
+
+        const ministryId = member.ministry_id || 1;
+        const excusedNotes = `[EXCUSED] Excused Absence (${service_name})`;
+
+        const dateParams = target_date ? [mId, target_date] : [mId];
+        const existing = await db.get(`SELECT id FROM attendance WHERE member_id = $1 AND ${dateClause}`, dateParams);
+
+        if (existing) {
+          await db.run(`
+            UPDATE attendance
+            SET ministry_id = $1,
+                security_code = NULL,
+                notes = $2,
+                checked_out_at = NULL,
+                checked_in_by = $3
+            WHERE id = $4
+          `, [ministryId, excusedNotes, req.user?.id || null, existing.id]);
+        } else {
+          await db.run(`
+            INSERT INTO attendance (
+              member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
+            ) VALUES ($1, $2, NULL, $3, $4, $5)
+          `, [mId, ministryId, req.user?.id || null, excusedNotes, checkinTimestamp]);
+        }
+        markedExcusedCount++;
+      }
+    }
+
+    // 4. Process Unmark IDs (Delete attendance record)
+    if (Array.isArray(unmark_ids) && unmark_ids.length > 0) {
+      for (const mId of unmark_ids) {
+        const dateParams = target_date ? [mId, target_date] : [mId];
+        await db.run(`
+          DELETE FROM attendance
+          WHERE member_id = $1 AND ${dateClause}
+        `, dateParams);
+        unmarkedCount++;
+      }
+    }
+
+    const totalUpdated = markedPresentCount + markedAbsentCount + markedExcusedCount + unmarkedCount;
+    await logAuditAction(
+      req.user?.id || null,
+      "BATCH_ATTENDANCE",
+      "attendance",
+      null,
+      `Batch attendance updated: ${markedPresentCount} Present, ${markedAbsentCount} Absent, ${markedExcusedCount} Excused, ${unmarkedCount} Unmarked on ${target_date || "today"}`
+    );
+
+    emitRealtimeEvent("attendance:changed", {
+      action: "batch_mark",
+      totalUpdated,
+      markedPresentCount,
+      markedAbsentCount,
+      markedExcusedCount,
+      unmarkedCount,
+      targetDate: target_date
+    });
+
+    res.json({
+      success: true,
+      message: `Batch attendance successfully updated! (${markedPresentCount} Present, ${markedAbsentCount} Absent)`,
+      stats: {
+        present: markedPresentCount,
+        absent: markedAbsentCount,
+        excused: markedExcusedCount,
+        unmarked: unmarkedCount,
+        total: totalUpdated
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Batch Check-in (e.g. Household group check-in or multi-select present)
 router.post("/batch-check-in", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {

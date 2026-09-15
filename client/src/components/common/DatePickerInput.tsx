@@ -23,6 +23,8 @@ interface DatePickerInputProps {
   inputClassName?: string;
   dark?: boolean;
   amberTheme?: boolean;
+  sundaysOnly?: boolean;
+  allowedDaysOfWeek?: number[]; // e.g. [0] for Sunday only
 }
 
 export const DatePickerInput: React.FC<DatePickerInputProps> = ({
@@ -36,8 +38,11 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
   className = "",
   inputClassName = "",
   dark = false,
-  amberTheme = false
+  amberTheme = false,
+  sundaysOnly = false,
+  allowedDaysOfWeek
 }) => {
+  const effectiveAllowedDays = allowedDaysOfWeek || (sundaysOnly ? [0] : null);
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -194,6 +199,17 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
     setIsOpen(false);
   };
 
+  const handleSetRecentSunday = () => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? 0 : -day;
+    d.setDate(d.getDate() + diff);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    onChange(`${d.getFullYear()}-${mm}-${dd}`);
+    setIsOpen(false);
+  };
+
   const handleSetNextSunday = () => {
     const d = new Date();
     const day = d.getDay();
@@ -340,13 +356,27 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
               <>
                 {/* Days of Week Header */}
                 <div className="grid grid-cols-7 text-center text-[10px] font-black uppercase tracking-wider text-charcoal/40">
-                  <span className="text-rose-500">Su</span>
-                  <span>Mo</span>
-                  <span>Tu</span>
-                  <span>We</span>
-                  <span>Th</span>
-                  <span>Fr</span>
-                  <span className="text-indigo-600">Sa</span>
+                  {sundaysOnly ? (
+                    <>
+                      <span className="text-rose-600 font-extrabold bg-rose-50/80 rounded-md py-0.5 border border-rose-200">Su</span>
+                      <span className="text-charcoal/25 font-normal">Mo</span>
+                      <span className="text-charcoal/25 font-normal">Tu</span>
+                      <span className="text-charcoal/25 font-normal">We</span>
+                      <span className="text-charcoal/25 font-normal">Th</span>
+                      <span className="text-charcoal/25 font-normal">Fr</span>
+                      <span className="text-charcoal/25 font-normal">Sa</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-rose-500">Su</span>
+                      <span>Mo</span>
+                      <span>Tu</span>
+                      <span>We</span>
+                      <span>Th</span>
+                      <span>Fr</span>
+                      <span className="text-indigo-600">Sa</span>
+                    </>
+                  )}
                 </div>
 
                 {/* Days Matrix */}
@@ -367,6 +397,9 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                   {/* Current Month Days */}
                   {Array.from({ length: totalDays }).map((_, idx) => {
                     const dayNum = idx + 1;
+                    const dayDate = new Date(viewYear, viewMonth, dayNum);
+                    const dayOfWeek = dayDate.getDay();
+                    const isAllowed = effectiveAllowedDays ? effectiveAllowedDays.includes(dayOfWeek) : true;
                     const isSelected =
                       selected &&
                       selected.year === viewYear &&
@@ -374,6 +407,18 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                       selected.day === dayNum;
 
                     const isToday = isCurrentMonthToday && today.getDate() === dayNum;
+
+                    if (!isAllowed) {
+                      return (
+                        <div
+                          key={`day-${dayNum}`}
+                          className="py-1.5 text-xs text-charcoal/20 select-none cursor-not-allowed font-normal text-center"
+                          title="Only Sundays can be selected"
+                        >
+                          {dayNum}
+                        </div>
+                      );
+                    }
 
                     return (
                       <button
@@ -385,6 +430,8 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                             ? "bg-indigo text-white font-black shadow-xs ring-2 ring-indigo-200 scale-105"
                             : isToday
                             ? "bg-amber-100 text-amber-950 font-black border border-amber-300 hover:bg-amber-200"
+                            : sundaysOnly
+                            ? "text-indigo-950 font-black bg-indigo-50/70 hover:bg-indigo hover:text-white border border-indigo-200/70"
                             : "text-charcoal hover:bg-indigo-50 hover:text-indigo"
                         }`}
                       >
@@ -402,20 +449,41 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
             {/* Quick Presets & Shortcuts */}
             <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-1 flex-wrap">
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleSetToday}
-                  className="px-2 py-1 rounded-md bg-ivory-light hover:bg-indigo-50 text-[10px] font-bold text-indigo-900 border border-indigo-100 transition-colors cursor-pointer"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSetNextSunday}
-                  className="px-2 py-1 rounded-md bg-ivory-light hover:bg-amber-50 text-[10px] font-bold text-amber-900 border border-amber-200 transition-colors cursor-pointer"
-                >
-                  Sunday
-                </button>
+                {sundaysOnly ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleSetRecentSunday}
+                      className="px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-[10px] font-bold text-indigo-900 border border-indigo-200 transition-colors cursor-pointer"
+                    >
+                      Latest Sunday
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSetNextSunday}
+                      className="px-2 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-[10px] font-bold text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                    >
+                      Next Sunday
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleSetToday}
+                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-indigo-50 text-[10px] font-bold text-indigo-900 border border-indigo-100 transition-colors cursor-pointer"
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSetNextSunday}
+                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-amber-50 text-[10px] font-bold text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                    >
+                      Sunday
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5">

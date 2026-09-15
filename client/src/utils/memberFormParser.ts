@@ -28,6 +28,8 @@ export interface ParsedMemberData {
   medical_notes: string;
   family_details: string;
   application_date: string;
+  civil_status?: string;
+  spouse_name?: string;
   detectedFieldsCount: number;
   rawTextPreview?: string;
 }

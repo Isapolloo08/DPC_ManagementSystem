@@ -9,7 +9,8 @@ import {
   setReadingPlanAnchor,
   resetReadingPlanOffset,
   getTodaysReading,
-  DayReading
+  DayReading,
+  alignPlanToChapterOnDate
 } from "../../utils/bibleReadingPlan";
 
 interface BibleScheduleAlignmentModalProps {
@@ -44,34 +45,34 @@ export const BibleScheduleAlignmentModal: React.FC<BibleScheduleAlignmentModalPr
   if (!isOpen) return null;
 
   const handleAlignToEzekiel29 = () => {
-    setReadingPlanAnchor("Ezekiel", 29);
+    resetReadingPlanOffset(true);
     setSelectedBook("Ezekiel");
     setSelectedChapter(29);
     setTodayReading(getTodaysReading());
-    setSavedFeedback("Schedule successfully calibrated to Ezekiel 29!");
-    setTimeout(() => setSavedFeedback(null), 3500);
+    setSavedFeedback("Schedule calibrated to DPC Church Benchmark (Sunday Sept 13: Ezekiel 25–29 → Monday Sept 14: Ezekiel 30–32)!");
+    setTimeout(() => setSavedFeedback(null), 4000);
   };
 
   const handleCustomAlign = () => {
-    setReadingPlanAnchor(selectedBook, selectedChapter);
+    alignPlanToChapterOnDate(selectedBook, selectedChapter, new Date(), "starts_on");
     setTodayReading(getTodaysReading());
-    setSavedFeedback(`Schedule aligned to ${selectedBook} ${selectedChapter}!`);
+    setSavedFeedback(`Schedule aligned! Today's reading begins at ${selectedBook} ${selectedChapter}.`);
     setTimeout(() => setSavedFeedback(null), 3500);
   };
 
   const handleReset = () => {
-    resetReadingPlanOffset(true); // reset to church default Ezekiel 29
+    resetReadingPlanOffset(true); // reset to church default Ezekiel 29 on Sunday Sept 13
     setSelectedBook("Ezekiel");
     setSelectedChapter(29);
     setTodayReading(getTodaysReading());
-    setSavedFeedback("Reset to DPC Church default (Ezekiel 29).");
+    setSavedFeedback("Reset to DPC Church default benchmark (Sunday: Ezekiel 25–29 → Monday: Ezekiel 30–32).");
     setTimeout(() => setSavedFeedback(null), 3000);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-        
+
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -101,7 +102,7 @@ export const BibleScheduleAlignmentModal: React.FC<BibleScheduleAlignmentModalPr
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6 text-slate-800">
-          
+
           {/* Current Live Benchmark Box */}
           <div className="bg-sky-50/80 border border-sky-200 rounded-2xl p-4 space-y-2">
             <div className="flex items-center justify-between text-xs font-bold text-sky-900 uppercase tracking-wider">
@@ -143,10 +144,10 @@ export const BibleScheduleAlignmentModal: React.FC<BibleScheduleAlignmentModalPr
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" /> D.P.C. Church Schedule
                 </div>
                 <div className="text-base font-black">
-                  Align to Ezekiel 29 (Ezekiel 25–29 Today)
+                  Calibrate to Church Benchmark (Ezekiel 29)
                 </div>
                 <div className="text-[11px] text-sky-100/90 font-medium">
-                  5 chapters for Sunday concluding exactly on Ezekiel Chapter 29
+                  Sunday Sept 13 ends at Ezekiel 29 → Monday Sept 14 reads Ezekiel 30–32
                 </div>
               </div>
               <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0 group-hover:translate-x-1 transition-transform">

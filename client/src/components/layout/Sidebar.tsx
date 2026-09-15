@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { ChurchLogo } from "../common/ChurchLogo";
 import {
-  LayoutDashboard, Users, UserCheck, Calendar, MessageSquare,
+  LayoutDashboard, Users, HeartHandshake, UserCheck, Calendar, MessageSquare,
   Heart, BarChart3, ShieldAlert, Sparkles, BookOpen, BookMarked, LogOut, Sliders, UserCog, CalendarCheck,
   X, ChevronLeft, ChevronRight, Utensils
 } from "lucide-react";
@@ -42,23 +42,43 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
 
   const isLeader = user?.role_name === "Leader";
   const isCoordinator = user?.role_name === "Coordinator";
+  const isVolunteer = user?.role_name === "Volunteer";
 
-  // Dedicated navigation for Small Group / Discipleship Leaders (Leader Folder Only)
+  // Dedicated navigation for Small Group / Discipleship Leaders
   const leaderNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: "leader-dashboard", label: "My Group", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Member" },
-    { id: "leader-members", label: "Lead Group", icon: <Users className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Leader" },
+    { id: "dashboard", label: "Leader Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Leader" },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "My Group" },
+    { id: "curriculum", label: "Bible Study Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
     { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-500" />, badge: "1-Yr" },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
+    { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
   ];
 
-  // Standard full church management navigation for Admin, Coordinator, Volunteer, Member
+  // Dedicated navigation for Ministry Volunteers & Helpers
+  const volunteerNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
+    { id: "dashboard", label: "Volunteer Hub", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-emerald-500" />, badge: "Volunteer" },
+    { id: "attendance", label: "Sunday Attendance", icon: <UserCheck className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Live" },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
+    { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />, badge: "My Group" },
+  ];
+
+  // Standard full church management navigation for Admin, Coordinator, Member
   const defaultNavItems: { id: NavTab; label: string; icon: React.ReactNode; roles?: string[]; badge?: string }[] = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
     { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
     { id: "attendance", label: "Sunday Attendance", icon: <UserCheck className="w-4 h-4 shrink-0" />, badge: "Live" },
     { id: "members", label: "Members & Families", icon: <Users className="w-4 h-4 shrink-0" /> },
+    { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "Groups" },
     { id: "leaderportal", label: "My Bible Study Group", icon: <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />, badge: "My Group" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "Duty" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-amber-500" />, roles: ["Admin"], badge: "Cycle" },
+    { id: "curriculum", label: "Bible Study Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
     { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "reports", label: "Analytics & Trends", icon: <BarChart3 className="w-4 h-4 shrink-0" /> },
@@ -67,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
     { id: "audit", label: "System Audit Logs", icon: <ShieldAlert className="w-4 h-4 shrink-0" />, roles: ["Admin"] },
   ];
 
-  const activeNavItems = isLeader ? leaderNavItems : defaultNavItems;
+  const activeNavItems = isLeader ? leaderNavItems : (isVolunteer ? volunteerNavItems : defaultNavItems);
 
   const handleTabClick = (tab: NavTab) => {
     onSelectTab(tab);
@@ -199,8 +219,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
                   onClick={() => handleTabClick(item.id)}
                   title={item.label}
                   className={`w-full flex items-center ${isCollapsed ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2"} rounded-xl text-xs transition-all cursor-pointer ${isActive
-                      ? "bg-indigo text-white shadow-sm font-bold"
-                      : "text-charcoal/80 hover:bg-indigo-50/70 hover:text-indigo font-medium"
+                    ? "bg-indigo text-white shadow-sm font-bold"
+                    : "text-charcoal/80 hover:bg-indigo-50/70 hover:text-indigo font-medium"
                     }`}
                 >
                   <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-2.5 min-w-0 pr-1"}`}>
@@ -211,8 +231,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
                   </div>
                   {!isCollapsed && item.badge && (
                     <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${isActive
-                        ? "bg-amber text-charcoal font-black"
-                        : "bg-indigo-50 text-indigo border border-indigo-100/80"
+                      ? "bg-amber text-charcoal font-black"
+                      : "bg-indigo-50 text-indigo border border-indigo-100/80"
                       }`}>
                       {item.badge}
                     </span>
@@ -265,8 +285,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
             onClick={() => handleTabClick("profile")}
             title="My Profile & Account Settings"
             className={`w-full flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all shadow-2xs active:scale-98 cursor-pointer ${currentTab === "profile"
-                ? "bg-indigo text-white border-indigo shadow-md font-black"
-                : "border-indigo-100 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950"
+              ? "bg-indigo text-white border-indigo shadow-md font-black"
+              : "border-indigo-100 bg-indigo-50/60 hover:bg-indigo-100/80 text-indigo-950"
               }`}
           >
             <UserCog className={`w-4 h-4 shrink-0 ${currentTab === "profile" ? "text-amber-400" : "text-indigo-700"}`} />

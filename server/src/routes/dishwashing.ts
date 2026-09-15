@@ -377,108 +377,114 @@ router.delete("/teams/:id/members/:memberId", authMiddleware, async (req: AuthRe
   }
 });
 
+// Helper to calculate full dishwashing rotation schedule
+export async function calculateDishwashingSchedule(count = 16) {
+  const numSundays = Math.min(Number(count) || 16, 26);
+
+  const teams = await db.all(`
+    SELECT dt.*, 
+           min.name as ministry_name, min.color as ministry_color,
+           bg.name as group_name, bg.meeting_day as group_meeting_day
+    FROM dishwashing_teams dt
+    LEFT JOIN ministries min ON dt.ministry_id = min.id
+    LEFT JOIN bible_study_groups bg ON dt.biblestudy_group_id = bg.id
+    ORDER BY dt.order_seq ASC, dt.id ASC
+  `);
+
+  // Fetch team members
+  const teamsWithMembers = await Promise.all(teams.map(async (t) => {
+    const m = await db.all(`
+      SELECT dtm.role as team_role, mem.first_name, mem.last_name, mem.contact_phone
+      FROM dishwashing_team_members dtm
+      JOIN members mem ON dtm.member_id = mem.id
+      WHERE dtm.team_id = $1
+    `, [t.id]);
+    return { ...t, members: m };
+  }));
+
+  const upcomingSundays = getUpcomingSundays(numSundays);
+  const anchorSun = new Date(2026, 0, 4, 0, 0, 0, 0).getTime();
+
+  // Fetch any saved overrides/completions from dishwashing_schedules
+  const savedSchedules = await db.all(`
+    SELECT ds.*, dt.name as team_name, dt.color as team_color, dt.leader_name as team_leader_name
+    FROM dishwashing_schedules ds
+    LEFT JOIN dishwashing_teams dt ON ds.team_id = dt.id
+    WHERE ds.duty_date >= $1
+  `, [upcomingSundays[0]]);
+
+  const scheduleList = upcomingSundays.map((sunDate, idx) => {
+    const isThisSunday = idx === 0;
+    const isNextSunday = idx === 1;
+    const dObj = new Date(sunDate + "T00:00:00");
+    const formattedDate = dObj.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+
+    const sunTime = dObj.getTime();
+    const diffWeeks = Math.floor(Math.round((sunTime - anchorSun) / 86400000) / 7);
+
+    // Default rotating team from automatic weekly cycle across all registered teams
+    let defaultTeam = null;
+    if (teamsWithMembers.length > 0) {
+      const cycleIndex = ((diffWeeks % teamsWithMembers.length) + teamsWithMembers.length) % teamsWithMembers.length;
+      defaultTeam = teamsWithMembers[cycleIndex];
+    }
+
+    // Check if there is an explicit override/completion saved
+    const override = savedSchedules.find(s => {
+      const sDate = s.duty_date instanceof Date ? s.duty_date.toISOString().split("T")[0] : String(s.duty_date).split("T")[0];
+      return sDate === sunDate;
+    });
+
+    let status: "on_duty" | "scheduled" | "completed" | "swapped" = isThisSunday ? "on_duty" : "scheduled";
+    let notes = "";
+    let completedAt = null;
+    let effectiveTeam = defaultTeam;
+
+    if (override) {
+      status = override.status as any;
+      notes = override.notes || "";
+      completedAt = override.completed_at || null;
+      if (override.team_id) {
+        const matchedTeam = teamsWithMembers.find(t => t.id === override.team_id);
+        if (matchedTeam) effectiveTeam = matchedTeam;
+      }
+    }
+
+    return {
+      duty_date: sunDate,
+      date_formatted: formattedDate,
+      week_number: idx + 1,
+      is_this_sunday: isThisSunday,
+      is_next_sunday: isNextSunday,
+      status,
+      completed_at: completedAt,
+      notes,
+      team: effectiveTeam
+    };
+  });
+
+  return {
+    total_teams: teams.length,
+    cycle_interval_weeks: teams.length,
+    thisSunday: scheduleList[0] || null,
+    nextSunday: scheduleList[1] || null,
+    schedule: scheduleList
+  };
+}
+
 // ====================================================
 // 7. GET SUNDAY ROTATION CYCLE (SCHEDULE)
 // ====================================================
 router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { count = 16 } = req.query;
-    const numSundays = Math.min(Number(count) || 16, 26);
-
-    const teams = await db.all(`
-      SELECT dt.*, 
-             min.name as ministry_name, min.color as ministry_color,
-             bg.name as group_name, bg.meeting_day as group_meeting_day
-      FROM dishwashing_teams dt
-      LEFT JOIN ministries min ON dt.ministry_id = min.id
-      LEFT JOIN bible_study_groups bg ON dt.biblestudy_group_id = bg.id
-      ORDER BY dt.order_seq ASC, dt.id ASC
-    `);
-
-    // Fetch team members
-    const teamsWithMembers = await Promise.all(teams.map(async (t) => {
-      const m = await db.all(`
-        SELECT dtm.role as team_role, mem.first_name, mem.last_name, mem.contact_phone
-        FROM dishwashing_team_members dtm
-        JOIN members mem ON dtm.member_id = mem.id
-        WHERE dtm.team_id = $1
-      `, [t.id]);
-      return { ...t, members: m };
-    }));
-
-    const upcomingSundays = getUpcomingSundays(numSundays);
-    const anchorSun = new Date(2026, 0, 4, 0, 0, 0, 0).getTime();
-
-    // Fetch any saved overrides/completions from dishwashing_schedules
-    const savedSchedules = await db.all(`
-      SELECT ds.*, dt.name as team_name, dt.color as team_color, dt.leader_name as team_leader_name
-      FROM dishwashing_schedules ds
-      LEFT JOIN dishwashing_teams dt ON ds.team_id = dt.id
-      WHERE ds.duty_date >= $1
-    `, [upcomingSundays[0]]);
-
-    const scheduleList = upcomingSundays.map((sunDate, idx) => {
-      const isThisSunday = idx === 0;
-      const isNextSunday = idx === 1;
-      const dObj = new Date(sunDate + "T00:00:00");
-      const formattedDate = dObj.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric"
-      });
-
-      const sunTime = dObj.getTime();
-      const diffWeeks = Math.floor(Math.round((sunTime - anchorSun) / 86400000) / 7);
-
-      // Default rotating team from automatic weekly cycle across all registered teams
-      let defaultTeam = null;
-      if (teamsWithMembers.length > 0) {
-        const cycleIndex = ((diffWeeks % teamsWithMembers.length) + teamsWithMembers.length) % teamsWithMembers.length;
-        defaultTeam = teamsWithMembers[cycleIndex];
-      }
-
-      // Check if there is an explicit override/completion saved
-      const override = savedSchedules.find(s => {
-        const sDate = s.duty_date instanceof Date ? s.duty_date.toISOString().split("T")[0] : String(s.duty_date).split("T")[0];
-        return sDate === sunDate;
-      });
-
-      let status: "on_duty" | "scheduled" | "completed" | "swapped" = isThisSunday ? "on_duty" : "scheduled";
-      let notes = "";
-      let completedAt = null;
-      let effectiveTeam = defaultTeam;
-
-      if (override) {
-        status = override.status as any;
-        notes = override.notes || "";
-        completedAt = override.completed_at || null;
-        if (override.team_id) {
-          const matchedTeam = teamsWithMembers.find(t => t.id === override.team_id);
-          if (matchedTeam) effectiveTeam = matchedTeam;
-        }
-      }
-
-      return {
-        duty_date: sunDate,
-        date_formatted: formattedDate,
-        week_number: idx + 1,
-        is_this_sunday: isThisSunday,
-        is_next_sunday: isNextSunday,
-        status,
-        completed_at: completedAt,
-        notes,
-        team: effectiveTeam
-      };
-    });
-
-    res.json({
-      total_teams: teams.length,
-      cycle_interval_weeks: teams.length,
-      thisSunday: scheduleList[0] || null,
-      nextSunday: scheduleList[1] || null,
-      schedule: scheduleList
-    });
+    const result = await calculateDishwashingSchedule(Number(count) || 16);
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -641,17 +647,21 @@ router.post("/schedule/override", authMiddleware, async (req: AuthRequest, res: 
 // ====================================================
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const activeGroups = await db.all("SELECT id, name, leader_name, ministry_id FROM bible_study_groups ORDER BY id ASC");
-    const activeMinistries = await db.all(`
-      SELECT m.id, m.name, m.color,
-        (SELECT u.name FROM users u JOIN user_ministries um ON u.id = um.user_id WHERE um.ministry_id = m.id AND u.role_id = 2 LIMIT 1) AS coordinator_name
-      FROM ministries m ORDER BY m.id ASC
-    `);
+    const [scheduleRes, activeGroups, activeMinistries] = await Promise.all([
+      calculateDishwashingSchedule(16),
+      db.all("SELECT id, name, leader_name, ministry_id FROM bible_study_groups ORDER BY id ASC"),
+      db.all(`
+        SELECT m.id, m.name, m.color,
+          (SELECT u.name FROM users u JOIN user_ministries um ON u.id = um.user_id WHERE um.ministry_id = m.id AND u.role_id = 2 LIMIT 1) AS coordinator_name
+        FROM ministries m ORDER BY m.id ASC
+      `)
+    ]);
 
     res.json({
-      duties: [],
-      thisSunday: null,
-      nextSunday: null,
+      ...scheduleRes,
+      duties: scheduleRes.schedule,
+      thisSunday: scheduleRes.thisSunday,
+      nextSunday: scheduleRes.nextSunday,
       cycleOptions: {
         groups: activeGroups,
         ministries: activeMinistries
