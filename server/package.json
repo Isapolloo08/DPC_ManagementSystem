@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "copy:migrations": "powershell -Command \"if (!(Test-Path dist/db/migrations)) { New-Item -ItemType Directory -Force -Path dist/db/migrations }; Copy-Item -Path src/db/migrations/* -Destination dist/db/migrations -Force\"",
+    "copy:migrations": "node -e \"const fs=require('fs'); fs.mkdirSync('dist/db/migrations', {recursive:true}); fs.cpSync('src/db/migrations', 'dist/db/migrations', {recursive:true});\"",
     "build": "tsc && npm run copy:migrations",
     "start": "npm run build && node dist/index.js",
     "dev": "npm run build && node --watch dist/index.js",
