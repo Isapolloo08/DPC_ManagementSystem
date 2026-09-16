@@ -32,7 +32,7 @@ function getUpcomingSaturdays(count = 12): string[] {
   return saturdays;
 }
 
-// 1. Get all Duty Teams with member rosters
+// 1. Get all Duty Teams with member rosters (Optimized: 0 N+1 roundtrips)
 router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { ministry_id } = req.query;
@@ -52,27 +52,35 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
     }
     query += " ORDER BY dt.order_seq ASC, dt.id ASC";
 
-    const teams = await db.all(query, params);
-
-    // Fetch members for each team
-    const teamsWithMembers = await Promise.all(teams.map(async (team) => {
-      const teamMembers = await db.all(`
-        SELECT dtm.id as assignment_id, dtm.role as team_role, dtm.joined_at,
+    const [teams, allDutyMembers] = await Promise.all([
+      db.all(query, params),
+      db.all(`
+        SELECT dtm.id as assignment_id, dtm.team_id, dtm.role as team_role, dtm.joined_at,
                m.id as member_id, m.first_name, m.last_name, m.contact_phone, m.contact_email, m.photo_url,
                min.name as ministry_name
         FROM duty_team_members dtm
         JOIN members m ON dtm.member_id = m.id
         LEFT JOIN ministries min ON m.ministry_id = min.id
-        WHERE dtm.team_id = $1
         ORDER BY CASE WHEN dtm.role = 'Team Leader' THEN 1 ELSE 2 END, m.last_name ASC
-      `, [team.id]);
+      `)
+    ]);
 
+    // Group members by team_id in memory
+    const membersByTeam = new Map<number, any[]>();
+    for (const dtm of allDutyMembers) {
+      const tId = dtm.team_id;
+      if (!membersByTeam.has(tId)) membersByTeam.set(tId, []);
+      membersByTeam.get(tId)!.push(dtm);
+    }
+
+    const teamsWithMembers = teams.map((team) => {
+      const members = membersByTeam.get(team.id) || [];
       return {
         ...team,
-        members_count: teamMembers.length,
-        members: teamMembers
+        members_count: members.length,
+        members
       };
-    }));
+    });
 
     res.json(teamsWithMembers);
   } catch (err: any) {
@@ -263,17 +271,26 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
     }
     teamQuery += " ORDER BY order_seq ASC, id ASC";
 
-    const teams = await db.all(teamQuery, teamParams);
-
-    // Fetch team members for full context
-    const teamsWithMembers = await Promise.all(teams.map(async (t) => {
-      const m = await db.all(`
-        SELECT dtm.role, mem.first_name, mem.last_name, mem.contact_phone
+    const [teams, allDutyMembers] = await Promise.all([
+      db.all(teamQuery, teamParams),
+      db.all(`
+        SELECT dtm.team_id, dtm.role, mem.first_name, mem.last_name, mem.contact_phone
         FROM duty_team_members dtm
         JOIN members mem ON dtm.member_id = mem.id
-        WHERE dtm.team_id = $1
-      `, [t.id]);
-      return { ...t, members: m };
+      `)
+    ]);
+
+    // Group members by team_id in memory
+    const membersByTeam = new Map<number, any[]>();
+    for (const dtm of allDutyMembers) {
+      const tId = dtm.team_id;
+      if (!membersByTeam.has(tId)) membersByTeam.set(tId, []);
+      membersByTeam.get(tId)!.push(dtm);
+    }
+
+    const teamsWithMembers = teams.map((t) => ({
+      ...t,
+      members: membersByTeam.get(t.id) || []
     }));
 
     const upcomingSaturdays = getUpcomingSaturdays(numSaturdays);

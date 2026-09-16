@@ -537,33 +537,49 @@ router.get("/trends", async (req: Request, res: Response) => {
     } else {
       query += " ORDER BY id ASC";
     }
-    const ministries = await db.all(query, params);
-
-    const trends = await Promise.all(ministries.map(async (m) => {
-      const totalCheckins = await db.get<{ count: string | number }>(`
-        SELECT COUNT(*) as count FROM attendance WHERE ministry_id = $1
-      `, [m.id]);
-
-      const weeklyBreakdown = await db.all(`
-        SELECT to_char(checked_in_at, 'YYYY-IW') as week, COUNT(*) as count
+    const [ministries, totalCheckinsRows, weeklyRows] = await Promise.all([
+      db.all(query, params),
+      db.all(`
+        SELECT ministry_id, COUNT(*) as count
         FROM attendance
-        WHERE ministry_id = $1
-        GROUP BY week
+        ${ministry_id ? "WHERE ministry_id = $1" : ""}
+        GROUP BY ministry_id
+      `, params),
+      db.all(`
+        SELECT ministry_id, to_char(checked_in_at, 'YYYY-IW') as week, COUNT(*) as count
+        FROM attendance
+        ${ministry_id ? "WHERE ministry_id = $1" : ""}
+        GROUP BY ministry_id, week
         ORDER BY week DESC
-        LIMIT 6
-      `, [m.id]);
+      `, params)
+    ]);
 
+    const totalCheckinsByMin = new Map<number, number>();
+    for (const r of totalCheckinsRows) {
+      totalCheckinsByMin.set(r.ministry_id, Number(r.count || 0));
+    }
+
+    const weeklyByMin = new Map<number, any[]>();
+    for (const w of weeklyRows) {
+      if (!weeklyByMin.has(w.ministry_id)) weeklyByMin.set(w.ministry_id, []);
+      if (weeklyByMin.get(w.ministry_id)!.length < 6) {
+        weeklyByMin.get(w.ministry_id)!.push({
+          week: w.week,
+          count: Number(w.count || 0)
+        });
+      }
+    }
+
+    const trends = ministries.map((m) => {
+      const weekly = (weeklyByMin.get(m.id) || []).slice().reverse();
       return {
         ministry_id: m.id,
         ministry_name: m.name,
         color: m.color,
-        total_checkins: Number(totalCheckins?.count || 0),
-        weekly: weeklyBreakdown.reverse().map(w => ({
-          week: w.week,
-          count: Number(w.count)
-        }))
+        total_checkins: totalCheckinsByMin.get(m.id) || 0,
+        weekly
       };
-    }));
+    });
 
     res.json(trends);
   } catch (err: any) {

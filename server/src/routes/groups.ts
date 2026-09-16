@@ -43,32 +43,39 @@ router.get("/", async (req: Request, res: Response) => {
 
     query += " ORDER BY g.id ASC";
 
-    const [groups, dbTopics] = await Promise.all([
+    const [groups, dbTopics, allGroupMembers] = await Promise.all([
       db.all(query, params),
-      db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => [])
-    ]);
-
-    const detailed = await Promise.all(groups.map(async (g) => {
-      const members = await db.all(`
+      db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => []),
+      db.all(`
         SELECT bsm.*, m.first_name, m.last_name, m.contact_email, m.contact_phone
         FROM bible_study_members bsm
         LEFT JOIN members m ON bsm.member_id = m.id
-        WHERE bsm.group_id = $1
         ORDER BY bsm.joined_at ASC
-      `, [g.id]);
+      `)
+    ]);
 
+    // Group members by group_id in memory
+    const membersByGroup = new Map<number, any[]>();
+    for (const bsm of allGroupMembers) {
+      const gId = bsm.group_id;
+      if (!membersByGroup.has(gId)) membersByGroup.set(gId, []);
+      membersByGroup.get(gId)!.push({
+        ...bsm,
+        display_name: bsm.first_name ? `${bsm.first_name} ${bsm.last_name}` : bsm.member_name
+      });
+    }
+
+    const detailed = groups.map((g) => {
+      const members = membersByGroup.get(g.id) || [];
       const totalChapters = resolveTotalChapters(g.curriculum || "", dbTopics);
 
       return {
         ...g,
         curriculum_total_chapters: totalChapters,
-        current_member_count: Number(g.current_member_count || 0),
-        members: members.map(m => ({
-          ...m,
-          display_name: m.first_name ? `${m.first_name} ${m.last_name}` : m.member_name
-        }))
+        current_member_count: members.length || Number(g.current_member_count || 0),
+        members
       };
-    }));
+    });
 
     res.json(detailed);
   } catch (err: any) {

@@ -5,21 +5,28 @@ import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
-// List all funds with financial progress
+// List all funds with financial progress (Optimized: single aggregated query)
 router.get("/funds", async (req: Request, res: Response) => {
   try {
-    const funds = await db.all("SELECT * FROM funds ORDER BY id ASC");
+    const funds = await db.all(`
+      SELECT 
+        f.*,
+        COALESCE(d.total_raised, 0) as raised_amount,
+        COALESCE(d.donor_count, 0) as donor_count
+      FROM funds f
+      LEFT JOIN (
+        SELECT 
+          fund_id,
+          COALESCE(SUM(amount), 0) as total_raised,
+          COUNT(DISTINCT member_id) as donor_count
+        FROM donations
+        GROUP BY fund_id
+      ) d ON d.fund_id = f.id
+      ORDER BY f.id ASC
+    `);
 
-    const enriched = await Promise.all(funds.map(async (f) => {
-      const totalRaised = await db.get<{ total: string | number }>(`
-        SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE fund_id = $1
-      `, [f.id]);
-
-      const donorCount = await db.get<{ count: string | number }>(`
-        SELECT COUNT(DISTINCT member_id) as count FROM donations WHERE fund_id = $1
-      `, [f.id]);
-
-      const raised = Number(totalRaised?.total || 0);
+    const enriched = funds.map((f) => {
+      const raised = Number(f.raised_amount || 0);
       const target = Number(f.target_amount || 0);
       const percentage = target > 0 ? Math.min(100, Math.round((raised / target) * 100)) : 100;
 
@@ -27,10 +34,10 @@ router.get("/funds", async (req: Request, res: Response) => {
         ...f,
         target_amount: target,
         raised_amount: raised,
-        donor_count: Number(donorCount?.count || 0),
+        donor_count: Number(f.donor_count || 0),
         progress_percentage: percentage
       };
-    }));
+    });
 
     res.json(enriched);
   } catch (err: any) {

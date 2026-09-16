@@ -96,56 +96,43 @@ router.get("/summary", async (req: Request, res: Response) => {
       yearsList = [currentYear, ...yearsList];
     }
 
-    // 3. For each year, fetch breakdown metrics
-    const yearlyBreakdown = await Promise.all(
-      yearsList.map(async (year) => {
-        const [
-          attRow,
-          donRow,
-          evtRow,
-          dutyRow,
-          dishRow,
-          annRow,
-          memRow
-        ] = await Promise.all([
-          db.get<{ count: string }>(
-            "SELECT COUNT(*) as count FROM attendance WHERE EXTRACT(YEAR FROM checked_in_at) = $1",
-            [year]
-          ),
-          db.get<{ count: string; total_amount: string }>(
-            "SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total_amount FROM donations WHERE EXTRACT(YEAR FROM donated_at) = $1",
-            [year]
-          ),
-          db.get<{ count: string }>(
-            "SELECT COUNT(*) as count FROM events WHERE EXTRACT(YEAR FROM start_time) = $1",
-            [year]
-          ),
-          db.get<{ count: string }>(
-            "SELECT COUNT(*) as count FROM duty_schedules WHERE EXTRACT(YEAR FROM duty_date) = $1",
-            [year]
-          ),
-          db.get<{ count: string }>(
-            "SELECT COUNT(*) as count FROM dishwashing_roster WHERE EXTRACT(YEAR FROM duty_date) = $1",
-            [year]
-          ),
-          db.get<{ count: string }>(
-            "SELECT COUNT(*) as count FROM announcements WHERE EXTRACT(YEAR FROM created_at) = $1",
-            [year]
-          ),
-          db.get<{ count: string }>(
-            "SELECT COUNT(*) as count FROM members WHERE EXTRACT(YEAR FROM created_at) = $1",
-            [year]
-          )
-        ]);
+    // 3. Consolidated yearly breakdown metrics in single grouped batch queries
+    const [
+      attRows,
+      donRows,
+      evtRows,
+      dutyRows,
+      dishRows,
+      annRows,
+      memRows
+    ] = await Promise.all([
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM checked_in_at)::int as year, COUNT(*) as count FROM attendance WHERE checked_in_at IS NOT NULL GROUP BY year"),
+      db.all<{ year: number; count: string; total_amount: string }>("SELECT EXTRACT(YEAR FROM donated_at)::int as year, COUNT(*) as count, COALESCE(SUM(amount), 0) as total_amount FROM donations WHERE donated_at IS NOT NULL GROUP BY year"),
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM start_time)::int as year, COUNT(*) as count FROM events WHERE start_time IS NOT NULL GROUP BY year"),
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM duty_date)::int as year, COUNT(*) as count FROM duty_schedules WHERE duty_date IS NOT NULL GROUP BY year"),
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM duty_date)::int as year, COUNT(*) as count FROM dishwashing_roster WHERE duty_date IS NOT NULL GROUP BY year"),
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM created_at)::int as year, COUNT(*) as count FROM announcements WHERE created_at IS NOT NULL GROUP BY year"),
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM created_at)::int as year, COUNT(*) as count FROM members WHERE created_at IS NOT NULL GROUP BY year")
+    ]);
 
-        const attendance = parseInt(attRow?.count || "0", 10);
-        const donationsCount = parseInt(donRow?.count || "0", 10);
-        const donationsTotal = parseFloat(donRow?.total_amount || "0");
-        const events = parseInt(evtRow?.count || "0", 10);
-        const dutySchedules = parseInt(dutyRow?.count || "0", 10);
-        const dishwashingRoster = parseInt(dishRow?.count || "0", 10);
-        const announcements = parseInt(annRow?.count || "0", 10);
-        const membersCreated = parseInt(memRow?.count || "0", 10);
+    const attMap = new Map(attRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+    const donCountMap = new Map(donRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+    const donTotalMap = new Map(donRows.map(r => [r.year, parseFloat(r.total_amount || "0")]));
+    const evtMap = new Map(evtRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+    const dutyMap = new Map(dutyRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+    const dishMap = new Map(dishRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+    const annMap = new Map(annRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+    const memMap = new Map(memRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+
+    const yearlyBreakdown = yearsList.map((year) => {
+      const attendance = attMap.get(year) || 0;
+      const donationsCount = donCountMap.get(year) || 0;
+      const donationsTotal = donTotalMap.get(year) || 0;
+      const events = evtMap.get(year) || 0;
+      const dutySchedules = dutyMap.get(year) || 0;
+      const dishwashingRoster = dishMap.get(year) || 0;
+      const announcements = annMap.get(year) || 0;
+      const membersCreated = memMap.get(year) || 0;
 
         const totalRecords =
           attendance +
@@ -167,8 +154,7 @@ router.get("/summary", async (req: Request, res: Response) => {
           announcements,
           membersCreated
         };
-      })
-    );
+    });
 
     res.json({
       success: true,

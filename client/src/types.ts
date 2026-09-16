@@ -626,3 +626,37 @@ export interface BibleReadingStatsResponse {
   totalCompletionsCount: number;
   activeReadersCount: number;
 }
+
+export interface SyncCountComparison {
+  table: string;
+  label: string;
+  localCount: number;
+  cloudCount: number;
+}
+
+export interface CloudSyncStatusResponse {
+  configured: boolean;
+  cloudHost: string | null;
+  connected: boolean;
+  lastSyncedAt: string | null;
+  lastSyncedBy: string | null;
+  lastSyncDirection: "push" | "pull" | null;
+  comparison: SyncCountComparison[];
+  error?: string;
+}
+
+export interface CloudSyncProgressEvent {
+  step: string;
+  current: number;
+  total: number;
+  percentage: number;
+  message: string;
+}
+
+export interface CloudSyncResult {
+  success: boolean;
+  syncedTables: number;
+  totalRows: number;
+  message: string;
+}
+

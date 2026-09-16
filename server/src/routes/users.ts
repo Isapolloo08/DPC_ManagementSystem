@@ -72,23 +72,29 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
 
     query += " ORDER BY u.role_id ASC, u.name ASC";
 
-    const users = await db.all(query, params);
-
-    const formatted = await Promise.all(users.map(async (u) => {
-      const ministries = await db.all(`
-        SELECT m.id, m.name, m.color
+    const [users, allUserMinistries] = await Promise.all([
+      db.all(query, params),
+      db.all(`
+        SELECT um.user_id, m.id, m.name, m.color
         FROM user_ministries um
         JOIN ministries m ON um.ministry_id = m.id
-        WHERE um.user_id = $1
-      `, [u.id]);
+      `)
+    ]);
 
-      return {
-        ...u,
-        contact_phone: u.contact_phone || null,
-        contact_email: u.contact_email || u.email,
-        ministries,
-        linked_member_name: u.member_first_name ? `${u.member_first_name} ${u.member_last_name}` : null
-      };
+    // Group user ministries in memory
+    const ministriesByUser = new Map<number, any[]>();
+    for (const um of allUserMinistries) {
+      const uId = um.user_id;
+      if (!ministriesByUser.has(uId)) ministriesByUser.set(uId, []);
+      ministriesByUser.get(uId)!.push({ id: um.id, name: um.name, color: um.color });
+    }
+
+    const formatted = users.map((u) => ({
+      ...u,
+      contact_phone: u.contact_phone || null,
+      contact_email: u.contact_email || u.email,
+      ministries: ministriesByUser.get(u.id) || [],
+      linked_member_name: u.member_first_name ? `${u.member_first_name} ${u.member_last_name}` : null
     }));
 
     res.json(formatted);

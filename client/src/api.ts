@@ -7,7 +7,8 @@ import {
   DishwashingTeam, SundayDutyScheduleResponse,
   UpdateProfilePayload, ChangePasswordPayload, UserActivityStats,
   BackupYearStats, BackupSummaryResponse, BackupYearDetailsResponse, BackupPreviewResponse, BackupExportPayload,
-  BibleReadingProgressResponse, BibleReadingToggleResponse, BibleReadingStatsResponse
+  BibleReadingProgressResponse, BibleReadingToggleResponse, BibleReadingStatsResponse,
+  CloudSyncStatusResponse, CloudSyncResult
 } from "./types";
 
 export const normalizeServerUrl = (rawInput?: string | null): string => {
@@ -590,7 +591,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ day_keys, completed })
     }),
-  getBibleReadingStats: () => request<BibleReadingStatsResponse>("/bible-reading/stats")
+  getBibleReadingStats: () => request<BibleReadingStatsResponse>("/bible-reading/stats"),
+
+  // Supabase Cloud Sync & Offsite Replication
+  getCloudSyncStatus: () => request<CloudSyncStatusResponse>("/cloud-sync/status"),
+  saveCloudSyncConfig: (cloudDatabaseUrl: string) =>
+    request<{ success: boolean; message: string; host?: string }>("/cloud-sync/config", {
+      method: "POST",
+      body: JSON.stringify({ cloudDatabaseUrl })
+    }),
+  testCloudSyncConnection: (cloudDatabaseUrl?: string) =>
+    request<{ success: boolean; message: string; host?: string }>("/cloud-sync/test", {
+      method: "POST",
+      body: JSON.stringify({ cloudDatabaseUrl })
+    }),
+  pushToCloud: () => request<CloudSyncResult>("/cloud-sync/push", { method: "POST" }),
+  pullFromCloud: () => request<CloudSyncResult>("/cloud-sync/pull", { method: "POST" })
 };
 
 

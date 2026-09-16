@@ -48,42 +48,64 @@ router.get("/suggest", async (req: Request, res: Response) => {
   }
 });
 
-// List all ministries with summary metrics
+// List all ministries with summary metrics (Optimized: 0 N+1 roundtrips)
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const ministries = await db.all("SELECT * FROM ministries ORDER BY id ASC");
+    const ministriesSql = `
+      SELECT 
+        m.*,
+        COALESCE(mem.member_count, 0) as active_members_count,
+        COALESCE(att.today_checkins, 0) as today_checkins_count
+      FROM ministries m
+      LEFT JOIN (
+        SELECT ministry_id, COUNT(*) as member_count
+        FROM members
+        WHERE status = 'active'
+        GROUP BY ministry_id
+      ) mem ON mem.ministry_id = m.id
+      LEFT JOIN (
+        SELECT ministry_id, COUNT(*) as today_checkins
+        FROM attendance
+        WHERE checked_in_at::date = CURRENT_DATE
+        GROUP BY ministry_id
+      ) att ON att.ministry_id = m.id
+      ORDER BY m.id ASC
+    `;
 
-    const summary = await Promise.all(ministries.map(async (m) => {
-      const memberCount = await db.get<{ count: string | number }>(`
-        SELECT COUNT(*) as count FROM members WHERE ministry_id = $1 AND status = 'active'
-      `, [m.id]);
+    const userMinistriesSql = `
+      SELECT u.id, u.name, u.email, u.role_id, um.ministry_id
+      FROM users u
+      JOIN user_ministries um ON u.id = um.user_id
+      WHERE u.role_id IN (2, 3)
+    `;
 
-      const coordinators = await db.all(`
-        SELECT u.id, u.name, u.email
-        FROM users u
-        JOIN user_ministries um ON u.id = um.user_id
-        WHERE um.ministry_id = $1 AND u.role_id = 2
-      `, [m.id]);
+    const [ministries, staffUsers] = await Promise.all([
+      db.all(ministriesSql),
+      db.all(userMinistriesSql)
+    ]);
 
-      const volunteers = await db.all(`
-        SELECT u.id, u.name, u.email
-        FROM users u
-        JOIN user_ministries um ON u.id = um.user_id
-        WHERE um.ministry_id = $1 AND u.role_id = 3
-      `, [m.id]);
+    // Group staff users in memory by ministry_id
+    const coordinatorsByMin = new Map<number, any[]>();
+    const volunteersByMin = new Map<number, any[]>();
 
-      const todayCheckins = await db.get<{ count: string | number }>(`
-        SELECT COUNT(*) as count FROM attendance
-        WHERE ministry_id = $1 AND DATE(checked_in_at) = CURRENT_DATE
-      `, [m.id]);
+    for (const u of staffUsers) {
+      const minId = u.ministry_id;
+      const userItem = { id: u.id, name: u.name, email: u.email };
+      if (u.role_id === 2) {
+        if (!coordinatorsByMin.has(minId)) coordinatorsByMin.set(minId, []);
+        coordinatorsByMin.get(minId)!.push(userItem);
+      } else if (u.role_id === 3) {
+        if (!volunteersByMin.has(minId)) volunteersByMin.set(minId, []);
+        volunteersByMin.get(minId)!.push(userItem);
+      }
+    }
 
-      return {
-        ...m,
-        active_members_count: Number(memberCount?.count || 0),
-        coordinators,
-        volunteers,
-        today_checkins_count: Number(todayCheckins?.count || 0)
-      };
+    const summary = ministries.map((m) => ({
+      ...m,
+      active_members_count: Number(m.active_members_count || 0),
+      coordinators: coordinatorsByMin.get(m.id) || [],
+      volunteers: volunteersByMin.get(m.id) || [],
+      today_checkins_count: Number(m.today_checkins_count || 0)
     }));
 
     res.json(summary);

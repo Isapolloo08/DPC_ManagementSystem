@@ -3,9 +3,10 @@ import { createPortal } from "react-dom";
 import {
   X, AlertCircle, Monitor, Save, ChevronDown, ChevronUp,
   Link2, CheckCircle2, XCircle, RefreshCw, Server, Wifi, Globe,
-  Activity, Cpu, Copy, Check, Zap, ShieldCheck, HelpCircle
+  Activity, Cpu, Copy, Check, Zap, ShieldCheck, HelpCircle, Cloud
 } from "lucide-react";
 import { getApiBase, normalizeServerUrl } from "../../api";
+import { CloudSyncModal } from "../cloud/CloudSyncModal";
 
 interface SystemConfigurationModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
   } | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(true);
+  const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
 
   useEffect(() => {
     const savedIp = localStorage.getItem("dpc_server_ip") || "";
@@ -378,9 +380,15 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
 
         {/* Modal Footer with Close & Quick Actions */}
         <div className="p-4 border-t border-indigo-100/80 bg-slate-50/70 flex items-center justify-between gap-3 relative z-10">
-          <p className="text-[10px] text-charcoal/50 hidden sm:block font-medium">
-            Daet Presbyterian Church • ChMS Network Gateway
-          </p>
+          <button
+            type="button"
+            onClick={() => setIsCloudSyncOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100/70 text-indigo-900 border border-indigo-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+          >
+            <Cloud className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Supabase Cloud Sync</span>
+          </button>
+          
           <button
             type="button"
             onClick={onClose}
@@ -391,6 +399,11 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
         </div>
 
       </div>
+
+      <CloudSyncModal
+        isOpen={isCloudSyncOpen}
+        onClose={() => setIsCloudSyncOpen(false)}
+      />
     </div>,
     document.body
   );

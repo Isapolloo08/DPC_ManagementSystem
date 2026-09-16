@@ -54,27 +54,35 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
     }
     query += " ORDER BY dt.order_seq ASC, dt.id ASC";
 
-    const teams = await db.all(query, params);
-
-    // Fetch members for each team
-    const teamsWithMembers = await Promise.all(teams.map(async (team) => {
-      const teamMembers = await db.all(`
-        SELECT dtm.id as assignment_id, dtm.role as team_role, dtm.joined_at,
+    const [teams, allDishMembers] = await Promise.all([
+      db.all(query, params),
+      db.all(`
+        SELECT dtm.id as assignment_id, dtm.team_id, dtm.role as team_role, dtm.joined_at,
                m.id as member_id, m.first_name, m.last_name, m.contact_phone, m.contact_email, m.photo_url,
                min.name as ministry_name
         FROM dishwashing_team_members dtm
         JOIN members m ON dtm.member_id = m.id
         LEFT JOIN ministries min ON m.ministry_id = min.id
-        WHERE dtm.team_id = $1
         ORDER BY CASE WHEN dtm.role = 'Team Leader' THEN 1 ELSE 2 END, m.last_name ASC
-      `, [team.id]);
+      `)
+    ]);
 
+    // Group members by team_id in memory
+    const membersByTeam = new Map<number, any[]>();
+    for (const dtm of allDishMembers) {
+      const tId = dtm.team_id;
+      if (!membersByTeam.has(tId)) membersByTeam.set(tId, []);
+      membersByTeam.get(tId)!.push(dtm);
+    }
+
+    const teamsWithMembers = teams.map((team) => {
+      const members = membersByTeam.get(team.id) || [];
       return {
         ...team,
-        members_count: teamMembers.length,
-        members: teamMembers
+        members_count: members.length,
+        members
       };
-    }));
+    });
 
     res.json(teamsWithMembers);
   } catch (err: any) {
@@ -381,25 +389,34 @@ router.delete("/teams/:id/members/:memberId", authMiddleware, async (req: AuthRe
 export async function calculateDishwashingSchedule(count = 16) {
   const numSundays = Math.min(Number(count) || 16, 26);
 
-  const teams = await db.all(`
-    SELECT dt.*, 
-           min.name as ministry_name, min.color as ministry_color,
-           bg.name as group_name, bg.meeting_day as group_meeting_day
-    FROM dishwashing_teams dt
-    LEFT JOIN ministries min ON dt.ministry_id = min.id
-    LEFT JOIN bible_study_groups bg ON dt.biblestudy_group_id = bg.id
-    ORDER BY dt.order_seq ASC, dt.id ASC
-  `);
-
-  // Fetch team members
-  const teamsWithMembers = await Promise.all(teams.map(async (t) => {
-    const m = await db.all(`
-      SELECT dtm.role as team_role, mem.first_name, mem.last_name, mem.contact_phone
+  const [teams, allDishMembers] = await Promise.all([
+    db.all(`
+      SELECT dt.*, 
+             min.name as ministry_name, min.color as ministry_color,
+             bg.name as group_name, bg.meeting_day as group_meeting_day
+      FROM dishwashing_teams dt
+      LEFT JOIN ministries min ON dt.ministry_id = min.id
+      LEFT JOIN bible_study_groups bg ON dt.biblestudy_group_id = bg.id
+      ORDER BY dt.order_seq ASC, dt.id ASC
+    `),
+    db.all(`
+      SELECT dtm.team_id, dtm.role as team_role, mem.first_name, mem.last_name, mem.contact_phone
       FROM dishwashing_team_members dtm
       JOIN members mem ON dtm.member_id = mem.id
-      WHERE dtm.team_id = $1
-    `, [t.id]);
-    return { ...t, members: m };
+    `)
+  ]);
+
+  // Group members by team_id in memory
+  const membersByTeam = new Map<number, any[]>();
+  for (const dtm of allDishMembers) {
+    const tId = dtm.team_id;
+    if (!membersByTeam.has(tId)) membersByTeam.set(tId, []);
+    membersByTeam.get(tId)!.push(dtm);
+  }
+
+  const teamsWithMembers = teams.map((t) => ({
+    ...t,
+    members: membersByTeam.get(t.id) || []
   }));
 
   const upcomingSundays = getUpcomingSundays(numSundays);

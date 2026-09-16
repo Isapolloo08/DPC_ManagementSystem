@@ -190,33 +190,39 @@ router.post("/login", async (req: Request, res: Response) => {
   }
 });
 
-// Demo accounts endpoint for fast testing & evaluation
+// Demo accounts endpoint for fast testing & evaluation (Optimized: 0 N+1 roundtrips)
 router.get("/demo-users", async (req: Request, res: Response) => {
   try {
-    const users = await db.all(`
-      SELECT u.id, u.name, u.username, u.email, u.role_id, r.name as role_name
-      FROM users u
-      JOIN roles r ON u.role_id = r.id
-      ORDER BY u.role_id ASC
-    `);
-
-    const formatted = await Promise.all(users.map(async (u) => {
-      const ministries = await db.all(`
-        SELECT m.id, m.name, m.color
+    const [users, allUserMinistries] = await Promise.all([
+      db.all(`
+        SELECT u.id, u.name, u.username, u.email, u.role_id, r.name as role_name
+        FROM users u
+        JOIN roles r ON u.role_id = r.id
+        ORDER BY u.role_id ASC
+      `),
+      db.all(`
+        SELECT um.user_id, m.id, m.name, m.color
         FROM user_ministries um
         JOIN ministries m ON um.ministry_id = m.id
-        WHERE um.user_id = $1
-      `, [u.id]);
+      `)
+    ]);
 
-      return {
-        id: u.id,
-        name: u.name,
-        username: u.username,
-        email: u.email,
-        role_id: u.role_id,
-        role_name: u.role_name,
-        ministries
-      };
+    // Group user ministries in memory
+    const ministriesByUser = new Map<number, any[]>();
+    for (const um of allUserMinistries) {
+      const uId = um.user_id;
+      if (!ministriesByUser.has(uId)) ministriesByUser.set(uId, []);
+      ministriesByUser.get(uId)!.push({ id: um.id, name: um.name, color: um.color });
+    }
+
+    const formatted = users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      username: u.username,
+      email: u.email,
+      role_id: u.role_id,
+      role_name: u.role_name,
+      ministries: ministriesByUser.get(u.id) || []
     }));
 
     res.json(formatted);

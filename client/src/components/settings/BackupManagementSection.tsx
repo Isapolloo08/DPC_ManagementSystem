@@ -6,11 +6,13 @@ import {
   ArrowRight, Lock
 } from "lucide-react";
 import { api } from "../../api";
-import { BackupSummaryResponse, BackupYearStats } from "../../types";
+import { BackupSummaryResponse, BackupYearStats, CloudSyncStatusResponse } from "../../types";
 import { DataInspectionModal } from "./DataInspectionModal";
 import { PurgeYearModal } from "./PurgeYearModal";
 import { RestoreModal } from "./RestoreModal";
 import { BackupModal } from "./BackupModal";
+import { CloudSyncModal } from "../cloud/CloudSyncModal";
+import { Cloud, ArrowUpCircle } from "lucide-react";
 
 interface BackupManagementSectionProps {
   onShowToast: (message: string, type?: "success" | "error") => void;
@@ -38,6 +40,10 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
   // Restore Modal State
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
 
+  // Cloud Sync State
+  const [isCloudSyncModalOpen, setIsCloudSyncModalOpen] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatusResponse | null>(null);
+
   // Container Selection state
   const [containerBackupYear, setContainerBackupYear] = useState<string>("all");
   const [containerPurgeYear, setContainerPurgeYear] = useState<string>("");
@@ -49,8 +55,12 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
   const loadSummary = async () => {
     try {
       setLoading(true);
-      const res = await api.getBackupSummary();
+      const [res, cloudRes] = await Promise.all([
+        api.getBackupSummary(),
+        api.getCloudSyncStatus().catch(() => null)
+      ]);
       setSummary(res);
+      if (cloudRes) setCloudSyncStatus(cloudRes);
       if (res.yearlyBreakdown.length > 0 && !containerPurgeYear) {
         setContainerPurgeYear(String(res.yearlyBreakdown[0].year));
       }
@@ -207,7 +217,55 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
         )}
       </div>
 
-      {/* 2. THREE PRIMARY ACTION CONTAINERS (BACKUP, RESTORE, DELETE) */}
+      {/* 2. SUPABASE CLOUD SYNC & OFFSITE REPLICATION HUB */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 border-2 border-indigo-500/30 rounded-3xl p-6 lg:p-7 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
+            <Cloud className="w-6 h-6 text-indigo-300 animate-pulse" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h3 className="text-base font-black text-white">Supabase Cloud Sync & Offsite Replication</h3>
+              {cloudSyncStatus?.connected ? (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Cloud Connected
+                </span>
+              ) : cloudSyncStatus?.configured ? (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                  Cloud Offline
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/10 text-indigo-200 border border-white/10">
+                  Setup Required
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-indigo-200/80 leading-relaxed max-w-xl">
+              Use LAN locally during Sunday services with zero lag. When ready, push all new members, attendance, and donations to Supabase Cloud with one click.
+            </p>
+            {cloudSyncStatus?.lastSyncedAt && (
+              <div className="text-[11px] text-indigo-300/70 font-medium pt-0.5">
+                Last synced: <strong className="text-white">{new Date(cloudSyncStatus.lastSyncedAt).toLocaleString()}</strong>
+                {cloudSyncStatus.lastSyncedBy ? ` by ${cloudSyncStatus.lastSyncedBy}` : ""}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsCloudSyncModalOpen(true)}
+            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 hover:from-indigo-400 hover:to-indigo-600 text-white font-black text-xs shadow-lg shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer border border-indigo-300/30"
+          >
+            <ArrowUpCircle className="w-4 h-4 text-indigo-200" />
+            <span>Open Cloud Sync Manager</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. THREE PRIMARY ACTION CONTAINERS (BACKUP, RESTORE, DELETE) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* CONTAINER 1: BACKUP HUB */}
@@ -513,6 +571,16 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
         onClose={() => setIsRestoreModalOpen(false)}
         onRestoreSuccess={() => {
           onShowToast("Database successfully restored from backup!");
+          loadSummary();
+        }}
+      />
+
+      {/* 5. Supabase Cloud Sync Modal */}
+      <CloudSyncModal
+        isOpen={isCloudSyncModalOpen}
+        onClose={() => setIsCloudSyncModalOpen(false)}
+        onSyncComplete={() => {
+          onShowToast("Supabase Cloud synchronization complete!");
           loadSummary();
         }}
       />

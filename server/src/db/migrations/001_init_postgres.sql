@@ -273,12 +273,20 @@ CREATE TABLE IF NOT EXISTS duty_schedules (
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_members_ministry_id ON members(ministry_id);
 CREATE INDEX IF NOT EXISTS idx_members_household_id ON members(household_id);
+CREATE INDEX IF NOT EXISTS idx_members_status ON members(status);
+CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_ministry_id ON attendance(ministry_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(checked_in_at);
+CREATE INDEX IF NOT EXISTS idx_attendance_date_cast ON attendance((checked_in_at::date));
+CREATE INDEX IF NOT EXISTS idx_donations_fund_id ON donations(fund_id);
 CREATE INDEX IF NOT EXISTS idx_donations_member_id ON donations(member_id);
 CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
 CREATE INDEX IF NOT EXISTS idx_lookups_type ON system_lookups(type);
 CREATE INDEX IF NOT EXISTS idx_duty_teams_ministry ON duty_teams(ministry_id);
+CREATE INDEX IF NOT EXISTS idx_duty_team_members_team ON duty_team_members(team_id);
 CREATE INDEX IF NOT EXISTS idx_duty_schedules_date ON duty_schedules(duty_date);
+CREATE INDEX IF NOT EXISTS idx_user_ministries_user ON user_ministries(user_id);
+CREATE INDEX IF NOT EXISTS idx_bible_study_members_grp ON bible_study_members(group_id);
 
 -- 23. Dishwashing Roster (Sunday Fellowship Meal Rotation)
 CREATE TABLE IF NOT EXISTS dishwashing_roster (

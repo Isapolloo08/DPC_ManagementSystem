@@ -32,10 +32,12 @@ const connectionString = cleanDbConnectionString(process.env.DATABASE_URL);
 const isSupabaseOrRemote = connectionString.includes("supabase") || connectionString.includes("render") || connectionString.includes("sslmode=require") || process.env.NODE_ENV === "production";
 
 export const sql = postgres(connectionString, {
-  max: 10,
-  idle_timeout: 20,
-  connect_timeout: 15,
+  max: 20,
+  idle_timeout: 120,
+  connect_timeout: 20,
+  max_lifetime: 60 * 30, // 30 minutes
   ssl: isSupabaseOrRemote ? "require" : undefined,
+  prepare: false, // Prevents statement cache issues on PgBouncer / Supabase transaction poolers
   onnotice: () => {}, // Silence harmless PostgreSQL NOTICE logs
   transform: {
     undefined: null
@@ -395,6 +397,31 @@ export async function initSchema() {
       }
     } catch (e: any) {
       console.warn("Dishwashing table check note:", e.message);
+    }
+
+    // 10. Ensure high-performance indexes exist across all core tables
+    try {
+      await sql.unsafe(`
+        CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
+        CREATE INDEX IF NOT EXISTS idx_attendance_ministry_id ON attendance(ministry_id);
+        CREATE INDEX IF NOT EXISTS idx_attendance_date_cast ON attendance((checked_in_at::date));
+        CREATE INDEX IF NOT EXISTS idx_attendance_checked_in_at ON attendance(checked_in_at);
+        CREATE INDEX IF NOT EXISTS idx_members_household_id ON members(household_id);
+        CREATE INDEX IF NOT EXISTS idx_members_ministry_id ON members(ministry_id);
+        CREATE INDEX IF NOT EXISTS idx_members_status ON members(status);
+        CREATE INDEX IF NOT EXISTS idx_user_ministries_user_id ON user_ministries(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_ministries_ministry_id ON user_ministries(ministry_id);
+        CREATE INDEX IF NOT EXISTS idx_duty_team_members_team_id ON duty_team_members(team_id);
+        CREATE INDEX IF NOT EXISTS idx_duty_team_members_member_id ON duty_team_members(member_id);
+        CREATE INDEX IF NOT EXISTS idx_dishwashing_team_members_team_id ON dishwashing_team_members(team_id);
+        CREATE INDEX IF NOT EXISTS idx_dishwashing_team_members_member_id ON dishwashing_team_members(member_id);
+        CREATE INDEX IF NOT EXISTS idx_bible_study_members_group_id ON bible_study_members(group_id);
+        CREATE INDEX IF NOT EXISTS idx_donations_fund_id ON donations(fund_id);
+        CREATE INDEX IF NOT EXISTS idx_donations_member_id ON donations(member_id);
+        CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
+      `);
+    } catch (idxErr: any) {
+      console.warn("Index check note:", idxErr.message);
     }
   } catch (err: any) {
     console.error("⚠️ PostgreSQL auto-init error:", {
