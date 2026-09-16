@@ -170,7 +170,7 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
     }
     if (biblestudy_group_id) {
       const bsGroupMembers = await db.all<{ member_id: number }>(
-        "SELECT member_id FROM biblestudy_group_members WHERE group_id = $1",
+        "SELECT member_id FROM bible_study_members WHERE group_id = $1",
         [biblestudy_group_id]
       );
       bsGroupMembers.forEach(bm => bm.member_id && allMemberIdsToLink.add(Number(bm.member_id)));
@@ -272,7 +272,7 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
     }
     if (biblestudy_group_id) {
       const bsGroupMembers = await db.all<{ member_id: number }>(
-        "SELECT member_id FROM biblestudy_group_members WHERE group_id = $1",
+        "SELECT member_id FROM bible_study_members WHERE group_id = $1",
         [biblestudy_group_id]
       );
       bsGroupMembers.forEach(bm => bm.member_id && allMemberIdsToLink.add(Number(bm.member_id)));

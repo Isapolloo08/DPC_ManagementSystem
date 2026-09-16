@@ -277,7 +277,6 @@ CREATE INDEX IF NOT EXISTS idx_members_status ON members(status);
 CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_ministry_id ON attendance(ministry_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(checked_in_at);
-CREATE INDEX IF NOT EXISTS idx_attendance_date_cast ON attendance((checked_in_at::date));
 CREATE INDEX IF NOT EXISTS idx_donations_fund_id ON donations(fund_id);
 CREATE INDEX IF NOT EXISTS idx_donations_member_id ON donations(member_id);
 CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);

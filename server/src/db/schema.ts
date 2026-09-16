@@ -404,7 +404,6 @@ export async function initSchema() {
       await sql.unsafe(`
         CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
         CREATE INDEX IF NOT EXISTS idx_attendance_ministry_id ON attendance(ministry_id);
-        CREATE INDEX IF NOT EXISTS idx_attendance_date_cast ON attendance((checked_in_at::date));
         CREATE INDEX IF NOT EXISTS idx_attendance_checked_in_at ON attendance(checked_in_at);
         CREATE INDEX IF NOT EXISTS idx_members_household_id ON members(household_id);
         CREATE INDEX IF NOT EXISTS idx_members_ministry_id ON members(ministry_id);
