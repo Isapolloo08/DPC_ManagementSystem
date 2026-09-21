@@ -2,6 +2,29 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Ministry } from "../types";
 import { api } from "../api";
 import { useSocketEvent } from "../socket";
+import { SessionExpiredModal } from "../components/common/SessionExpiredModal";
+
+export function isJwtExpired(token: string | null): boolean {
+  if (!token) return true;
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return true;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(jsonPayload);
+    if (!payload.exp) return false;
+    // Expired if current time >= exp in ms
+    return payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
 
 interface AuthContextType {
   user: User | null;
@@ -36,6 +59,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [hasAdmin, setHasAdmin] = useState<boolean>(false);
   const [selectedMinistryId, setSelectedMinistryId] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isSessionExpiredModalOpen, setIsSessionExpiredModalOpen] = useState<boolean>(false);
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string>("");
+
+  const handleGoToLogin = () => {
+    localStorage.removeItem("chms_token");
+    setToken(null);
+    setUser(null);
+    setSelectedMinistryId(null);
+    setIsSessionExpiredModalOpen(false);
+  };
 
   const fetchInitial = async () => {
     try {
@@ -52,18 +85,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const savedToken = localStorage.getItem("chms_token");
       if (savedToken) {
-        try {
-          const res = await api.getMe();
-          setUser(res.user);
-          if (res.user.ministries && res.user.ministries.length > 0 && res.user.role_name !== "Admin") {
-            setSelectedMinistryId(res.user.ministries[0].id);
-          } else {
-            setSelectedMinistryId(null);
+        if (isJwtExpired(savedToken)) {
+          setSessionExpiredMessage("Your 3-day login session has expired. Please log in again to continue.");
+          setIsSessionExpiredModalOpen(true);
+        } else {
+          try {
+            const res = await api.getMe();
+            setUser(res.user);
+            if (res.user.ministries && res.user.ministries.length > 0 && res.user.role_name !== "Admin") {
+              setSelectedMinistryId(res.user.ministries[0].id);
+            } else {
+              setSelectedMinistryId(null);
+            }
+          } catch {
+            setSessionExpiredMessage("Your session is invalid or expired. Please log in again.");
+            setIsSessionExpiredModalOpen(true);
           }
-        } catch {
-          localStorage.removeItem("chms_token");
-          setToken(null);
-          setUser(null);
         }
       }
     } catch (err) {
@@ -75,6 +112,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     fetchInitial();
+  }, []);
+
+  // Listen for session expiration events & periodic expiration checks
+  useEffect(() => {
+    const handleSessionExpiredEvent = (e: any) => {
+      const msg = e.detail?.message || "Your 3-day login session has expired. Please log in again to continue.";
+      setSessionExpiredMessage(msg);
+      setIsSessionExpiredModalOpen(true);
+    };
+
+    const checkCurrentTokenExpiration = () => {
+      const currentToken = localStorage.getItem("chms_token");
+      if (currentToken && isJwtExpired(currentToken)) {
+        setSessionExpiredMessage("Your 3-day login session has expired. Please log in again to continue.");
+        setIsSessionExpiredModalOpen(true);
+      }
+    };
+
+    window.addEventListener("auth:session-expired", handleSessionExpiredEvent);
+    window.addEventListener("focus", checkCurrentTokenExpiration);
+    const timer = setInterval(checkCurrentTokenExpiration, 20000); // Check every 20 seconds
+
+    return () => {
+      window.removeEventListener("auth:session-expired", handleSessionExpiredEvent);
+      window.removeEventListener("focus", checkCurrentTokenExpiration);
+      clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -214,6 +278,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
+      <SessionExpiredModal
+        isOpen={isSessionExpiredModalOpen}
+        onGoToLogin={handleGoToLogin}
+        message={sessionExpiredMessage}
+      />
     </AuthContext.Provider>
   );
 };

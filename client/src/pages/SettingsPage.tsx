@@ -247,13 +247,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       return;
     }
 
+    const dup = lookups.find(l =>
+      l.type === lookupFormData.type &&
+      l.name.toLowerCase().trim() === lookupFormData.name.toLowerCase().trim() &&
+      l.id !== editingLookup?.id
+    );
+    if (dup) {
+      showToast("A lookup item with this name already exists in this category", "error");
+      return;
+    }
+
     try {
+      const payload = {
+        ...lookupFormData,
+        name: lookupFormData.name.trim(),
+        description: lookupFormData.description ? lookupFormData.description.trim() : ""
+      };
+
       if (editingLookup) {
-        await api.updateLookup(editingLookup.id, lookupFormData);
-        showToast(`'${lookupFormData.name}' updated successfully!`);
+        await api.updateLookup(editingLookup.id, payload);
+        showToast(`'${lookupFormData.name.trim()}' updated successfully!`);
       } else {
-        await api.createLookup(lookupFormData);
-        showToast(`'${lookupFormData.name}' created successfully!`);
+        await api.createLookup(payload);
+        showToast(`'${lookupFormData.name.trim()}' created successfully!`);
       }
       setIsLookupModalOpen(false);
       const updatedLookups = await api.getLookups();
@@ -318,19 +334,38 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       return;
     }
 
+    const dupMin = ministries.find(m =>
+      m.name.toLowerCase().trim() === ministryFormData.name.toLowerCase().trim() &&
+      m.id !== editingMinistry?.id
+    );
+    if (dupMin) {
+      showToast("A ministry with this name already exists", "error");
+      return;
+    }
+
+    const minAgeVal = ministryFormData.min_age === "" ? null : Number(ministryFormData.min_age);
+    const maxAgeVal = ministryFormData.max_age === "" ? null : Number(ministryFormData.max_age);
+
+    if (minAgeVal !== null && maxAgeVal !== null && minAgeVal > maxAgeVal) {
+      showToast("Minimum age cannot be greater than maximum age", "error");
+      return;
+    }
+
     try {
       const payload = {
         ...ministryFormData,
-        min_age: ministryFormData.min_age === "" ? null : Number(ministryFormData.min_age),
-        max_age: ministryFormData.max_age === "" ? null : Number(ministryFormData.max_age)
+        name: ministryFormData.name.trim(),
+        description: ministryFormData.description ? ministryFormData.description.trim() : "",
+        min_age: minAgeVal,
+        max_age: maxAgeVal
       };
 
       if (editingMinistry) {
         await api.updateMinistry(editingMinistry.id, payload);
-        showToast(`Ministry '${ministryFormData.name}' updated successfully!`);
+        showToast(`Ministry '${ministryFormData.name.trim()}' updated successfully!`);
       } else {
         await api.createMinistry(payload);
-        showToast(`Ministry '${ministryFormData.name}' created successfully!`);
+        showToast(`Ministry '${ministryFormData.name.trim()}' created successfully!`);
       }
       setIsMinistryModalOpen(false);
       const updated = await api.getMinistries();
@@ -369,18 +404,33 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       return;
     }
 
+    const dupFund = funds.find(f =>
+      f.name.toLowerCase().trim() === fundFormData.name.toLowerCase().trim() &&
+      f.id !== editingFund?.id
+    );
+    if (dupFund) {
+      showToast("A fund with this name already exists", "error");
+      return;
+    }
+
+    if (Number(fundFormData.target_amount) < 0) {
+      showToast("Target amount cannot be negative", "error");
+      return;
+    }
+
     try {
       const payload = {
-        ...fundFormData,
+        name: fundFormData.name.trim(),
+        description: fundFormData.description ? fundFormData.description.trim() : "",
         target_amount: Number(fundFormData.target_amount) || 0
       };
 
       if (editingFund) {
         await api.updateFund(editingFund.id, payload);
-        showToast(`Fund '${fundFormData.name}' updated successfully!`);
+        showToast(`Fund '${fundFormData.name.trim()}' updated successfully!`);
       } else {
         await api.createFund(payload);
-        showToast(`Fund '${fundFormData.name}' created successfully!`);
+        showToast(`Fund '${fundFormData.name.trim()}' created successfully!`);
       }
       setIsFundModalOpen(false);
       const updated = await api.getFunds();
@@ -495,6 +545,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           </button>
         </div>
       )}
+
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="space-y-2 relative z-10">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <Sliders className="w-3.5 h-3.5 text-amber-300" />
+              <span>Church Configuration & Master Tables</span>
+            </div>
+          </div>
+          <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight">
+            System Settings & Lookups
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
+            Configure church profile, ministry master lookups, member statuses, rooms & sanctuaries, relationships, and financial funds.
+          </p>
+        </div>
+      </div>
 
       {/* TOP: Settings Navigation Tabs with Left & Right Scroll Buttons + Drag-to-Scroll */}
       <div className="relative flex items-center gap-2 group/tabstrip bg-slate-50/70 p-1.5 rounded-2xl border border-indigo-100/60 shadow-2xs">

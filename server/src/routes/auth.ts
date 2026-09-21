@@ -123,7 +123,7 @@ router.post("/register", async (req: Request, res: Response) => {
         : `New user registered: ${name.trim()} (${cleanUsername || email.trim()}) with role ${user?.role_name || assignedRoleId}`
     );
 
-    const token = jwt.sign({ id: newUserId }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: newUserId }, JWT_SECRET, { expiresIn: "3d" });
 
     res.status(201).json({
       token,
@@ -171,7 +171,7 @@ router.post("/login", async (req: Request, res: Response) => {
       WHERE um.user_id = $1
     `, [user.id]);
 
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "3d" });
 
     res.json({
       token,
@@ -253,7 +253,7 @@ router.post("/switch-demo", async (req: Request, res: Response) => {
       WHERE um.user_id = $1
     `, [user.id]);
 
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "3d" });
 
     res.json({
       token,

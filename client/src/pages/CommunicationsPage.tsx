@@ -78,9 +78,20 @@ export const CommunicationsPage: React.FC = () => {
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!announceForm.title.trim()) {
+      showAlert("Title Required", "Please enter an announcement title.", "warning");
+      return;
+    }
+    if (!announceForm.body.trim()) {
+      showAlert("Message Body Required", "Please enter the announcement message content.", "warning");
+      return;
+    }
+
     try {
       await api.createAnnouncement({
         ...announceForm,
+        title: announceForm.title.trim(),
+        body: announceForm.body.trim(),
         ministry_id: announceForm.ministry_id ? Number(announceForm.ministry_id) : null
       });
       setIsAnnounceModalOpen(false);
@@ -100,21 +111,26 @@ export const CommunicationsPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="relative overflow-hidden bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-200/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
-              <Megaphone className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-charcoal tracking-tight">
-              Church Communications & Bulletins
-            </h1>
-            <span className="px-3 py-1 rounded-full text-xs font-black bg-indigo-50 text-indigo-900 border border-indigo-200/80 shadow-2xs">
-              Church-Wide Board
-            </span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <Megaphone className="w-3.5 h-3.5 text-amber-300" />
+              <span>Church Broadcasts & Bulletins</span>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Church Communications & Bulletins
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
             Ministry-scoped broadcasts, pastoral alerts, and official church announcements.
           </p>
         </div>

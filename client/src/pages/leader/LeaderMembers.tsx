@@ -30,6 +30,10 @@ export const LeaderMembers: React.FC<LeaderMembersProps> = ({
       name.toLowerCase().includes(memberSearch.toLowerCase()) ||
       (d.contact_phone && d.contact_phone.includes(memberSearch))
     );
+  }).sort((a, b) => {
+    const nameA = (a.member_name || `${a.first_name || ""} ${a.last_name || ""}`).trim().toLowerCase();
+    const nameB = (b.member_name || `${b.first_name || ""} ${b.last_name || ""}`).trim().toLowerCase();
+    return nameA.localeCompare(nameB);
   });
 
   if (!activeGroup) {

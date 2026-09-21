@@ -61,7 +61,7 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
         FROM duty_team_members dtm
         JOIN members m ON dtm.member_id = m.id
         LEFT JOIN ministries min ON m.ministry_id = min.id
-        ORDER BY CASE WHEN dtm.role = 'Team Leader' THEN 1 ELSE 2 END, m.last_name ASC
+        ORDER BY CASE WHEN dtm.role = 'Team Leader' THEN 1 ELSE 2 END, LOWER(m.first_name) ASC, LOWER(m.last_name) ASC
       `)
     ]);
 
@@ -93,8 +93,16 @@ router.post("/teams", authMiddleware, requireRoles("Admin", "Coordinator"), asyn
   try {
     const { name, ministry_id, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({ error: "Team name is required" });
+    }
+
+    const existing = await db.get(
+      "SELECT id FROM duty_teams WHERE LOWER(name) = LOWER($1) AND (ministry_id = $2 OR ($2 IS NULL AND ministry_id IS NULL))",
+      [name.trim(), ministry_id || null]
+    );
+    if (existing) {
+      return res.status(400).json({ error: "A duty team with this name already exists" });
     }
 
     let assignedOrder = order_seq;
@@ -117,12 +125,12 @@ router.post("/teams", authMiddleware, requireRoles("Admin", "Coordinator"), asyn
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id
     `, [
-      name,
+      name.trim(),
       ministry_id || null,
       leader_id || null,
       resolvedLeaderName || null,
       color || "#2C3968",
-      assignedOrder,
+      Number(assignedOrder) || 1,
       tasks_checklist || "Sanctuary Cleaning, Sound Setup, Trash Disposal, Restroom Sanitization"
     ]);
 
@@ -160,6 +168,16 @@ router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator"), a
     const id = req.params.id;
     const { name, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
 
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: "Team name cannot be empty" });
+      const currentTeam = await db.get("SELECT ministry_id FROM duty_teams WHERE id = $1", [id]);
+      const duplicate = await db.get(
+        "SELECT id FROM duty_teams WHERE LOWER(name) = LOWER($1) AND (ministry_id = $2 OR ($2 IS NULL AND ministry_id IS NULL)) AND id != $3",
+        [name.trim(), currentTeam?.ministry_id || null, id]
+      );
+      if (duplicate) return res.status(400).json({ error: "Another duty team already has this name" });
+    }
+
     let resolvedLeaderName = leader_name;
     if (leader_id) {
       const lm = await db.get("SELECT first_name, last_name FROM members WHERE id = $1", [leader_id]);
@@ -175,7 +193,7 @@ router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator"), a
           order_seq = COALESCE($5, order_seq),
           tasks_checklist = COALESCE($6, tasks_checklist)
       WHERE id = $7
-    `, [name, leader_id, resolvedLeaderName, color, order_seq, tasks_checklist, id]);
+    `, [name !== undefined ? name.trim() : null, leader_id, resolvedLeaderName, color, order_seq !== undefined ? Number(order_seq) : null, tasks_checklist, id]);
 
     // Ensure leader is added to team members
     if (leader_id) {

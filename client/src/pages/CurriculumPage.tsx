@@ -155,7 +155,20 @@ export const CurriculumPage: React.FC = () => {
         return;
       }
 
-      const total = Number(formData.total_chapters) || 1;
+      const dup = studyTopics.find(t =>
+        t.title.toLowerCase().trim() === formData.title.toLowerCase().trim() &&
+        t.id !== editingStudyTopic?.id
+      );
+      if (dup) {
+        showToast("A curriculum topic with this title already exists", "error");
+        return;
+      }
+
+      const total = Number(formData.total_chapters);
+      if (isNaN(total) || total < 1) {
+        showToast("Total chapters must be at least 1", "error");
+        return;
+      }
 
       const payload = {
         title: formData.title.trim(),
@@ -165,10 +178,10 @@ export const CurriculumPage: React.FC = () => {
 
       if (editingStudyTopic) {
         await api.updateStudyTopic(editingStudyTopic.id, payload);
-        showToast(`'${formData.title}' updated successfully!`);
+        showToast(`'${formData.title.trim()}' updated successfully!`);
       } else {
         await api.createStudyTopic(payload);
-        showToast(`'${formData.title}' added to curriculum library!`);
+        showToast(`'${formData.title.trim()}' added to curriculum library!`);
       }
 
       setIsStudyTopicModalOpen(false);
@@ -246,21 +259,26 @@ export const CurriculumPage: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="relative overflow-hidden bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-200/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
-              <BookMarked className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-charcoal tracking-tight">
-              Topics & Books of Study
-            </h1>
-            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-black uppercase tracking-wider shadow-2xs">
-              Discipleship & Scripture Curriculum
-            </span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <BookMarked className="w-3.5 h-3.5 text-amber-300" />
+              <span>Discipleship & Scripture Curriculum</span>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Topics & Books of Study
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
             Manage books of the Bible and see in real time which small groups are <strong>Done</strong> and which are <strong>Ongoing</strong>.
           </p>
         </div>
@@ -277,10 +295,10 @@ export const CurriculumPage: React.FC = () => {
           <button
             onClick={loadData}
             disabled={loading}
-            className="p-2.5 rounded-2xl border border-indigo-100 bg-white text-charcoal hover:bg-indigo-50/60 transition-all shadow-2xs cursor-pointer"
+            className="p-2.5 rounded-2xl border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all shadow-2xs backdrop-blur-md cursor-pointer"
             title="Refresh curriculum list"
           >
-            <RefreshCw className={`w-4 h-4 text-indigo-700 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>

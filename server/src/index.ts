@@ -24,6 +24,8 @@ import dishwashingRouter from "./routes/dishwashing";
 import backupRouter from "./routes/backup";
 import bibleReadingRouter from "./routes/bibleReading";
 import cloudSyncRouter from "./routes/cloudSync";
+import attendanceLogRouter from "./routes/attendanceLog";
+import servicesRouter from "./routes/services";
 
 dotenv.config();
 
@@ -107,6 +109,8 @@ app.use("/api/dishwashing", dishwashingRouter);
 app.use("/api/backup", backupRouter);
 app.use("/api/bible-reading", bibleReadingRouter);
 app.use("/api/cloud-sync", cloudSyncRouter);
+app.use("/api/attendance-log", attendanceLogRouter);
+app.use("/api/services", servicesRouter);
 
 // Global Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

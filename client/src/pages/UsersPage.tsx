@@ -43,14 +43,21 @@ export const UsersPage: React.FC = () => {
   const [memberSearch, setMemberSearch] = useState("");
 
   const filteredMembersForLink = useMemo(() => {
-    if (!memberSearch.trim()) return members;
-    const q = memberSearch.toLowerCase();
-    return members.filter(m => {
-      const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
-      const ministry = (m.ministry_name || "").toLowerCase();
-      const email = (m.contact_email || "").toLowerCase();
-      const phone = (m.contact_phone || "").toLowerCase();
-      return fullName.includes(q) || ministry.includes(q) || email.includes(q) || phone.includes(q);
+    let list = members;
+    if (memberSearch.trim()) {
+      const q = memberSearch.toLowerCase();
+      list = members.filter(m => {
+        const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
+        const ministry = (m.ministry_name || "").toLowerCase();
+        const email = (m.contact_email || "").toLowerCase();
+        const phone = (m.contact_phone || "").toLowerCase();
+        return fullName.includes(q) || ministry.includes(q) || email.includes(q) || phone.includes(q);
+      });
+    }
+    return [...list].sort((a, b) => {
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
     });
   }, [members, memberSearch]);
 
@@ -163,13 +170,48 @@ export const UsersPage: React.FC = () => {
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (!formData.name.trim() || !formData.email.trim()) {
-        showToast("Please enter a name and email address", "error");
+      if (!formData.name.trim()) {
+        showToast("Please enter a user name", "error");
         return;
+      }
+
+      if (!formData.email.trim()) {
+        showToast("Please enter an email address", "error");
+        return;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+        showToast("Please enter a valid email address", "error");
+        return;
+      }
+
+      const dupEmail = users.find(u => u.email.toLowerCase() === formData.email.trim().toLowerCase() && u.id !== editingUser?.id);
+      if (dupEmail) {
+        showToast("A user with this email address already exists", "error");
+        return;
+      }
+
+      if (formData.username.trim()) {
+        const cleanUsername = formData.username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+        const dupUser = users.find(u => u.username?.toLowerCase() === cleanUsername && u.id !== editingUser?.id);
+        if (dupUser) {
+          showToast("A user with this username already exists", "error");
+          return;
+        }
       }
 
       if (!editingUser && (!formData.password || formData.password.length < 6)) {
         showToast("Password must be at least 6 characters for new users", "error");
+        return;
+      }
+
+      if (editingUser && formData.password && formData.password.trim().length > 0 && formData.password.trim().length < 6) {
+        showToast("New password must be at least 6 characters", "error");
+        return;
+      }
+
+      if (!formData.role_id) {
+        showToast("Please select a user role", "error");
         return;
       }
 
@@ -327,22 +369,27 @@ export const UsersPage: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-80 h-80 bg-gradient-to-br from-indigo-500/5 via-amber-500/5 to-transparent rounded-full blur-2xl pointer-events-none"></div>
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="space-y-2 relative z-10">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
-              <UserCog className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
-              User Accounts & Permissions
-            </h1>
-            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-black uppercase tracking-wider shadow-2xs">
-              Access & Role Management
-            </span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <UserCog className="w-3.5 h-3.5 text-amber-300" />
+              <span>Access & Role Management</span>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed font-medium">
+          <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight">
+            User Accounts & Permissions
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
             Manage system logins, assign ministry departments, configure permissions for Admins, Coordinators, Leaders, Volunteers, and link accounts to church member profiles.
           </p>
         </div>
@@ -350,9 +397,9 @@ export const UsersPage: React.FC = () => {
         <div className="flex items-center gap-3 flex-wrap shrink-0 relative z-10">
           <button
             onClick={() => setIsMatrixOpen(!isMatrixOpen)}
-            className="flex items-center gap-2 bg-white hover:bg-indigo-50/60 border border-indigo-200/80 text-charcoal font-bold px-4 py-2.5 rounded-2xl text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all cursor-pointer active:scale-95"
           >
-            <ShieldCheck className="w-4 h-4 text-indigo" />
+            <ShieldCheck className="w-4 h-4 text-sky-300" />
             <span>{isMatrixOpen ? "Hide Permissions Matrix" : "Role Permissions Matrix"}</span>
           </button>
 

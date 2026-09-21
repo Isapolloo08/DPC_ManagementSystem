@@ -128,7 +128,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       FROM members m
       LEFT JOIN households h ON m.household_id = h.id
       WHERE m.ministry_id = $1
-      ORDER BY m.last_name ASC, m.first_name ASC
+      ORDER BY LOWER(m.first_name) ASC, LOWER(m.last_name) ASC
     `, [ministry.id]);
 
     const upcomingEvents = await db.all(`
@@ -153,10 +153,16 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.post("/", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, min_age, max_age, description, color = "#2C3968" } = req.body;
-    if (!name) return res.status(400).json({ error: "Ministry name is required" });
+    if (!name || !name.trim()) return res.status(400).json({ error: "Ministry name is required" });
 
     const existing = await db.get("SELECT id FROM ministries WHERE LOWER(name) = LOWER($1)", [name.trim()]);
     if (existing) return res.status(400).json({ error: "A ministry with this name already exists" });
+
+    const minNum = min_age !== undefined && min_age !== "" && min_age !== null ? Number(min_age) : null;
+    const maxNum = max_age !== undefined && max_age !== "" && max_age !== null ? Number(max_age) : null;
+    if (minNum !== null && maxNum !== null && minNum > maxNum) {
+      return res.status(400).json({ error: "Minimum age cannot be greater than maximum age" });
+    }
 
     const result = await db.run(`
       INSERT INTO ministries (name, min_age, max_age, description, color)
@@ -164,8 +170,8 @@ router.post("/", authMiddleware, requireRoles("Admin"), async (req: AuthRequest,
       RETURNING id
     `, [
       name.trim(),
-      min_age !== undefined && min_age !== "" ? Number(min_age) : null,
-      max_age !== undefined && max_age !== "" ? Number(max_age) : null,
+      minNum,
+      maxNum,
       description || null,
       color
     ]);
@@ -197,6 +203,10 @@ router.put("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthReques
     const hasMaxAge = "max_age" in req.body;
     const minAgeVal = hasMinAge ? (min_age !== null && min_age !== "" && min_age !== undefined ? Number(min_age) : null) : current.min_age;
     const maxAgeVal = hasMaxAge ? (max_age !== null && max_age !== "" && max_age !== undefined ? Number(max_age) : null) : current.max_age;
+
+    if (minAgeVal !== null && maxAgeVal !== null && minAgeVal > maxAgeVal) {
+      return res.status(400).json({ error: "Minimum age cannot be greater than maximum age" });
+    }
 
     await db.run(`
       UPDATE ministries

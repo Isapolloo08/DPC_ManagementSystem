@@ -110,9 +110,14 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 shadow-md border border-slate-800">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 shadow-xl border border-white/10">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
         <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-        <div className="absolute bottom-0 right-32 w-64 h-64 bg-sky-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute bottom-0 right-32 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
@@ -241,26 +246,26 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
           </div>
         </div>
 
-        {/* D. Saturday Duty & Cleaning */}
+        {/* D. Sunday Dishwashing Rotation */}
         <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Saturday Church Duty</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sunday Dishwashing</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-              <CalendarCheck className="w-4 h-4" />
+              <Utensils className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
             <div className="text-sm font-black text-slate-900 truncate">
-              {upcomingDuty?.team?.name || "Sanctuary Cleaning"}
+              {upcomingDishwashing?.team?.name || activeGroup?.name || "Sunday Fellowship Meal"}
             </div>
             <p className="text-xs text-amber-800 font-bold mt-0.5">
-              {upcomingDuty?.duty_date ? new Date(upcomingDuty.duty_date).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" }) : "Scheduled Saturdays"}
+              {upcomingDishwashing?.duty_date ? new Date(upcomingDishwashing.duty_date).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" }) : "Scheduled Sundays"}
             </p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-500">{upcomingDuty?.team?.leader_name ? `Leader: ${upcomingDuty.team.leader_name}` : "Church Roster"}</span>
+            <span className="text-[11px] text-slate-500">Fellowship Meal Duty</span>
             <button
-              onClick={() => onNavigate("duty")}
+              onClick={() => onNavigate("dishwashing")}
               className="text-xs font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
             >
               <span>View Roster</span>
@@ -282,7 +287,7 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
           <span className="text-xs text-slate-500 font-medium">One-click actions</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <button
             onClick={() => onNavigate("leaderportal")}
             className="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-50/80 hover:bg-amber-100/90 border border-amber-200/80 text-amber-950 transition-all text-center group cursor-pointer hover:shadow-xs"
@@ -317,15 +322,6 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
             <BookOpen className="w-5 h-5 text-emerald-600 mb-1.5 group-hover:scale-110 transition-transform" />
             <span className="text-xs font-bold">Bible Reading</span>
             <span className="text-[10px] text-emerald-700/70">1-Year Scripture</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate("duty")}
-            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-purple-50/80 hover:bg-purple-100/90 border border-purple-200/80 text-purple-950 transition-all text-center group cursor-pointer hover:shadow-xs"
-          >
-            <CalendarCheck className="w-5 h-5 text-purple-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">Saturday Duty</span>
-            <span className="text-[10px] text-purple-700/70">Sanctuary cleaning</span>
           </button>
 
           <button

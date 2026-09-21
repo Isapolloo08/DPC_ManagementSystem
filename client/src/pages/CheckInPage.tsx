@@ -14,14 +14,25 @@ import {
 } from "lucide-react";
 import { useSocketEvent } from "../socket";
 import { CheckInPageSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
+import { EventAttendanceCheckInView } from "../components/attendance/EventAttendanceCheckInView";
 
 export const CheckInPage: React.FC = () => {
   const { user, ministries, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
+  const [activeAttendanceTab, setActiveAttendanceTab] = useState<"sunday" | "event">("sunday");
   const coordinatorMinistryId = isRestricted && allowedMinistries.length > 0
     ? allowedMinistries[0].id
     : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
 
-  // Helper to get latest Sunday (0 = Sunday)
+  // Helper to get today's local date string (YYYY-MM-DD)
+  const getTodayDateStr = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+
+  // Helper to get latest Sunday (0 = Sunday). If today is Sunday, returns today.
   const getLatestSundayDate = () => {
     const d = new Date();
     const day = d.getDay();
@@ -33,68 +44,106 @@ export const CheckInPage: React.FC = () => {
     return `${sunday.getFullYear()}-${mm}-${dd}`;
   };
 
+  // Helper to get the single upcoming Sunday
+  const getUpcomingSundayDate = () => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? 7 : (7 - day);
+    const sunday = new Date(d);
+    sunday.setDate(d.getDate() + diff);
+    const mm = String(sunday.getMonth() + 1).padStart(2, "0");
+    const dd = String(sunday.getDate()).padStart(2, "0");
+    return `${sunday.getFullYear()}-${mm}-${dd}`;
+  };
+
+  const todayStr = useMemo(() => getTodayDateStr(), []);
+  const latestSundayStr = useMemo(() => getLatestSundayDate(), []);
+  const upcomingSundayStr = useMemo(() => getUpcomingSundayDate(), []);
+
   const [serviceDate, setServiceDate] = useState<string>(getLatestSundayDate);
   const [serviceName, setServiceName] = useState<string>("Sunday Worship Service (9:30 AM)");
+  const [isDateMenuOpen, setIsDateMenuOpen] = useState(false);
+  const dateMenuRef = React.useRef<HTMLDivElement>(null);
 
-  // Generate list of Sundays (past 52 Sundays + upcoming 8 Sundays)
-  const sundayOptions = useMemo(() => {
-    const latestStr = getLatestSundayDate();
-    const [y, m, dNum] = latestStr.split("-").map(Number);
-    const base = new Date(y, m - 1, dNum);
-    const list: { date: string; label: string; isLatest: boolean }[] = [];
-
-    // 6 upcoming Sundays
-    for (let i = 6; i >= 1; i--) {
-      const d = new Date(base);
-      d.setDate(base.getDate() + (i * 7));
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const formatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      list.push({
-        date: dateStr,
-        label: `${formatted} (Upcoming Sunday)`,
-        isLatest: false
-      });
+  // Close date menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
+        setIsDateMenuOpen(false);
+      }
+    };
+    if (isDateMenuOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
     }
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [isDateMenuOpen]);
 
-    // Latest / Current Sunday
-    const latestFormatted = base.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    const isTodaySunday = new Date().getDay() === 0;
-    list.push({
-      date: latestStr,
-      label: `${latestFormatted} (${isTodaySunday ? "Today's Sunday Service" : "Latest Sunday Service"})`,
-      isLatest: true
-    });
+  // Check if selected service date is in the future
+  const isUpcomingFuture = serviceDate > todayStr;
+  const isTodaySunday = useMemo(() => new Date().getDay() === 0, []);
 
-    // Past 35 Sundays
-    for (let i = 1; i <= 35; i++) {
+  // Format any YYYY-MM-DD into "MMM D, YYYY"
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return "";
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  // Recent 4 past Sundays for quick access
+  const recentPastSundays = useMemo(() => {
+    const [y, m, dNum] = latestSundayStr.split("-").map(Number);
+    const base = new Date(y, m - 1, dNum);
+    const list: { date: string; label: string }[] = [];
+    for (let i = 1; i <= 4; i++) {
       const d = new Date(base);
       d.setDate(base.getDate() - (i * 7));
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const formatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      list.push({
-        date: dateStr,
-        label: `${formatted} (Sunday)`,
-        isLatest: false
-      });
+      list.push({ date: dateStr, label: formatted });
     }
-
     return list;
-  }, []);
+  }, [latestSundayStr]);
+
+  // Snap any picked date to the corresponding Sunday (or keep if already Sunday)
+  const snapToSunday = (dateVal: string) => {
+    if (!dateVal) return;
+    const [y, m, d] = dateVal.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    const day = dt.getDay();
+    if (day !== 0) {
+      dt.setDate(dt.getDate() - day);
+    }
+    const snapped = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    if (snapped > upcomingSundayStr) {
+      setServiceDate(upcomingSundayStr);
+    } else {
+      setServiceDate(snapped);
+    }
+    setIsDateMenuOpen(false);
+  };
 
   const handlePrevSunday = () => {
     const [y, m, dNum] = serviceDate.split("-").map(Number);
     const d = new Date(y, m - 1, dNum);
     d.setDate(d.getDate() - 7);
-    const nextDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    setServiceDate(nextDate);
+    const prevDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    setServiceDate(prevDate);
   };
 
   const handleNextSunday = () => {
+    if (serviceDate >= upcomingSundayStr) return;
     const [y, m, dNum] = serviceDate.split("-").map(Number);
     const d = new Date(y, m - 1, dNum);
     d.setDate(d.getDate() + 7);
     const nextDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    setServiceDate(nextDate);
+    if (nextDate > upcomingSundayStr) {
+      setServiceDate(upcomingSundayStr);
+    } else {
+      setServiceDate(nextDate);
+    }
   };
   const [filterMinistry, setFilterMinistry] = useState<string>(
     coordinatorMinistryId ? String(coordinatorMinistryId) : (selectedMinistryId ? String(selectedMinistryId) : "all")
@@ -289,6 +338,10 @@ export const CheckInPage: React.FC = () => {
   };
 
   const handleApplyBatchAttendance = async (list: AttendanceRosterItem[] = batchScopeList) => {
+    if (isUpcomingFuture) {
+      showToast("Attendance cannot be marked for upcoming future dates.", "error");
+      return;
+    }
     const targetList = list.length > 0 ? list : batchScopeList;
     if (targetList.length === 0) {
       showToast("No members found in the current roster to mark.", "error");
@@ -342,6 +395,10 @@ export const CheckInPage: React.FC = () => {
 
   // Mark single member present
   const handleMarkPresent = async (item: AttendanceRosterItem) => {
+    if (isUpcomingFuture) {
+      showToast("Attendance cannot be marked for upcoming future dates.", "error");
+      return;
+    }
     try {
       setActionLoading(item.member_id);
       const res = await api.checkIn({
@@ -374,6 +431,10 @@ export const CheckInPage: React.FC = () => {
 
   // Mark single member absent directly or open modal
   const handleOpenAbsentModal = (item: AttendanceRosterItem, type: "absent" | "excused" = "absent") => {
+    if (isUpcomingFuture) {
+      showToast("Attendance cannot be marked for upcoming future dates.", "error");
+      return;
+    }
     setAbsentModalMember(item);
     setAbsentStatusType(type);
     setAbsentPresetReason(type === "absent" ? "Unexcused / No Show" : "Sick / Not Feeling Well");
@@ -382,6 +443,10 @@ export const CheckInPage: React.FC = () => {
 
   // Quick mark absent without dialog
   const handleQuickMarkAbsent = async (item: AttendanceRosterItem) => {
+    if (isUpcomingFuture) {
+      showToast("Attendance cannot be marked for upcoming future dates.", "error");
+      return;
+    }
     try {
       setActionLoading(item.member_id);
       await api.checkIn({
@@ -404,6 +469,10 @@ export const CheckInPage: React.FC = () => {
   // Save absent or excused from modal
   const handleSaveAbsentOrExcused = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUpcomingFuture) {
+      showToast("Attendance cannot be marked for upcoming future dates.", "error");
+      return;
+    }
     if (!absentModalMember) return;
     try {
       setActionLoading(absentModalMember.member_id);
@@ -430,6 +499,10 @@ export const CheckInPage: React.FC = () => {
 
   // Undo / Unmark attendance
   const handleUndoAttendance = async (item: AttendanceRosterItem) => {
+    if (isUpcomingFuture) {
+      showToast("Attendance cannot be modified for upcoming future dates.", "error");
+      return;
+    }
     if (!item.attendance_id) return;
     try {
       setActionLoading(item.member_id);
@@ -445,6 +518,10 @@ export const CheckInPage: React.FC = () => {
 
   // Check in entire household at once
   const handleCheckInHousehold = async (householdName: string, memberIds: number[]) => {
+    if (isUpcomingFuture) {
+      showToast("Attendance cannot be marked for upcoming future dates.", "error");
+      return;
+    }
     try {
       await api.batchCheckIn({
         member_ids: memberIds,
@@ -460,6 +537,10 @@ export const CheckInPage: React.FC = () => {
   // Quick Guest check-in
   const handleCreateAndCheckInGuest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUpcomingFuture) {
+      showToast("Guest check-in is disabled for upcoming future dates.", "error");
+      return;
+    }
     if (!guestFirstName.trim() || !guestLastName.trim()) {
       showToast("First and last name are required", "error");
       return;
@@ -560,6 +641,10 @@ export const CheckInPage: React.FC = () => {
         return false;
       }
       return true;
+    }).sort((a, b) => {
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
     });
   }, [roster, coordinatorMinistryId, filterMinistry, selectedHousehold]);
 
@@ -601,6 +686,10 @@ export const CheckInPage: React.FC = () => {
       else if (statusFilter === "unmarked") matchesStatus = isUnmarked;
 
       return matchesSearch && matchesHousehold && matchesStatus;
+    }).sort((a, b) => {
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
     });
   }, [roster, searchQuery, selectedHousehold, coordinatorMinistryId, filterMinistry, statusFilter, isFastMode]);
 
@@ -640,13 +729,62 @@ export const CheckInPage: React.FC = () => {
         </div>
       )}
 
+      {/* TOP SUBTAB SWITCHER: Sunday Service vs Special Events */}
+      <div className="flex items-center justify-between gap-4 flex-wrap pb-1">
+        <div className="inline-flex items-center gap-1.5 p-1 bg-stone-200/70 rounded-2xl border border-stone-300/80">
+          <button
+            type="button"
+            onClick={() => setActiveAttendanceTab("sunday")}
+            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+              activeAttendanceTab === "sunday"
+                ? "bg-indigo text-white shadow-sm"
+                : "text-charcoal/70 hover:text-charcoal hover:bg-white/60"
+            }`}
+          >
+            <ChurchLogo className="w-4 h-4 text-amber" />
+            <span>Sunday Worship Check-In</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveAttendanceTab("event")}
+            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+              activeAttendanceTab === "event"
+                ? "bg-indigo text-white shadow-sm"
+                : "text-charcoal/70 hover:text-charcoal hover:bg-white/60"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber" />
+            <span>Special Event Check-In</span>
+          </button>
+        </div>
+
+        {activeAttendanceTab === "sunday" && (
+          <div className="text-xs font-semibold text-stone-500 bg-white py-1.5 px-3.5 rounded-xl border border-stone-200/80 shadow-2xs">
+            Sunday Worship Service • <span className="font-bold text-charcoal">{formatDateDisplay(serviceDate)}</span>
+          </div>
+        )}
+      </div>
+
+      {activeAttendanceTab === "event" ? (
+        <EventAttendanceCheckInView />
+      ) : (
+        <>
       {/* TOP HERO: Sunday Service & Attendance Overview */}
-      <div className="bg-gradient-to-r from-indigo-950 via-indigo-900 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-radial from-amber-500/15 via-indigo-500/5 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+      <div className="relative z-30 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
+        {/* Background decorative elements isolated with overflow-hidden */}
+        <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
+          <img
+            src="/container_bg.jpg"
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen"
+          />
+          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+          <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl"></div>
+        </div>
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-amber-300 text-[11px] font-bold shadow-2xs backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
               <ChurchLogo className="w-3.5 h-3.5 text-amber-400" />
               <span>Sunday Divine Worship & Kids Attendance Kiosk</span>
             </div>
@@ -660,8 +798,8 @@ export const CheckInPage: React.FC = () => {
 
           {/* Quick Date & Service Selector Controls */}
           <div className="flex flex-wrap items-center gap-2.5 bg-white/10 p-2.5 rounded-2xl border border-white/15 backdrop-blur-md">
-            {/* Dedicated Sunday Service Selector */}
-            <div className="flex items-center gap-1 bg-indigo-950/90 p-1 rounded-2xl border border-white/15 backdrop-blur-md shadow-inner">
+            {/* Dedicated Sunday Service Selector Popover */}
+            <div ref={dateMenuRef} className="relative z-50 flex items-center gap-1 bg-indigo-950/90 p-1 rounded-2xl border border-white/15 backdrop-blur-md shadow-inner">
               <button
                 type="button"
                 onClick={handlePrevSunday}
@@ -671,40 +809,171 @@ export const CheckInPage: React.FC = () => {
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <div className="relative flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 transition-all text-white">
-                <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0 pointer-events-none" />
-                <select
-                  value={serviceDate}
-                  onChange={(e) => setServiceDate(e.target.value)}
-                  className="bg-transparent text-white font-bold text-xs outline-none cursor-pointer pr-4 appearance-none"
-                >
-                  {sundayOptions.map((opt) => (
-                    <option key={opt.date} value={opt.date} className="bg-slate-900 text-white font-medium py-1">
-                      {opt.label}
-                    </option>
-                  ))}
-                  {!sundayOptions.some((o) => o.date === serviceDate) && (
-                    <option value={serviceDate} className="bg-slate-900 text-white font-medium">
-                      {serviceDate} (Sunday)
-                    </option>
-                  )}
-                </select>
-                <ChevronDown className="w-3 h-3 text-indigo-300 absolute right-2 pointer-events-none" />
-              </div>
+              {/* Central Trigger Button */}
+              <button
+                type="button"
+                onClick={() => setIsDateMenuOpen(!isDateMenuOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-white cursor-pointer active:scale-95"
+              >
+                <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="font-black text-xs tracking-tight">
+                  {formatDateDisplay(serviceDate)}
+                </span>
+
+                {serviceDate === upcomingSundayStr ? (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-500/30 text-purple-200 border border-purple-400/40 hidden sm:inline-block">
+                    Upcoming (Locked)
+                  </span>
+                ) : serviceDate === latestSundayStr ? (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 hidden sm:inline-block">
+                    {isTodaySunday ? "Today's Service" : "Latest Service"}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white/15 text-indigo-200 hidden sm:inline-block">
+                    Past Sunday
+                  </span>
+                )}
+
+                <ChevronDown className={`w-3.5 h-3.5 text-indigo-300 transition-transform duration-200 ${isDateMenuOpen ? "rotate-180" : ""}`} />
+              </button>
 
               <button
                 type="button"
                 onClick={handleNextSunday}
-                className="p-2 rounded-xl hover:bg-white/15 text-indigo-200 hover:text-white transition-colors cursor-pointer active:scale-95"
-                title="Next Sunday Service"
+                disabled={serviceDate >= upcomingSundayStr}
+                className={`p-2 rounded-xl transition-colors ${serviceDate >= upcomingSundayStr
+                  ? "text-indigo-400/30 cursor-not-allowed"
+                  : "hover:bg-white/15 text-indigo-200 hover:text-white cursor-pointer active:scale-95"
+                  }`}
+                title={serviceDate >= upcomingSundayStr ? "No further upcoming Sundays" : "Next Sunday Service"}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
+
+              {/* Sunday Selector Popover Dropdown (100% Solid Opaque Background) */}
+              {isDateMenuOpen && (
+                <div className="absolute top-full left-0 sm:left-auto sm:right-0 md:left-0 mt-2 z-50 w-72 sm:w-84 bg-slate-950 border border-slate-700 rounded-2xl shadow-2xl ring-1 ring-white/10 p-3.5 text-white animate-in fade-in zoom-in-95 duration-150">
+                  {/* Section 1: Upcoming & Latest Highlights */}
+                  <div className="space-y-2">
+                    <div className="text-[10px] uppercase font-black tracking-wider text-slate-400 px-1">
+                      Services
+                    </div>
+
+                    {/* Upcoming Sunday (Only 1) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setServiceDate(upcomingSundayStr);
+                        setIsDateMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${serviceDate === upcomingSundayStr
+                        ? "bg-purple-950 border-2 border-purple-500 text-white shadow-md"
+                        : "bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 hover:border-slate-700"
+                        }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0 border border-purple-500/30">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white">{formatDateDisplay(upcomingSundayStr)}</div>
+                          <div className="text-[10px] text-purple-300 font-medium">Upcoming Sunday (Preview Only)</div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/30 text-purple-200 font-black border border-purple-400/40">
+                        Locked
+                      </span>
+                    </button>
+
+                    {/* Latest / Today's Service */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setServiceDate(latestSundayStr);
+                        setIsDateMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${serviceDate === latestSundayStr
+                        ? "bg-emerald-950 border-2 border-emerald-500 text-white shadow-md"
+                        : "bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 hover:border-slate-700"
+                        }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white">{formatDateDisplay(latestSundayStr)}</div>
+                          <div className="text-[10px] text-emerald-300 font-medium">
+                            {isTodaySunday ? "Today's Sunday Service" : "Latest Sunday Service"}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 font-black border border-emerald-400/40">
+                        Active
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Section 2: Recent Sundays (Last 4 Weeks) */}
+                  <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+                    <div className="text-[10px] uppercase font-black tracking-wider text-slate-400 px-1">
+                      Recent Past Services
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {recentPastSundays.map((s) => (
+                        <button
+                          key={s.date}
+                          type="button"
+                          onClick={() => {
+                            setServiceDate(s.date);
+                            setIsDateMenuOpen(false);
+                          }}
+                          className={`p-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between cursor-pointer ${serviceDate === s.date
+                            ? "bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400"
+                            : "bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700"
+                            }`}
+                        >
+                          <span className="truncate mr-1">{s.label}</span>
+                          {serviceDate === s.date && <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Section 3: Jump to Any Past Sunday Archive */}
+                  <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+                    <div className="text-[10px] uppercase font-black tracking-wider text-slate-400 px-1 flex items-center justify-between">
+                      <span>Jump to Any Past Sunday</span>
+                      <span className="text-[9px] text-slate-400 font-normal lowercase">(snaps to sunday)</span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="date"
+                        max={upcomingSundayStr}
+                        value={serviceDate}
+                        onChange={(e) => snapToSunday(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 hover:border-slate-500 focus:border-amber-400 text-white text-xs font-semibold px-3 py-2 rounded-xl outline-none transition-all cursor-pointer [color-scheme:dark]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
-              onClick={() => setIsGuestModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber to-amber-500 hover:from-amber-500 hover:to-amber-600 text-charcoal font-black text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              onClick={() => {
+                if (isUpcomingFuture) {
+                  showToast("Guest check-in is disabled for upcoming future dates.", "error");
+                  return;
+                }
+                setIsGuestModalOpen(true);
+              }}
+              disabled={isUpcomingFuture}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 ${isUpcomingFuture
+                ? "bg-white/10 text-white/40 cursor-not-allowed border border-white/10"
+                : "bg-gradient-to-r from-amber to-amber-500 hover:from-amber-500 hover:to-amber-600 text-charcoal active:scale-95 cursor-pointer"
+                }`}
+              title={isUpcomingFuture ? "Check-in disabled for upcoming Sunday" : "Check In Guest"}
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>Check In Guest</span>
@@ -994,6 +1263,36 @@ export const CheckInPage: React.FC = () => {
         )}
       </div>
 
+      {/* Upcoming Service Notice Banner */}
+      {isUpcomingFuture && (
+        <div className="bg-gradient-to-r from-indigo-950 via-purple-950 to-indigo-900 border border-purple-500/30 text-white p-4 rounded-3xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-400/30 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-sm text-white">Upcoming Sunday Service Preview</span>
+                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                  Opens on {formatDateDisplay(serviceDate)}
+                </span>
+              </div>
+              <p className="text-xs text-purple-200/80 mt-0.5">
+                Attendance mark-up and check-in actions are locked for upcoming future dates. Marking will automatically be enabled once this Sunday arrives.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setServiceDate(latestSundayStr)}
+            className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border border-white/10"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Switch to Active Service</span>
+          </button>
+        </div>
+      )}
+
       {/* MAIN ATTENDANCE ROSTER LIST */}
       {loading && roster.length === 0 ? (
         <TableSkeleton rows={8} columns={6} />
@@ -1031,17 +1330,22 @@ export const CheckInPage: React.FC = () => {
               {/* Toggle Batch Roll Call Button */}
               <button
                 type="button"
+                disabled={isUpcomingFuture}
                 onClick={() => {
+                  if (isUpcomingFuture) return;
                   if (!isFastMode) {
                     setStatusFilter("all");
                   }
                   setIsFastMode(!isFastMode);
                   setSelectedMemberIds(new Set());
                 }}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 ${isFastMode
-                  ? "bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700"
-                  : "bg-indigo hover:bg-indigo-700 text-white border border-indigo/20 shadow-xs"
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${isUpcomingFuture
+                  ? "bg-gray-100 text-charcoal/30 border border-gray-200 cursor-not-allowed"
+                  : isFastMode
+                    ? "bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 cursor-pointer active:scale-95"
+                    : "bg-indigo hover:bg-indigo-700 text-white border border-indigo/20 shadow-xs cursor-pointer active:scale-95"
                   }`}
+                title={isUpcomingFuture ? "Batch roll call opens on Sunday" : "Toggle Batch Roll Call"}
               >
                 <ListChecks className="w-4 h-4" />
                 <span>{isFastMode ? "Exit Batch Roll Call" : "Batch Roll Call"}</span>
@@ -1540,6 +1844,13 @@ export const CheckInPage: React.FC = () => {
                                   <span>Unchanged</span>
                                 </span>
                               )}
+                            </div>
+                          ) : isUpcomingFuture ? (
+                            <div className="flex items-center justify-end">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-semibold border border-slate-200">
+                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Opens on Sunday</span>
+                              </span>
                             </div>
                           ) : (
                             <div className="flex items-center justify-end gap-1.5 flex-wrap">
@@ -2060,6 +2371,9 @@ export const CheckInPage: React.FC = () => {
           </div>
         </div>,
         document.body
+      )}
+
+        </>
       )}
 
     </div>

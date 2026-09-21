@@ -79,6 +79,10 @@ CREATE TABLE IF NOT EXISTS members (
   civil_status VARCHAR(50) DEFAULT 'Single',
   spouse_name VARCHAR(255),
   spouse_id INT REFERENCES members(id) ON DELETE SET NULL,
+  is_baptized BOOLEAN DEFAULT FALSE,
+  baptism_status VARCHAR(50) DEFAULT 'not_baptized',
+  baptism_date DATE,
+  baptism_notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -126,17 +130,6 @@ CREATE TABLE IF NOT EXISTS announcements (
   title VARCHAR(255) NOT NULL,
   body TEXT NOT NULL,
   is_pinned BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 11. Prayer Requests
-CREATE TABLE IF NOT EXISTS prayer_requests (
-  id SERIAL PRIMARY KEY,
-  member_id INT REFERENCES members(id) ON DELETE SET NULL,
-  ministry_id INT REFERENCES ministries(id) ON DELETE CASCADE,
-  request_text TEXT NOT NULL,
-  is_anonymous BOOLEAN DEFAULT FALSE,
-  status VARCHAR(50) NOT NULL DEFAULT 'open',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -5,7 +5,9 @@ import { api } from "../../api";
 import { TimePickerInput } from "../../components/common/TimePickerInput";
 import { DatePickerInput } from "../../components/common/DatePickerInput";
 import { ConfirmationModal, ModalType } from "../../components/common/ConfirmationModal";
+import { BibleStudyRescheduleModal } from "../../components/biblestudy/BibleStudyRescheduleModal";
 import { getBookTotalChapters, generateChapterOptions } from "../../utils/curriculumHelper";
+import { getScheduleDates, isDateMatchingSchedule } from "../../utils/scheduleHelper";
 import {
   UserCheck, Calendar, Check, CheckCircle2, BookOpen,
   Edit, Bookmark, BookmarkCheck, Sparkles, MapPin,
@@ -95,6 +97,21 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
   const [isCurriculumDropdownOpen, setIsCurriculumDropdownOpen] = useState(false);
   const curriculumRef = useRef<HTMLDivElement>(null);
 
+  // Church Rooms Lookups from Database
+  const [churchRooms, setChurchRooms] = useState<string[]>([]);
+  const [isCustomLoc, setIsCustomLoc] = useState<boolean>(false);
+  const [customLocText, setCustomLocText] = useState<string>("");
+
+  useEffect(() => {
+    api.getLookups("event_location", true)
+      .then(res => {
+        if (res && Array.isArray(res)) {
+          setChurchRooms(res.map((r: any) => r.name).filter(Boolean));
+        }
+      })
+      .catch(() => setChurchRooms([]));
+  }, []);
+
   // Parse time on modal open
   useEffect(() => {
     if (activeGroup) {
@@ -115,6 +132,10 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
         }
       }
 
+      const isCustom = Boolean(activeGroup.location && !churchRooms.includes(activeGroup.location));
+      setIsCustomLoc(isCustom);
+      setCustomLocText(isCustom ? (activeGroup.location || "") : "");
+
       setFormData({
         name: activeGroup.name,
         curriculum: activeGroup.curriculum || "",
@@ -128,7 +149,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
         description: activeGroup.description || ""
       });
     }
-  }, [activeGroup, isEditModalOpen]);
+  }, [activeGroup, isEditModalOpen, churchRooms]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -169,19 +190,36 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
     );
   }, [curriculumQuery]);
 
-  const handleSaveAttendance = () => {
+  const handleSaveAttendance = async () => {
+    if (!activeGroup) return;
     const presentIds = Object.keys(checkedMembers)
       .filter(id => checkedMembers[Number(id)])
       .map(id => Number(id));
 
-    onSaveAttendanceSession(sessionDate, presentIds);
-    setSessionSavedSuccess(true);
-    setTimeout(() => setSessionSavedSuccess(false), 3000);
+    try {
+      await api.saveGroupAttendance(activeGroup.id, {
+        session_date: sessionDate,
+        topic_title: activeGroup.curriculum || "Weekly Bible Study",
+        chapter: activeGroup.current_chapter || "Chapter 1",
+        present_member_ids: presentIds
+      });
+
+      onSaveAttendanceSession(sessionDate, presentIds);
+      setSessionSavedSuccess(true);
+      setTimeout(() => setSessionSavedSuccess(false), 3000);
+    } catch (err: any) {
+      showAlert("Attendance Save Failed", err.message || "Failed to save attendance session", "danger");
+    }
   };
 
   const handleSaveGroupDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeGroup) return;
+
+    if (!formData.name.trim()) {
+      showAlert("Group Name Required", "Please enter a group name.", "warning");
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -190,15 +228,15 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
         : formData.meeting_time_start;
 
       await api.updateGroup(activeGroup.id, {
-        name: formData.name,
-        curriculum: formData.curriculum,
+        name: formData.name.trim(),
+        curriculum: formData.curriculum ? formData.curriculum.trim() : null,
         current_chapter: formData.current_chapter,
         progress_stage: formData.progress_stage,
-        progress_notes: formData.progress_notes,
+        progress_notes: formData.progress_notes ? formData.progress_notes.trim() : null,
         meeting_day: formData.meeting_day,
         meeting_time: formattedMeetingTime,
-        location: formData.location,
-        description: formData.description
+        location: formData.location ? formData.location.trim() : null,
+        description: formData.description ? formData.description.trim() : null
       });
 
       setSaveSuccessMsg("✓ Small group study details and schedule updated successfully!");
@@ -216,61 +254,16 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
   const handleOpenReschedule = () => {
     if (!activeGroup) return;
-    let start = "7:00 PM";
-    let end = "8:30 PM";
-    if (activeGroup.rescheduled_time) {
-      if (activeGroup.rescheduled_time.includes("-")) {
-        const parts = activeGroup.rescheduled_time.split("-");
-        start = parts[0]?.trim() || "7:00 PM";
-        end = parts[1]?.trim() || "";
-      } else {
-        start = activeGroup.rescheduled_time.trim();
-        end = "";
-      }
-    } else if (activeGroup.meeting_time) {
-      if (activeGroup.meeting_time.includes("-")) {
-        const parts = activeGroup.meeting_time.split("-");
-        start = parts[0]?.trim() || "7:00 PM";
-        end = parts[1]?.trim() || "";
-      }
-    }
-
-    const defaultDate = activeGroup.rescheduled_date || new Date(Date.now() + 86400000).toISOString().split("T")[0];
-
-    setRescheduleData({
-      is_rescheduled: activeGroup.is_rescheduled !== undefined ? Boolean(activeGroup.is_rescheduled) : true,
-      rescheduled_date: defaultDate,
-      rescheduled_time_start: start,
-      rescheduled_time_end: end,
-      reschedule_reason: activeGroup.reschedule_reason || ""
-    });
     setIsRescheduleModalOpen(true);
   };
 
-  const handleSaveReschedule = async (e?: React.FormEvent, forceRevert = false) => {
-    if (e) e.preventDefault();
+  const handleRevertReschedule = async () => {
     if (!activeGroup) return;
-
     try {
-      setIsSavingReschedule(true);
-      const isRescheduled = forceRevert ? false : rescheduleData.is_rescheduled;
-      const formattedTime = rescheduleData.rescheduled_time_end
-        ? `${rescheduleData.rescheduled_time_start} - ${rescheduleData.rescheduled_time_end}`
-        : rescheduleData.rescheduled_time_start;
-
-      await api.rescheduleGroup(activeGroup.id, {
-        is_rescheduled: isRescheduled,
-        rescheduled_date: isRescheduled ? rescheduleData.rescheduled_date : null,
-        rescheduled_time: isRescheduled ? formattedTime : null,
-        reschedule_reason: isRescheduled ? rescheduleData.reschedule_reason : null
-      });
-
+      await api.rescheduleGroup(activeGroup.id, { is_rescheduled: false });
       if (onGroupUpdated) onGroupUpdated();
-      setIsRescheduleModalOpen(false);
     } catch (err: any) {
-      showAlert("Reschedule Failed", err.message || "Failed to update reschedule status", "danger");
-    } finally {
-      setIsSavingReschedule(false);
+      showAlert("Revert Failed", err.message || "Failed to revert schedule", "danger");
     }
   };
 
@@ -356,8 +349,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               Edit Resched
             </button>
             <button
-              onClick={() => handleSaveReschedule(undefined, true)}
-              disabled={isSavingReschedule}
+              onClick={handleRevertReschedule}
               className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs transition-colors cursor-pointer"
             >
               Revert
@@ -369,28 +361,75 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2-Cols: Weekly Meeting Attendance Logger */}
         <div className="lg:col-span-2 bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-5">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-bold">
-                <UserCheck className="w-5 h-5" />
+          <div className="space-y-3 border-b border-gray-100 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-bold">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-charcoal">
+                    Weekly Small Group Attendance Roll-Call
+                  </h3>
+                  <p className="text-[11px] text-charcoal/50">
+                    Check off disciples present for this week's Bible study session
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-sm sm:text-base text-charcoal">
-                  Weekly Small Group Attendance Roll-Call
-                </h3>
-                <p className="text-[11px] text-charcoal/50">
-                  Check off disciples present for this week's Bible study session
-                </p>
+
+              <div className="w-full sm:w-48">
+                <DatePickerInput
+                  value={sessionDate}
+                  onChange={(val) => setSessionDate(val)}
+                  placeholder="Select date"
+                />
               </div>
             </div>
 
-            <div className="w-40">
-              <DatePickerInput
-                value={sessionDate}
-                onChange={(val) => setSessionDate(val)}
-                placeholder="Select date"
-              />
-            </div>
+            {/* Quick schedule date chips & alignment indicator */}
+            {(() => {
+              const scheduleInfo = getScheduleDates(activeGroup?.meeting_day);
+              const isMatching = isDateMatchingSchedule(sessionDate, activeGroup?.meeting_day);
+
+              return (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex flex-wrap gap-1.5">
+                    {scheduleInfo.chips.map((chip, idx) => {
+                      const isSelected = sessionDate === chip.date;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSessionDate(chip.date)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                            isSelected
+                              ? "bg-indigo text-white border-indigo shadow-2xs"
+                              : "bg-gray-50 text-charcoal/70 border-gray-200 hover:border-indigo/40 hover:bg-indigo-50/40"
+                          }`}
+                        >
+                          {chip.isToday && <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>}
+                          <span>{chip.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div>
+                    {isMatching ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>Regular ({activeGroup?.meeting_day || "Regular Sched"})</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
+                        <CalendarClock className="w-3 h-3 text-amber-600" />
+                        <span>Rescheduled Date (Regular is {activeGroup?.meeting_day || "Scheduled"})</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {sessionSavedSuccess && (
@@ -823,14 +862,45 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
               {/* Location */}
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Location / Meeting Venue</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Sanctuary Library Room 201, Online Zoom"
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-charcoal/70 text-xs">Location / Meeting Venue</label>
+                  <span className="text-[10px] text-indigo-700 font-semibold">Database Rooms</span>
+                </div>
+                <select
+                  value={isCustomLoc ? "__custom__" : formData.location}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom__") {
+                      setIsCustomLoc(true);
+                      setFormData({ ...formData, location: customLocText });
+                    } else {
+                      setIsCustomLoc(false);
+                      setFormData({ ...formData, location: e.target.value });
+                    }
+                  }}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold text-charcoal cursor-pointer"
+                >
+                  <option value="">-- Select Church Room / Venue --</option>
+                  {churchRooms.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                  {formData.location && !churchRooms.includes(formData.location) && (
+                    <option value={formData.location}>{formData.location} (Current Venue)</option>
+                  )}
+                  <option value="__custom__">+ Custom / Off-Site Location...</option>
+                </select>
+
+                {isCustomLoc && (
+                  <input
+                    type="text"
+                    placeholder="e.g. Bro John's Residence (Daet), Google Meet, Cafe Rooftop"
+                    value={customLocText}
+                    onChange={(e) => {
+                      setCustomLocText(e.target.value);
+                      setFormData({ ...formData, location: e.target.value });
+                    }}
+                    className="w-full mt-2 bg-white p-2.5 rounded-xl border border-indigo-300 focus:outline-none focus:border-indigo text-xs font-medium animate-in fade-in"
+                  />
+                )}
               </div>
 
               {/* Footer Actions */}
@@ -858,198 +928,19 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: RESCHEDULE NEXT SESSION (LEADER PORTAL) */}
+      {/* MODAL: RESCHEDULE NEXT SESSION (WITH ROOM & DAY AVAILABILITY INSPECTOR) */}
       {/* ========================================================================= */}
-      {isRescheduleModalOpen && activeGroup && createPortal(
-        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-amber-200 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
-                  <CalendarClock className="w-5 h-5 text-amber-700" />
-                </div>
-                <div>
-                  <h3 className="font-black text-base text-charcoal">Reschedule Bible Study Session</h3>
-                  <p className="text-xs text-charcoal/60 truncate max-w-xs">{activeGroup.name}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsRescheduleModalOpen(false)}
-                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Regular Schedule Reference Banner */}
-            <div className="p-3 bg-ivory rounded-2xl border border-amber-200/60 text-xs flex items-center justify-between gap-2 flex-wrap">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-bold text-charcoal/50 uppercase block">Regular Weekly Schedule</span>
-                <span className="font-bold text-charcoal">
-                  Every {activeGroup.meeting_day} at {activeGroup.meeting_time}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold text-charcoal/50 uppercase block">Meeting Location</span>
-                <span className="font-bold text-charcoal">{activeGroup.location}</span>
-              </div>
-            </div>
-
-            <form onSubmit={(e) => handleSaveReschedule(e, false)} className="space-y-4 text-xs">
-              {/* Status Mode Selector */}
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1.5">
-                  Reschedule Status:
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <div
-                    onClick={() => setRescheduleData({ ...rescheduleData, is_rescheduled: true })}
-                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${rescheduleData.is_rescheduled
-                      ? "bg-amber-50/90 border-amber-400 ring-1 ring-amber-400 text-amber-950 font-bold"
-                      : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
-                      }`}
-                  >
-                    <div className="w-4 h-4 rounded-full border border-amber-600 flex items-center justify-center shrink-0 mt-0.5">
-                      {rescheduleData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-amber-600"></div>}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">⚠️ Reschedule Active</div>
-                      <div className="text-[10px] text-amber-800/80 font-normal mt-0.5">Move next meeting to a new date/time</div>
-                    </div>
-                  </div>
-
-                  <div
-                    onClick={() => setRescheduleData({ ...rescheduleData, is_rescheduled: false })}
-                    className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${!rescheduleData.is_rescheduled
-                      ? "bg-emerald-50/90 border-emerald-400 ring-1 ring-emerald-400 text-emerald-950 font-bold"
-                      : "bg-ivory-light border-gray-200 text-charcoal/70 hover:border-gray-300"
-                      }`}
-                  >
-                    <div className="w-4 h-4 rounded-full border border-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
-                      {!rescheduleData.is_rescheduled && <div className="w-2 h-2 rounded-full bg-emerald-600"></div>}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">✓ Regular Schedule</div>
-                      <div className="text-[10px] text-emerald-800/80 font-normal mt-0.5">Follow normal meeting schedule</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Conditional Reschedule Inputs */}
-              {rescheduleData.is_rescheduled && (
-                <div className="space-y-3.5 p-3.5 bg-gradient-to-br from-amber-50/60 to-ivory rounded-2xl border border-amber-200/80 animate-in fade-in">
-                  {/* New Date Picker */}
-                  <div>
-                    <DatePickerInput
-                      label="New Rescheduled Meeting Date"
-                      required={rescheduleData.is_rescheduled}
-                      value={rescheduleData.rescheduled_date}
-                      onChange={(val) => setRescheduleData({ ...rescheduleData, rescheduled_date: val })}
-                      placeholder="Select new meeting date"
-                      amberTheme
-                    />
-                  </div>
-
-                  {/* Time In & Time Out using TimePickerInput */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <TimePickerInput
-                        label="New Time In (Start Time) *"
-                        value={rescheduleData.rescheduled_time_start}
-                        onChange={(val) => setRescheduleData({ ...rescheduleData, rescheduled_time_start: val })}
-                        placeholder="e.g. 6:30 PM"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <TimePickerInput
-                        label="New Time Out (End Time)"
-                        value={rescheduleData.rescheduled_time_end}
-                        onChange={(val) => setRescheduleData({ ...rescheduleData, rescheduled_time_end: val })}
-                        placeholder="e.g. 8:00 PM"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Quick Reason Chips */}
-                  <div>
-                    <label className="block font-bold text-amber-950 mb-1">
-                      Reason / Notice for Disciples *
-                    </label>
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {[
-                        "Typhoon / Severe Weather",
-                        "Leader Travel / Ministry Duty",
-                        "Church-Wide Event / Holiday",
-                        "Member Request & Agreement",
-                        "Venue Maintenance / Room Setup"
-                      ].map((chip) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => setRescheduleData({ ...rescheduleData, reschedule_reason: chip })}
-                          className="px-2 py-1 rounded-lg bg-white hover:bg-amber-100 border border-amber-200 text-[10px] font-semibold text-amber-950 transition-colors cursor-pointer"
-                        >
-                          {chip}
-                        </button>
-                      ))}
-                    </div>
-                    <textarea
-                      rows={2}
-                      required={rescheduleData.is_rescheduled}
-                      placeholder="e.g. 'Naurong po ang ating meeting sa Friday dahil may church conference sa Miyerkules. Kitakits sa Friday 6:30 PM!'..."
-                      value={rescheduleData.reschedule_reason}
-                      onChange={(e) => setRescheduleData({ ...rescheduleData, reschedule_reason: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsRescheduleModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  {activeGroup.is_rescheduled && (
-                    <button
-                      type="button"
-                      onClick={() => handleSaveReschedule(undefined, true)}
-                      disabled={isSavingReschedule}
-                      className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200 cursor-pointer"
-                      title="Clear reschedule and revert to regular schedule"
-                    >
-                      Clear Reschedule
-                    </button>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSavingReschedule}
-                  className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>
-                    {isSavingReschedule
-                      ? "Saving..."
-                      : rescheduleData.is_rescheduled
-                        ? "Save Rescheduled Session"
-                        : "Save Regular Schedule"}
-                  </span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+      <BibleStudyRescheduleModal
+        isOpen={isRescheduleModalOpen}
+        onClose={() => setIsRescheduleModalOpen(false)}
+        group={activeGroup}
+        onSaved={() => {
+          if (onGroupUpdated) onGroupUpdated();
+        }}
+        showToast={(msg, type) => {
+          showAlert(type === "error" ? "Reschedule Notice" : "Schedule Updated", msg, type === "error" ? "danger" : "success");
+        }}
+      />
 
       {/* Reusable Confirmation & Alert Modal */}
       <ConfirmationModal

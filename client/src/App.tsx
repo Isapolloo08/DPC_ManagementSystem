@@ -11,12 +11,15 @@ import { BibleStudyPage } from "./pages/BibleStudyPage";
 import { CurriculumPage } from "./pages/CurriculumPage";
 import { DutyPage } from "./pages/DutyPage";
 import { EventsPage } from "./pages/EventsPage";
+import { SundayEventsCyclePage } from "./pages/SundayEventsCyclePage";
 import { CommunicationsPage } from "./pages/CommunicationsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { AuditPage } from "./pages/AuditPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { CheckInPage } from "./pages/CheckInPage";
+import { AttendanceLogPage } from "./pages/AttendanceLogPage";
+import { ServiceCalendarPage } from "./pages/ServiceCalendarPage";
 import { DishwashingPage } from "./pages/DishwashingPage";
 import { LeaderPortalPage } from "./pages/leader";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -56,6 +59,9 @@ const MainLayout: React.FC = () => {
       if (currentTab === "leaderportal") {
         return <LeaderPortalPage onNavigateGeneralTab={setCurrentTab} />;
       }
+      if (currentTab === "attendancelog") {
+        return <AttendanceLogPage />;
+      }
       if (currentTab === "curriculum") {
         return <CurriculumPage />;
       }
@@ -66,7 +72,10 @@ const MainLayout: React.FC = () => {
         return <DishwashingPage />;
       }
       if (currentTab === "events") {
-        return <EventsPage />;
+        return <EventsPage onNavigate={setCurrentTab} />;
+      }
+      if (currentTab === "sundaycycle") {
+        return <SundayEventsCyclePage />;
       }
       if (currentTab === "communications") {
         return <CommunicationsPage />;
@@ -93,6 +102,10 @@ const MainLayout: React.FC = () => {
         return <LeaderPortalPage initialTab="biblestudy" />;
       case "attendance":
         return <CheckInPage />;
+      case "attendancelog":
+        return <AttendanceLogPage />;
+      case "servicecalendar":
+        return <ServiceCalendarPage />;
       case "members":
         return <MembersPage />;
       case "biblestudy":
@@ -104,7 +117,9 @@ const MainLayout: React.FC = () => {
       case "dishwashing":
         return <DishwashingPage />;
       case "events":
-        return <EventsPage />;
+        return <EventsPage onNavigate={setCurrentTab} />;
+      case "sundaycycle":
+        return <SundayEventsCyclePage />;
       case "communications":
         return <CommunicationsPage />;
       case "reports":

@@ -143,6 +143,7 @@ router.post("/users", authMiddleware, requireRoles("Admin"), async (req: AuthReq
 
     if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
     if (!email || !email.trim()) return res.status(400).json({ error: "Email is required" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: "Invalid email format" });
     if (!password || password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
     if (!role_id) return res.status(400).json({ error: "Role is required" });
 
@@ -200,9 +201,17 @@ router.put("/users/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
     const current = await db.get("SELECT * FROM users WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "User not found" });
 
-    if (email && email.trim().toLowerCase() !== current.email.toLowerCase()) {
-      const duplicate = await db.get("SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id != $2", [email.trim(), id]);
-      if (duplicate) return res.status(400).json({ error: "Another user already has this email" });
+    if (name !== undefined && !name.trim()) {
+      return res.status(400).json({ error: "Name cannot be empty" });
+    }
+
+    if (email !== undefined) {
+      if (!email.trim()) return res.status(400).json({ error: "Email cannot be empty" });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: "Invalid email format" });
+      if (email.trim().toLowerCase() !== current.email.toLowerCase()) {
+        const duplicate = await db.get("SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id != $2", [email.trim(), id]);
+        if (duplicate) return res.status(400).json({ error: "Another user already has this email" });
+      }
     }
 
     let cleanUsername = current.username;
@@ -215,7 +224,8 @@ router.put("/users/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
     }
 
     let newHash = current.password_hash;
-    if (password && password.trim().length >= 6) {
+    if (password !== undefined && password.trim().length > 0) {
+      if (password.trim().length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
       newHash = bcrypt.hashSync(password.trim(), 10);
     }
 

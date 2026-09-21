@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
@@ -12,6 +12,70 @@ import {
   AlertCircle, ChevronRight, Phone, CheckSquare, Sparkle, Calendar,
   Crown, UserPlus, Search, Filter
 } from "lucide-react";
+
+export interface DutyChecklistItem {
+  id: string;
+  task: string;
+  desc: string;
+  completed?: boolean;
+}
+
+export interface DutyGuidelineCard {
+  id: string;
+  title: string;
+  desc: string;
+  color: "amber" | "indigo" | "emerald" | "rose" | "teal" | "sky" | "violet";
+}
+
+const DEFAULT_DUTY_CHECKLIST: DutyChecklistItem[] = [
+  { id: "duty-1", task: "Sanctuary Sweeping & Mopping", desc: "Clean altar, aisles, pews, and pulpit area." },
+  { id: "duty-2", task: "Restroom Sanitization", desc: "Restock toilet paper, soap, clean sinks and mirrors." },
+  { id: "duty-3", task: "Trash Disposal & Replacement", desc: "Empty all indoor trash bins and replace liners." },
+  { id: "duty-4", task: "Sound & Audio Visual Setup", desc: "Check microphones, sound console, projector screen." },
+  { id: "duty-5", task: "Fellowship Area Preparation", desc: "Clean tables, wash coffee cups, wipe counters." },
+  { id: "duty-6", task: "Entrance Porch & Perimeter", desc: "Sweep foyer entrance, ensure welcome mats are clean." },
+];
+
+const DEFAULT_DUTY_GUIDELINES: DutyGuidelineCard[] = [
+  {
+    id: "guide-1",
+    title: "⏰ Call Time & Attendance",
+    desc: "Duty teams convene at the church premises every Saturday by 1:00 PM - 3:00 PM. Team Leaders coordinate attendance in advance.",
+    color: "amber"
+  },
+  {
+    id: "guide-2",
+    title: "🔄 Schedule Swaps",
+    desc: "If team members have personal conflicts on their designated Saturday, use the \"Swap Saturday Team\" button to trade dates with another team.",
+    color: "indigo"
+  },
+  {
+    id: "guide-3",
+    title: "✨ Automatic Weekly Rota",
+    desc: "The system automatically cycles to the next scheduled team every week according to the turn order.",
+    color: "emerald"
+  }
+];
+
+const getDutyGuidelineTheme = (color: string) => {
+  switch (color) {
+    case "amber":
+      return { bg: "bg-amber-50/90", border: "border-amber-200", title: "text-amber-950", desc: "text-amber-900" };
+    case "emerald":
+      return { bg: "bg-emerald-50/90", border: "border-emerald-200", title: "text-emerald-950", desc: "text-emerald-900" };
+    case "rose":
+      return { bg: "bg-rose-50/90", border: "border-rose-200", title: "text-rose-950", desc: "text-rose-900" };
+    case "teal":
+      return { bg: "bg-teal-50/90", border: "border-teal-200", title: "text-teal-950", desc: "text-teal-900" };
+    case "sky":
+      return { bg: "bg-sky-50/90", border: "border-sky-200", title: "text-sky-950", desc: "text-sky-900" };
+    case "violet":
+      return { bg: "bg-violet-50/90", border: "border-violet-200", title: "text-violet-950", desc: "text-violet-900" };
+    case "indigo":
+    default:
+      return { bg: "bg-indigo-50/90", border: "border-indigo-200", title: "text-indigo-950", desc: "text-indigo-900" };
+  }
+};
 
 export const DutyPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
@@ -29,6 +93,175 @@ export const DutyPage: React.FC = () => {
   const [churchMembers, setChurchMembers] = useState<Member[]>([]);
   const [allMinistries, setAllMinistries] = useState<Ministry[]>(ministries || []);
   const [loading, setLoading] = useState(true);
+
+  // Dynamic Duty Checklist & Guidelines State
+  const [dutyChecklist, setDutyChecklist] = useState<DutyChecklistItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("dpc_saturday_duty_checklist");
+      return saved ? JSON.parse(saved) : DEFAULT_DUTY_CHECKLIST;
+    } catch {
+      return DEFAULT_DUTY_CHECKLIST;
+    }
+  });
+
+  const [dutyGuidelines, setDutyGuidelines] = useState<DutyGuidelineCard[]>(() => {
+    try {
+      const saved = localStorage.getItem("dpc_duty_guidelines");
+      return saved ? JSON.parse(saved) : DEFAULT_DUTY_GUIDELINES;
+    } catch {
+      return DEFAULT_DUTY_GUIDELINES;
+    }
+  });
+
+  // Task Modal State
+  const [isDutyTaskModalOpen, setIsDutyTaskModalOpen] = useState(false);
+  const [editingDutyTask, setEditingDutyTask] = useState<DutyChecklistItem | null>(null);
+  const [dutyTaskForm, setDutyTaskForm] = useState({ task: "", desc: "" });
+
+  // Guideline Modal State
+  const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState(false);
+  const [editingGuideline, setEditingGuideline] = useState<DutyGuidelineCard | null>(null);
+  const [guidelineForm, setGuidelineForm] = useState<{
+    title: string;
+    desc: string;
+    color: "amber" | "indigo" | "emerald" | "rose" | "teal" | "sky" | "violet";
+  }>({
+    title: "",
+    desc: "",
+    color: "amber"
+  });
+
+  const saveDutyChecklist = (newChecklist: DutyChecklistItem[]) => {
+    setDutyChecklist(newChecklist);
+    localStorage.setItem("dpc_saturday_duty_checklist", JSON.stringify(newChecklist));
+  };
+
+  const saveDutyGuidelines = (newGuidelines: DutyGuidelineCard[]) => {
+    setDutyGuidelines(newGuidelines);
+    localStorage.setItem("dpc_duty_guidelines", JSON.stringify(newGuidelines));
+  };
+
+  const handleOpenAddDutyTask = () => {
+    setEditingDutyTask(null);
+    setDutyTaskForm({ task: "", desc: "" });
+    setIsDutyTaskModalOpen(true);
+  };
+
+  const handleOpenEditDutyTask = (item: DutyChecklistItem) => {
+    setEditingDutyTask(item);
+    setDutyTaskForm({ task: item.task, desc: item.desc });
+    setIsDutyTaskModalOpen(true);
+  };
+
+  const handleSaveDutyTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dutyTaskForm.task.trim()) {
+      showAlert("Missing Title", "Please enter a task title.");
+      return;
+    }
+
+    if (editingDutyTask) {
+      const updated = dutyChecklist.map(t =>
+        t.id === editingDutyTask.id ? { ...t, task: dutyTaskForm.task.trim(), desc: dutyTaskForm.desc.trim() } : t
+      );
+      saveDutyChecklist(updated);
+    } else {
+      const newTask: DutyChecklistItem = {
+        id: `duty-${Date.now()}`,
+        task: dutyTaskForm.task.trim(),
+        desc: dutyTaskForm.desc.trim(),
+        completed: false
+      };
+      saveDutyChecklist([...dutyChecklist, newTask]);
+    }
+    setIsDutyTaskModalOpen(false);
+  };
+
+  const handleDeleteDutyTask = (id: string) => {
+    const updated = dutyChecklist.filter(t => t.id !== id);
+    saveDutyChecklist(updated);
+  };
+
+  const handleToggleDutyTask = (id: string) => {
+    const updated = dutyChecklist.map(t =>
+      t.id === id ? { ...t, completed: !t.completed } : t
+    );
+    saveDutyChecklist(updated);
+  };
+
+  const handleOpenAddGuideline = () => {
+    setEditingGuideline(null);
+    setGuidelineForm({ title: "", desc: "", color: "amber" });
+    setIsGuidelineModalOpen(true);
+  };
+
+  const handleOpenEditGuideline = (item: DutyGuidelineCard) => {
+    setEditingGuideline(item);
+    setGuidelineForm({ title: item.title, desc: item.desc, color: item.color || "amber" });
+    setIsGuidelineModalOpen(true);
+  };
+
+  const handleSaveGuideline = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guidelineForm.title.trim()) {
+      showAlert("Missing Title", "Please enter guideline card title.");
+      return;
+    }
+
+    if (editingGuideline) {
+      const updated = dutyGuidelines.map(g =>
+        g.id === editingGuideline.id ? { ...g, title: guidelineForm.title.trim(), desc: guidelineForm.desc.trim(), color: guidelineForm.color } : g
+      );
+      saveDutyGuidelines(updated);
+    } else {
+      const newGuide: DutyGuidelineCard = {
+        id: `guide-${Date.now()}`,
+        title: guidelineForm.title.trim(),
+        desc: guidelineForm.desc.trim(),
+        color: guidelineForm.color
+      };
+      saveDutyGuidelines([...dutyGuidelines, newGuide]);
+    }
+    setIsGuidelineModalOpen(false);
+  };
+
+  const handleDeleteGuideline = (id: string, title: string) => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Delete Guideline Card",
+      type: "danger",
+      confirmText: "Delete",
+      description: (
+        <p className="text-xs text-charcoal/80 text-center">
+          Are you sure you want to remove <strong>"{title}"</strong>?
+        </p>
+      ),
+      onConfirm: () => {
+        const updated = dutyGuidelines.filter(g => g.id !== id);
+        saveDutyGuidelines(updated);
+        setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const handleResetDutyDefaults = () => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Reset Duty Protocols to Default",
+      type: "warning",
+      confirmText: "Reset to Defaults",
+      description: (
+        <p className="text-xs text-charcoal/80 text-center">
+          This will restore the standard Saturday cleaning checklist and duty team best practices.
+        </p>
+      ),
+      onConfirm: () => {
+        saveDutyChecklist(DEFAULT_DUTY_CHECKLIST);
+        saveDutyGuidelines(DEFAULT_DUTY_GUIDELINES);
+        setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
 
   // Custom Confirmation & Alert Modal State
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
@@ -125,7 +358,11 @@ export const DutyPage: React.FC = () => {
       ]);
       setTeams(teamsData);
       setSchedule(scheduleData.schedule);
-      setChurchMembers(membersData);
+      setChurchMembers([...membersData].sort((a, b) => {
+        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      }));
       if (ministriesData && ministriesData.length > 0) {
         setAllMinistries(ministriesData);
       }
@@ -165,31 +402,50 @@ export const DutyPage: React.FC = () => {
 
   const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!teamForm.name.trim()) {
+      showAlert("Team Name Required", "Please enter a duty team name.", "warning");
+      return;
+    }
+
+    const dup = teams.find(t =>
+      t.name.toLowerCase().trim() === teamForm.name.toLowerCase().trim() &&
+      t.id !== editingTeam?.id
+    );
+    if (dup) {
+      showAlert("Duplicate Team Name", `A duty team named "${teamForm.name.trim()}" already exists.`, "warning");
+      return;
+    }
+
+    if (!teamForm.order_seq || Number(teamForm.order_seq) < 1) {
+      showAlert("Invalid Order Sequence", "Order sequence must be at least 1.", "warning");
+      return;
+    }
+
     try {
       if (editingTeam) {
         await api.updateDutyTeam(editingTeam.id, {
-          name: teamForm.name,
+          name: teamForm.name.trim(),
           order_seq: Number(teamForm.order_seq),
-          leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : null,
+          leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : undefined,
           color: teamForm.color,
-          tasks_checklist: teamForm.tasks_checklist,
-          member_ids: teamForm.selectedMemberIds
+          tasks_checklist: teamForm.tasks_checklist || undefined
         });
+        showAlert("Team Updated", `Updated ${teamForm.name} successfully!`, "success");
       } else {
         await api.createDutyTeam({
-          name: teamForm.name,
+          name: teamForm.name.trim(),
           order_seq: Number(teamForm.order_seq),
-          ministry_id: coordinatorMinistryId || null,
-          leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : null,
+          leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : undefined,
           color: teamForm.color,
-          tasks_checklist: teamForm.tasks_checklist,
+          tasks_checklist: teamForm.tasks_checklist || undefined,
           member_ids: teamForm.selectedMemberIds
         });
+        showAlert("Team Created", `Created ${teamForm.name} successfully!`, "success");
       }
       setIsTeamModalOpen(false);
       loadDutyData();
     } catch (err: any) {
-      showAlert("Save Failed", err.message || "Failed to save team", "danger");
+      showAlert("Operation Failed", err.message || "Could not save duty team.", "danger");
     }
   };
 
@@ -197,41 +453,31 @@ export const DutyPage: React.FC = () => {
     setConfirmModalConfig({
       isOpen: true,
       title: "Delete Duty Team",
-      type: "delete",
-      confirmText: "Yes, Delete Team",
-      cancelText: "Cancel",
+      type: "danger",
+      confirmText: "Delete",
       description: (
         <p className="text-xs text-charcoal/80 text-center">
-          Are you sure you want to delete <strong>"{name}"</strong> from the Saturday rotation roster?
+          Are you sure you want to delete <strong>"{name}"</strong>? Any assigned schedules will be unlinked.
         </p>
       ),
       onConfirm: async () => {
         try {
-          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
           await api.deleteDutyTeam(teamId);
-          loadDutyData();
           setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+          loadDutyData();
         } catch (err: any) {
-          setConfirmModalConfig({
-            isOpen: true,
-            title: "Delete Failed",
-            type: "danger",
-            confirmText: "Close",
-            cancelText: null,
-            description: err.message || "Failed to delete team.",
-            onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
-          });
+          showAlert("Delete Failed", err.message || "Failed to delete team.", "danger");
         }
       }
     });
   };
 
+  const handleOpenAddMember = (team: DutyTeam) => {
+    handleOpenMultiMemberSelector("existing_team", team);
+  };
+
   const handleOpenSelectorForForm = () => {
-    setSelectorTarget("team_form");
-    setSelectorSelectedIds(new Set(teamForm.selectedMemberIds));
-    setSelectorSearchQuery("");
-    setSelectorMinistryFilter("");
-    setIsMultiMemberSelectorOpen(true);
+    handleOpenMultiMemberSelector("team_form");
   };
 
   const handleRemoveMemberFromForm = (memberId: number) => {
@@ -241,43 +487,55 @@ export const DutyPage: React.FC = () => {
     }));
   };
 
-  const handleOpenAddMember = (team: DutyTeam) => {
-    setTargetTeam(team);
-    setSelectorTarget("existing_team");
-    const existingIds = new Set(team.members?.map(m => m.member_id) || []);
-    setSelectorSelectedIds(new Set(existingIds));
+  const handleOpenMultiMemberSelector = (target: "team_form" | "existing_team", team?: DutyTeam) => {
+    setSelectorTarget(target);
+    setTargetTeam(team || null);
     setSelectorSearchQuery("");
     setSelectorMinistryFilter("");
+
+    if (target === "team_form") {
+      setSelectorSelectedIds(new Set(teamForm.selectedMemberIds));
+    } else if (target === "existing_team" && team) {
+      const currentIds = team.members?.map(m => m.member_id) || [];
+      setSelectorSelectedIds(new Set(currentIds));
+    }
     setIsMultiMemberSelectorOpen(true);
   };
 
-  const handleToggleMemberSelection = (memberId: number) => {
+  const handleToggleSelectorMember = (memberId: number) => {
     setSelectorSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(memberId)) {
-        next.delete(memberId);
-      } else {
-        next.add(memberId);
-      }
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
       return next;
     });
   };
 
-  const filteredSelectorMembers = churchMembers.filter((m) => {
-    const matchesSearch =
-      !selectorSearchQuery ||
-      `${m.first_name} ${m.last_name}`.toLowerCase().includes(selectorSearchQuery.toLowerCase()) ||
-      (m.contact_phone && m.contact_phone.includes(selectorSearchQuery)) ||
-      (m.contact_email && m.contact_email.toLowerCase().includes(selectorSearchQuery.toLowerCase()));
+  const handleToggleMemberSelection = (memberId: number) => {
+    handleToggleSelectorMember(memberId);
+  };
 
-    const matchesMinistry =
-      !selectorMinistryFilter ||
-      String(m.ministry_id) === selectorMinistryFilter ||
-      (m.ministry_name && m.ministry_name.toLowerCase() === selectorMinistryFilter.toLowerCase()) ||
-      (allMinistries.find(min => String(min.id) === selectorMinistryFilter)?.name.toLowerCase() === m.ministry_name?.toLowerCase());
+  const filteredSelectorMembers = useMemo(() => {
+    return churchMembers.filter((m) => {
+      const matchesSearch =
+        !selectorSearchQuery ||
+        `${m.first_name} ${m.last_name}`.toLowerCase().includes(selectorSearchQuery.toLowerCase()) ||
+        (m.contact_phone && m.contact_phone.includes(selectorSearchQuery)) ||
+        (m.contact_email && m.contact_email.toLowerCase().includes(selectorSearchQuery.toLowerCase()));
 
-    return matchesSearch && matchesMinistry;
-  });
+      const matchesMinistry =
+        !selectorMinistryFilter ||
+        String(m.ministry_id) === selectorMinistryFilter ||
+        (m.ministry_name && m.ministry_name.toLowerCase() === selectorMinistryFilter.toLowerCase()) ||
+        (allMinistries.find(min => String(min.id) === selectorMinistryFilter)?.name.toLowerCase() === m.ministry_name?.toLowerCase());
+
+      return matchesSearch && matchesMinistry;
+    }).sort((a, b) => {
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [churchMembers, selectorSearchQuery, selectorMinistryFilter, allMinistries]);
 
   const handleSelectAllFiltered = () => {
     setSelectorSelectedIds((prev) => {
@@ -402,33 +660,37 @@ export const DutyPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
-              <CalendarCheck className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">
-              Saturday Duty Roster & Rotating Teams
-            </h1>
-            {coordinatorMinistryId && (
-              <span className="text-xs bg-indigo-50 text-indigo-950 border border-indigo-200/80 px-3 py-1 rounded-full font-black shadow-2xs">
-                {coordinatorMinistryName} Scope
-              </span>
-            )}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <CalendarCheck className="w-3.5 h-3.5 text-amber-300" />
+              <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Saturday Duty Roster"}</span>
+            </div>
           </div>
-          <p className="text-xs text-charcoal/60 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Saturday Duty Roster & Rotating Teams
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
             Weekly Saturday service preparation, church facility cleaning, and rotating team duty cycle.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="relative z-10 flex items-center gap-2.5">
           <button
             onClick={loadDutyData}
-            className="p-2.5 rounded-2xl border border-indigo-100 bg-white hover:bg-gray-50 text-charcoal/70 transition-all shadow-2xs cursor-pointer active:scale-95"
+            className="p-2.5 rounded-2xl border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all shadow-2xs backdrop-blur-md cursor-pointer active:scale-95"
             title="Refresh schedule"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-amber-300" : ""}`} />
           </button>
           {canManage && (
             <button
@@ -444,9 +706,14 @@ export const DutyPage: React.FC = () => {
 
       {/* Hero Card: THIS SATURDAY'S ON-DUTY TEAM */}
       {thisSaturday && thisSaturday.team && (
-        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-950 via-indigo-900 to-indigo-800 rounded-3xl p-7 sm:p-8 text-white shadow-xl border border-indigo-700/70">
+        <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-7 sm:p-8 text-white shadow-xl border border-white/10">
+          <img
+            src="/container_bg.jpg"
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover object-center opacity-30 mix-blend-screen pointer-events-none"
+          />
           <div className="absolute top-0 right-0 w-96 h-96 bg-amber-400/15 pointer-events-none rounded-full blur-3xl -mr-20 -mt-20"></div>
-          <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-emerald-500/10 pointer-events-none rounded-full blur-2xl"></div>
+          <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 pointer-events-none rounded-full blur-2xl"></div>
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
             <div className="space-y-3.5">
@@ -649,7 +916,15 @@ export const DutyPage: React.FC = () => {
 
                       {team.members && team.members.length > 0 ? (
                         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {team.members.map((m) => (
+                          {[...team.members]
+                            .sort((a, b) => {
+                              if (a.team_role === "Team Leader" && b.team_role !== "Team Leader") return -1;
+                              if (b.team_role === "Team Leader" && a.team_role !== "Team Leader") return 1;
+                              const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+                              const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+                              return nameA.localeCompare(nameB);
+                            })
+                            .map((m) => (
                             <div
                               key={m.member_id}
                               className="flex items-center justify-between p-2.5 rounded-xl bg-ivory-light/60 hover:bg-ivory-light border border-indigo-50/80 text-xs transition-colors"
@@ -819,61 +1094,215 @@ export const DutyPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: SATURDAY CHECKLIST */}
+      {/* TAB 3: SATURDAY CHECKLIST & GUIDELINES (DYNAMIC & EDITABLE) */}
       {activeTab === "tasks" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 space-y-4 shadow-sm">
-            <h3 className="font-black text-sm text-indigo-950 flex items-center gap-2">
-              <CheckSquare className="w-4 h-4 text-indigo-700" />
-              <span>Standard Saturday Cleaning Checklist</span>
-            </h3>
-            <p className="text-xs text-charcoal/60">
-              Assigned teams follow this standard protocol each Saturday before Sunday service:
-            </p>
-            <div className="space-y-2.5 text-xs">
-              {[
-                { task: "Sanctuary Sweeping & Mopping", desc: "Clean altar, aisles, pews, and pulpit area." },
-                { task: "Restroom Sanitization", desc: "Restock toilet paper, soap, clean sinks and mirrors." },
-                { task: "Trash Disposal & Replacement", desc: "Empty all indoor trash bins and replace liners." },
-                { task: "Sound & Audio Visual Setup", desc: "Check microphones, sound console, projector screen." },
-                { task: "Fellowship Area Preparation", desc: "Clean tables, wash coffee cups, wipe counters." },
-                { task: "Entrance Porch & Perimeter", desc: "Sweep foyer entrance, ensure welcome mats are clean." },
-              ].map((item, idx) => (
-                <div key={idx} className="p-3.5 rounded-2xl bg-ivory-light/70 border border-indigo-50/80 flex items-start gap-3">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="font-black text-indigo-950 block">{item.task}</span>
-                    <span className="text-[11px] text-charcoal/60">{item.desc}</span>
-                  </div>
-                </div>
-              ))}
+        <div className="space-y-6">
+          {/* Action Header */}
+          <div className="flex flex-wrap items-center justify-between gap-4 p-5 bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm">
+            <div className="space-y-0.5">
+              <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+                <CheckSquare className="w-5 h-5 text-indigo-700" />
+                <span>Saturday Duty Checklist & Ministry SOPs</span>
+              </h2>
+              <p className="text-xs text-charcoal/60">
+                Standard cleaning procedures, equipment checks, and operational guidelines for scheduled teams
+              </p>
             </div>
+
+            {canManage && (
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <button
+                  onClick={handleResetDutyDefaults}
+                  className="px-3.5 py-2 text-xs font-bold text-charcoal/60 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Restore default duty checklist and guidelines"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset Defaults</span>
+                </button>
+                <button
+                  onClick={handleOpenAddGuideline}
+                  className="px-3.5 py-2 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Guideline Card</span>
+                </button>
+                <button
+                  onClick={handleOpenAddDutyTask}
+                  className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-900 to-indigo-700 hover:from-indigo-950 hover:to-indigo-800 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Checklist Task</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 space-y-4 shadow-sm">
-            <h3 className="font-black text-sm text-indigo-950 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>Duty Team Best Practices</span>
-            </h3>
-            <div className="space-y-3.5 text-xs text-charcoal/70">
-              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200">
-                <span className="font-black text-amber-950 block mb-1">⏰ Call Time & Attendance</span>
-                <p className="text-[11px] text-amber-900 leading-relaxed">
-                  Duty teams convene at the church premises every Saturday by 1:00 PM - 3:00 PM. Team Leaders coordinate attendance in advance.
-                </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Left Card: Cleaning Checklist */}
+            <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 space-y-4 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-indigo-50">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-2xl bg-indigo-50 text-indigo-800 border border-indigo-100">
+                      <CheckSquare className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h3 className="font-black text-sm text-indigo-950">Standard Saturday Cleaning Checklist</h3>
+                      <p className="text-[11px] text-charcoal/60">Follow this protocol each Saturday before Sunday service</p>
+                    </div>
+                  </div>
+
+                  {canManage && (
+                    <button
+                      onClick={handleOpenAddDutyTask}
+                      className="text-[11px] font-bold text-indigo-800 hover:text-indigo-950 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Task</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3.5 space-y-2.5 text-xs">
+                  {dutyChecklist.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => handleToggleDutyTask(item.id)}
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-3 group ${
+                        item.completed
+                          ? "bg-emerald-50/70 border-emerald-200/80 text-emerald-950"
+                          : "bg-ivory-light/70 hover:bg-indigo-50/40 border-indigo-50/80 text-charcoal"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        {item.completed ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                        ) : (
+                          <CheckSquare className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+                        )}
+                        <div>
+                          <span
+                            className={`font-black block leading-tight ${
+                              item.completed ? "line-through text-charcoal/40" : "text-indigo-950"
+                            }`}
+                          >
+                            {item.task}
+                          </span>
+                          {item.desc && (
+                            <span
+                              className={`text-[11px] mt-0.5 block leading-relaxed ${
+                                item.completed ? "line-through text-charcoal/30" : "text-charcoal/60"
+                              }`}
+                            >
+                              {item.desc}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {canManage && (
+                        <div
+                          className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => handleOpenEditDutyTask(item)}
+                            className="p-1 text-charcoal/40 hover:text-indigo-950 hover:bg-white rounded transition-colors"
+                            title="Edit task"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDutyTask(item.id)}
+                            className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white rounded transition-colors"
+                            title="Delete task"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200">
-                <span className="font-black text-indigo-950 block mb-1">🔄 Schedule Swaps</span>
-                <p className="text-[11px] text-indigo-900 leading-relaxed">
-                  If team members have personal conflicts on their designated Saturday, use the <strong>"Swap Saturday Team"</strong> button to trade dates with another team.
-                </p>
+              <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-100 flex items-center justify-between text-xs text-indigo-950 font-bold mt-4">
+                <span>Completed Tasks</span>
+                <span className="bg-white px-2.5 py-0.5 rounded-lg border border-indigo-200 text-indigo-900 font-black">
+                  {dutyChecklist.filter(t => t.completed).length} / {dutyChecklist.length}
+                </span>
+              </div>
+            </div>
+
+            {/* Right Card: Best Practices & Guidelines */}
+            <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 space-y-4 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-indigo-50">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100">
+                      <Sparkles className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h3 className="font-black text-sm text-indigo-950">Duty Team Best Practices</h3>
+                      <p className="text-[11px] text-charcoal/60">Guidelines for leaders and Saturday volunteers</p>
+                    </div>
+                  </div>
+
+                  {canManage && (
+                    <button
+                      onClick={handleOpenAddGuideline}
+                      className="text-[11px] font-bold text-amber-900 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Card</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3.5 space-y-3 text-xs">
+                  {dutyGuidelines.map((card) => {
+                    const theme = getDutyGuidelineTheme(card.color);
+                    return (
+                      <div
+                        key={card.id}
+                        className={`p-4 rounded-2xl border transition-all relative group ${theme.bg} ${theme.border}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <span className={`font-black block mb-1 ${theme.title}`}>{card.title}</span>
+
+                          {canManage && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                              <button
+                                onClick={() => handleOpenEditGuideline(card)}
+                                className="p-1 text-charcoal/40 hover:text-indigo-950 hover:bg-white/80 rounded transition-colors"
+                                title="Edit guideline"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteGuideline(card.id, card.title)}
+                                className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white/80 rounded transition-colors"
+                                title="Delete guideline"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <p className={`text-[11px] leading-relaxed ${theme.desc}`}>{card.desc}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/80">
-                <span className="font-bold text-emerald-950 block mb-1">✨ Automatic Weekly Rota</span>
-                <p className="text-[11px] text-emerald-900">
-                  The system automatically cycles to the next scheduled team every week according to the turn order.
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950 to-slate-900 text-white space-y-1.5 mt-4">
+                <div className="flex items-center gap-2 text-amber-300 text-xs font-black">
+                  <Sparkles className="w-4 h-4" />
+                  <span>Excellence in God's House</span>
+                </div>
+                <p className="text-[11px] text-indigo-100/80 leading-relaxed">
+                  "Whatever you do, work at it with all your heart, as working for the Lord, not for human masters." — Colossians 3:23
                 </p>
               </div>
             </div>
@@ -1278,6 +1707,165 @@ export const DutyPage: React.FC = () => {
                   className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   Confirm Swap
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL 4: Create / Edit Duty Task */}
+      {isDutyTaskModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-black text-indigo-950">
+                  {editingDutyTask ? "Edit Cleaning Task" : "Add Cleaning Task"}
+                </h2>
+                <span className="text-[11px] text-charcoal/60">
+                  Saturday church building cleaning task
+                </span>
+              </div>
+              <button
+                onClick={() => setIsDutyTaskModalOpen(false)}
+                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDutyTask} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Task Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sanctuary Sweeping & Mopping"
+                  value={dutyTaskForm.task}
+                  onChange={(e) => setDutyTaskForm({ ...dutyTaskForm, task: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Description / Specifics</label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Clean altar, aisles, pews, and pulpit area."
+                  value={dutyTaskForm.desc}
+                  onChange={(e) => setDutyTaskForm({ ...dutyTaskForm, desc: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+                ></textarea>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDutyTaskModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  {editingDutyTask ? "Save Changes" : "Add Task"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL 5: Create / Edit Guideline Card */}
+      {isGuidelineModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-black text-indigo-950">
+                  {editingGuideline ? "Edit Guideline Card" : "Add Guideline Card"}
+                </h2>
+                <span className="text-[11px] text-charcoal/60">
+                  Operational best practices for duty teams
+                </span>
+              </div>
+              <button
+                onClick={() => setIsGuidelineModalOpen(false)}
+                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGuideline} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Card Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. ⏰ Call Time & Attendance"
+                  value={guidelineForm.title}
+                  onChange={(e) => setGuidelineForm({ ...guidelineForm, title: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Color Theme</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { key: "amber", label: "Amber", bg: "bg-amber-50 text-amber-800 border-amber-200" },
+                    { key: "indigo", label: "Indigo", bg: "bg-indigo-50 text-indigo-800 border-indigo-200" },
+                    { key: "emerald", label: "Emerald", bg: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+                    { key: "rose", label: "Rose", bg: "bg-rose-50 text-rose-800 border-rose-200" },
+                    { key: "teal", label: "Teal", bg: "bg-teal-50 text-teal-800 border-teal-200" },
+                    { key: "sky", label: "Sky", bg: "bg-sky-50 text-sky-800 border-sky-200" },
+                    { key: "violet", label: "Violet", bg: "bg-violet-50 text-violet-800 border-violet-200" }
+                  ].map(theme => (
+                    <button
+                      key={theme.key}
+                      type="button"
+                      onClick={() => setGuidelineForm({ ...guidelineForm, color: theme.key as any })}
+                      className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${theme.bg} ${
+                        guidelineForm.color === theme.key ? "ring-2 ring-indigo-950 scale-102 shadow-xs" : "opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      {theme.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-charcoal mb-1">Guideline Details *</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="e.g. Duty teams convene at the church premises every Saturday by 1:00 PM - 3:00 PM."
+                  value={guidelineForm.desc}
+                  onChange={(e) => setGuidelineForm({ ...guidelineForm, desc: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+                ></textarea>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGuidelineModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  {editingGuideline ? "Save Changes" : "Add Guideline"}
                 </button>
               </div>
             </form>

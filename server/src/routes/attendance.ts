@@ -106,7 +106,7 @@ router.get("/roster", async (req: Request, res: Response) => {
       query += ` AND (m.first_name ILIKE $${pIdx} OR m.last_name ILIKE $${pIdx} OR h.name ILIKE $${pIdx})`;
     }
 
-    query += " ORDER BY min.id ASC, h.name ASC, m.first_name ASC";
+    query += " ORDER BY LOWER(m.first_name) ASC, LOWER(m.last_name) ASC";
 
     const rows = await db.all(query, params);
     res.json(rows);
@@ -588,3 +588,4 @@ router.get("/trends", async (req: Request, res: Response) => {
 });
 
 export default router;
+

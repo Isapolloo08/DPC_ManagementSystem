@@ -74,6 +74,7 @@ export const SYNC_TABLES: TableSyncConfig[] = [
   { name: "event_registrations", label: "Event RSVPs", conflictTarget: "event_id, member_id", updateCols: ["user_id", "guests_count", "status"], isSerial: true },
   { name: "announcements", label: "Announcements", conflictTarget: "id", updateCols: ["title", "body", "ministry_id", "created_by", "is_pinned"], isSerial: true },
   { name: "attendance", label: "Attendance Records", conflictTarget: "id", updateCols: ["member_id", "ministry_id", "event_id", "checked_in_at", "checked_in_by", "security_tag", "checked_out_at", "checked_out_by", "notes"], isSerial: true },
+  { name: "services", label: "Service Calendar", conflictTarget: "service_date, service_type", updateCols: ["title", "status", "notes", "updated_at"], isSerial: true },
   { name: "audit_logs", label: "Audit Logs", conflictTarget: "id", updateCols: ["user_id", "action", "target_table", "target_id", "details"], isSerial: true }
 ];
 

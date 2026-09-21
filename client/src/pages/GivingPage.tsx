@@ -89,12 +89,25 @@ export const GivingPage: React.FC = () => {
 
   const handleRecordDonation = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!giveForm.fund_id) {
+      showAlert("Fund Required", "Please select a ministry fund or giving category.", "warning");
+      return;
+    }
+    if (!giveForm.amount || isNaN(Number(giveForm.amount)) || Number(giveForm.amount) <= 0) {
+      showAlert("Invalid Amount", "Please enter a valid contribution amount greater than 0.", "warning");
+      return;
+    }
+    if (!giveForm.method) {
+      showAlert("Payment Method Required", "Please select a payment method.", "warning");
+      return;
+    }
+
     try {
       await api.recordDonation({
         fund_id: Number(giveForm.fund_id),
         amount: Number(giveForm.amount),
         method: giveForm.method,
-        notes: giveForm.notes
+        notes: giveForm.notes ? giveForm.notes.trim() : undefined
       });
       setIsGiveModalOpen(false);
       setGiveForm({ fund_id: "1", amount: "", method: "online", notes: "" });
@@ -125,21 +138,26 @@ export const GivingPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="relative overflow-hidden bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-200/20 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
-              <Heart className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-charcoal tracking-tight">
-              Giving & Stewardship
-            </h1>
-            <span className="px-3 py-1 rounded-full text-xs font-black bg-indigo-50 text-indigo-900 border border-indigo-200/80 shadow-2xs">
-              Faithful Ministry Stewardship
-            </span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <Heart className="w-3.5 h-3.5 text-amber-300" />
+              <span>Faithful Stewardship</span>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Giving & Stewardship
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
             Ministry fund progress, tithes & offerings, and official tax contribution statements for church partners.
           </p>
         </div>
@@ -147,9 +165,9 @@ export const GivingPage: React.FC = () => {
         <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
           <button
             onClick={handleGenerateStatement}
-            className="flex items-center gap-2 bg-white hover:bg-indigo-50/60 border border-indigo-200/80 text-charcoal font-bold px-4 py-2.5 rounded-2xl text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all cursor-pointer active:scale-95"
           >
-            <FileText className="w-4 h-4 text-indigo" />
+            <FileText className="w-4 h-4 text-sky-300" />
             <span>My Tax Giving Statement</span>
           </button>
           <button

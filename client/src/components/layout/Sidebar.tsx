@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { ChurchLogo } from "../common/ChurchLogo";
 import {
   LayoutDashboard, Users, HeartHandshake, UserCheck, Calendar, MessageSquare,
   Heart, BarChart3, ShieldAlert, Sparkles, BookOpen, BookMarked, LogOut, Sliders, UserCog, CalendarCheck,
-  X, ChevronLeft, ChevronRight, Utensils
+  X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Utensils, Sun
 } from "lucide-react";
 
 export type NavTab =
@@ -15,12 +15,15 @@ export type NavTab =
   | "leader-members"
   | "leader-biblestudy"
   | "attendance"
+  | "attendancelog"
+  | "servicecalendar"
   | "members"
   | "biblestudy"
   | "curriculum"
   | "duty"
   | "dishwashing"
   | "events"
+  | "sundaycycle"
   | "communications"
   | "reports"
   | "users"
@@ -39,6 +42,39 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpen = false, onClose, onOpenProfile }) => {
   const { user, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const checkScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    setCanScrollUp(scrollTop > 8);
+    setCanScrollDown(scrollTop + clientHeight < scrollHeight - 8);
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const current = scrollRef.current;
+    if (!current) return;
+
+    const resizeObserver = new ResizeObserver(() => checkScroll());
+    resizeObserver.observe(current);
+    window.addEventListener("resize", checkScroll);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [currentTab, isCollapsed]);
+
+  const scrollUp = () => {
+    scrollRef.current?.scrollBy({ top: -160, behavior: "smooth" });
+  };
+
+  const scrollDown = () => {
+    scrollRef.current?.scrollBy({ top: 160, behavior: "smooth" });
+  };
 
   const isLeader = user?.role_name === "Leader";
   const isCoordinator = user?.role_name === "Coordinator";
@@ -48,22 +84,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
   const leaderNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: "dashboard", label: "Leader Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Leader" },
     { id: "leaderportal", label: "My Bible Study Group", icon: <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "My Group" },
+    { id: "attendancelog", label: "Attendance Log", icon: <UserCheck className="w-4 h-4 shrink-0 text-emerald-500" />, badge: "Log" },
     { id: "curriculum", label: "Bible Study Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
     { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-500" />, badge: "1-Yr" },
     { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
     { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
-    { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
   ];
 
   // Dedicated navigation for Ministry Volunteers & Helpers
   const volunteerNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: "dashboard", label: "Volunteer Hub", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-emerald-500" />, badge: "Volunteer" },
-    { id: "attendance", label: "Sunday Attendance", icon: <UserCheck className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Live" },
+    { id: "attendance", label: "Attendance", icon: <UserCheck className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Live" },
     { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
     { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
     { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
-    { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "leaderportal", label: "My Bible Study Group", icon: <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />, badge: "My Group" },
   ];
@@ -72,14 +111,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
   const defaultNavItems: { id: NavTab; label: string; icon: React.ReactNode; roles?: string[]; badge?: string }[] = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0" /> },
     { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
-    { id: "attendance", label: "Sunday Attendance", icon: <UserCheck className="w-4 h-4 shrink-0" />, badge: "Live" },
+    { id: "attendance", label: "Attendance", icon: <UserCheck className="w-4 h-4 shrink-0" />, badge: "Live" },
+    { id: "attendancelog", label: "Attendance Log", icon: <UserCheck className="w-4 h-4 shrink-0 text-emerald-600" />, roles: ["Admin", "Coordinator"], badge: "Log" },
+    { id: "servicecalendar", label: "Service Calendar", icon: <Calendar className="w-4 h-4 shrink-0 text-indigo-600" />, roles: ["Admin", "Coordinator"], badge: "Services" },
     { id: "members", label: "Members & Families", icon: <Users className="w-4 h-4 shrink-0" /> },
     { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "Groups" },
     { id: "leaderportal", label: "My Bible Study Group", icon: <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />, badge: "My Group" },
     { id: "curriculum", label: "Bible Study Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
     { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
     { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
-    { id: "events", label: "Events & Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "reports", label: "Analytics & Trends", icon: <BarChart3 className="w-4 h-4 shrink-0" /> },
     { id: "users", label: "User Management", icon: <UserCog className="w-4 h-4 shrink-0" />, roles: ["Admin"], badge: "Admin" },
@@ -197,85 +239,115 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
         </div>
 
         {/* SCROLLABLE MIDDLE NAVIGATION CONTAINER */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-3.5 space-y-4">
-          {/* Navigation Items */}
-          <div className="space-y-1">
-            {!isCollapsed && (
-              <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-charcoal/50 mb-1.5 truncate">
-                {isLeader ? "Leader Workspace" : "Main Navigation"}
-              </p>
-            )}
-            {activeNavItems.map((item) => {
-              if ((item as any).roles && user && !(item as any).roles.includes(user.role_name)) {
-                return null;
-              }
+        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Up Scroll Indicator */}
+          {canScrollUp && (
+            <button
+              type="button"
+              onClick={scrollUp}
+              className="absolute top-1 left-1/2 -translate-x-1/2 z-20 p-1 text-indigo-600/80 hover:text-indigo-900 hover:scale-125 active:scale-95 transition-all cursor-pointer"
+              title="Scroll Up"
+            >
+              <ChevronUp className="w-6 h-6 stroke-[2.5] animate-pulse" />
+            </button>
+          )}
 
-              const isActive = isLeader
-                ? (currentTab === item.id || (item.id === "leader-dashboard" && currentTab === "dashboard"))
-                : currentTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleTabClick(item.id)}
-                  title={item.label}
-                  className={`w-full flex items-center ${isCollapsed ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2"} rounded-xl text-xs transition-all cursor-pointer ${isActive
-                    ? "bg-indigo text-white shadow-sm font-bold"
-                    : "text-charcoal/80 hover:bg-indigo-50/70 hover:text-indigo font-medium"
-                    }`}
-                >
-                  <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-2.5 min-w-0 pr-1"}`}>
-                    <span className={isActive ? "text-amber-400" : "text-indigo/70"}>
-                      {item.icon}
-                    </span>
-                    {!isCollapsed && <span className="truncate">{item.label}</span>}
-                  </div>
-                  {!isCollapsed && item.badge && (
-                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${isActive
-                      ? "bg-amber text-charcoal font-black"
-                      : "bg-indigo-50 text-indigo border border-indigo-100/80"
-                      }`}>
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <div
+            ref={scrollRef}
+            onScroll={checkScroll}
+            className="flex-1 overflow-y-auto no-scrollbar p-3.5 space-y-4"
+          >
+            {/* Navigation Items */}
+            <div className="space-y-1">
+              {!isCollapsed && (
+                <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-charcoal/50 mb-1.5 truncate">
+                  {isLeader ? "Leader Workspace" : "Main Navigation"}
+                </p>
+              )}
+              {activeNavItems.map((item) => {
+                if ((item as any).roles && user && !(item as any).roles.includes(user.role_name)) {
+                  return null;
+                }
 
-          {/* Ministry Legend (Scoped to Designated Ministry for Coordinators) */}
-          {isCollapsed ? (
-            <div className="pt-3 border-t border-indigo-50 flex flex-col items-center gap-2">
-              {ministryList.map((m) => (
-                <span
-                  key={m.name}
-                  className={`w-3 h-3 rounded-full ${m.color} cursor-pointer hover:scale-125 transition-transform shadow-2xs`}
-                  title={`${m.name} Ministry (${m.age})`}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="pt-4 border-t border-indigo-50">
-              <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-charcoal/50 mb-2.5 flex items-center gap-1">
-                <BookOpen className="w-3 h-3 text-indigo" />
-                {isCoordinator && user?.ministries && user.ministries.length > 0
-                  ? "Designated Ministry"
-                  : "7 Active Ministries"}
-              </p>
-              <div className="space-y-1.5 px-3">
-                {ministryList.map((m) => (
-                  <div key={m.name} className={`flex items-center justify-between text-xs py-1 px-2 rounded-lg ${isCoordinator ? "bg-indigo-50/70 border border-indigo-100 font-bold" : "py-0.5"
-                    }`}>
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${m.color}`}></span>
-                      <span className="text-charcoal font-bold">{m.name} Ministry</span>
+                const isActive = isLeader
+                  ? (currentTab === item.id || (item.id === "leader-dashboard" && currentTab === "dashboard"))
+                  : currentTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleTabClick(item.id)}
+                    title={item.label}
+                    className={`w-full flex items-center ${isCollapsed ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2"} rounded-xl text-xs transition-all cursor-pointer ${isActive
+                      ? "bg-indigo text-white shadow-sm font-bold"
+                      : "text-charcoal/80 hover:bg-indigo-50/70 hover:text-indigo font-medium"
+                      }`}
+                  >
+                    <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-2.5 min-w-0 pr-1"}`}>
+                      <span className={isActive ? "text-amber-400" : "text-indigo/70"}>
+                        {item.icon}
+                      </span>
+                      {!isCollapsed && <span className="truncate">{item.label}</span>}
                     </div>
-                    <span className={`text-[10px] ${isCoordinator ? "bg-white text-indigo px-1.5 py-0.5 rounded shadow-2xs font-bold" : "text-charcoal/50"}`}>
-                      {m.age}
-                    </span>
-                  </div>
+                    {!isCollapsed && item.badge && (
+                      <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${isActive
+                        ? "bg-amber text-charcoal font-black"
+                        : "bg-indigo-50 text-indigo border border-indigo-100/80"
+                        }`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Ministry Legend (Scoped to Designated Ministry for Coordinators) */}
+            {isCollapsed ? (
+              <div className="pt-3 border-t border-indigo-50 flex flex-col items-center gap-2">
+                {ministryList.map((m) => (
+                  <span
+                    key={m.name}
+                    className={`w-3 h-3 rounded-full ${m.color} cursor-pointer hover:scale-125 transition-transform shadow-2xs`}
+                    title={`${m.name} Ministry (${m.age})`}
+                  />
                 ))}
               </div>
-            </div>
+            ) : (
+              <div className="pt-4 border-t border-indigo-50">
+                <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-charcoal/50 mb-2.5 flex items-center gap-1">
+                  <BookOpen className="w-3 h-3 text-indigo" />
+                  {isCoordinator && user?.ministries && user.ministries.length > 0
+                    ? "Designated Ministry"
+                    : "7 Active Ministries"}
+                </p>
+                <div className="space-y-1.5 px-3">
+                  {ministryList.map((m) => (
+                    <div key={m.name} className={`flex items-center justify-between text-xs py-1 px-2 rounded-lg ${isCoordinator ? "bg-indigo-50/70 border border-indigo-100 font-bold" : "py-0.5"
+                      }`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${m.color}`}></span>
+                        <span className="text-charcoal font-bold">{m.name} Ministry</span>
+                      </div>
+                      <span className={`text-[10px] ${isCoordinator ? "bg-white text-indigo px-1.5 py-0.5 rounded shadow-2xs font-bold" : "text-charcoal/50"}`}>
+                        {m.age}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Down Scroll Indicator */}
+          {canScrollDown && (
+            <button
+              type="button"
+              onClick={scrollDown}
+              className="absolute bottom-1 left-1/2 -translate-x-1/2 z-20 p-1 text-amber-600/90 hover:text-amber-700 hover:scale-125 active:scale-95 transition-all cursor-pointer"
+              title="Scroll Down"
+            >
+              <ChevronDown className="w-6 h-6 stroke-[2.5] animate-bounce" />
+            </button>
           )}
         </div>
 

@@ -41,8 +41,8 @@ router.post("/announcements", authMiddleware, requireRoles("Admin", "Coordinator
   try {
     const { ministry_id, title, body, is_pinned = false } = req.body;
 
-    if (!title || !body) {
-      return res.status(400).json({ error: "Title and body are required" });
+    if (!title || !title.trim() || !body || !body.trim()) {
+      return res.status(400).json({ error: "Title and message body are required" });
     }
 
     // Coordinator can only post to their assigned ministry

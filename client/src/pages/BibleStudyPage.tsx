@@ -5,9 +5,11 @@ import { api } from "../api";
 import { BibleStudyGroup, StudyTopic, StudyTopicsSummary, User } from "../types";
 import { TimePickerInput } from "../components/common/TimePickerInput";
 import { DatePickerInput } from "../components/common/DatePickerInput";
+import { DateTimePickerInput } from "../components/common/DateTimePickerInput";
 import { useSocketEvent } from "../socket";
 import { BibleStudyPageSkeleton, CardGridSkeleton } from "../components/common/SkeletonLoader";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
+import { BibleStudyRescheduleModal } from "../components/biblestudy/BibleStudyRescheduleModal";
 import {
   BookOpen, Plus, Users, Calendar, Clock, MapPin,
   Search, Filter, CheckCircle2, X, Phone, Sparkles,
@@ -18,8 +20,27 @@ import {
 } from "lucide-react";
 import { getBookTotalChapters, generateChapterOptions } from "../utils/curriculumHelper";
 
+const toDateTimeLocal = (dateStr?: string, timeStr?: string) => {
+  const d = dateStr || new Date(Date.now() + 86400000).toISOString().split("T")[0];
+  let hours = 19;
+  let minutes = "00";
+  if (timeStr) {
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = match[2];
+      const p = match[3]?.toUpperCase();
+      if (p === "PM" && h < 12) h += 12;
+      if (p === "AM" && h === 12) h = 0;
+      hours = h;
+      minutes = m.padStart(2, "0");
+    }
+  }
+  return `${d}T${String(hours).padStart(2, "0")}:${minutes}`;
+};
+
 export const BibleStudyPage: React.FC = () => {
-  const { user, ministries, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
+  const { user, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
   const [groups, setGroups] = useState<BibleStudyGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [studySummary, setStudySummary] = useState<StudyTopicsSummary | null>(null);
@@ -42,7 +63,7 @@ export const BibleStudyPage: React.FC = () => {
     description: "",
     type: "info",
     confirmText: "Okay",
-    onConfirm: () => {}
+    onConfirm: () => { }
   });
 
   const showAlert = (title: string, message: string, type: ModalType = "danger") => {
@@ -82,14 +103,6 @@ export const BibleStudyPage: React.FC = () => {
 
   // Reschedule Modal State
   const [rescheduleGroupModal, setRescheduleGroupModal] = useState<BibleStudyGroup | null>(null);
-  const [rescheduleFormData, setRescheduleFormData] = useState({
-    is_rescheduled: true,
-    rescheduled_date: "",
-    rescheduled_time_start: "7:00 PM",
-    rescheduled_time_end: "8:30 PM",
-    reschedule_reason: ""
-  });
-  const [isSavingReschedule, setIsSavingReschedule] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -120,11 +133,13 @@ export const BibleStudyPage: React.FC = () => {
   );
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
 
-  // Searchable Dropdowns state & refs for Group Creation Modal
+  // Dropdown states & refs
   const [leadersList, setLeadersList] = useState<{ id: string | number; name: string; contact: string; role_name?: string }[]>([]);
   const [isLeaderDropdownOpen, setIsLeaderDropdownOpen] = useState(false);
   const [isCurriculumDropdownOpen, setIsCurriculumDropdownOpen] = useState(false);
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
+  const [isCustomLocation, setIsCustomLocation] = useState(false);
+  const [customLocationText, setCustomLocationText] = useState("");
 
   // Group Members Enrollment State
   const [membersList, setMembersList] = useState<{ id: number; name: string; ministry_name?: string; age?: number }[]>([]);
@@ -132,7 +147,6 @@ export const BibleStudyPage: React.FC = () => {
   const [memberQuery, setMemberQuery] = useState<string>("");
   const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false);
 
-  // Dedicated search queries so selected values don't filter out the list upon re-opening
   const [curriculumQuery, setCurriculumQuery] = useState<string>("");
   const [leaderQuery, setLeaderQuery] = useState<string>("");
   const [locationQuery, setLocationQuery] = useState<string>("");
@@ -142,7 +156,7 @@ export const BibleStudyPage: React.FC = () => {
   const locationRef = useRef<HTMLDivElement>(null);
   const memberRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdowns on outside click and reset search queries
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (leaderRef.current && !leaderRef.current.contains(e.target as Node)) {
@@ -196,8 +210,7 @@ export const BibleStudyPage: React.FC = () => {
       setStudySummary(studyRes);
       setSystemCategories(categoriesRes.filter((c: any) => c.is_active).map((c: any) => c.name));
       setSystemLocations(locationsRes.filter((l: any) => l.is_active).map((l: any) => l.name));
-      
-      // Eagerly load leaders and members for group assignment
+
       loadLeadersList(filterMinistry);
       loadMembersForEnrollment(filterMinistry);
     } catch (err) {
@@ -217,7 +230,7 @@ export const BibleStudyPage: React.FC = () => {
         name: `${m.first_name} ${m.last_name}`,
         ministry_name: m.ministry_name,
         age: m.birthdate ? Math.floor((new Date().getTime() - new Date(m.birthdate).getTime()) / 31557600000) : undefined
-      }));
+      })).sort((a: any, b: any) => a.name.localeCompare(b.name));
       setMembersList(members);
     } catch (err) {
       console.warn("Could not load members for enrollment", err);
@@ -251,7 +264,7 @@ export const BibleStudyPage: React.FC = () => {
       const combined = [...userLeaders, ...memberLeaders];
       const unique = combined.filter((l: any, idx: number, arr: any[]) =>
         l.name && arr.findIndex((x: any) => x.name.toLowerCase().trim() === l.name.toLowerCase().trim()) === idx
-      );
+      ).sort((a: any, b: any) => a.name.localeCompare(b.name));
       setLeadersList(unique);
     } catch (err) {
       console.warn("Could not load users for leader options", err);
@@ -259,7 +272,6 @@ export const BibleStudyPage: React.FC = () => {
     }
   };
 
-  // Filtered leaders by search query
   const filteredLeaders = useMemo(() => {
     const q = leaderQuery.toLowerCase().trim();
     if (!q) return leadersList;
@@ -270,7 +282,6 @@ export const BibleStudyPage: React.FC = () => {
     );
   }, [leadersList, leaderQuery]);
 
-  // Combined and filtered curricula (church topics + Bible books) with exact total_chapters
   const allCurricula = useMemo(() => {
     const churchTopics = (studySummary?.topics || []).map(t => ({
       title: t.title,
@@ -328,161 +339,67 @@ export const BibleStudyPage: React.FC = () => {
     if (!q) return allCurricula;
     return allCurricula.filter(c =>
       c.title.toLowerCase().includes(q) ||
-      (c.category && c.category.toLowerCase().includes(q))
+      c.category.toLowerCase().includes(q)
     );
   }, [allCurricula, curriculumQuery]);
 
-  const completedGroups = useMemo(() => {
-    return groups.filter(g => g.progress_stage === "completed");
-  }, [groups]);
-
-  const completedCount = completedGroups.length;
-  const completionRate = groups.length > 0 ? Math.round((completedCount / groups.length) * 100) : 0;
-
-  // Combined locations
-  const allLocations = useMemo(() => {
-    const defaultLocations = [
-      "Fellowship Hall Room 201",
-      "Sanctuary Library Room 201",
-      "Fellowship Hall Cafe",
-      "Youth Lounge / Room 102",
-      "Room 105 (Annex)",
-      "Main Sanctuary",
-      "Prayer Room / Chapel",
-      "Online / Zoom Video Conference",
-      "Member Home / Off-Campus"
-    ];
-    return Array.from(new Set([...systemLocations, ...defaultLocations]));
-  }, [systemLocations]);
-
-  const filteredLocations = useMemo(() => {
-    const q = locationQuery.toLowerCase().trim();
-    if (!q) return allLocations;
-    return allLocations.filter(loc => loc.toLowerCase().includes(q));
-  }, [allLocations, locationQuery]);
-
   const filteredMembers = useMemo(() => {
     const q = memberQuery.toLowerCase().trim();
-    if (!q) return membersList;
-    return membersList.filter(m =>
-      m.name.toLowerCase().includes(q) ||
-      (m.ministry_name && m.ministry_name.toLowerCase().includes(q))
-    );
+    const list = !q
+      ? membersList
+      : membersList.filter(m =>
+          m.name.toLowerCase().includes(q) ||
+          (m.ministry_name && m.ministry_name.toLowerCase().includes(q))
+        );
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
   }, [membersList, memberQuery]);
 
-  const handleToggleMember = (memberId: number) => {
-    setSelectedMemberIds(prev => {
-      if (prev.includes(memberId)) {
-        return prev.filter(id => id !== memberId);
-      } else {
-        if (prev.length >= (Number(formData.max_capacity) || 12)) {
-          showAlert("Capacity Limit Reached", `Max capacity of ${formData.max_capacity} members reached for this study group.`, "warning");
-          return prev;
-        }
-        return [...prev, memberId];
+  const enrolledMembersDetails = useMemo(() => {
+    const editingGroup = editingGroupId ? groups.find(g => g.id === editingGroupId) : null;
+    return selectedMemberIds.map(id => {
+      const fromList = membersList.find(m => m.id === id);
+      if (fromList) return fromList;
+      const fromGroup = editingGroup?.members?.find((m: any) => (m.member_id || m.id) === id);
+      if (fromGroup) {
+        return {
+          id: id,
+          name: `${fromGroup.first_name || ""} ${fromGroup.last_name || ""}`.trim() || fromGroup.member_name || `Member #${id}`,
+          ministry_name: (fromGroup as any).ministry_name,
+          age: undefined
+        };
       }
-    });
-  };
-
-  const loadLookups = async () => {
-    try {
-      const [catRes, locRes] = await Promise.all([
-        api.getLookups({ type: "bible_study_category", active_only: true }),
-        api.getLookups({ type: "event_location", active_only: true })
-      ]);
-      if (catRes && catRes.length > 0) {
-        setSystemCategories(catRes.map(c => c.name));
-      }
-      if (locRes && locRes.length > 0) {
-        setSystemLocations(locRes.map(l => l.name));
-      }
-    } catch (e) {
-      console.warn("Using default category options", e);
-    }
-  };
-
-  useEffect(() => {
-    loadGroups(groups.length === 0);
-  }, []);
-
-  // Real-time synchronization
-  useSocketEvent("groups:changed", () => {
-    loadGroups(false);
-    loadMembersForEnrollment();
-  });
-  useSocketEvent("study_topics:changed", () => {
-    loadGroups(false);
-  });
-  useSocketEvent("lookups:changed", () => {
-    loadLookups();
-  });
-  useSocketEvent("members:changed", () => {
-    loadMembersForEnrollment(formData.ministry_id); // was loadMembers()
-  });
-  useSocketEvent("users:changed", () => {
-    loadLeadersList(); // was loadLeaders()
-  });
-
-  const loadGroups = async (isInitial = false) => {
-    try {
-      if (isInitial) {
-        setLoading(true);
-      }
-      const ministryScope = isRestricted && allowedMinistries.length > 0 ? allowedMinistries[0].id : undefined;
-      const [res, summary] = await Promise.all([
-        api.getGroups({ ministry_id: ministryScope }),
-        api.getStudyTopics()
-      ]);
-      setGroups(res);
-      setStudySummary(summary);
-    } catch (err) {
-      console.error("Failed to load Bible study groups:", err);
-    } finally {
-      if (isInitial) {
-        setLoading(false);
-      }
-    }
-  };
+      return {
+        id: id,
+        name: `Member #${id}`,
+        ministry_name: undefined,
+        age: undefined
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedMemberIds, membersList, groups, editingGroupId]);
 
   const getProgressStageBadge = (stage?: string) => {
     switch (stage) {
-      case "intro":
-        return {
-          label: "Intro / Starting Out",
-          sublabel: "No. 1 pa lang / Introduction",
-          bg: "bg-emerald-50 text-emerald-800 border-emerald-200",
-          dot: "bg-emerald-500"
-        };
-      case "midway":
-        return {
-          label: "Mid-way (Kalahati)",
-          sublabel: "Ongoing verses in chapter",
-          bg: "bg-amber-50 text-amber-900 border-amber-200",
-          dot: "bg-amber-500"
-        };
-      case "application":
-        return {
-          label: "Discussion & Reflection",
-          sublabel: "Practical study application",
-          bg: "bg-indigo-50 text-indigo-900 border-indigo-200",
-          dot: "bg-indigo-500"
-        };
       case "completed":
-        return {
-          label: "Chapter Finished",
-          sublabel: "Ready for next lesson",
-          bg: "bg-sky-50 text-sky-900 border-sky-200",
-          dot: "bg-sky-500"
-        };
+        return { label: "Completed", bg: "bg-emerald-100 text-emerald-800 border-emerald-300", dot: "bg-emerald-600" };
+      case "midway":
+        return { label: "Mid-way", bg: "bg-amber-100 text-amber-900 border-amber-300", dot: "bg-amber-600" };
+      case "application":
+        return { label: "Discussion", bg: "bg-orange-100 text-orange-900 border-orange-300", dot: "bg-orange-600" };
+      case "intro":
+        return { label: "Starting", bg: "bg-teal-100 text-teal-900 border-teal-300", dot: "bg-teal-600" };
       default:
-        return {
-          label: "In Progress",
-          sublabel: "Active study",
-          bg: "bg-indigo-50 text-indigo-900 border-indigo-200",
-          dot: "bg-indigo-500"
-        };
+        return { label: "In Progress", bg: "bg-indigo-100 text-indigo-900 border-indigo-300", dot: "bg-indigo-600" };
     }
   };
+
+  const completedCount = useMemo(() => {
+    return groups.filter(g => g.progress_stage === "completed").length;
+  }, [groups]);
+
+  const completionRate = useMemo(() => {
+    if (groups.length === 0) return 0;
+    return Math.round((completedCount / groups.length) * 100);
+  }, [groups, completedCount]);
 
   const handleOpenProgressModal = (group: BibleStudyGroup) => {
     setProgressGroupModal(group);
@@ -496,15 +413,15 @@ export const BibleStudyPage: React.FC = () => {
   const handleSaveProgress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!progressGroupModal) return;
+
     try {
       setIsSavingProgress(true);
-      await api.updateGroupProgress(progressGroupModal.id, {
+      await api.updateGroup(progressGroupModal.id, {
         current_chapter: progressFormData.current_chapter,
         progress_stage: progressFormData.progress_stage,
         progress_notes: progressFormData.progress_notes
       });
 
-      // Update in local state
       setGroups(prev =>
         prev.map(g =>
           g.id === progressGroupModal.id
@@ -527,10 +444,10 @@ export const BibleStudyPage: React.FC = () => {
         });
       }
 
-      setIsJoinSuccess(`Updated study progress for ${progressGroupModal.name}!`);
+      setIsJoinSuccess(`✓ Chapter progress updated for ${progressGroupModal.name}!`);
       setProgressGroupModal(null);
     } catch (err: any) {
-      showAlert("Update Failed", err.message || "Failed to update study chapter progress", "danger");
+      showAlert("Progress Update Failed", err.message || "Failed to update study chapter", "danger");
     } finally {
       setIsSavingProgress(false);
     }
@@ -538,93 +455,6 @@ export const BibleStudyPage: React.FC = () => {
 
   const handleOpenRescheduleModal = (group: BibleStudyGroup) => {
     setRescheduleGroupModal(group);
-    let start = "7:00 PM";
-    let end = "8:30 PM";
-    if (group.rescheduled_time) {
-      if (group.rescheduled_time.includes("-")) {
-        const parts = group.rescheduled_time.split("-");
-        start = parts[0]?.trim() || "7:00 PM";
-        end = parts[1]?.trim() || "";
-      } else {
-        start = group.rescheduled_time.trim();
-        end = "";
-      }
-    } else if (group.meeting_time) {
-      if (group.meeting_time.includes("-")) {
-        const parts = group.meeting_time.split("-");
-        start = parts[0]?.trim() || "7:00 PM";
-        end = parts[1]?.trim() || "";
-      } else {
-        start = group.meeting_time.trim();
-        end = "";
-      }
-    }
-
-    const defaultDate = group.rescheduled_date || new Date(Date.now() + 86400000).toISOString().split("T")[0];
-
-    setRescheduleFormData({
-      is_rescheduled: group.is_rescheduled !== undefined ? Boolean(group.is_rescheduled) : true,
-      rescheduled_date: defaultDate,
-      rescheduled_time_start: start,
-      rescheduled_time_end: end,
-      reschedule_reason: group.reschedule_reason || ""
-    });
-  };
-
-  const handleSaveReschedule = async (e?: React.FormEvent, forceRevert = false) => {
-    if (e) e.preventDefault();
-    if (!rescheduleGroupModal) return;
-
-    try {
-      setIsSavingReschedule(true);
-      const isRescheduled = forceRevert ? false : rescheduleFormData.is_rescheduled;
-      const formattedTime = rescheduleFormData.rescheduled_time_end
-        ? `${rescheduleFormData.rescheduled_time_start} - ${rescheduleFormData.rescheduled_time_end}`
-        : rescheduleFormData.rescheduled_time_start;
-
-      await api.rescheduleGroup(rescheduleGroupModal.id, {
-        is_rescheduled: isRescheduled,
-        rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
-        rescheduled_time: isRescheduled ? formattedTime : null,
-        reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
-      });
-
-      // Update in local state
-      setGroups(prev =>
-        prev.map(g =>
-          g.id === rescheduleGroupModal.id
-            ? {
-              ...g,
-              is_rescheduled: isRescheduled,
-              rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
-              rescheduled_time: isRescheduled ? formattedTime : null,
-              reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
-            }
-            : g
-        )
-      );
-
-      if (selectedGroup && selectedGroup.id === rescheduleGroupModal.id) {
-        setSelectedGroup({
-          ...selectedGroup,
-          is_rescheduled: isRescheduled,
-          rescheduled_date: isRescheduled ? rescheduleFormData.rescheduled_date : null,
-          rescheduled_time: isRescheduled ? formattedTime : null,
-          reschedule_reason: isRescheduled ? rescheduleFormData.reschedule_reason : null
-        });
-      }
-
-      setIsJoinSuccess(
-        isRescheduled
-          ? `✓ Next meeting for ${rescheduleGroupModal.name} rescheduled to ${rescheduleFormData.rescheduled_date}!`
-          : `✓ Reverted ${rescheduleGroupModal.name} to regular weekly schedule.`
-      );
-      setRescheduleGroupModal(null);
-    } catch (err: any) {
-      showAlert("Reschedule Failed", err.message || "Failed to update reschedule status", "danger");
-    } finally {
-      setIsSavingReschedule(false);
-    }
   };
 
   const handleOpenCreateModal = () => {
@@ -632,7 +462,10 @@ export const BibleStudyPage: React.FC = () => {
     setSelectedMemberIds([]);
     setMemberQuery("");
     setIsMemberDropdownOpen(false);
+    setIsCustomLocation(false);
+    setCustomLocationText("");
     const initialMin = isRestricted && allowedMinistries.length > 0 ? String(allowedMinistries[0].id) : "";
+    const defaultLoc = systemLocations.length > 0 ? systemLocations[0] : "";
     setFormData({
       name: "",
       description: "",
@@ -643,7 +476,7 @@ export const BibleStudyPage: React.FC = () => {
       meeting_day: "Wednesday",
       meeting_time_start: "7:00 PM",
       meeting_time_end: "8:30 PM",
-      location: "",
+      location: defaultLoc,
       category: "General",
       max_capacity: 12,
       current_chapter: "Chapter 1",
@@ -651,28 +484,28 @@ export const BibleStudyPage: React.FC = () => {
       progress_notes: ""
     });
     loadLeadersList(initialMin);
-    loadMembersForEnrollment(initialMin);
+    loadMembersForEnrollment();
     setIsCreateModalOpen(true);
   };
 
   const handleOpenEditModal = (group: BibleStudyGroup) => {
     setEditingGroupId(group.id);
     const existingIds = (group.members || [])
-      .map((m: any) => m.member_id)
+      .map((m: any) => m.member_id || m.id)
       .filter((id: any): id is number => typeof id === "number" && id > 0);
     setSelectedMemberIds(existingIds);
     setMemberQuery("");
     setIsMemberDropdownOpen(false);
+
+    const isCustom = Boolean(group.location && !systemLocations.includes(group.location));
+    setIsCustomLocation(isCustom);
+    setCustomLocationText(isCustom ? (group.location || "") : "");
 
     let start = "7:00 PM";
     let end = "8:30 PM";
     if (group.meeting_time) {
       if (group.meeting_time.includes("-")) {
         const parts = group.meeting_time.split("-");
-        start = parts[0]?.trim() || "7:00 PM";
-        end = parts[1]?.trim() || "";
-      } else if (group.meeting_time.toLowerCase().includes("to")) {
-        const parts = group.meeting_time.split(/to/i);
         start = parts[0]?.trim() || "7:00 PM";
         end = parts[1]?.trim() || "";
       } else {
@@ -699,71 +532,77 @@ export const BibleStudyPage: React.FC = () => {
       progress_notes: group.progress_notes || ""
     });
     loadLeadersList(group.ministry_id || undefined);
-    loadMembersForEnrollment(group.ministry_id || undefined);
+    loadMembersForEnrollment();
     setSelectedGroup(null);
     setIsCreateModalOpen(true);
   };
 
   const handleSaveGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const formattedMeetingTime = formData.meeting_time_end
-        ? `${formData.meeting_time_start} - ${formData.meeting_time_end}`
-        : formData.meeting_time_start;
+    if (!formData.name.trim()) {
+      showAlert("Group Name Required", "Please enter a name for this Bible study group.", "warning");
+      return;
+    }
 
-      const payload = {
-        name: formData.name,
-        description: formData.description,
-        curriculum: formData.curriculum,
-        leader_name: formData.leader_name,
-        leader_contact: formData.leader_contact,
-        meeting_day: formData.meeting_day,
-        meeting_time: formattedMeetingTime,
-        location: formData.location,
-        category: formData.category,
+    const dupGroup = groups.find(g =>
+      g.name.toLowerCase().trim() === formData.name.toLowerCase().trim() &&
+      g.id !== editingGroupId
+    );
+    if (dupGroup) {
+      showAlert("Duplicate Group Name", `A Bible study group named "${formData.name.trim()}" already exists.`, "warning");
+      return;
+    }
+
+    if (!formData.leader_name.trim()) {
+      showAlert("Leader Required", "Please assign a leader for this group.", "warning");
+      return;
+    }
+
+    if (!formData.location.trim()) {
+      showAlert("Location Required", "Please specify the meeting location or room.", "warning");
+      return;
+    }
+
+    try {
+      const payload: any = {
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        curriculum: formData.curriculum.trim(),
         ministry_id: formData.ministry_id ? Number(formData.ministry_id) : null,
+        leader_name: formData.leader_name.trim(),
+        leader_contact: formData.leader_contact.trim(),
+        meeting_day: formData.meeting_day,
+        meeting_time: formData.meeting_time_end
+          ? `${formData.meeting_time_start} - ${formData.meeting_time_end}`
+          : formData.meeting_time_start,
+        location: formData.location.trim(),
+        category: formData.category,
         max_capacity: Number(formData.max_capacity) || 12,
-        member_ids: selectedMemberIds,
-        current_chapter: formData.current_chapter,
-        progress_stage: formData.progress_stage,
-        progress_notes: formData.progress_notes
+        current_chapter: formData.current_chapter.trim() || "Chapter 1",
+        progress_stage: formData.progress_stage || "in_progress",
+        progress_notes: formData.progress_notes.trim(),
+        member_ids: selectedMemberIds
       };
 
       if (editingGroupId) {
         await api.updateGroup(editingGroupId, payload);
+        setIsJoinSuccess(`✓ Small Group "${formData.name.trim()}" updated successfully!`);
       } else {
         await api.createGroup(payload);
+        setIsJoinSuccess(`✓ New Small Group "${formData.name.trim()}" created successfully!`);
       }
 
       setIsCreateModalOpen(false);
-      setEditingGroupId(null);
-      setIsLeaderDropdownOpen(false);
-      setIsCurriculumDropdownOpen(false);
-      setIsLocationDropdownOpen(false);
-      setIsMemberDropdownOpen(false);
-      setSelectedMemberIds([]);
-      setMemberQuery("");
-      setFormData({
-        name: "",
-        description: "",
-        curriculum: "",
-        ministry_id: "",
-        leader_name: "",
-        leader_contact: "",
-        meeting_day: "Wednesday",
-        meeting_time_start: "7:00 PM",
-        meeting_time_end: "8:30 PM",
-        location: "",
-        category: "General",
-        max_capacity: 12,
-        current_chapter: "Chapter 1",
-        progress_stage: "in_progress",
-        progress_notes: ""
-      });
-      loadGroups(false);
+      loadData();
     } catch (err: any) {
       showAlert("Save Group Failed", err.message || "Failed to save Bible study group", "danger");
     }
+  };
+
+  const handleToggleMember = (memId: number) => {
+    setSelectedMemberIds(prev =>
+      prev.includes(memId) ? prev.filter(id => id !== memId) : [...prev, memId]
+    );
   };
 
   const cleanUser = user ? user.name.replace(/\(.*?\)/g, "").trim().toLowerCase() : "";
@@ -774,16 +613,13 @@ export const BibleStudyPage: React.FC = () => {
 
   const isUserDesignatedInGroup = (g: BibleStudyGroup) => {
     if (!user) return false;
-    // 1. Leader name matching
     const cleanLeader = (g.leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
     if (cleanLeader) {
       if (cleanUser === cleanLeader || cleanUser.includes(cleanLeader) || cleanLeader.includes(cleanUser)) return true;
       if (userLinkedName && (userLinkedName === cleanLeader || userLinkedName.includes(cleanLeader) || cleanLeader.includes(userLinkedName))) return true;
     }
-    // 2. Leader contact matching
     const cleanContact = (g.leader_contact || "").trim().toLowerCase();
     if (cleanContact && (cleanContact === userEmail || cleanContact === userUsername)) return true;
-    // 3. Member in group (as disciple/member)
     if (g.members && g.members.length > 0) {
       return g.members.some((m: any) => {
         if (userMemberId && m.member_id === userMemberId) return true;
@@ -804,25 +640,11 @@ export const BibleStudyPage: React.FC = () => {
     return false;
   };
 
-  const myGroupsCount = useMemo(() => {
-    return groups.filter(isUserDesignatedInGroup).length;
-  }, [groups, user?.id, user?.name]);
-
   const filteredGroups = useMemo(() => {
     return groups.filter(g => {
-      // Ministry filter (instant)
-      if (filterMinistry && String(g.ministry_id) !== filterMinistry) {
-        return false;
-      }
-      // Category filter (instant)
-      if (selectedCategory !== "all" && g.category !== selectedCategory) {
-        return false;
-      }
-      // Meeting day filter (instant)
-      if (filterDay !== "all" && filterDay !== "All Days" && g.meeting_day !== filterDay) {
-        return false;
-      }
-      // Search query
+      if (filterMinistry && String(g.ministry_id) !== filterMinistry) return false;
+      if (selectedCategory !== "all" && g.category !== selectedCategory) return false;
+      if (filterDay !== "all" && filterDay !== "All Days" && g.meeting_day !== filterDay) return false;
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase().trim();
       return (
@@ -836,7 +658,7 @@ export const BibleStudyPage: React.FC = () => {
   }, [groups, filterMinistry, selectedCategory, filterDay, searchQuery]);
 
   const totalMembersEnrolled = useMemo(() => {
-    return groups.reduce((sum, g) => sum + (g.current_member_count || 0), 0);
+    return groups.reduce((sum, g) => sum + (g.current_member_count || (g.members ? g.members.length : 0)), 0);
   }, [groups]);
 
   const canCreate = user?.role_name === "Admin" || user?.role_name === "Coordinator";
@@ -854,42 +676,54 @@ export const BibleStudyPage: React.FC = () => {
             <CheckCircle2 className="w-5 h-5 text-amber-300" />
             <span>{isJoinSuccess}</span>
           </div>
-          <button onClick={() => setIsJoinSuccess(null)} className="p-1 hover:text-gray-200">
+          <button onClick={() => setIsJoinSuccess(null)} className="p-1 hover:text-gray-200 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
-              <BookOpen className="w-5 h-5" />
-            </span>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">Bible Study & Discipleship Groups</h1>
-              <p className="text-xs text-charcoal/60 mt-0.5">
-                Small group fellowships, Scripture study circles, home meetings, and discipleship tracks.
-              </p>
+      {/* Header Hero Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10 space-y-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+              <span>Small Groups & Discipleship</span>
             </div>
+            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-bold px-3 py-1 rounded-full backdrop-blur-md">
+              {groups.length} Active Groups
+            </span>
           </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Bible Study & Discipleship Groups
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
+            Small group fellowships, Scripture study circles, home meetings, and discipleship tracks.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="relative z-10 flex items-center gap-2.5 flex-wrap shrink-0">
           <button
             onClick={() => setIsCompletedModalOpen(true)}
-            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-emerald-300 border border-white/15 font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
           >
-            <Award className="w-4 h-4 text-emerald-600" />
+            <Award className="w-4 h-4 text-emerald-300" />
             <span>Completed Groups ({completedCount})</span>
           </button>
           {canCreate && (
             <button
               onClick={handleOpenCreateModal}
-              className="flex items-center gap-1.5 bg-indigo hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4 text-amber-300" />
+              <Plus className="w-4 h-4 text-indigo-950" />
               <span>New Bible Study Group</span>
             </button>
           )}
@@ -959,7 +793,6 @@ export const BibleStudyPage: React.FC = () => {
 
       {/* Multi-Level Filter Toolbar */}
       <div className="bg-white p-4 rounded-3xl border border-indigo-100/80 shadow-2xs space-y-3.5">
-        {/* Category Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-gray-100 no-scrollbar">
           <span className="text-xs font-bold text-charcoal/60 mr-1 flex items-center gap-1 shrink-0">
             <Filter className="w-3.5 h-3.5 text-amber-600" /> Category:
@@ -969,19 +802,17 @@ export const BibleStudyPage: React.FC = () => {
               key={cat}
               onClick={() => setSelectedCategory(cat === "All" ? "all" : cat)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${(selectedCategory === "all" && cat === "All") || selectedCategory === cat
-                  ? "bg-indigo text-white shadow-2xs ring-2 ring-indigo-200"
-                  : "bg-ivory-light text-charcoal/70 hover:bg-gray-100"
-                  }`}
+                ? "bg-indigo text-white shadow-2xs ring-2 ring-indigo-200"
+                : "bg-ivory-light text-charcoal/70 hover:bg-gray-100"
+                }`}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        {/* Row 2: Dropdowns & Search */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-            {/* Ministry Filter */}
             <div className="flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-indigo shrink-0" />
               <select
@@ -997,7 +828,6 @@ export const BibleStudyPage: React.FC = () => {
               </select>
             </div>
 
-            {/* Meeting Day Filter */}
             <div className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <select
@@ -1012,7 +842,6 @@ export const BibleStudyPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Search Box */}
           <div className="relative w-full md:w-72">
             <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-2.5" />
             <input
@@ -1027,9 +856,7 @@ export const BibleStudyPage: React.FC = () => {
       </div>
 
       {/* Groups Grid */}
-      {loading && groups.length === 0 ? (
-        <CardGridSkeleton count={6} columns={3} />
-      ) : filteredGroups.length === 0 ? (
+      {filteredGroups.length === 0 ? (
         <div className="bg-white p-12 rounded-3xl border border-indigo-100 text-center space-y-3 shadow-2xs">
           <BookOpen className="w-10 h-10 text-charcoal/30 mx-auto" />
           <h3 className="text-sm font-bold text-charcoal">No Bible Study Groups Found</h3>
@@ -1040,7 +867,7 @@ export const BibleStudyPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredGroups.map((g) => {
-            const memberCount = g.current_member_count || 0;
+            const memberCount = g.current_member_count || (g.members ? g.members.length : 0);
             const capacityPercent = Math.min(100, Math.round((memberCount / (g.max_capacity || 12)) * 100));
             const isLeaderOfThis = isUserLeaderOfGroup(g);
             const isDesignatedOfThis = isUserDesignatedInGroup(g);
@@ -1048,22 +875,19 @@ export const BibleStudyPage: React.FC = () => {
             return (
               <div
                 key={g.id}
-                className={`bg-white rounded-3xl p-5 border shadow-xs flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden ${
-                  isLeaderOfThis 
-                    ? "border-amber-300 ring-2 ring-amber-100/70" 
-                    : isDesignatedOfThis 
-                    ? "border-sky-300 ring-2 ring-sky-100/70" 
+                className={`bg-white rounded-3xl p-5 border shadow-xs flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden ${isLeaderOfThis
+                  ? "border-amber-300 ring-2 ring-amber-100/70"
+                  : isDesignatedOfThis
+                    ? "border-sky-300 ring-2 ring-sky-100/70"
                     : "border-indigo-100/80 hover:border-indigo-300"
-                }`}
+                  }`}
               >
-                {/* Top Accent Gradient Bar */}
                 <div
                   className="absolute top-0 left-0 right-0 h-1.5 opacity-80 group-hover:opacity-100 transition-opacity"
                   style={{ backgroundColor: g.ministry_color || "#2C3968" }}
                 />
 
                 <div>
-                  {/* Category, Ministry, & Personal Designation Badges */}
                   <div className="flex items-center justify-between gap-1.5 mb-2.5 pt-1 flex-wrap">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="bg-indigo-50/90 text-indigo font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-100/60">
@@ -1091,12 +915,10 @@ export const BibleStudyPage: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Group Name */}
                   <h3 className="text-base font-black text-charcoal group-hover:text-indigo transition-colors leading-snug">
                     {g.name}
                   </h3>
 
-                  {/* Reschedule Alert Card (if session is rescheduled) */}
                   {g.is_rescheduled && (
                     <div className="mt-3 p-3 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/15 rounded-2xl border border-amber-300/80 text-xs shadow-2xs space-y-1.5 animate-in fade-in">
                       <div className="flex items-center justify-between gap-1.5 flex-wrap">
@@ -1135,9 +957,8 @@ export const BibleStudyPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* UNIFIED STUDY TRACK & PACING HUB */}
+                  {/* Study Track & Pacing Hub */}
                   <div className="mt-3 p-3.5 bg-gradient-to-br from-indigo-50/70 via-ivory to-amber-50/40 rounded-2xl border border-indigo-100 space-y-2.5">
-                    {/* Header: Book & Current Chapter */}
                     <div className="flex items-center justify-between gap-1.5 flex-wrap">
                       <div className="flex items-center gap-1.5 min-w-0 pr-1">
                         <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
@@ -1157,8 +978,7 @@ export const BibleStudyPage: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* Notice / Specific Location Description if available */}
-                    {g.progress_notes ? (
+                    {g.progress_notes && (
                       <div className="bg-white/95 p-2.5 rounded-xl border border-indigo-100/90 text-[11px] text-charcoal/85 flex items-start gap-1.5 shadow-2xs">
                         <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                         <div className="leading-tight min-w-0">
@@ -1166,13 +986,8 @@ export const BibleStudyPage: React.FC = () => {
                           <span className="break-words">{g.progress_notes}</span>
                         </div>
                       </div>
-                    ) : (
-                      <div className="text-[10px] text-charcoal/40 italic">
-                        No custom pacing notice logged
-                      </div>
                     )}
 
-                    {/* Integrated Quick Actions: Update Chapter & Reschedule */}
                     <div className="pt-1.5 flex items-center justify-end gap-1.5 border-t border-indigo-100/60 flex-wrap">
                       <button
                         type="button"
@@ -1184,7 +999,6 @@ export const BibleStudyPage: React.FC = () => {
                           ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300"
                           : "bg-white hover:bg-amber-50 text-amber-900 border border-amber-200/80"
                           }`}
-                        title="Reschedule next upcoming session"
                       >
                         <CalendarClock className="w-3 h-3 text-amber-700" />
                         <span>{g.is_rescheduled ? "Resched Active ⚠️" : "Reschedule"}</span>
@@ -1204,14 +1018,12 @@ export const BibleStudyPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Overview Description */}
                   {g.description && (
                     <p className="text-xs text-charcoal/70 mt-2.5 line-clamp-2 leading-relaxed">
                       {g.description}
                     </p>
                   )}
 
-                  {/* Schedule & Venue Parameters */}
                   <div className="mt-3 pt-2.5 border-t border-gray-100 space-y-1.5 text-xs text-charcoal/75 font-medium">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-indigo shrink-0" />
@@ -1232,7 +1044,6 @@ export const BibleStudyPage: React.FC = () => {
 
                 {/* Bottom Capacity Bar & Primary Actions */}
                 <div className="mt-4 pt-3 border-t border-gray-100 space-y-3">
-                  {/* Capacity Bar */}
                   <div>
                     <div className="flex justify-between text-[11px] font-bold text-charcoal/60 mb-1">
                       <span>Roster: {memberCount} of {g.max_capacity} Enrolled</span>
@@ -1240,21 +1051,20 @@ export const BibleStudyPage: React.FC = () => {
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${capacityPercent >= 90 ? "bg-rose" : capacityPercent >= 60 ? "bg-amber" : "bg-emerald-500"
+                        className={`h-full rounded-full transition-all duration-300 ${capacityPercent >= 80 ? "bg-emerald-500" : capacityPercent >= 40 ? "bg-amber" : "bg-rose"
                           }`}
                         style={{ width: `${capacityPercent}%` }}
                       ></div>
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
                   <div className="flex items-center justify-between gap-2">
                     <button
                       onClick={() => setSelectedGroup(g)}
                       className="flex-1 px-3 py-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-gray-200/80"
                     >
                       <Users className="w-3.5 h-3.5 text-indigo-700" />
-                      <span>View Roster ({memberCount})</span>
+                      <span>View Member ({memberCount})</span>
                     </button>
                     {canCreate && (
                       <button
@@ -1300,7 +1110,6 @@ export const BibleStudyPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Info Cards */}
             <div className="space-y-3 text-xs">
               <div className="p-3.5 bg-ivory rounded-xl border border-amber/20 space-y-2">
                 <div className="flex items-center gap-2 text-charcoal font-bold">
@@ -1308,7 +1117,6 @@ export const BibleStudyPage: React.FC = () => {
                   <span>Curriculum: {selectedGroup.curriculum || "General Scripture Discussion"}</span>
                 </div>
 
-                {/* Chapter & Progress Banner */}
                 <div className="p-2.5 bg-white/90 rounded-lg border border-indigo-100 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <BookmarkCheck className="w-4 h-4 text-indigo-700" />
@@ -1359,20 +1167,25 @@ export const BibleStudyPage: React.FC = () => {
                 </p>
               </div>
 
-              {/* Enrolled Roster */}
               <div>
                 <h4 className="font-bold text-charcoal/70 mb-2 flex items-center justify-between">
                   <span>Enrolled Members ({selectedGroup.members?.length || 0} / {selectedGroup.max_capacity})</span>
                 </h4>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {selectedGroup.members && selectedGroup.members.length > 0 ? (
-                    selectedGroup.members.map((m, idx) => (
+                    [...selectedGroup.members]
+                      .sort((a, b) => {
+                        const nameA = (a.display_name || a.member_name || `${a.first_name || ""} ${a.last_name || ""}`).trim().toLowerCase();
+                        const nameB = (b.display_name || b.member_name || `${b.first_name || ""} ${b.last_name || ""}`).trim().toLowerCase();
+                        return nameA.localeCompare(nameB);
+                      })
+                      .map((m, idx) => (
                       <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-ivory-light border border-gray-100 text-xs">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo font-bold flex items-center justify-center text-[10px]">
-                            {m.member_name ? m.member_name[0] : "M"}
+                            {m.display_name ? m.display_name[0] : (m.member_name ? m.member_name[0] : "M")}
                           </div>
-                          <span className="font-bold text-charcoal">{m.member_name}</span>
+                          <span className="font-bold text-charcoal">{m.display_name || m.member_name || `${m.first_name || ""} ${m.last_name || ""}`.trim()}</span>
                         </div>
                         <span className="text-[10px] text-charcoal/50">Joined {new Date(m.joined_at).toLocaleDateString()}</span>
                       </div>
@@ -1384,22 +1197,35 @@ export const BibleStudyPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+            <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
               <button
                 onClick={() => setSelectedGroup(null)}
                 className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
               >
                 Close
               </button>
-              {canCreate && (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleOpenEditModal(selectedGroup)}
-                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs shadow-md active:scale-95 transition-transform cursor-pointer"
+                  onClick={() => {
+                    const g = selectedGroup;
+                    setSelectedGroup(null);
+                    handleOpenRescheduleModal(g);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-xs border border-amber-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
                 >
-                  <Edit className="w-4 h-4 text-amber-300" />
-                  <span>Edit Bible Study Group</span>
+                  <CalendarClock className="w-4 h-4 text-amber-700" />
+                  <span>Reschedule Next Session</span>
                 </button>
-              )}
+                {canCreate && (
+                  <button
+                    onClick={() => handleOpenEditModal(selectedGroup)}
+                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs shadow-md active:scale-95 transition-transform cursor-pointer"
+                  >
+                    <Edit className="w-4 h-4 text-amber-300" />
+                    <span>Edit Bible Study Group</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>,
@@ -1468,7 +1294,6 @@ export const BibleStudyPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Book / Study Topic - Searchable Dropdown */}
               <div ref={curriculumRef} className="relative">
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-bold text-charcoal/70">Book / Study Topic</label>
@@ -1522,13 +1347,11 @@ export const BibleStudyPage: React.FC = () => {
                       setIsCurriculumDropdownOpen(!isCurriculumDropdownOpen);
                     }}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-indigo p-0.5 cursor-pointer"
-                    title="Toggle topics dropdown"
                   >
                     <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isCurriculumDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
                 </div>
 
-                {/* Dropdown Menu for Curriculum */}
                 {isCurriculumDropdownOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
                     <div className="p-2 bg-indigo-50/70 text-[10px] font-bold text-indigo-900 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
@@ -1545,10 +1368,7 @@ export const BibleStudyPage: React.FC = () => {
                           key={`${item.title}-${idx}`}
                           type="button"
                           onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              curriculum: item.title
-                            }));
+                            setFormData(prev => ({ ...prev, curriculum: item.title }));
                             setCurriculumQuery("");
                             setIsCurriculumDropdownOpen(false);
                           }}
@@ -1560,11 +1380,8 @@ export const BibleStudyPage: React.FC = () => {
                               <span className="truncate">{item.title}</span>
                             </div>
                             <div className="text-[10px] text-charcoal/60 pl-5 flex items-center gap-1.5 mt-0.5">
-                              <span className={`px-1.5 py-0.2 rounded font-semibold text-[9px] ${item.type === "curriculum"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-indigo-100 text-indigo-800"
-                                }`}>
-                                {item.category || (item.type === "curriculum" ? "Study Track" : "Bible Book")}
+                              <span className={`px-1.5 py-0.2 rounded font-semibold text-[9px] ${item.type === "curriculum" ? "bg-amber-100 text-amber-800" : "bg-indigo-100 text-indigo-800"}`}>
+                                {item.category}
                               </span>
                               {item.total_chapters ? (
                                 <span className="truncate text-charcoal/50">• {item.total_chapters} chapters</span>
@@ -1581,59 +1398,33 @@ export const BibleStudyPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Leader & Contact Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Leader Searchable Dropdown */}
                 <div ref={leaderRef} className="relative">
                   <div className="flex items-center justify-between mb-1">
                     <label className="font-bold text-charcoal/70">Leader / Facilitator *</label>
-                    {formData.leader_name && (
-                      <span className="text-[9px] text-sky-600 font-semibold">Autofilled</span>
-                    )}
                   </div>
                   <div className="relative">
                     <input
                       type="text"
                       required
-                      placeholder="Search leader (e.g. Daniel Cruz, Arthur Bautista)"
+                      placeholder="Search leader (e.g. Pastor, Elder, Sister)"
                       value={formData.leader_name}
                       onFocus={(e) => {
                         e.target.select();
                         setLeaderQuery("");
                         setIsLeaderDropdownOpen(true);
-                        if (leadersList.length === 0) {
-                          loadLeadersList(formData.ministry_id);
-                        }
                       }}
                       onClick={() => {
                         setLeaderQuery("");
                         setIsLeaderDropdownOpen(true);
-                        if (leadersList.length === 0) {
-                          loadLeadersList(formData.ministry_id);
-                        }
                       }}
                       onChange={(e) => {
                         setFormData({ ...formData, leader_name: e.target.value });
                         setLeaderQuery(e.target.value);
                         setIsLeaderDropdownOpen(true);
                       }}
-                      className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                      className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold"
                     />
-                    {formData.leader_name && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFormData(prev => ({ ...prev, leader_name: "", leader_contact: "" }));
-                          setLeaderQuery("");
-                          setIsLeaderDropdownOpen(true);
-                        }}
-                        className="absolute right-7 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 p-1 cursor-pointer transition-colors"
-                        title="Clear leader"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                     <button
                       type="button"
                       tabIndex={-1}
@@ -1643,76 +1434,57 @@ export const BibleStudyPage: React.FC = () => {
                         }
                         setIsLeaderDropdownOpen(!isLeaderDropdownOpen);
                       }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-sky-600 p-0.5 cursor-pointer"
-                      title="Toggle leaders dropdown"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-indigo p-0.5 cursor-pointer"
                     >
                       <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isLeaderDropdownOpen ? "rotate-180" : ""}`} />
                     </button>
                   </div>
 
-                  {/* Dropdown Menu for Leader */}
                   {isLeaderDropdownOpen && (
                     <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
-                      <div className="p-2 bg-sky-50/80 text-[10px] font-bold text-sky-950 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
-                        <span>Church Leaders ({filteredLeaders.length})</span>
-                        <span className="text-[9px] text-sky-700 font-normal">Autofills contact</span>
+                      <div className="p-2 bg-indigo-50/70 text-[10px] font-bold text-indigo-900 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
+                        <span>Church Leaders & Members ({filteredLeaders.length})</span>
                       </div>
-                      {filteredLeaders.length === 0 ? (
-                        <div className="p-3 text-center text-charcoal/50 text-[11px]">
-                          No matching leader found. You can keep typing custom name.
-                        </div>
-                      ) : (
-                        filteredLeaders.map((ldr) => (
-                          <button
-                            key={ldr.id}
-                            type="button"
-                            onClick={() => {
-                              setFormData(prev => ({
-                                ...prev,
-                                leader_name: ldr.name,
-                                leader_contact: ldr.contact || prev.leader_contact
-                              }));
-                              setLeaderQuery("");
-                              setIsLeaderDropdownOpen(false);
-                            }}
-                            className="w-full text-left p-2.5 hover:bg-sky-50/70 transition-colors flex items-center justify-between group cursor-pointer"
-                          >
-                            <div className="min-w-0 pr-2">
-                              <div className="font-bold text-charcoal group-hover:text-sky-900 text-xs flex items-center gap-1.5">
-                                <UserIcon className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                                <span>{ldr.name}</span>
-                                {ldr.role_name && (
-                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 font-semibold">
-                                    {ldr.role_name}
-                                  </span>
-                                )}
-                              </div>
-                              {ldr.contact && (
-                                <div className="text-[10px] text-charcoal/60 pl-5 flex items-center gap-1 mt-0.5 truncate">
-                                  <Phone className="w-3 h-3 text-charcoal/40 shrink-0" />
-                                  <span className="truncate">{ldr.contact}</span>
-                                </div>
-                              )}
+                      {filteredLeaders.map((l) => (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              leader_name: l.name,
+                              leader_contact: l.contact || prev.leader_contact
+                            }));
+                            setLeaderQuery("");
+                            setIsLeaderDropdownOpen(false);
+                          }}
+                          className="w-full text-left p-2.5 hover:bg-indigo-50/60 transition-colors flex items-center justify-between group cursor-pointer"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="font-bold text-charcoal group-hover:text-indigo text-xs">
+                              {l.name}
                             </div>
-                            {formData.leader_name === ldr.name && (
-                              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                            )}
-                          </button>
-                        ))
-                      )}
+                            <div className="text-[10px] text-charcoal/60 mt-0.5 flex items-center gap-1.5">
+                              <span className="bg-gray-100 px-1.5 py-0.2 rounded text-[9px] font-semibold text-charcoal/80">
+                                {l.role_name}
+                              </span>
+                              {l.contact && <span className="truncate">• {l.contact}</span>}
+                            </div>
+                          </div>
+                          {formData.leader_name === l.name && (
+                            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                          )}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                {/* Leader Contact Field */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-bold text-charcoal/70">Leader Contact</label>
-                    <span className="text-[10px] text-charcoal/40">Phone/Email</span>
-                  </div>
+                  <label className="block font-bold text-charcoal/70 mb-1">Leader Contact (Phone / Email)</label>
                   <input
                     type="text"
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="e.g. 0917-123-4567 or email"
                     value={formData.leader_contact}
                     onChange={(e) => setFormData({ ...formData, leader_contact: e.target.value })}
                     className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
@@ -1720,292 +1492,186 @@ export const BibleStudyPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Schedule: Day, Time In, Time Out, and Max Capacity */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-xs text-charcoal/70 mb-1">Meeting Day *</label>
+                  <label className="block font-bold text-charcoal/70 mb-1">Meeting Day *</label>
                   <select
                     value={formData.meeting_day}
                     onChange={(e) => setFormData({ ...formData, meeting_day: e.target.value })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs h-[41px]"
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold"
                   >
-                    <option value="Monday">Monday</option>
-                    <option value="Tuesday">Tuesday</option>
-                    <option value="Wednesday">Wednesday</option>
-                    <option value="Thursday">Thursday</option>
-                    <option value="Friday">Friday</option>
-                    <option value="Saturday">Saturday</option>
-                    <option value="Sunday">Sunday</option>
+                    {daysOfWeek.filter(d => d !== "All Days").map((day) => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
+                  <label className="block font-bold text-charcoal/70 mb-1">Start Time *</label>
                   <TimePickerInput
-                    label="Time In (Start) *"
                     value={formData.meeting_time_start}
                     onChange={(val) => setFormData({ ...formData, meeting_time_start: val })}
-                    placeholder="e.g. 7:00 PM"
-                    required
                   />
                 </div>
 
                 <div>
+                  <label className="block font-bold text-charcoal/70 mb-1">End Time</label>
                   <TimePickerInput
-                    label="Time Out (End)"
                     value={formData.meeting_time_end}
                     onChange={(val) => setFormData({ ...formData, meeting_time_end: val })}
-                    placeholder="e.g. 8:30 PM"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-charcoal/70 text-xs">Location / Room *</label>
+                    <span className="text-[10px] text-indigo font-semibold">Database Rooms</span>
+                  </div>
+                  <select
+                    required
+                    value={isCustomLocation ? "__custom__" : formData.location}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setIsCustomLocation(true);
+                        setFormData({ ...formData, location: customLocationText });
+                      } else {
+                        setIsCustomLocation(false);
+                        setFormData({ ...formData, location: e.target.value });
+                      }
+                    }}
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs cursor-pointer"
+                  >
+                    <option value="">-- Choose Church Room / Location --</option>
+                    {systemLocations.map((loc) => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                    {formData.location && !systemLocations.includes(formData.location) && (
+                      <option value={formData.location}>
+                        {formData.location} (Current Location)
+                      </option>
+                    )}
+                    <option value="__custom__">+ Custom / Off-Site Location...</option>
+                  </select>
+
+                  {isCustomLocation && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Type custom location / home address..."
+                      value={customLocationText}
+                      onChange={(e) => {
+                        setCustomLocationText(e.target.value);
+                        setFormData({ ...formData, location: e.target.value });
+                      }}
+                      className="w-full mt-2 bg-white p-2.5 rounded-xl border border-indigo-300 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs animate-in fade-in"
+                    />
+                  )}
                 </div>
 
                 <div>
-                  <label className="block font-bold text-xs text-charcoal/70 mb-1">Max Capacity</label>
+                  <label className="block font-bold text-charcoal/70 mb-1 text-xs">Max Capacity</label>
                   <input
                     type="number"
-                    min="4"
-                    max="50"
+                    min={1}
+                    max={100}
                     value={formData.max_capacity}
-                    onChange={(e) => setFormData({ ...formData, max_capacity: Number(e.target.value) })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold text-charcoal text-center h-[41px]"
+                    onChange={(e) => setFormData({ ...formData, max_capacity: Number(e.target.value) || 12 })}
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-xs"
                   />
                 </div>
               </div>
 
-              {/* Meeting Location / Room / Link - Searchable Dropdown */}
-              <div ref={locationRef} className="relative">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-charcoal/70">Meeting Location / Room / Link *</label>
-                  {formData.location && (
-                    <span className="text-[10px] text-indigo-600 font-semibold">Select or type custom</span>
-                  )}
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Search church rooms or links (e.g. Fellowship Hall Room 201, Zoom)"
-                    value={formData.location}
-                    onFocus={(e) => {
-                      e.target.select();
-                      setLocationQuery("");
-                      setIsLocationDropdownOpen(true);
-                    }}
-                    onClick={() => {
-                      setLocationQuery("");
-                      setIsLocationDropdownOpen(true);
-                    }}
-                    onChange={(e) => {
-                      setFormData({ ...formData, location: e.target.value });
-                      setLocationQuery(e.target.value);
-                      setIsLocationDropdownOpen(true);
-                    }}
-                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                  />
-                  {formData.location && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFormData(prev => ({ ...prev, location: "" }));
-                        setLocationQuery("");
-                        setIsLocationDropdownOpen(true);
-                      }}
-                      className="absolute right-7 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 p-1 cursor-pointer transition-colors"
-                      title="Clear location"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => {
-                      if (!isLocationDropdownOpen) {
-                        setLocationQuery("");
-                      }
-                      setIsLocationDropdownOpen(!isLocationDropdownOpen);
-                    }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-indigo p-0.5 cursor-pointer"
-                    title="Toggle location dropdown"
-                  >
-                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isLocationDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
-                </div>
-
-                {/* Dropdown Menu for Location */}
-                {isLocationDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
-                    <div className="p-2 bg-indigo-50/70 text-[10px] font-bold text-indigo-900 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
-                      <span>Church Rooms & Meeting Spaces ({filteredLocations.length})</span>
-                      <span className="text-[9px] text-indigo-600 font-normal">Click to choose</span>
-                    </div>
-                    {filteredLocations.length === 0 ? (
-                      <div className="p-3 text-center text-charcoal/50 text-[11px]">
-                        No matching locations. You can keep typing custom room or link.
-                      </div>
-                    ) : (
-                      filteredLocations.map((loc, idx) => (
-                        <button
-                          key={`${loc}-${idx}`}
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              location: loc
-                            }));
-                            setLocationQuery("");
-                            setIsLocationDropdownOpen(false);
-                          }}
-                          className="w-full text-left p-2.5 hover:bg-indigo-50/60 transition-colors flex items-center justify-between group cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                            <span className="font-bold text-charcoal group-hover:text-indigo text-xs">{loc}</span>
-                          </div>
-                          {formData.location === loc && (
-                            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                          )}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Added Members - Searchable Multi-Select */}
+              {/* Enrollment section */}
               <div ref={memberRef} className="relative">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-charcoal/70 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Added Members</span>
+                  <label className="block font-bold text-charcoal/70 text-xs">
+                    Enroll Church Members ({selectedMemberIds.length} Selected)
                   </label>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                    {selectedMemberIds.length} / {formData.max_capacity || 12} Added
-                  </span>
+                  {selectedMemberIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMemberIds([])}
+                      className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  )}
                 </div>
 
-                {/* Selected Member Tag Pills */}
-                {selectedMemberIds.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 p-2 mb-2 bg-indigo-50/50 rounded-xl border border-indigo-100/80 max-h-24 overflow-y-auto">
-                    {selectedMemberIds.map((mId) => {
-                      const m = membersList.find(item => item.id === mId);
-                      return (
-                        <span
-                          key={mId}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-xs font-bold text-charcoal shadow-2xs group"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                          <span>{m ? m.name : `Member #${mId}`}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleMember(mId)}
-                            className="text-charcoal/40 hover:text-rose-600 p-0.5 rounded transition-colors cursor-pointer"
-                            title="Remove member"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Member Search Bar / Dropdown Trigger */}
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="Search members by name or ministry to add (e.g. Elena Santos)..."
+                    placeholder="Search church members to add..."
                     value={memberQuery}
-                    onFocus={() => {
-                      setIsMemberDropdownOpen(true);
-                      if (membersList.length === 0) {
-                        loadMembersForEnrollment(formData.ministry_id);
-                      }
-                    }}
-                    onClick={() => {
-                      setIsMemberDropdownOpen(true);
-                      if (membersList.length === 0) {
-                        loadMembersForEnrollment(formData.ministry_id);
-                      }
-                    }}
                     onChange={(e) => {
                       setMemberQuery(e.target.value);
                       setIsMemberDropdownOpen(true);
                     }}
-                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                    onFocus={() => setIsMemberDropdownOpen(true)}
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:border-indigo"
                   />
-                  {memberQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMemberQuery("");
-                        setIsMemberDropdownOpen(true);
-                      }}
-                      className="absolute right-7 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 p-1 cursor-pointer transition-colors"
-                      title="Clear search"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setIsMemberDropdownOpen(!isMemberDropdownOpen)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-indigo p-0.5 cursor-pointer"
-                    title="Toggle members dropdown"
-                  >
-                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMemberDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
                 </div>
 
-                {/* Dropdown Menu for Members */}
                 {isMemberDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
-                    <div className="p-2 bg-indigo-50/80 text-[10px] font-bold text-indigo-950 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
-                      <span>Available Members ({filteredMembers.length})</span>
-                      <span className="text-[9px] text-indigo-700 font-normal">Click to add or remove</span>
-                    </div>
+                  <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-52 overflow-y-auto divide-y divide-gray-100 animate-in fade-in">
                     {filteredMembers.length === 0 ? (
-                      <div className="p-3 text-center text-charcoal/50 text-xs">
-                        No matching members found.
+                      <div className="p-3 text-center text-xs text-charcoal/50">
+                        No church members found matching "{memberQuery}"
                       </div>
                     ) : (
                       filteredMembers.map((mem) => {
                         const isSelected = selectedMemberIds.includes(mem.id);
                         return (
-                          <button
+                          <div
                             key={mem.id}
-                            type="button"
                             onClick={() => handleToggleMember(mem.id)}
-                            className={`w-full text-left p-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer ${isSelected ? "bg-indigo-50/50 font-bold" : ""
-                              }`}
+                            className={`p-2 hover:bg-indigo-50 flex items-center justify-between cursor-pointer transition-colors ${isSelected ? "bg-indigo-50/80 font-bold" : ""}`}
                           >
-                            <div className="flex items-center gap-2 min-w-0 pr-2">
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 ${isSelected ? "bg-indigo" : "bg-gray-400"
-                                }`}>
-                                {mem.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-xs text-charcoal group-hover:text-indigo truncate">
-                                  {mem.name}
-                                </div>
-                                {mem.ministry_name && (
-                                  <span className="text-[10px] text-charcoal/50">
-                                    {mem.ministry_name} {mem.age ? `• ${mem.age} yrs` : ""}
-                                  </span>
-                                )}
-                              </div>
+                            <div>
+                              <div className="text-xs text-charcoal">{mem.name}</div>
+                              {mem.ministry_name && <div className="text-[10px] text-charcoal/50">{mem.ministry_name}</div>}
                             </div>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${isSelected
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                              : "bg-gray-100 text-charcoal/60 group-hover:bg-indigo-100 group-hover:text-indigo"
-                              }`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isSelected ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-gray-100 text-charcoal/60"}`}>
                               {isSelected ? "✓ Added" : "+ Add"}
                             </span>
-                          </button>
+                          </div>
                         );
                       })
                     )}
+                  </div>
+                )}
+
+                {/* Display list of all currently enrolled/selected members */}
+                {enrolledMembersDetails.length > 0 && (
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="text-[11px] font-bold text-charcoal/60">
+                      Currently Enrolled Disciples ({enrolledMembersDetails.length}):
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-indigo-50/50 rounded-2xl border border-indigo-100/80 max-h-36 overflow-y-auto">
+                      {enrolledMembersDetails.map((mem) => (
+                        <span
+                          key={mem.id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-indigo-200 text-charcoal text-xs font-bold shadow-2xs hover:border-rose-300 transition-all"
+                        >
+                          <span>{mem.name}</span>
+                          {mem.ministry_name && (
+                            <span className="text-[10px] text-indigo-700/70 font-normal">({mem.ministry_name})</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleMember(mem.id)}
+                            className="w-4 h-4 rounded-full hover:bg-rose-100 text-charcoal/40 hover:text-rose-600 flex items-center justify-center cursor-pointer ml-0.5"
+                            title={`Remove ${mem.name}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2042,379 +1708,67 @@ export const BibleStudyPage: React.FC = () => {
         document.body
       )}
 
-      {/* ==================================================== */}
-      {/* MODAL: Quick Update Chapter & Progress */}
-      {/* ==================================================== */}
+      {/* QUICK UPDATE PROGRESS MODAL */}
       {progressGroupModal && createPortal(
-        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-4 animate-in zoom-in-95 duration-150">
-            {/* Header */}
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-4">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
                   <BookmarkCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-charcoal">Update Study Chapter & Location</h3>
+                  <h3 className="text-base font-bold text-charcoal">Update Study Chapter</h3>
                   <p className="text-xs text-charcoal/60 truncate max-w-xs">{progressGroupModal.name}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setProgressGroupModal(null)}
-                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Current Book Topic Banner */}
-            {(() => {
-              const modalTotalChapters = getBookTotalChapters(progressGroupModal.curriculum, studySummary?.topics || []);
-              const modalChapterOptions = generateChapterOptions(modalTotalChapters);
-
-              return (
-                <>
-                  {progressGroupModal.curriculum && (
-                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/70 text-xs font-semibold text-amber-950 flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
-                        <span>Book / Topic: <strong>{progressGroupModal.curriculum}</strong></span>
-                      </div>
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-200/70 text-amber-950 font-bold text-[10px] border border-amber-300">
-                        {modalTotalChapters} Chapters Total
-                      </span>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSaveProgress} className="space-y-3.5 text-xs">
-                    {/* Current Chapter / Lesson Input with Quick Chips */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-bold text-charcoal/70">
-                          What Chapter / Lesson na sila? *
-                        </label>
-                        <span className="text-[10px] text-indigo-700 font-bold">
-                          {modalTotalChapters} Chapters in this Book
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Chapter 1, Introduction, Chapter 3 (Part 2)"
-                          value={progressFormData.current_chapter}
-                          onChange={(e) => setProgressFormData({ ...progressFormData, current_chapter: e.target.value })}
-                          className="flex-1 bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs"
-                        />
-                        <select
-                          value={progressFormData.current_chapter}
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              const isEnd = e.target.value === "Completed" || e.target.value === `Chapter ${modalTotalChapters}`;
-                              setProgressFormData({
-                                ...progressFormData,
-                                current_chapter: e.target.value,
-                                progress_stage: isEnd ? "completed" : progressFormData.progress_stage
-                              });
-                            }
-                          }}
-                          className="bg-indigo-50 text-indigo-950 font-bold text-xs p-2.5 rounded-xl border border-indigo-200 outline-none cursor-pointer"
-                        >
-                          <option value="">Select Chapter ▼</option>
-                          {modalChapterOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Dynamic Preset Chapter Chips */}
-                      <div className="mt-2 space-y-1">
-                        <span className="text-[10px] text-charcoal/50 font-bold block uppercase tracking-wider">
-                          Select Chapter (1 to {modalTotalChapters}):
-                        </span>
-                        <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto p-1.5 bg-gray-50/80 rounded-xl border border-gray-100 no-scrollbar">
-                          {modalChapterOptions.map((chip) => (
-                            <button
-                              key={chip.value}
-                              type="button"
-                              onClick={() => {
-                                const isEnd = chip.value === "Completed" || chip.value === `Chapter ${modalTotalChapters}`;
-                                setProgressFormData({
-                                  ...progressFormData,
-                                  current_chapter: chip.value,
-                                  progress_stage: isEnd ? "completed" : progressFormData.progress_stage
-                                });
-                              }}
-                              className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${progressFormData.current_chapter === chip.value
-                                ? "bg-indigo text-white border-indigo shadow-2xs scale-105"
-                                : "bg-white hover:bg-indigo-50 border-gray-200 text-charcoal/75 hover:text-indigo"
-                                }`}
-                            >
-                              {chip.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Progress Stage Picker */}
-                    <div>
-                      <label className="block font-bold text-charcoal/70 mb-1.5">
-                        Study Progress Stage (Nasaan sila banda?)
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {[
-                          { id: "intro", title: "🟢 Intro / Just Starting", desc: "No. 1 pa lang / Introduction / overview" },
-                          { id: "midway", title: "🟡 Mid-way (Kalahati)", desc: "Nasa kalahati pa lang ng ongoing verses" },
-                          { id: "application", title: "🟠 Discussion & Reflection", desc: "Tapos na reading, nasa group reflection" },
-                          { id: "completed", title: "🔵 Chapter Finished", desc: "Tapos na ang chapter, next lesson na" }
-                        ].map((st) => (
-                          <div
-                            key={st.id}
-                            onClick={() => setProgressFormData({ ...progressFormData, progress_stage: st.id })}
-                            className={`p-2.5 rounded-xl border cursor-pointer transition-all ${progressFormData.progress_stage === st.id
-                              ? "bg-indigo-50/70 border-indigo ring-1 ring-indigo text-indigo-950 font-bold"
-                              : "bg-ivory-light border-gray-200 hover:border-gray-300 text-charcoal/80"
-                              }`}
-                          >
-                            <div className="text-xs font-bold">{st.title}</div>
-                            <div className="text-[10px] text-charcoal/60 mt-0.5">{st.desc}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Notice & Progress Description (Saan Banda Sila) */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-bold text-charcoal/70">
-                          Notice & Specific Location Description
-                        </label>
-                        <span className="text-[10px] text-indigo-600 font-semibold">Important details</span>
-                      </div>
-                      <textarea
-                        rows={3}
-                        placeholder="Maglagay ng notice o detalye kung nasaan sila banda (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide, itutuloy sa susunod na meeting')..."
-                        value={progressFormData.progress_notes}
-                        onChange={(e) => setProgressFormData({ ...progressFormData, progress_notes: e.target.value })}
-                        className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                      />
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => setProgressGroupModal(null)}
-                        className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isSavingProgress}
-                        className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
-                      >
-                        <Check className="w-4 h-4" />
-                        <span>{isSavingProgress ? "Saving..." : "Save Chapter Progress"}</span>
-                      </button>
-                    </div>
-                  </form>
-                </>
-              );
-            })()}
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* ==================================================== */}
-      {/* MODAL: Reschedule Small Group Next Session */}
-      {/* ==================================================== */}
-      {rescheduleGroupModal && createPortal(
-        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-amber-200 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
-                  <CalendarClock className="w-5 h-5 text-amber-700" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-charcoal">Reschedule Bible Study Session</h3>
-                  <p className="text-xs text-charcoal/60 truncate max-w-xs">{rescheduleGroupModal.name}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRescheduleGroupModal(null)}
-                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Regular Schedule Reference Banner */}
-            <div className="p-3 bg-ivory rounded-2xl border border-amber-200/60 text-xs flex items-center justify-between gap-2 flex-wrap">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-bold text-charcoal/50 uppercase block">Regular Weekly Schedule</span>
-                <span className="font-bold text-charcoal">
-                  Every {rescheduleGroupModal.meeting_day} at {rescheduleGroupModal.meeting_time}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold text-charcoal/50 uppercase block">Meeting Location</span>
-                <span className="font-bold text-charcoal">{rescheduleGroupModal.location}</span>
-              </div>
-            </div>
-
-            <form onSubmit={(e) => handleSaveReschedule(e, false)} className="space-y-4 text-xs">
-              {/* Status Mode Selector */}
+            <form onSubmit={handleSaveProgress} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1.5">Schedule Status *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRescheduleFormData({ ...rescheduleFormData, is_rescheduled: true })}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${rescheduleFormData.is_rescheduled
-                      ? "bg-amber-50 border-amber-400 ring-2 ring-amber-400/20 text-amber-950 font-bold shadow-2xs"
-                      : "bg-white border-gray-200 text-charcoal/70 hover:border-gray-300"
-                      }`}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs font-black text-amber-800 mb-0.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Rescheduled Date</span>
-                    </div>
-                    <p className="text-[10px] font-medium text-amber-900/70">Move next meeting to a special day/time</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setRescheduleFormData({ ...rescheduleFormData, is_rescheduled: false })}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${!rescheduleFormData.is_rescheduled
-                      ? "bg-emerald-50 border-emerald-400 ring-2 ring-emerald-400/20 text-emerald-950 font-bold shadow-2xs"
-                      : "bg-white border-gray-200 text-charcoal/70 hover:border-gray-300"
-                      }`}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs font-black text-emerald-800 mb-0.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Regular Weekly</span>
-                    </div>
-                    <p className="text-[10px] font-medium text-emerald-900/70">Keep normal weekly schedule</p>
-                  </button>
-                </div>
+                <label className="block font-bold text-charcoal/70 mb-1">Current Chapter / Lesson *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Chapter 1"
+                  value={progressFormData.current_chapter}
+                  onChange={(e) => setProgressFormData({ ...progressFormData, current_chapter: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-bold"
+                />
               </div>
 
-              {/* Conditional Form Fields when Rescheduled is ON */}
-              {rescheduleFormData.is_rescheduled && (
-                <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200/80 space-y-3 animate-in fade-in duration-150">
-                  {/* Rescheduled Date Picker */}
-                  <div>
-                    <label className="block font-bold text-amber-950 mb-1">
-                      New Meeting Date *
-                    </label>
-                    <input
-                      type="date"
-                      required={rescheduleFormData.is_rescheduled}
-                      value={rescheduleFormData.rescheduled_date}
-                      onChange={(e) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_date: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 font-bold text-charcoal text-xs shadow-2xs"
-                    />
-                  </div>
+              <div>
+                <label className="block font-bold text-charcoal/70 mb-1">Notice & Pacing Description</label>
+                <textarea
+                  rows={3}
+                  placeholder="Describe where the group is currently discussing..."
+                  value={progressFormData.progress_notes}
+                  onChange={(e) => setProgressFormData({ ...progressFormData, progress_notes: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200"
+                />
+              </div>
 
-                  {/* Rescheduled Time Start & End */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block font-bold text-amber-950 mb-1">Start Time *</label>
-                      <TimePickerInput
-                        value={rescheduleFormData.rescheduled_time_start}
-                        onChange={(val) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_time_start: val })}
-                        placeholder="e.g. 7:00 PM"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-amber-950 mb-1">End Time</label>
-                      <TimePickerInput
-                        value={rescheduleFormData.rescheduled_time_end}
-                        onChange={(val) => setRescheduleFormData({ ...rescheduleFormData, rescheduled_time_end: val })}
-                        placeholder="e.g. 8:00 PM"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Quick Reason Chips */}
-                  <div>
-                    <label className="block font-bold text-amber-950 mb-1">
-                      Reason / Notice for Disciples *
-                    </label>
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {[
-                        "Typhoon / Severe Weather",
-                        "Leader Travel / Ministry Duty",
-                        "Church-Wide Event / Holiday",
-                        "Member Request & Agreement",
-                        "Venue Maintenance / Room Setup"
-                      ].map((chip) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => setRescheduleFormData({ ...rescheduleFormData, reschedule_reason: chip })}
-                          className="px-2 py-1 rounded-lg bg-white hover:bg-amber-100 border border-amber-200 text-[10px] font-semibold text-amber-950 transition-colors cursor-pointer"
-                        >
-                          {chip}
-                        </button>
-                      ))}
-                    </div>
-                    <textarea
-                      rows={2}
-                      required={rescheduleFormData.is_rescheduled}
-                      placeholder="e.g. 'Naurong po ang ating meeting sa Friday dahil may church conference sa Miyerkules. Kitakits sa Friday 6:30 PM!'..."
-                      value={rescheduleFormData.reschedule_reason}
-                      onChange={(e) => setRescheduleFormData({ ...rescheduleFormData, reschedule_reason: e.target.value })}
-                      className="w-full bg-white p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-500 text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
               <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRescheduleGroupModal(null)}
-                    className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  {rescheduleGroupModal.is_rescheduled && (
-                    <button
-                      type="button"
-                      onClick={() => handleSaveReschedule(undefined, true)}
-                      disabled={isSavingReschedule}
-                      className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200 cursor-pointer"
-                      title="Clear reschedule and revert to regular schedule"
-                    >
-                      Clear Reschedule
-                    </button>
-                  )}
-                </div>
-
+                <button
+                  type="button"
+                  onClick={() => setProgressGroupModal(null)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
-                  disabled={isSavingReschedule}
-                  className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
+                  disabled={isSavingProgress}
+                  className="px-5 py-2 rounded-xl bg-indigo text-white font-bold shadow-md cursor-pointer disabled:opacity-50"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>
-                    {isSavingReschedule
-                      ? "Saving..."
-                      : rescheduleFormData.is_rescheduled
-                        ? "Save Rescheduled Session"
-                        : "Save Regular Schedule"}
-                  </span>
+                  {isSavingProgress ? "Saving..." : "Save Chapter Progress"}
                 </button>
               </div>
             </form>
@@ -2423,123 +1777,63 @@ export const BibleStudyPage: React.FC = () => {
         document.body
       )}
 
-      {/* ==================================================== */}
-      {/* MODAL: Completed Books of Study Archive */}
-      {/* ==================================================== */}
+      {/* RESCHEDULE MODAL (WITH ROOM AVAILABILITY & DAY-WISE GROUP INSPECTOR) */}
+      <BibleStudyRescheduleModal
+        isOpen={Boolean(rescheduleGroupModal)}
+        onClose={() => setRescheduleGroupModal(null)}
+        group={rescheduleGroupModal}
+        onSaved={loadData}
+        showToast={(msg, type) => {
+          if (type === "error") {
+            showAlert("Reschedule Error", msg, "danger");
+          } else {
+            setIsJoinSuccess(msg);
+          }
+        }}
+      />
+
+      {/* COMPLETED GROUPS ARCHIVE MODAL */}
       {isCompletedModalOpen && createPortal(
-        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-emerald-200 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 border border-emerald-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-900 flex items-center justify-center font-bold">
                   <Award className="w-5 h-5 text-emerald-700" />
                 </div>
                 <div>
-                  <h3 className="font-black text-lg text-charcoal flex items-center gap-2">
-                    <span>Completed Bible Studies & Groups</span>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-600 text-white">
-                      {completedCount} Completed
-                    </span>
-                  </h3>
-                  <p className="text-xs text-charcoal/60">
-                    Archive of small groups and discipleship tracks that have finished their curriculum.
-                  </p>
+                  <h3 className="text-base font-black text-charcoal">Completed Bible Study Groups</h3>
+                  <p className="text-xs text-charcoal/60">{completedCount} groups finished curriculum tracks</p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsCompletedModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/50 hover:text-charcoal transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setIsCompletedModalOpen(false)} className="p-1.5 text-charcoal/40 hover:bg-gray-100 rounded-xl cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Summary Highlights */}
-            <div className="grid grid-cols-3 gap-3 p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 text-center">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Completed Groups</span>
-                <span className="text-xl font-black text-emerald-900">{completedCount}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Active Groups</span>
-                <span className="text-xl font-black text-emerald-900">{groups.length}</span>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Completion Rate</span>
-                <span className="text-xl font-black text-emerald-900">{completionRate}%</span>
-              </div>
-            </div>
-
-            {/* List of Completed Groups */}
-            {completedGroups.length === 0 ? (
-              <div className="text-center py-10 bg-gray-50 rounded-xl space-y-2">
-                <BookOpen className="w-8 h-8 text-charcoal/30 mx-auto" />
-                <p className="text-xs text-charcoal/70 font-semibold">No small groups have reached completed status yet.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {completedGroups.map((grp, idx) => (
-                  <div
-                    key={grp.id}
-                    className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/30 hover:bg-white hover:shadow-2xs transition-all space-y-2.5"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold">
-                            {idx + 1}
-                          </span>
-                          <h4 className="font-bold text-sm text-charcoal">{grp.name}</h4>
-                          {grp.curriculum && (
-                            <span className="text-xs font-bold text-indigo bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                              📖 {grp.curriculum}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-charcoal/70 pl-7">
-                          Facilitator: <strong>{grp.leader_name}</strong> • {grp.category}
-                        </p>
-                        {grp.progress_notes && (
-                          <p className="text-xs text-charcoal/70 pl-7 leading-relaxed italic bg-white/70 p-2 rounded-lg border border-emerald-100 mt-1">
-                            "{grp.progress_notes}"
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Finished</span>
-                        </span>
-                      </div>
+            <div className="space-y-2">
+              {groups.filter(g => g.progress_stage === "completed").length === 0 ? (
+                <p className="text-xs text-charcoal/50 text-center py-6">No completed groups yet in this cycle.</p>
+              ) : (
+                groups.filter(g => g.progress_stage === "completed").map(g => (
+                  <div key={g.id} className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-emerald-950">{g.name}</div>
+                      <div className="text-[10px] text-emerald-800">{g.curriculum} • Leader: {g.leader_name}</div>
                     </div>
-
-                    <div className="flex items-center justify-between text-xs text-charcoal/70 pl-7 pt-1 border-t border-emerald-100">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span>Status: <strong>{grp.current_chapter || "Completed"}</strong></span>
-                        {grp.members && <span>👥 {grp.members.length} Participants</span>}
-                      </div>
-                    </div>
+                    <span className="text-[10px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                      ✓ Completed
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-end pt-3 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setIsCompletedModalOpen(false)}
-                className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                Close Archive
-              </button>
+                ))
+              )}
             </div>
           </div>
         </div>,
         document.body
       )}
 
-      {/* Reusable Confirmation & Alert Modal */}
+      {/* Confirmation Modal */}
       <ConfirmationModal
         isOpen={confirmModalConfig.isOpen}
         title={confirmModalConfig.title}
@@ -2554,5 +1848,3 @@ export const BibleStudyPage: React.FC = () => {
     </div>
   );
 };
-
-export default BibleStudyPage;

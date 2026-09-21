@@ -12,12 +12,13 @@ import {
   Layers, LayoutGrid, List, X, Sparkles, AlertCircle,
   Cake, Gift, PartyPopper, Send, Check, Utensils, CalendarCheck,
   BookOpen, ShieldCheck, Droplets, ChevronRight as ChevronRightIcon,
-  Crown, Phone, ExternalLink, Sparkle, Tag, ChevronDown, ChevronUp
+  Crown, Phone, ExternalLink, Sparkle, Tag, ChevronDown, ChevronUp, Sun, UserCheck
 } from "lucide-react";
 import { DateTimePickerInput } from "../components/common/DateTimePickerInput";
 import { useSocketEvent } from "../socket";
 import { EventsPageSkeleton } from "../components/common/SkeletonLoader";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
+import { EventAttendanceModal } from "../components/common/EventAttendanceModal";
 
 // Dynamic default dates helper for "Now" & "Now + 2 Hours"
 const getNowIsoLocal = (): string => {
@@ -124,7 +125,11 @@ const isActivityOnDate = (act: UnifiedActivity, dateStr: string): boolean => {
   return dateStr >= start && dateStr <= end;
 };
 
-export const EventsPage: React.FC = () => {
+export interface EventsPageProps {
+  onNavigate?: (tab: any) => void;
+}
+
+export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   const { user, ministries, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
 
   // Raw data collections
@@ -152,6 +157,7 @@ export const EventsPage: React.FC = () => {
   // Inspector & Modals state
   const [selectedActivity, setSelectedActivity] = useState<UnifiedActivity | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [attendanceModalEvent, setAttendanceModalEvent] = useState<EventItem | null>(null);
   const [selectedBirthday, setSelectedBirthday] = useState<BirthdayCelebrant | null>(null);
   const [dayPopover, setDayPopover] = useState<{
     dateStr: string;
@@ -321,9 +327,35 @@ export const EventsPage: React.FC = () => {
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.title.trim()) {
+      showAlert("Title Required", "Please enter an event title.", "warning");
+      return;
+    }
+
+    if (!formData.start_time || !formData.end_time) {
+      showAlert("Time Required", "Start and End times are required.", "warning");
+      return;
+    }
+
+    if (new Date(formData.end_time).getTime() < new Date(formData.start_time).getTime()) {
+      showAlert("Invalid Time Range", "Event end time cannot be earlier than start time.", "warning");
+      return;
+    }
+
+    const dupEvent = events.find(ev =>
+      ev.title.toLowerCase().trim() === formData.title.toLowerCase().trim() &&
+      ev.start_time?.split("T")[0] === formData.start_time.split("T")[0]
+    );
+
+    if (dupEvent) {
+      showAlert("Duplicate Event", `An event named "${formData.title}" is already scheduled on this date.`, "warning");
+      return;
+    }
+
     try {
       await api.createEvent({
         ...formData,
+        title: formData.title.trim(),
         ministry_id: formData.ministry_id ? Number(formData.ministry_id) : null
       });
       setIsCreateModalOpen(false);
@@ -814,10 +846,15 @@ export const EventsPage: React.FC = () => {
       {/* ========================================================================= */}
       {/* 1. PAGE HERO HEADER */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-white/10 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
         {/* Glow ambient spots */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
@@ -825,7 +862,7 @@ export const EventsPage: React.FC = () => {
               <CalendarIcon className="w-5 h-5" />
             </span>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
-              Master Calendar & Schedule
+              Calendar
             </h1>
             <span className="bg-amber-400/20 text-amber-300 border border-amber-300/30 text-xs font-black px-3 py-1 rounded-full shadow-inner flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
@@ -864,13 +901,29 @@ export const EventsPage: React.FC = () => {
             </button>
           </div>
 
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate("sundaycycle")}
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-amber-300 font-bold px-4 py-2.5 rounded-2xl text-xs border border-white/20 backdrop-blur-md transition-all active:scale-95 cursor-pointer shadow-xs hover:border-amber-300/40"
+            >
+              <Sun className="w-4 h-4 text-amber-300" />
+              <span>Events & Celebrations</span>
+            </button>
+          )}
+
           {canCreate && (
             <button
-              onClick={() => handleOpenCreateModal()}
+              onClick={() => {
+                if (onNavigate) {
+                  onNavigate("sundaycycle");
+                } else {
+                  handleOpenCreateModal();
+                }
+              }}
               className="flex items-center gap-2 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 hover:brightness-105 text-slate-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-lg hover:shadow-amber-400/20 transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4 text-slate-950" />
-              <span>Schedule Event</span>
+              <span>Add Event / Celebration</span>
             </button>
           )}
         </div>
@@ -1083,7 +1136,11 @@ export const EventsPage: React.FC = () => {
                               if (allDayActs.length > 0) {
                                 handleOpenDayPopover(e, day.dateStr);
                               } else if (canCreate) {
-                                handleOpenCreateModal(day.dateStr);
+                                if (onNavigate) {
+                                  onNavigate("sundaycycle");
+                                } else {
+                                  handleOpenCreateModal(day.dateStr);
+                                }
                               }
                             }}
                             className={`text-xs font-bold inline-flex items-center justify-center w-6 h-6 rounded-full transition-all cursor-pointer ${
@@ -1297,16 +1354,29 @@ export const EventsPage: React.FC = () => {
                       {/* Right Action Pill */}
                       <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                         {act.type === "church_event" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRsvp(act.raw_data.id);
-                            }}
-                            className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>RSVP ({act.rsvp_count || 0})</span>
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAttendanceModalEvent(act.raw_data);
+                              }}
+                              className="bg-purple-900 hover:bg-purple-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                              title="Mark Present / Event Attendance"
+                            >
+                              <UserCheck className="w-3.5 h-3.5 text-purple-300" />
+                              <span>Attendance</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRsvp(act.raw_data.id);
+                              }}
+                              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>RSVP ({act.rsvp_count || 0})</span>
+                            </button>
+                          </div>
                         )}
                         {act.type === "birthday" && (
                           <button
@@ -1452,15 +1522,24 @@ export const EventsPage: React.FC = () => {
                 )}
 
                 {/* Footer Action Buttons */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
                   {activeInspectorItem.type === "church_event" && (
-                    <button
-                      onClick={() => handleRsvp(activeInspectorItem.raw_data.id)}
-                      className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-105 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>RSVP Going ({activeInspectorItem.rsvp_count || 0})</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setAttendanceModalEvent(activeInspectorItem.raw_data)}
+                        className="w-full bg-gradient-to-r from-purple-800 to-indigo-900 hover:from-purple-700 hover:to-indigo-800 text-white font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                      >
+                        <UserCheck className="w-4 h-4 text-purple-300" />
+                        <span>Event Attendance & Check-In</span>
+                      </button>
+                      <button
+                        onClick={() => handleRsvp(activeInspectorItem.raw_data.id)}
+                        className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-105 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>RSVP ({activeInspectorItem.rsvp_count || 0})</span>
+                      </button>
+                    </>
                   )}
 
                   {activeInspectorItem.type === "birthday" && (
@@ -1787,6 +1866,13 @@ export const EventsPage: React.FC = () => {
         isLoading={confirmModalConfig.isLoading}
         onConfirm={confirmModalConfig.onConfirm}
         onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Event Attendance & Check-In Modal */}
+      <EventAttendanceModal
+        event={attendanceModalEvent}
+        isOpen={!!attendanceModalEvent}
+        onClose={() => setAttendanceModalEvent(null)}
       />
     </div>
   );

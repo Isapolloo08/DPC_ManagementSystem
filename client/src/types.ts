@@ -105,6 +105,10 @@ export interface Member {
   linked_spouse_birthdate?: string | null;
   linked_spouse_ministry_id?: number | null;
   linked_spouse_ministry_name?: string | null;
+  is_baptized?: boolean | null;
+  baptism_status?: "not_baptized" | "candidate" | "scheduled" | "baptized" | string | null;
+  baptism_date?: string | null;
+  baptism_notes?: string | null;
   partner_record?: {
     first_name: string;
     last_name: string;
@@ -133,6 +137,100 @@ export interface Member {
   family_members?: { id: number; first_name: string; last_name: string; birthdate: string; ministry_id: number }[];
   attendance_history?: AttendanceRecord[];
   donations?: Donation[];
+  membership_type?: "baptized_regular" | "unbaptized_regular" | "guest" | "inactive";
+  attendance_health?: "healthy" | "warning" | "action_required" | "inactive";
+  consecutive_absences?: number;
+  last_attended_date?: string | null;
+  bible_study_group_id?: number | null;
+  bible_study_group_name?: string | null;
+  bible_study_leader_name?: string | null;
+}
+
+export interface QualifiedBaptismCandidate {
+  id: number;
+  first_name: string;
+  last_name: string;
+  gender?: string;
+  birthdate?: string;
+  age?: number;
+  contact_phone?: string;
+  ministry_id?: number;
+  ministry_name?: string;
+  ministry_color?: string;
+  household_name?: string;
+  application_date?: string;
+  baptism_status?: string;
+  is_baptized?: boolean;
+  total_present: number;
+  total_absent: number;
+  total_excused: number;
+  total_logged: number;
+  consistency_rate: number;
+  annual_sundays_target?: number;
+  has_bible_study?: boolean;
+  bible_study_group_id?: number | null;
+  bible_study_group_name?: string | null;
+  bible_study_leader_name?: string | null;
+  is_candidate: boolean;
+  is_ready_for_nomination: boolean;
+  qualification_reason: string;
+}
+
+export interface BaptismCandidatesResponse {
+  candidates: QualifiedBaptismCandidate[];
+  counts: {
+    total_qualified: number;
+    already_candidates: number;
+    pending_nomination: number;
+  };
+}
+
+
+export interface MemberAnnualAttendanceResponse {
+  member: Member;
+  year: number;
+  available_years: number[];
+  stats: {
+    total_present: number;
+    total_absent: number;
+    total_excused: number;
+    total_logged_services: number;
+    consistency_rate: number;
+    annual_percentage: number;
+    estimated_sundays: number;
+  };
+  baptism_tracker: {
+    is_baptized: boolean;
+    baptism_status: string;
+    baptism_date?: string | null;
+    baptism_notes?: string | null;
+    is_attendance_qualified: boolean;
+    is_candidate: boolean;
+    should_alert: boolean;
+    alert_reason?: string | null;
+  };
+  monthly_breakdown: {
+    month_num: number;
+    month_name: string;
+    present: number;
+    absent: number;
+    excused: number;
+    total: number;
+  }[];
+  records: {
+    id: number;
+    member_id: number;
+    ministry_id: number;
+    event_id?: number | null;
+    checked_in_at: string;
+    checked_out_at?: string | null;
+    security_code?: string | null;
+    notes?: string | null;
+    ministry_name?: string | null;
+    ministry_color?: string | null;
+    checked_in_by_name?: string | null;
+    status: "present" | "absent" | "excused";
+  }[];
 }
 
 export interface Household {
@@ -207,6 +305,40 @@ export interface EventItem {
   registrations?: { id: number; member_id: number; first_name: string; last_name: string; status: string }[];
 }
 
+export interface RecurringSundayEvent {
+  id: number;
+  title: string;
+  theme_tagline?: string | null;
+  description?: string | null;
+  month: number;
+  week_pattern: "1st_sunday" | "2nd_sunday" | "3rd_sunday" | "4th_sunday" | "last_sunday" | string;
+  target_ministry_id?: number | null;
+  target_ministry_name?: string | null;
+  db_ministry_name?: string | null;
+  db_ministry_color?: string | null;
+  color?: string;
+  icon?: string;
+  liturgical_notes?: string | null;
+  program_highlights?: string | null;
+  is_active: boolean;
+  target_year?: number;
+  projected_date?: string;
+  projected_day?: number;
+  projected_formatted?: string;
+  is_past?: boolean;
+  is_today?: boolean;
+  is_synced_to_calendar?: boolean;
+  synced_event_id?: number | null;
+}
+
+export interface RecurringSundayEventsResponse {
+  year: number;
+  available_years: number[];
+  events: RecurringSundayEvent[];
+  total_annual_events: number;
+}
+
+
 export interface Announcement {
   id: number;
   ministry_id: number | null;
@@ -251,7 +383,6 @@ export interface DashboardMetrics {
     today_checkins: number;
     ytd_giving_amount: number;
     active_announcements?: number;
-    open_prayer_requests?: number;
     upcoming_events_count: number;
     aging_out_alerts_count: number;
     birthdays_this_month_count?: number;
@@ -320,6 +451,77 @@ export interface BibleStudyGroup {
   rescheduled_time?: string | null;
   reschedule_reason?: string | null;
   created_at?: string;
+}
+
+export interface BibleStudyAttendanceHistoryItem {
+  session_date: string;
+  topic_title: string;
+  chapter: string;
+  status: "present" | "absent" | "excused";
+  notes?: string;
+}
+
+export interface BibleStudyMemberAttendance {
+  member_id: number;
+  display_name: string;
+  first_name?: string;
+  last_name?: string;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  photo_url?: string | null;
+  ministry_name?: string | null;
+  ministry_color?: string | null;
+  joined_at?: string;
+  total_sessions: number;
+  present_count: number;
+  absent_count: number;
+  excused_count: number;
+  consecutive_absences: number;
+  attendance_rate: number;
+  health_status: "consistent" | "moderate" | "at_risk";
+  history: BibleStudyAttendanceHistoryItem[];
+}
+
+export interface BibleStudySessionAttendee {
+  member_id: number;
+  name: string;
+  photo_url?: string | null;
+  contact_phone?: string | null;
+  status: "present" | "absent" | "excused";
+  notes?: string;
+}
+
+export interface BibleStudySessionDetail {
+  id: number;
+  session_date: string;
+  topic_title: string;
+  chapter: string;
+  notes?: string;
+  is_special?: boolean;
+  special_reason?: string | null;
+  recorded_by_name: string;
+  present_count: number;
+  absent_count: number;
+  excused_count: number;
+  total_enrolled: number;
+  attendees: BibleStudySessionAttendee[];
+  absentees: BibleStudySessionAttendee[];
+  excused: BibleStudySessionAttendee[];
+}
+
+export interface GroupAttendanceResponse {
+  group: BibleStudyGroup;
+  summary: {
+    total_sessions: number;
+    total_enrolled: number;
+    overall_attendance_rate: number;
+    total_absences: number;
+    total_presents: number;
+    at_risk_count: number;
+    average_attendees_per_session: string;
+  };
+  members: BibleStudyMemberAttendance[];
+  sessions: BibleStudySessionDetail[];
 }
 
 export type LookupType = 
@@ -659,4 +861,273 @@ export interface CloudSyncResult {
   totalRows: number;
   message: string;
 }
+
+export interface GrowthSummary {
+  total_active_members: number;
+  discipleship_ratio: number;
+  disciples_in_groups: number;
+  total_groups: number;
+  total_capacity: number;
+  capacity_utilization: number;
+  retention_rate: number;
+  total_new_members: number;
+  new_members_attended: number;
+  new_members_in_groups: number;
+  new_members_baptized: number;
+  total_baptisms_period: number;
+  avg_weekly_attendance: number;
+  peak_attendance: number;
+}
+
+export interface BaptismTrendItem {
+  month_key: string;
+  month_label: string;
+  count: number;
+  male_count: number;
+  female_count: number;
+}
+
+export interface AttendanceTrendItem {
+  date: string;
+  date_label: string;
+  day_name: string;
+  total: number;
+  present: number;
+  late: number;
+  unique_members: number;
+}
+
+export interface MinistryAttendanceItem {
+  date: string;
+  ministry_id: number;
+  ministry_name: string;
+  ministry_color: string;
+  count: number;
+}
+
+export interface GroupInsightItem {
+  id: number;
+  name: string;
+  curriculum: string;
+  current_chapter: string;
+  progress_stage: string;
+  meeting_day: string;
+  meeting_time: string;
+  max_capacity: number;
+  enrolled_count: number;
+  utilization_rate: number;
+}
+
+export interface GrowthInsightsData {
+  timeframe: string;
+  summary: GrowthSummary;
+  baptisms: BaptismTrendItem[];
+  attendance_trends: AttendanceTrendItem[];
+  ministry_attendance: MinistryAttendanceItem[];
+  groups_list: GroupInsightItem[];
+}
+
+export type AttendanceLogType = "sunday_service" | "bible_study" | "event";
+export type AttendanceLogStatus = "present" | "absent" | "excused";
+
+export interface AttendanceLogItem {
+  logType: AttendanceLogType;
+  logDate: string; // YYYY-MM-DD
+  memberId: number;
+  memberName: string;
+  ministryId?: number | null;
+  ministryName: string;
+  groupId?: number | null;
+  groupName?: string;
+  eventId?: number | null;
+  eventName?: string;
+  status: AttendanceLogStatus;
+  recordedAt: string;
+}
+
+export interface AttendanceLogSummary {
+  total: number;
+  present: number;
+  absent: number;
+  excused: number;
+}
+
+export interface AttendanceLogResponse {
+  rows: AttendanceLogItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: AttendanceLogSummary;
+}
+
+export interface AttendanceLogFilters {
+  from?: string;
+  to?: string;
+  type?: AttendanceLogType | "";
+  status?: AttendanceLogStatus | "";
+  ministryId?: number | string;
+  groupId?: number | string;
+  memberId?: number | string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ServiceItem {
+  id: number;
+  service_date: string;
+  service_type: "sunday_service" | "special_service";
+  title: string;
+  status: "held" | "cancelled";
+  notes?: string | null;
+  check_in_count: number;
+  is_recorded: boolean;
+}
+
+export interface ServicesResponse {
+  services: ServiceItem[];
+  total: number;
+  from_date: string;
+  to_date: string;
+}
+
+export interface CreateServicePayload {
+  service_date: string;
+  service_type?: "sunday_service" | "special_service";
+  title: string;
+  status?: "held" | "cancelled";
+  notes?: string;
+}
+
+export interface UpdateServicePayload {
+  title?: string;
+  status?: "held" | "cancelled";
+  notes?: string;
+}
+
+export interface MonthlyAttendanceItem {
+  month_num: number;
+  month_name: string;
+  present: number;
+  absent: number;
+  excused: number;
+  total_sundays_in_month: number;
+  elapsed_sundays: number;
+  is_future: boolean;
+}
+
+export interface AttendanceRecordItem {
+  id: number;
+  checked_in_at: string;
+  date_str: string;
+  time_str: string;
+  status: "present" | "absent" | "excused";
+  notes?: string | null;
+  security_code?: string | null;
+  checked_in_by_name?: string | null;
+  ministry_name?: string | null;
+  ministry_color?: string | null;
+}
+
+export interface BaptismMilestoneTracker {
+  is_baptized: boolean;
+  baptism_status: string;
+  baptism_date?: string | null;
+  baptism_notes?: string | null;
+  is_eligible_for_ceremony: boolean;
+  should_alert: boolean;
+  alert_reason?: string | null;
+}
+
+export interface AttendanceSummaryMetrics {
+  attended: number;
+  missed: number;
+  absent?: number;
+  excused: number;
+  unrecorded_services_count: number;
+  total_held_services: number;
+  attendance_rate_percentage: number | null;
+  consistency_rate_percentage?: number | null;
+  current_streak: number;
+  longest_streak: number;
+  last_attended_date: string | null;
+}
+
+export interface EventAttendanceMetrics {
+  attended: number;
+  total_events: number;
+  last_attended_date: string | null;
+  events_list: { id: number; title: string; event_date: string; attended_at: string }[];
+}
+
+export interface MemberComprehensiveAttendanceSummary {
+  member: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    birthdate?: string | null;
+    age?: number | null;
+    gender?: string | null;
+    civil_status?: string | null;
+    ministry_id: number | null;
+    ministry_name: string;
+    ministry_color?: string | null;
+    household_id?: number | null;
+    household_name?: string | null;
+    photo_url: string | null;
+    status: string;
+    is_baptized: boolean;
+    baptism_status: string;
+    baptism_date?: string | null;
+    baptism_notes?: string | null;
+  };
+  member_id: number;
+  from_date: string;
+  to_date: string;
+  sunday_service: AttendanceSummaryMetrics;
+  bible_study: AttendanceSummaryMetrics;
+  events: EventAttendanceMetrics;
+  overall_attendance_rate: number | null;
+  consistency_score: number | null;
+  consistency_tier: "Consistent Regular" | "Regular Attendee" | "Developing Habit" | "Needs Encouragement" | "Inactive / Disengaged" | "No Data";
+  monthly_breakdown: MonthlyAttendanceItem[];
+  records: AttendanceRecordItem[];
+  baptism_tracker: BaptismMilestoneTracker;
+}
+
+export interface EventAttendeeItem {
+  member_id: number;
+  first_name: string;
+  last_name: string;
+  contact_phone?: string;
+  contact_email?: string;
+  ministry_id?: number | null;
+  ministry_name: string;
+  ministry_color?: string | null;
+  status: "attended" | "registered" | "unregistered" | "absent" | "excused";
+  attendance_notes?: string | null;
+  registered_at?: string | null;
+  checked_in_at?: string | null;
+  attendance_id?: number | null;
+}
+
+export interface EventAttendanceRosterResponse {
+  event: {
+    id: number;
+    title: string;
+    start_time: string;
+    end_time: string;
+    location?: string | null;
+  };
+  summary: {
+    total_registered: number;
+    total_attended: number;
+    total_absent?: number;
+    total_excused?: number;
+    total_active_members: number;
+  };
+  attendees: EventAttendeeItem[];
+}
+
+
 

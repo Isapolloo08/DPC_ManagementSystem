@@ -13,7 +13,7 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "leader-dashboard": { title: "My Bible Study Group", subtitle: "Small group fellowship & spiritual growth" },
   "leader-members": { title: "Lead Group Disciples", subtitle: "Assigned discipleship roster & care" },
   "leader-biblestudy": { title: "Meeting & Curriculum", subtitle: "Curriculum & meeting attendance" },
-  "attendance": { title: "Sunday Attendance", subtitle: "Live divine worship service kiosks" },
+  "attendance": { title: "Attendance & Check-In", subtitle: "Sunday divine worship & special event check-in kiosks" },
   "members": { title: "Members & Households", subtitle: "7 ministries directory & membership cards" },
   "biblestudy": { title: "Bible Study Groups", subtitle: "Discipleship life groups & schedules" },
   "curriculum": { title: "Topics & Books of Study", subtitle: "Discipleship curriculum tracker" },

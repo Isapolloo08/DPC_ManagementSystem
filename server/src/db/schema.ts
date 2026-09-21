@@ -2,6 +2,7 @@ import postgres from "postgres";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
+import { error } from "console";
 
 const envCandidates = [
   path.resolve(process.cwd(), ".env"),
@@ -38,7 +39,7 @@ export const sql = postgres(connectionString, {
   max_lifetime: 60 * 30, // 30 minutes
   ssl: isSupabaseOrRemote ? "require" : undefined,
   prepare: false, // Prevents statement cache issues on PgBouncer / Supabase transaction poolers
-  onnotice: () => {}, // Silence harmless PostgreSQL NOTICE logs
+  onnotice: () => { }, // Silence harmless PostgreSQL NOTICE logs
   transform: {
     undefined: null
   }
@@ -156,12 +157,12 @@ export async function initSchema() {
         DROP COLUMN IF EXISTS assigned_group_id,
         DROP COLUMN IF EXISTS assigned_ministry_id;
       `);
-    } catch {}
+    } catch { }
 
     // 2. Ensure username column exists
     try {
       await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100) UNIQUE`;
-    } catch {}
+    } catch { }
 
     // 3. Ensure all 5 roles exist (Admin, Coordinator, Leader, Volunteer, Member)
     try {
@@ -169,7 +170,7 @@ export async function initSchema() {
         INSERT INTO roles (name) VALUES ('Admin'), ('Coordinator'), ('Leader'), ('Volunteer'), ('Member')
         ON CONFLICT (name) DO NOTHING;
       `;
-    } catch {}
+    } catch { }
 
     // 4. Ensure membership application form columns exist on members table
     try {
@@ -190,9 +191,13 @@ export async function initSchema() {
         ADD COLUMN IF NOT EXISTS application_date DATE,
         ADD COLUMN IF NOT EXISTS civil_status VARCHAR(50) DEFAULT 'Single',
         ADD COLUMN IF NOT EXISTS spouse_name VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS spouse_id INT REFERENCES members(id) ON DELETE SET NULL;
+        ADD COLUMN IF NOT EXISTS spouse_id INT REFERENCES members(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS is_baptized BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS baptism_status VARCHAR(50) DEFAULT 'not_baptized',
+        ADD COLUMN IF NOT EXISTS baptism_date DATE,
+        ADD COLUMN IF NOT EXISTS baptism_notes TEXT;
       `;
-    } catch {}
+    } catch { }
 
     // 4. Ensure 7 core ministries exist
     try {
@@ -207,7 +212,7 @@ export async function initSchema() {
           ('Old Adult', 56, 120, 'Ages 56+: Golden years fellowship, prayer warriors & legacy mentorship', '#8D5B4C')
         ON CONFLICT (name) DO NOTHING;
       `;
-    } catch {}
+    } catch { }
 
     // 5. Ensure default system lookups & settings if baseline seed exists
     const lookupCount = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM system_lookups");
@@ -374,7 +379,7 @@ export async function initSchema() {
           ADD COLUMN IF NOT EXISTS rescheduled_time VARCHAR(100),
           ADD COLUMN IF NOT EXISTS reschedule_reason TEXT;
         `);
-      } catch {}
+      } catch { }
 
       // 9. Ensure Daily Bible Reading Plan user progress tracking table exists
       try {
@@ -395,13 +400,97 @@ export async function initSchema() {
       } catch (brErr: any) {
         console.warn("Bible reading table init note:", brErr.message);
       }
-    } catch (e: any) {
-      console.warn("Dishwashing table check note:", e.message);
-    }
 
-    // 10. Ensure high-performance indexes exist across all core tables
-    try {
-      await sql.unsafe(`
+      // 10. Ensure Recurring Sunday Annual Events table exists
+      try {
+        await sql.unsafe(`
+          CREATE TABLE IF NOT EXISTS recurring_sunday_events (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            theme_tagline TEXT,
+            description TEXT,
+            month INT NOT NULL,
+            week_pattern VARCHAR(50) NOT NULL DEFAULT '1st_sunday',
+            target_ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL,
+            target_ministry_name VARCHAR(100),
+            color VARCHAR(50) DEFAULT '#2C3968',
+            icon VARCHAR(50) DEFAULT 'Sparkles',
+            liturgical_notes TEXT,
+            program_highlights TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_recurring_sunday_events_month ON recurring_sunday_events(month);
+        `);
+
+        const sundayEventsCount = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM recurring_sunday_events");
+        if (Number(sundayEventsCount?.count || 0) === 0) {
+          console.log("🌱 Seeding default Annual Sunday Church Events Cycle...");
+          await sql`
+            INSERT INTO recurring_sunday_events (title, theme_tagline, description, month, week_pattern, target_ministry_name, color, icon, program_highlights, liturgical_notes) VALUES
+              ('New Year Covenant & Consecration Sunday', 'Commit your way to the Lord; trust in Him (Psalm 37:5)', 'Church-wide spiritual dedication and prayer covenant for the incoming ministry year.', 1, '1st_sunday', 'Church-wide / All Ministries', '#4F46E5', 'Sparkles', 'Covenant Prayer Cards, Holy Communion, Ministry Leaders Consecration', 'Liturgical White & Gold'),
+              ('Youth Harvest & Campus Commissioning Sunday', 'Let no one despise your youth, but set an example (1 Timothy 4:12)', 'Honoring Christian youth disciples, campus ambassadors, and young leaders.', 2, '3rd_sunday', 'Youth Ministry', '#D97706', 'Flame', 'Youth Band Praise & Worship, Spoken Word, Campus Commissioning Blessing', 'Energetic Amber & Gold'),
+              ('Resurrection Sunday / Easter Triumph', 'He is not here; He has risen! (Luke 24:6)', 'Grand celebratory Sunday marking the triumph of Christ over the grave.', 4, '1st_sunday', 'Church-wide / All Ministries', '#7C3AED', 'Sun', 'Sunrise Fellowship, Grand Easter Cantata, Family Photo Booth, Holy Communion', 'Royal Purple & Radiant Gold'),
+              ('Mother''s Day Celebration Sunday', 'Her children arise and call her blessed (Proverbs 31:28)', 'A tribute Sunday honoring all godly mothers, grandmothers, and spiritual mothers.', 5, '2nd_sunday', 'Junior & Old Adult / Women', '#E11D48', 'Heart', 'Floral Token Distribution, Special Song from Children, Mother-Child Blessing Prayer', 'Rose Pink & Warm Ivory'),
+              ('Father''s Day Celebration Sunday', 'As for me and my house, we will serve the Lord (Joshua 24:15)', 'Honoring Christian fathers, household heads, and spiritual leaders of the home.', 6, '3rd_sunday', 'Junior & Old Adult / Men', '#2563EB', 'ShieldCheck', 'Fathers Blessing Altar Call, Brotherhood Recognition, Fellowship Lunch', 'Deep Royal Blue & Silver'),
+              ('Grand Church Anniversary & Homecoming Sunday', 'The Lord has done great things for us, and we are filled with joy (Psalm 126:3)', 'Our annual church founding thanksgiving celebration and grand alumni homecoming.', 7, 'last_sunday', 'Church-wide / All Ministries', '#059669', 'Award', 'Historical Video Documentary, Agape Thanksgiving Banquet, Ordination & Dedication', 'Emerald Green & Gold'),
+              ('Missions & Evangelism Impact Sunday', 'Go into all the world and proclaim the gospel (Mark 16:15)', 'Spotlight on local community outreach, church planting, and global mission partners.', 8, '3rd_sunday', 'Church-wide / Outreach', '#EA580C', 'Globe', 'Missionary Testimonies, Faith-Promise Giving Pledge, Outreach Highlights', 'Fiery Orange & Earth Brown'),
+              ('Teachers'' & Sunday School Educators Day', 'And the things you have heard me say... entrust to reliable people (2 Timothy 2:2)', 'Appreciation Sunday honoring Sunday school teachers, cell group leaders, and catechists.', 9, '4th_sunday', 'Sunday School & Educators', '#0284C7', 'BookOpen', 'Educator Appreciation Plaque, Gift Tokens from Students, Teaching Ministry Tribute', 'Sky Blue & Academic Gold'),
+              ('Pastoral & Clergy Appreciation Sunday', 'Honor those who work hard among you and care for you (1 Thessalonians 5:12-13)', 'A special Sunday to bless, honor, and pray over the pastors, ministers, and pastoral families.', 10, '2nd_sunday', 'Church-wide / Leadership', '#9333EA', 'Crown', 'Love Gift Offering, Pastoral Family Tribute Video, Congregation Prayer of Blessing', 'Royal Violet & Gold'),
+              ('Children''s Day & Sunday School Festival', 'Let the little children come to me, and do not hinder them (Matthew 19:14)', 'A joyful Sunday dedicated to kids, Sunday School presentations, and family celebration.', 10, '4th_sunday', 'Kinder & Elementary', '#F59E0B', 'Smile', 'Children Choir Special, Bible Costume Parade, Sunday School Awards & Treat Bags', 'Bright Yellow, Coral & Cyan'),
+              ('Water Baptism & Discipleship Harvest Sunday', 'Buried with Him in baptism, raised to walk in new life (Romans 6:4)', 'Solemn and celebratory Sunday ceremony for disciples receiving holy Water Baptism.', 11, '3rd_sunday', 'Discipleship / Candidates', '#0891B2', 'Droplets', 'Water Baptism Ceremony, Testimony Videos, Candidates Certificate Conferment', 'Cyan, Aqua & Ocean Blue'),
+              ('Christmas Thanksgiving & Year-End Dedication', 'For unto us a Child is born, unto us a Son is given (Isaiah 9:6)', 'Grand year-end Christmas worship service celebrating the incarnation of Christ.', 12, 'last_sunday', 'Church-wide / All Ministries', '#DC2626', 'Gift', 'Candlelight Service, Christmas Carol Medley, Year-End Thanksgiving Testimonies', 'Christmas Crimson & Evergreen');
+          `;
+        }
+        // 11. Ensure Bible Study Session & Attendance tracking tables exist
+        try {
+          await sql.unsafe(`
+          CREATE TABLE IF NOT EXISTS bible_study_sessions (
+            id SERIAL PRIMARY KEY,
+            group_id INT NOT NULL REFERENCES bible_study_groups(id) ON DELETE CASCADE,
+            session_date DATE NOT NULL,
+            topic_title VARCHAR(255),
+            chapter VARCHAR(100),
+            notes TEXT,
+            is_special BOOLEAN DEFAULT FALSE,
+            special_reason TEXT,
+            recorded_by INT REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(group_id, session_date)
+          );
+
+          ALTER TABLE bible_study_sessions ADD COLUMN IF NOT EXISTS is_special BOOLEAN DEFAULT FALSE;
+          ALTER TABLE bible_study_sessions ADD COLUMN IF NOT EXISTS special_reason TEXT;
+
+          CREATE TABLE IF NOT EXISTS bible_study_attendance (
+            id SERIAL PRIMARY KEY,
+            group_id INT NOT NULL REFERENCES bible_study_groups(id) ON DELETE CASCADE,
+            session_date DATE NOT NULL,
+            member_id INT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+            status VARCHAR(20) NOT NULL DEFAULT 'present',
+            notes TEXT,
+            recorded_by INT REFERENCES users(id) ON DELETE SET NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(group_id, session_date, member_id)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_bs_att_group ON bible_study_attendance(group_id);
+          CREATE INDEX IF NOT EXISTS idx_bs_att_date ON bible_study_attendance(session_date);
+          CREATE INDEX IF NOT EXISTS idx_bs_att_member ON bible_study_attendance(member_id);
+          CREATE INDEX IF NOT EXISTS idx_bs_sess_group ON bible_study_sessions(group_id);
+          CREATE INDEX IF NOT EXISTS idx_bs_sess_date ON bible_study_sessions(session_date);
+        `);
+        } catch (bsAttErr: any) {
+          console.warn("Bible study attendance table init note:", bsAttErr.message);
+        }
+      } catch (e: any) {
+        console.warn("Table check note:", e.message);
+      }
+
+      // Ensure high-performance indexes exist across all core tables
+      try {
+        await sql.unsafe(`
         CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
         CREATE INDEX IF NOT EXISTS idx_attendance_ministry_id ON attendance(ministry_id);
         CREATE INDEX IF NOT EXISTS idx_attendance_checked_in_at ON attendance(checked_in_at);
@@ -419,18 +508,118 @@ export async function initSchema() {
         CREATE INDEX IF NOT EXISTS idx_donations_member_id ON donations(member_id);
         CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
       `);
-    } catch (idxErr: any) {
-      console.warn("Index check note:", idxErr.message);
+      } catch (idxErr: any) {
+        console.warn("Index check note:", idxErr.message);
+      }
+
+      // 12. Ensure attendance_log view and performance indexes are created
+      try {
+        const attLogSqlPath = getMigrationFilePath("004_attendance_log_view.sql");
+        if (attLogSqlPath && fs.existsSync(attLogSqlPath)) {
+          const attLogSql = fs.readFileSync(attLogSqlPath, "utf-8");
+          await sql.unsafe(attLogSql);
+        } else {
+          await sql.unsafe(`
+            CREATE INDEX IF NOT EXISTS idx_bs_att_member_date ON bible_study_attendance(member_id, session_date);
+            CREATE INDEX IF NOT EXISTS idx_bs_att_group_date ON bible_study_attendance(group_id, session_date);
+            CREATE INDEX IF NOT EXISTS idx_attendance_member_checked_in ON attendance(member_id, checked_in_at);
+
+            DROP VIEW IF EXISTS attendance_log CASCADE;
+
+            CREATE VIEW attendance_log AS
+            SELECT
+              'sunday_service'::VARCHAR(50) AS log_type,
+              a.member_id,
+              (a.checked_in_at AT TIME ZONE 'Asia/Manila')::DATE AS log_date,
+              'present'::VARCHAR(20) AS status,
+              NULL::INT AS group_id,
+              NULL::INT AS event_id,
+              a.checked_in_at AS recorded_at
+            FROM attendance a
+            WHERE a.event_id IS NULL
+            UNION ALL
+            SELECT
+              'event'::VARCHAR(50) AS log_type,
+              a.member_id,
+              (a.checked_in_at AT TIME ZONE 'Asia/Manila')::DATE AS log_date,
+              'present'::VARCHAR(20) AS status,
+              NULL::INT AS group_id,
+              a.event_id AS event_id,
+              a.checked_in_at AS recorded_at
+            FROM attendance a
+            WHERE a.event_id IS NOT NULL
+            UNION ALL
+            SELECT
+              'event'::VARCHAR(50) AS log_type,
+              er.member_id,
+              (COALESCE(e.start_time, er.created_at) AT TIME ZONE 'Asia/Manila')::DATE AS log_date,
+              'present'::VARCHAR(20) AS status,
+              NULL::INT AS group_id,
+              er.event_id AS event_id,
+              er.created_at AS recorded_at
+            FROM event_registrations er
+            JOIN events e ON er.event_id = e.id
+            WHERE er.status = 'attended'
+              AND NOT EXISTS (
+                SELECT 1 FROM attendance a
+                WHERE a.event_id = er.event_id AND a.member_id = er.member_id
+              )
+            UNION ALL
+            SELECT
+              'bible_study'::VARCHAR(50) AS log_type,
+              bsa.member_id,
+              bsa.session_date AS log_date,
+              bsa.status::VARCHAR(20) AS status,
+              bsa.group_id,
+              NULL::INT AS event_id,
+              bsa.created_at AS recorded_at
+            FROM bible_study_attendance bsa;
+          `);
+        }
+      } catch (attLogErr: any) {
+        console.warn("Attendance log view init note:", attLogErr.message);
+      }
+
+      // 13. Ensure services table exists for Service Calendar & Attendance Intelligence
+      try {
+        const servicesMigrationPath = getMigrationFilePath("005_service_calendar_and_attendance_intelligence.sql");
+        if (servicesMigrationPath && fs.existsSync(servicesMigrationPath)) {
+          const servicesSql = fs.readFileSync(servicesMigrationPath, "utf-8");
+          await sql.unsafe(servicesSql);
+        } else {
+          await sql.unsafe(`
+            CREATE TABLE IF NOT EXISTS services (
+              id SERIAL PRIMARY KEY,
+              service_date DATE NOT NULL,
+              service_type VARCHAR(50) NOT NULL DEFAULT 'sunday_service',
+              title VARCHAR(255) NOT NULL DEFAULT 'Sunday Worship Service',
+              status VARCHAR(50) NOT NULL DEFAULT 'held',
+              notes TEXT,
+              created_by INT REFERENCES users(id) ON DELETE SET NULL,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE(service_date, service_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_services_date ON services(service_date);
+            CREATE INDEX IF NOT EXISTS idx_services_status ON services(status);
+            CREATE INDEX IF NOT EXISTS idx_services_type ON services(service_type);
+          `);
+        }
+      } catch (srvErr: any) {
+        console.warn("Services migration note:", srvErr.message);
+      }
+    } catch (err: any) {
+      console.error("⚠️ PostgreSQL auto-init error:", {
+        message: err?.message,
+        code: err?.code,
+        detail: err?.detail,
+        errno: err?.errno,
+        address: err?.address,
+        port: err?.port,
+        stack: err?.stack
+      });
     }
-  } catch (err: any) {
-    console.error("⚠️ PostgreSQL auto-init error:", {
-      message: err?.message,
-      code: err?.code,
-      detail: err?.detail,
-      errno: err?.errno,
-      address: err?.address,
-      port: err?.port,
-      stack: err?.stack
-    });
+  } catch (outerError: any) {
+    console.error("Unuthorized  Error initializing Schema", outerError);
   }
 }

@@ -63,7 +63,7 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
         FROM dishwashing_team_members dtm
         JOIN members m ON dtm.member_id = m.id
         LEFT JOIN ministries min ON m.ministry_id = min.id
-        ORDER BY CASE WHEN dtm.role = 'Team Leader' THEN 1 ELSE 2 END, m.last_name ASC
+        ORDER BY CASE WHEN dtm.role = 'Team Leader' THEN 1 ELSE 2 END, LOWER(m.first_name) ASC, LOWER(m.last_name) ASC
       `)
     ]);
 
@@ -110,8 +110,13 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
       member_ids
     } = req.body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({ error: "Team or unit name is required" });
+    }
+
+    const existing = await db.get("SELECT id FROM dishwashing_teams WHERE LOWER(name) = LOWER($1)", [name.trim()]);
+    if (existing) {
+      return res.status(400).json({ error: "A dishwashing team with this name already exists" });
     }
 
     let assignedOrder = order_seq;
@@ -140,7 +145,7 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id
     `, [
-      name,
+      name.trim(),
       cycle_mode,
       biblestudy_group_id ? Number(biblestudy_group_id) : null,
       ministry_id ? Number(ministry_id) : null,
@@ -163,7 +168,7 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
       );
     }
 
-    // Auto-fetch disciples from the bible study group if biblestudy_group_id is present
+    // Auto-fetch disciples from the bible study group or ministry if present
     const allMemberIdsToLink = new Set<number>();
     if (Array.isArray(member_ids)) {
       member_ids.forEach(id => id && allMemberIdsToLink.add(Number(id)));
@@ -174,6 +179,32 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
         [biblestudy_group_id]
       );
       bsGroupMembers.forEach(bm => bm.member_id && allMemberIdsToLink.add(Number(bm.member_id)));
+    }
+    if (ministry_id) {
+      const minMembers = await db.all<{ id: number }>(
+        "SELECT id FROM members WHERE status = 'active' AND ministry_id = $1",
+        [ministry_id]
+      );
+      minMembers.forEach(mm => mm.id && allMemberIdsToLink.add(Number(mm.id)));
+
+      const minData = await db.get<{ min_age: number; max_age: number; name: string }>(
+        "SELECT min_age, max_age, name FROM ministries WHERE id = $1",
+        [ministry_id]
+      );
+      if (minData && (minData.min_age !== null || minData.max_age !== null)) {
+        const minAge = minData.min_age ?? 0;
+        const maxAge = minData.max_age ?? 120;
+        const ageMembers = await db.all<{ id: number }>(
+          `SELECT id FROM members 
+           WHERE status = 'active' 
+             AND birthdate IS NOT NULL 
+             AND birthdate != '' 
+             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) >= $1 
+             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) <= $2`,
+          [minAge, maxAge]
+        );
+        ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
+      }
     }
 
     // Link each member to the dishwashing team
@@ -218,6 +249,12 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
       volunteers_count,
       member_ids
     } = req.body;
+
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: "Team name cannot be empty" });
+      const duplicate = await db.get("SELECT id FROM dishwashing_teams WHERE LOWER(name) = LOWER($1) AND id != $2", [name.trim(), id]);
+      if (duplicate) return res.status(400).json({ error: "Another dishwashing team already has this name" });
+    }
 
     let resolvedLeaderName = leader_name;
     let resolvedLeaderContact = leader_contact;
@@ -265,7 +302,7 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
       );
     }
 
-    // Auto-fetch disciples from the bible study group if biblestudy_group_id is present
+    // Auto-fetch disciples from the bible study group or ministry if present
     const allMemberIdsToLink = new Set<number>();
     if (Array.isArray(member_ids)) {
       member_ids.forEach(mId => mId && allMemberIdsToLink.add(Number(mId)));
@@ -276,6 +313,32 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
         [biblestudy_group_id]
       );
       bsGroupMembers.forEach(bm => bm.member_id && allMemberIdsToLink.add(Number(bm.member_id)));
+    }
+    if (ministry_id) {
+      const minMembers = await db.all<{ id: number }>(
+        "SELECT id FROM members WHERE status = 'active' AND ministry_id = $1",
+        [ministry_id]
+      );
+      minMembers.forEach(mm => mm.id && allMemberIdsToLink.add(Number(mm.id)));
+
+      const minData = await db.get<{ min_age: number; max_age: number; name: string }>(
+        "SELECT min_age, max_age, name FROM ministries WHERE id = $1",
+        [ministry_id]
+      );
+      if (minData && (minData.min_age !== null || minData.max_age !== null)) {
+        const minAge = minData.min_age ?? 0;
+        const maxAge = minData.max_age ?? 120;
+        const ageMembers = await db.all<{ id: number }>(
+          `SELECT id FROM members 
+           WHERE status = 'active' 
+             AND birthdate IS NOT NULL 
+             AND birthdate != '' 
+             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) >= $1 
+             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) <= $2`,
+          [minAge, maxAge]
+        );
+        ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
+      }
     }
 
     if (allMemberIdsToLink.size > 0) {

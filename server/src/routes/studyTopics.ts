@@ -176,6 +176,11 @@ router.post("/", requireRoles("Admin", "Coordinator", "Leader"), async (req, res
       return res.status(400).json({ error: "Title is required" });
     }
 
+    const dup = await db.get("SELECT id FROM bible_study_topics WHERE LOWER(title) = LOWER($1)", [title.trim()]);
+    if (dup) {
+      return res.status(400).json({ error: "A curriculum topic with this title already exists" });
+    }
+
     const result = await db.run(`
       INSERT INTO bible_study_topics (
         title, total_chapters, summary_notes
@@ -215,6 +220,12 @@ router.put("/:id", requireRoles("Admin", "Coordinator", "Leader"), async (req, r
     const existing = await db.get("SELECT id FROM bible_study_topics WHERE id = $1", [topicId]);
     if (!existing) {
       return res.status(404).json({ error: "Study topic not found" });
+    }
+
+    if (title !== undefined) {
+      if (!title.trim()) return res.status(400).json({ error: "Title cannot be empty" });
+      const dup = await db.get("SELECT id FROM bible_study_topics WHERE LOWER(title) = LOWER($1) AND id != $2", [title.trim(), topicId]);
+      if (dup) return res.status(400).json({ error: "Another curriculum topic already has this title" });
     }
 
     await db.run(`

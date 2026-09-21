@@ -49,15 +49,20 @@ router.get("/funds", async (req: Request, res: Response) => {
 router.post("/funds", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, description, target_amount = 0 } = req.body;
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({ error: "Fund name is required" });
+    }
+
+    const existing = await db.get("SELECT id FROM funds WHERE LOWER(name) = LOWER($1)", [name.trim()]);
+    if (existing) {
+      return res.status(400).json({ error: "A fund with this name already exists" });
     }
 
     const result = await db.run(`
       INSERT INTO funds (name, description, target_amount)
       VALUES ($1, $2, $3)
       RETURNING id
-    `, [name, description || null, Number(target_amount) || 0]);
+    `, [name.trim(), description || null, Number(target_amount) || 0]);
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user!.id, "CREATE", "funds", newId, `Created fund: ${name}`);
@@ -75,13 +80,19 @@ router.put("/funds/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
     const id = req.params.id;
     const { name, description, target_amount } = req.body;
 
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: "Fund name cannot be empty" });
+      const duplicate = await db.get("SELECT id FROM funds WHERE LOWER(name) = LOWER($1) AND id != $2", [name.trim(), id]);
+      if (duplicate) return res.status(400).json({ error: "Another fund already has this name" });
+    }
+
     await db.run(`
       UPDATE funds
       SET name = COALESCE($1, name),
           description = COALESCE($2, description),
           target_amount = COALESCE($3, target_amount)
       WHERE id = $4
-    `, [name, description, target_amount !== undefined ? Number(target_amount) : null, id]);
+    `, [name !== undefined ? name.trim() : null, description, target_amount !== undefined ? Number(target_amount) : null, id]);
 
     await logAuditAction(req.user!.id, "UPDATE", "funds", Number(id), `Updated fund #${id}`);
     emitRealtimeEvent("finance:changed", { action: "update_fund", id: Number(id) });

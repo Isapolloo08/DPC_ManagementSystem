@@ -1,15 +1,15 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { Member, Household, Ministry } from "../types";
 import {
-  Users, Home, Search, Plus, Filter, AlertCircle,
+  Users, Home, Search, Plus, Filter, AlertCircle, AlertTriangle,
   Heart, Sparkles, Phone, Mail, Calendar, ShieldCheck, ArrowRight, X, Check,
   Cake, Gift, PartyPopper, Send, FileText, MapPin, Briefcase, GraduationCap, Clock,
   Layers, Shield, Info, ArrowLeft, School, BookOpen, Pencil, Trash2, RefreshCw,
   Upload, Image as ImageIcon, FileUp, Scan, Clipboard, Loader2, CheckCircle2,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Droplets, Award, TrendingUp, Flame
 } from "lucide-react";
 import { DatePickerInput } from "../components/common/DatePickerInput";
 import { TimePickerInput } from "../components/common/TimePickerInput";
@@ -27,6 +27,42 @@ import { MembersPageSkeleton, TableSkeleton } from "../components/common/Skeleto
 import { analyzeMemberFile, parseMemberText, ParsedMemberData } from "../utils/memberFormParser";
 import { MemberImportAnalyzeModal } from "../components/common/MemberImportAnalyzeModal";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
+import { MemberAttendanceSummaryModal } from "../components/common/MemberAttendanceSummaryModal";
+
+export const splitFullName = (fullName: string): { firstName: string; lastName: string } => {
+  const trimmed = fullName.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return { firstName: '', lastName: '' };
+
+  const parts = trimmed.split(' ');
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' };
+  }
+
+  const compoundPrefixes = ['dela', 'de', 'del', 'san', 'santa', 'sta.', 'van', 'von', 'dos', 'da', 'di'];
+
+  // Check if second-to-last word is a compound prefix like "Dela Cruz", "De Los Santos", etc.
+  if (parts.length >= 3 && compoundPrefixes.includes(parts[parts.length - 2].toLowerCase())) {
+    const lastName = parts.slice(parts.length - 2).join(' ');
+    const firstName = parts.slice(0, parts.length - 2).join(' ');
+    return { firstName, lastName };
+  }
+
+  // Check 3-part compound like "De La Cruz"
+  if (parts.length >= 4 && parts[parts.length - 3].toLowerCase() === 'de' && parts[parts.length - 2].toLowerCase() === 'la') {
+    const lastName = parts.slice(parts.length - 3).join(' ');
+    const firstName = parts.slice(0, parts.length - 3).join(' ');
+    return { firstName, lastName };
+  }
+
+  // Default: last word is lastName, all preceding words are firstName (includes given names + middle initial)
+  const lastName = parts[parts.length - 1];
+  const firstName = parts.slice(0, parts.length - 1).join(' ');
+  return { firstName, lastName };
+};
+
+export const sanitizePhoneInput = (val: string): string => {
+  return val.replace(/\D/g, "").slice(0, 11);
+};
 
 export const MembersPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
@@ -44,7 +80,10 @@ export const MembersPage: React.FC = () => {
   const [filterMinistry, setFilterMinistry] = useState<string>(
     coordinatorMinistryId ? String(coordinatorMinistryId) : (selectedMinistryId ? String(selectedMinistryId) : "")
   );
-  const [birthdayFilter, setBirthdayFilter] = useState<string>("all");
+  const [filterHousehold, setFilterHousehold] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterBirthMonth, setFilterBirthMonth] = useState<string>("");
+  const [membershipFilter, setMembershipFilter] = useState<string>("all");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -52,6 +91,12 @@ export const MembersPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isAddHouseholdModalOpen, setIsAddHouseholdModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [birthdayFilter, setBirthdayFilter] = useState<string>("all");
+
+  // Comprehensive Attendance Summary & Streaks Modal State
+  const [attendanceSummaryMember, setAttendanceSummaryMember] = useState<Member | null>(null);
+  const [attendanceSummaryInitialTab, setAttendanceSummaryInitialTab] = useState<"overview" | "logs" | "monthly" | "milestones" | "audit">("overview");
 
   // Custom Confirmation & Alert Modal State
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
@@ -69,7 +114,7 @@ export const MembersPage: React.FC = () => {
     description: "",
     type: "info",
     confirmText: "Confirm",
-    onConfirm: () => {}
+    onConfirm: () => { }
   });
 
   // Greeting Modal State
@@ -106,8 +151,81 @@ export const MembersPage: React.FC = () => {
     facebook_account: "",
     family_details: "",
     application_date: new Date().toISOString().split("T")[0],
-    status: "active"
+    status: "active",
+    is_baptized: false,
+    baptism_status: "not_baptized",
+    baptism_date: "",
+    baptism_notes: ""
   });
+
+  const [fullNameInput, setFullNameInput] = useState<string>("");
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState<boolean>(false);
+  const [dbDuplicateMember, setDbDuplicateMember] = useState<Member | null>(null);
+
+  const handleFullNameChange = (val: string) => {
+    setFullNameInput(val);
+    const { firstName, lastName } = splitFullName(val);
+    setFormData(prev => ({
+      ...prev,
+      first_name: firstName,
+      last_name: lastName
+    }));
+  };
+
+  // Real-time automatic database duplicate check as user types
+  useEffect(() => {
+    const trimmed = fullNameInput.trim();
+    if (trimmed.length < 2) {
+      setDbDuplicateMember(null);
+      setIsCheckingDuplicate(false);
+      return;
+    }
+
+    setIsCheckingDuplicate(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.checkMemberDuplicate({
+          name: trimmed,
+          exclude_id: editingMember?.id
+        });
+        setDbDuplicateMember(res.duplicateName || null);
+      } catch (err) {
+        console.error("Duplicate check error:", err);
+      } finally {
+        setIsCheckingDuplicate(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [fullNameInput, editingMember?.id]);
+
+  // Combined live duplicate match: database match + local state
+  const liveDuplicateMember = useMemo(() => {
+    if (dbDuplicateMember) return dbDuplicateMember;
+
+    const trimmed = fullNameInput.trim().toLowerCase();
+    if (trimmed.length < 2) return null;
+
+    const normalizedInput = trimmed.replace(/\./g, '').replace(/\s+/g, ' ');
+
+    return members.find(m => {
+      if (editingMember && m.id === editingMember.id) return false;
+      const mFull = `${m.first_name} ${m.last_name}`.trim().toLowerCase();
+      const normalizedM = mFull.replace(/\./g, '').replace(/\s+/g, ' ');
+
+      if (normalizedInput === normalizedM) return true;
+
+      const { firstName, lastName } = splitFullName(fullNameInput);
+      if (
+        firstName && lastName &&
+        m.first_name.trim().toLowerCase() === firstName.trim().toLowerCase() &&
+        m.last_name.trim().toLowerCase() === lastName.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    }) || null;
+  }, [fullNameInput, members, editingMember, dbDuplicateMember]);
 
   // Spouse creation sub-form state (if spouse is not yet in member directory)
   const [createNewSpouseRecord, setCreateNewSpouseRecord] = useState<boolean>(false);
@@ -116,12 +234,18 @@ export const MembersPage: React.FC = () => {
     last_name: "",
     birthdate: "",
     gender: "Female",
+    application_date: new Date().toISOString().split("T")[0],
     contact_phone: "",
     contact_email: "",
+    address: "",
+    same_address_as_member: true,
     occupation: "",
     facebook_account: "",
-    medical_notes: "",
-    hobbies: ""
+    family_details: "",
+    hobbies: "",
+    invited_by: "",
+    previous_church: "",
+    medical_notes: ""
   });
 
   const [youthStatus, setYouthStatus] = useState<"student" | "graduated">("student");
@@ -138,11 +262,18 @@ export const MembersPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Household form state
+  // Household form state
   const [householdForm, setHouseholdForm] = useState({
     name: "",
     address: "",
     primary_contact_phone: ""
   });
+
+  // Household & Family Linkage State in Add/Edit Member Form
+  const [householdMode, setHouseholdMode] = useState<"link_parents" | "create_new" | "existing" | "none">("link_parents");
+  const [newHouseholdName, setNewHouseholdName] = useState<string>("");
+  const [parentSearchName, setParentSearchName] = useState<string>("");
+  const [selectedParentMember, setSelectedParentMember] = useState<Member | null>(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -166,12 +297,16 @@ export const MembersPage: React.FC = () => {
       loadData(1);
     }, 200);
     return () => clearTimeout(handler);
-  }, [filterMinistry, coordinatorMinistryId, searchQuery, birthdayFilter, pageSize]);
+  }, [filterMinistry, coordinatorMinistryId, searchQuery, birthdayFilter, membershipFilter, pageSize]);
 
   // Real-time automatic sync via Socket.IO
   useSocketEvent("members:changed", () => {
     loadData(currentPage);
   }, [filterMinistry, coordinatorMinistryId, currentPage, pageSize]);
+
+  useSocketEvent("households:changed", () => {
+    loadData(currentPage);
+  });
 
   useSocketEvent("ministries:changed", () => {
     loadData(currentPage);
@@ -184,11 +319,16 @@ export const MembersPage: React.FC = () => {
         ? coordinatorMinistryId
         : (filterMinistry ? Number(filterMinistry) : undefined);
 
+      const isHealthFilter = ["warning", "action_required"].includes(membershipFilter);
+      const isMembershipTypeFilter = ["baptized_regular", "unbaptized_regular", "guest", "inactive"].includes(membershipFilter);
+
       const [mRes, hList, minList] = await Promise.all([
         api.getMembers({
           ministry_id: activeMinistryParam,
           search: searchQuery || undefined,
           birthday_filter: birthdayFilter !== "all" ? birthdayFilter : undefined,
+          membership_filter: isMembershipTypeFilter ? membershipFilter : undefined,
+          attendance_health_filter: isHealthFilter ? membershipFilter : undefined,
           page: pageToFetch,
           limit: pageSize
         }),
@@ -293,6 +433,25 @@ export const MembersPage: React.FC = () => {
     }
   };
 
+  const handleSelectParent = (parentName: string) => {
+    setParentSearchName(parentName);
+    const matched = members.find(
+      (m) => `${m.first_name} ${m.last_name}`.toLowerCase().trim() === parentName.toLowerCase().trim()
+    );
+    if (matched) {
+      setSelectedParentMember(matched);
+      setFormData(prev => ({
+        ...prev,
+        guardian_names: prev.guardian_names || `${matched.first_name} ${matched.last_name}`,
+        guardian_phone: prev.guardian_phone || matched.contact_phone || "",
+        address: prev.address || matched.address || "",
+        household_id: matched.household_id ? String(matched.household_id) : prev.household_id
+      }));
+    } else {
+      setSelectedParentMember(null);
+    }
+  };
+
   const handleCivilStatusChange = (status: string) => {
     if (status === "Married") {
       const jaMin = effectiveMinistries.find(
@@ -303,6 +462,8 @@ export const MembersPage: React.FC = () => {
         civil_status: "Married",
         ministry_id: jaMin && !coordinatorMinistryId ? String(jaMin.id) : prev.ministry_id
       }));
+      setHouseholdMode("create_new");
+      setNewHouseholdName(`${formData.last_name ? `${formData.last_name} Household` : "New Family Household"}`);
     } else {
       const age = calculateClientAge(formData.birthdate);
       const suggested = getSuggestedMinistryForAge(age);
@@ -314,6 +475,7 @@ export const MembersPage: React.FC = () => {
         ministry_id: suggested && !coordinatorMinistryId ? String(suggested.id) : prev.ministry_id
       }));
       setCreateNewSpouseRecord(false);
+      setHouseholdMode("link_parents");
     }
   };
 
@@ -346,20 +508,34 @@ export const MembersPage: React.FC = () => {
       facebook_account: "",
       family_details: "",
       application_date: new Date().toISOString().split("T")[0],
-      status: "active"
+      status: "active",
+      is_baptized: false,
+      baptism_status: "not_baptized",
+      baptism_date: "",
+      baptism_notes: ""
     });
+    setHouseholdMode("link_parents");
+    setNewHouseholdName("");
+    setParentSearchName("");
+    setSelectedParentMember(null);
     setCreateNewSpouseRecord(false);
     setSpouseFormData({
       first_name: "",
       last_name: "",
       birthdate: "",
       gender: "Female",
+      application_date: new Date().toISOString().split("T")[0],
       contact_phone: "",
       contact_email: "",
+      address: "",
+      same_address_as_member: true,
       occupation: "",
       facebook_account: "",
-      medical_notes: "",
-      hobbies: ""
+      family_details: "",
+      hobbies: "",
+      invited_by: "",
+      previous_church: "",
+      medical_notes: ""
     });
     setYouthStatus("student");
     setGradWorkStatus("with_work");
@@ -368,6 +544,7 @@ export const MembersPage: React.FC = () => {
     setAnalyzedFeedback(null);
 
     setPasteRawText("");
+    setFullNameInput("");
     setIsAddModalOpen(true);
   };
 
@@ -383,6 +560,9 @@ export const MembersPage: React.FC = () => {
       // Update fields only if detected; unprovided fields safely remain as is / empty!
       if (parsed.first_name) { updated.first_name = parsed.first_name; autoFilledKeys.push("First Name"); }
       if (parsed.last_name) { updated.last_name = parsed.last_name; autoFilledKeys.push("Last Name"); }
+      if (parsed.first_name || parsed.last_name) {
+        setFullNameInput(`${updated.first_name || ""} ${updated.last_name || ""}`.trim());
+      }
       if (parsed.birthdate) { updated.birthdate = parsed.birthdate; autoFilledKeys.push("Birthdate"); }
       if (parsed.gender) { updated.gender = parsed.gender; }
       if (parsed.civil_status) { updated.civil_status = parsed.civil_status; autoFilledKeys.push("Civil Status"); }
@@ -437,10 +617,15 @@ export const MembersPage: React.FC = () => {
 
   const handleOpenEdit = (member: Member) => {
     setEditingMember(member);
+    setFullNameInput(`${member.first_name || ""} ${member.last_name || ""}`.trim());
+    const formatDateStr = (d?: string | null) => {
+      if (!d) return "";
+      return typeof d === "string" ? d.split("T")[0] : new Date(d).toISOString().split("T")[0];
+    };
     setFormData({
       first_name: member.first_name || "",
       last_name: member.last_name || "",
-      birthdate: member.birthdate || "",
+      birthdate: formatDateStr(member.birthdate),
       gender: member.gender || "Male",
       civil_status: member.civil_status || "Single",
       spouse_name: member.spouse_name || "",
@@ -463,8 +648,12 @@ export const MembersPage: React.FC = () => {
       previous_church: member.previous_church || "",
       facebook_account: member.facebook_account || "",
       family_details: member.family_details || "",
-      application_date: member.application_date || new Date().toISOString().split("T")[0],
-      status: member.status || "active"
+      application_date: formatDateStr(member.application_date) || new Date().toISOString().split("T")[0],
+      status: member.status || "active",
+      is_baptized: member.is_baptized || (member.baptism_status === "baptized"),
+      baptism_status: member.baptism_status || (member.is_baptized ? "baptized" : "not_baptized"),
+      baptism_date: formatDateStr(member.baptism_date),
+      baptism_notes: member.baptism_notes || ""
     });
     setCreateNewSpouseRecord(false);
     setSpouseFormData({
@@ -472,13 +661,33 @@ export const MembersPage: React.FC = () => {
       last_name: "",
       birthdate: "",
       gender: member.gender === "Male" ? "Female" : "Male",
+      application_date: new Date().toISOString().split("T")[0],
       contact_phone: "",
       contact_email: "",
+      address: "",
+      same_address_as_member: true,
       occupation: "",
       facebook_account: "",
-      medical_notes: "",
-      hobbies: ""
+      family_details: "",
+      hobbies: "",
+      invited_by: "",
+      previous_church: "",
+      medical_notes: ""
     });
+
+    if (member.household_id) {
+      setHouseholdMode("existing");
+    } else if (member.guardian_names) {
+      setHouseholdMode("link_parents");
+      setParentSearchName(member.guardian_names);
+      const matched = members.find(
+        (m) => `${m.first_name} ${m.last_name}`.toLowerCase().trim() === member.guardian_names!.toLowerCase().trim()
+      );
+      if (matched) setSelectedParentMember(matched);
+    } else {
+      setHouseholdMode("none");
+    }
+    setNewHouseholdName("");
 
     if (member.occupation && member.occupation.trim() !== "") {
       setYouthStatus("graduated");
@@ -510,7 +719,197 @@ export const MembersPage: React.FC = () => {
 
   const handleSubmitMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    const { firstName, lastName } = splitFullName(fullNameInput);
+    const effectiveFirstName = firstName || formData.first_name.trim();
+    const effectiveLastName = lastName || formData.last_name.trim() || effectiveFirstName;
+
     try {
+      if (!fullNameInput.trim() || (!effectiveFirstName && !effectiveLastName)) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: "Full Name Required",
+          type: "warning",
+          confirmText: "Okay",
+          cancelText: null,
+          description: <p className="text-xs text-charcoal/80 text-center">Please enter the member's complete name (e.g. Mark Andrie M. Remot).</p>,
+          onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+        });
+        return;
+      }
+
+      if (!formData.birthdate) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: "Birthdate Required",
+          type: "warning",
+          confirmText: "Okay",
+          cancelText: null,
+          description: <p className="text-xs text-charcoal/80 text-center">Please enter a valid birthdate for this member.</p>,
+          onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+        });
+        return;
+      }
+
+      if (new Date(formData.birthdate) > new Date()) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: "Invalid Birthdate",
+          type: "warning",
+          confirmText: "Okay",
+          cancelText: null,
+          description: <p className="text-xs text-charcoal/80 text-center">Birthdate cannot be in the future.</p>,
+          onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+        });
+        return;
+      }
+
+      if (formData.contact_email && formData.contact_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contact_email.trim())) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: "Invalid Email Address",
+          type: "warning",
+          confirmText: "Okay",
+          cancelText: null,
+          description: <p className="text-xs text-charcoal/80 text-center">Please enter a valid email format (e.g. name@domain.com).</p>,
+          onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+        });
+        return;
+      }
+
+      // Check duplicate member by full name
+      if (liveDuplicateMember) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: "Duplicate Member Detected",
+          type: "warning",
+          confirmText: "Close",
+          cancelText: null,
+          description: (
+            <p className="text-xs text-charcoal/80 text-center">
+              A member named <strong>"{liveDuplicateMember.first_name} {liveDuplicateMember.last_name}"</strong> already exists in the system (ID #{liveDuplicateMember.id}).
+            </p>
+          ),
+          onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+        });
+        return;
+      }
+
+      // Check duplicate email
+      if (formData.contact_email && formData.contact_email.trim()) {
+        const dupEmail = members.find(m =>
+          m.contact_email &&
+          m.contact_email.toLowerCase().trim() === formData.contact_email.toLowerCase().trim() &&
+          m.id !== editingMember?.id
+        );
+        if (dupEmail) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: "Duplicate Email Detected",
+            type: "warning",
+            confirmText: "Close",
+            cancelText: null,
+            description: (
+              <p className="text-xs text-charcoal/80 text-center">
+                The email <strong>"{formData.contact_email.trim()}"</strong> is already registered to <strong>"{dupEmail.first_name} {dupEmail.last_name}"</strong>.
+              </p>
+            ),
+            onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+          });
+          return;
+        }
+      }
+
+      // Check phone format (Must be 11 digits starting with 09)
+      if (formData.contact_phone && formData.contact_phone.trim()) {
+        const cleanPhone = formData.contact_phone.replace(/\D/g, '');
+        if (cleanPhone.length !== 11 || !cleanPhone.startsWith('09')) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: "Invalid Contact Number",
+            type: "warning",
+            confirmText: "Okay",
+            cancelText: null,
+            description: (
+              <p className="text-xs text-charcoal/80 text-center">
+                Contact number must be an <strong>11-digit Philippine mobile number</strong> starting with <strong>09</strong> (e.g. <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">09123456789</code>).
+              </p>
+            ),
+            onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+          });
+          return;
+        }
+      }
+
+      // Check guardian phone format
+      if (formData.guardian_phone && formData.guardian_phone.trim()) {
+        const cleanGPhone = formData.guardian_phone.replace(/\D/g, '');
+        if (cleanGPhone.length !== 11 || !cleanGPhone.startsWith('09')) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: "Invalid Guardian Contact Number",
+            type: "warning",
+            confirmText: "Okay",
+            cancelText: null,
+            description: (
+              <p className="text-xs text-charcoal/80 text-center">
+                Guardian contact number must be an <strong>11-digit Philippine mobile number</strong> starting with <strong>09</strong> (e.g. <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">09123456789</code>).
+              </p>
+            ),
+            onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+          });
+          return;
+        }
+      }
+
+      // Check partner phone format if registering partner
+      if (createNewSpouseRecord && spouseFormData.contact_phone && spouseFormData.contact_phone.trim()) {
+        const cleanSPhone = spouseFormData.contact_phone.replace(/\D/g, '');
+        if (cleanSPhone.length !== 11 || !cleanSPhone.startsWith('09')) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: "Invalid Partner Contact Number",
+            type: "warning",
+            confirmText: "Okay",
+            cancelText: null,
+            description: (
+              <p className="text-xs text-charcoal/80 text-center">
+                Partner contact number must be an <strong>11-digit Philippine mobile number</strong> starting with <strong>09</strong> (e.g. <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">09123456789</code>).
+              </p>
+            ),
+            onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+          });
+          return;
+        }
+      }
+
+      // Check duplicate phone
+      if (formData.contact_phone && formData.contact_phone.trim()) {
+        const cleanPhone = formData.contact_phone.trim().replace(/[^0-9]/g, '');
+        if (cleanPhone.length >= 7) {
+          const dupPhone = members.find(m => {
+            if (!m.contact_phone || m.id === editingMember?.id) return false;
+            const targetClean = m.contact_phone.trim().replace(/[^0-9]/g, '');
+            return targetClean.length >= 7 && targetClean === cleanPhone;
+          });
+          if (dupPhone) {
+            setConfirmModalConfig({
+              isOpen: true,
+              title: "Duplicate Phone Number",
+              type: "warning",
+              confirmText: "Close",
+              cancelText: null,
+              description: (
+                <p className="text-xs text-charcoal/80 text-center">
+                  The phone number <strong>"{formData.contact_phone.trim()}"</strong> is already registered to <strong>"{dupPhone.first_name} {dupPhone.last_name}"</strong>.
+                </p>
+              ),
+              onConfirm: () => setConfirmModalConfig(p => ({ ...p, isOpen: false }))
+            });
+            return;
+          }
+        }
+      }
+
       const jaMin = effectiveMinistries.find(m => m.name.toLowerCase().includes("junior"));
       const finalMinistryId = coordinatorMinistryId
         ? coordinatorMinistryId
@@ -518,13 +917,48 @@ export const MembersPage: React.FC = () => {
           ? jaMin.id
           : (formData.ministry_id ? Number(formData.ministry_id) : null));
 
+      let finalHouseholdId: number | null = null;
+      if (householdMode === "create_new") {
+        const hName = (newHouseholdName.trim() || `${effectiveLastName} Household`);
+        const newH = await api.createHousehold({
+          name: hName,
+          address: formData.address || undefined,
+          primary_contact_phone: formData.contact_phone || undefined
+        });
+        finalHouseholdId = newH.id;
+      } else if (householdMode === "link_parents") {
+        if (selectedParentMember?.household_id) {
+          finalHouseholdId = selectedParentMember.household_id;
+        } else if (selectedParentMember) {
+          const newH = await api.createHousehold({
+            name: `${selectedParentMember.last_name} Household`,
+            address: selectedParentMember.address || formData.address || undefined,
+            primary_contact_phone: selectedParentMember.contact_phone || formData.contact_phone || undefined
+          });
+          await api.updateMember(selectedParentMember.id, { household_id: newH.id });
+          finalHouseholdId = newH.id;
+        } else if (formData.household_id) {
+          finalHouseholdId = Number(formData.household_id);
+        }
+      } else if (householdMode === "existing") {
+        finalHouseholdId = formData.household_id ? Number(formData.household_id) : null;
+      } else {
+        finalHouseholdId = null;
+      }
+
       const payload: any = {
         ...formData,
+        first_name: effectiveFirstName,
+        last_name: effectiveLastName,
         civil_status: formData.civil_status || "Single",
         spouse_name: formData.spouse_name || null,
         spouse_id: formData.spouse_id ? Number(formData.spouse_id) : null,
-        household_id: formData.household_id ? Number(formData.household_id) : null,
-        ministry_id: finalMinistryId
+        household_id: finalHouseholdId,
+        ministry_id: finalMinistryId,
+        is_baptized: formData.baptism_status === "baptized" || formData.is_baptized,
+        baptism_status: formData.baptism_status || (formData.is_baptized ? "baptized" : "not_baptized"),
+        baptism_date: formData.baptism_date || null,
+        baptism_notes: formData.baptism_notes || null
       };
 
       if (formData.civil_status === "Married" && createNewSpouseRecord && spouseFormData.first_name.trim()) {
@@ -533,13 +967,18 @@ export const MembersPage: React.FC = () => {
           last_name: (spouseFormData.last_name || formData.last_name).trim(),
           birthdate: spouseFormData.birthdate || formData.birthdate || "1990-01-01",
           gender: spouseFormData.gender || (formData.gender === "Male" ? "Female" : "Male"),
+          application_date: spouseFormData.application_date || formData.application_date || new Date().toISOString().split("T")[0],
           contact_phone: spouseFormData.contact_phone || null,
           contact_email: spouseFormData.contact_email || null,
+          address: spouseFormData.same_address_as_member ? (formData.address || null) : (spouseFormData.address || formData.address || null),
           occupation: spouseFormData.occupation || null,
           facebook_account: spouseFormData.facebook_account || null,
-          medical_notes: spouseFormData.medical_notes || null,
+          family_details: spouseFormData.family_details || formData.family_details || null,
           hobbies: spouseFormData.hobbies || null,
-          address: formData.address || null
+          invited_by: spouseFormData.invited_by || formData.invited_by || null,
+          previous_church: spouseFormData.previous_church || null,
+          medical_notes: spouseFormData.medical_notes || null,
+          household_id: finalHouseholdId
         };
       }
 
@@ -629,8 +1068,38 @@ export const MembersPage: React.FC = () => {
 
   const handleCreateHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!householdForm.name.trim()) {
+      setConfirmModalConfig({
+        isOpen: true,
+        title: "Required Field Missing",
+        type: "warning",
+        confirmText: "Okay",
+        cancelText: null,
+        description: <p className="text-xs text-center">Please enter a household name.</p>,
+        onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+
+    const dupHousehold = households.find(h => h.name.toLowerCase().trim() === householdForm.name.toLowerCase().trim());
+    if (dupHousehold) {
+      setConfirmModalConfig({
+        isOpen: true,
+        title: "Duplicate Household",
+        type: "warning",
+        confirmText: "Okay",
+        cancelText: null,
+        description: <p className="text-xs text-center">A household with the name "{householdForm.name}" already exists.</p>,
+        onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+
     try {
-      await api.createHousehold(householdForm);
+      await api.createHousehold({
+        ...householdForm,
+        name: householdForm.name.trim()
+      });
       setIsAddHouseholdModalOpen(false);
       setHouseholdForm({ name: "", address: "", primary_contact_phone: "" });
       loadData();
@@ -735,27 +1204,46 @@ export const MembersPage: React.FC = () => {
     }
   };
 
-  const displayedMembers = members;
+
+
+  const displayedMembers = React.useMemo(() => {
+    return [...members].sort((a, b) => {
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [members]);
 
   // Autocomplete suggestions for "Who Invites You in DPC?"
   const memberSuggestions = React.useMemo(() => {
-    return members.map((m) => ({
-      title: `${m.first_name} ${m.last_name}`,
-      category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
-      subtitle: m.contact_phone || m.contact_email || `${m.age} yrs old`,
-      aliases: [
-        m.first_name,
-        m.last_name,
-        `${m.last_name}, ${m.first_name}`,
-        `${m.first_name[0]}. ${m.last_name}`
-      ]
-    }));
+    return [...members]
+      .sort((a, b) => {
+        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      })
+      .map((m) => ({
+        title: `${m.first_name} ${m.last_name}`,
+        category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
+        subtitle: m.contact_phone || m.contact_email || `${m.age} yrs old`,
+        aliases: [
+          m.first_name,
+          m.last_name,
+          `${m.last_name}, ${m.first_name}`,
+          `${m.first_name[0]}. ${m.last_name}`
+        ]
+      }));
   }, [members]);
 
   // Autocomplete suggestions for Spouse / Partner Search
   const spouseMemberSuggestions = React.useMemo(() => {
     return members
       .filter((m) => !editingMember || m.id !== editingMember.id)
+      .sort((a, b) => {
+        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      })
       .map((m) => ({
         title: `${m.first_name} ${m.last_name}`,
         category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
@@ -768,6 +1256,31 @@ export const MembersPage: React.FC = () => {
         ]
       }));
   }, [members, editingMember]);
+
+  // Autocomplete suggestions for Parents / Family Linking
+  const parentMemberSuggestions = React.useMemo(() => {
+    return members
+      .filter((m) => !editingMember || m.id !== editingMember.id)
+      .sort((a, b) => {
+        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      })
+      .map((m) => {
+        const household = households.find(h => h.id === m.household_id);
+        return {
+          title: `${m.first_name} ${m.last_name}`,
+          category: household ? `🏡 ${household.name}` : (m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member"),
+          subtitle: `${m.gender || "Member"} • ${m.age ? `${m.age} yrs old` : 'Adult'}${m.address ? ` • ${m.address}` : ''}`,
+          aliases: [
+            m.first_name,
+            m.last_name,
+            `${m.last_name}, ${m.first_name}`,
+            `${m.first_name[0]}. ${m.last_name}`
+          ]
+        };
+      });
+  }, [members, editingMember, households]);
 
   // Find who invited the currently selected member
   const inviterMember = selectedMember?.invited_by
@@ -791,6 +1304,10 @@ export const MembersPage: React.FC = () => {
         target.includes(thisFullName) ||
         thisFullName.includes(target)
       );
+    }).sort((a, b) => {
+      const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+      const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB);
     })
     : [];
 
@@ -854,42 +1371,51 @@ export const MembersPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      {/* Header & Controls Hero Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <img
+          src="/container_bg.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
+        />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
-              <Users className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">
-              Members & Family Directory
-            </h1>
-            <span className="text-xs bg-indigo-50 border border-indigo-200/80 text-indigo-950 font-black px-3 py-1 rounded-full shadow-2xs">
-              {coordinatorMinistryId ? `${totalRecords} Active ${coordinatorMinistryName} Records` : `${totalRecords} Active Records`}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <Users className="w-3.5 h-3.5 text-amber-300" />
+              <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Church-Wide Directory"}</span>
+            </div>
+            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-bold px-3 py-1 rounded-full backdrop-blur-md">
+              {totalRecords} Active Records
             </span>
           </div>
-          <p className="text-xs text-charcoal/60 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Members & Family Directory
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
             Individual member profiles, households, birthdays, medical alerts, and age-based ministry tracking.
           </p>
         </div>
 
         {/* Action Buttons */}
         {canEdit && (
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="relative z-10 flex items-center gap-2.5 flex-wrap shrink-0">
             <button
               onClick={() => setIsAddHouseholdModalOpen(true)}
-              className="flex items-center gap-2 bg-white hover:bg-amber-50/50 border border-indigo-200 text-indigo-950 font-bold px-4 py-2.5 rounded-2xl text-xs shadow-2xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
             >
-              <Home className="w-4 h-4 text-amber-600" />
+              <Home className="w-4 h-4 text-amber-300" />
               <span>New Household</span>
             </button>
             <button
               type="button"
               onClick={handleOpenAddWithImport}
-              className="flex items-center gap-2 bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-950 font-black px-4 py-2.5 rounded-2xl text-xs shadow-2xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-black px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
               title="Import and analyze member registration form photo or document"
             >
-              <FileUp className="w-4 h-4 text-indigo-600" />
+              <FileUp className="w-4 h-4 text-sky-300" />
               <span>Import Form / File</span>
             </button>
             <button
@@ -994,56 +1520,97 @@ export const MembersPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Birthday Celebrant Quick Filters */}
+        {/* Membership Status & Attendance Health Filter Bar */}
         {activeTab === "members" && (
-          <div className="flex items-center gap-2 flex-wrap bg-white/80 p-3 rounded-2xl border border-indigo-100/80 shadow-2xs text-xs">
-            <span className="font-black text-indigo-950 flex items-center gap-1.5 mr-1 text-[11px] uppercase tracking-wider">
-              <Cake className="w-3.5 h-3.5 text-rose-500" />
-              <span>Milestones:</span>
-            </span>
-            {[
-              { id: "all", label: "All Members", icon: <Users className="w-3.5 h-3.5 text-indigo-700" /> },
-              { id: "today", label: "Birthday Today", icon: <Sparkles className="w-3.5 h-3.5 text-amber-500" /> },
-              { id: "this_week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5 text-rose-500" /> },
-              { id: "this_month", label: "This Month", icon: <Cake className="w-3.5 h-3.5 text-emerald-600" /> },
-            ].map(pill => (
-              <button
-                key={pill.id}
-                onClick={() => setBirthdayFilter(pill.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${birthdayFilter === pill.id
-                  ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 shadow-xs border border-amber-300"
-                  : "bg-white text-charcoal/70 hover:bg-gray-100 border border-indigo-100"
-                  }`}
-              >
-                {pill.icon}
-                <span>{pill.label}</span>
-              </button>
-            ))}
-
-            <select
-              value={birthdayFilter.startsWith("month_") ? birthdayFilter : ""}
-              onChange={(e) => setBirthdayFilter(e.target.value || "all")}
-              className="bg-white px-3 py-1.5 rounded-xl text-xs border border-indigo-100 font-bold text-indigo-950 focus:outline-none cursor-pointer"
-            >
-              <option value="">Filter by Birth Month...</option>
+          <div className="space-y-2">
+            {/* Status Categories */}
+            <div className="flex items-center gap-1.5 flex-wrap bg-white/95 p-2.5 rounded-2xl border border-indigo-100/90 shadow-2xs text-xs">
+              <span className="font-black text-indigo-950 flex items-center gap-1.5 mr-1 text-[11px] uppercase tracking-wider">
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
+                <span>Status:</span>
+              </span>
               {[
-                "January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December"
-              ].map((mName, i) => (
-                <option key={i + 1} value={`month_${i + 1}`}>
-                  {mName} Birthdays
-                </option>
+                { id: "all", label: "All Members", icon: "👥", countText: "" },
+                { id: "baptized_regular", label: "Baptized Regular", color: "text-indigo-950 bg-indigo-50 border-indigo-200" },
+                { id: "unbaptized_regular", label: "Regular (Unbaptized)", color: "text-sky-950 bg-sky-50 border-sky-200" },
+                { id: "guest", label: "Guests / Visitors", color: "text-amber-950 bg-amber-50 border-amber-300" },
+                { id: "inactive", label: "Inactive / Absent", color: "text-slate-700 bg-slate-100 border-slate-300" },
+                { id: "warning", label: "Warning (1–2 Absences)", color: "text-amber-900 bg-amber-50 border-amber-300 font-black" },
+                { id: "action_required", label: "Action Required (2–3+ Absences)", color: "text-rose-950 bg-rose-50 border-rose-300 font-black" },
+              ].map(pill => (
+                <button
+                  key={pill.id}
+                  onClick={() => setMembershipFilter(pill.id)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${membershipFilter === pill.id
+                    ? "bg-gradient-to-r from-indigo-900 to-indigo-950 text-white shadow-xs border border-indigo-800 scale-[1.02]"
+                    : "bg-white text-charcoal/70 hover:bg-indigo-50/60 border border-indigo-100"
+                    }`}
+                >
+                  <span>{pill.icon}</span>
+                  <span>{pill.label}</span>
+                </button>
               ))}
-            </select>
 
-            {birthdayFilter !== "all" && (
-              <button
-                onClick={() => setBirthdayFilter("all")}
-                className="text-[11px] text-rose-600 font-bold hover:underline ml-auto flex items-center gap-1 cursor-pointer"
+              {membershipFilter !== "all" && (
+                <button
+                  onClick={() => setMembershipFilter("all")}
+                  className="text-[11px] text-rose-600 font-bold hover:underline ml-auto flex items-center gap-1 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" /> Clear Status Filter
+                </button>
+              )}
+            </div>
+
+            {/* Birthday Celebrant Quick Filters */}
+            <div className="flex items-center gap-2 flex-wrap bg-white/80 p-2.5 rounded-2xl border border-indigo-100/80 shadow-2xs text-xs">
+              <span className="font-black text-indigo-950 flex items-center gap-1.5 mr-1 text-[11px] uppercase tracking-wider">
+                <Cake className="w-3.5 h-3.5 text-rose-500" />
+                <span>Milestones:</span>
+              </span>
+              {[
+                { id: "all", label: "All Milestones", icon: <Users className="w-3.5 h-3.5 text-indigo-700" /> },
+                { id: "today", label: "Birthday Today", icon: <Sparkles className="w-3.5 h-3.5 text-amber-500" /> },
+                { id: "this_week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5 text-rose-500" /> },
+                { id: "this_month", label: "This Month", icon: <Cake className="w-3.5 h-3.5 text-emerald-600" /> },
+              ].map(pill => (
+                <button
+                  key={pill.id}
+                  onClick={() => setBirthdayFilter(pill.id)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${birthdayFilter === pill.id
+                    ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 shadow-xs border border-amber-300"
+                    : "bg-white text-charcoal/70 hover:bg-gray-100 border border-indigo-100"
+                    }`}
+                >
+                  {pill.icon}
+                  <span>{pill.label}</span>
+                </button>
+              ))}
+
+              <select
+                value={birthdayFilter.startsWith("month_") ? birthdayFilter : ""}
+                onChange={(e) => setBirthdayFilter(e.target.value || "all")}
+                className="bg-white px-3 py-1.5 rounded-xl text-xs border border-indigo-100 font-bold text-indigo-950 focus:outline-none cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" /> Reset Filter
-              </button>
-            )}
+                <option value="">Filter by Birth Month...</option>
+                {[
+                  "January", "February", "March", "April", "May", "June",
+                  "July", "August", "September", "October", "November", "December"
+                ].map((mName, i) => (
+                  <option key={i + 1} value={`month_${i + 1}`}>
+                    {mName} Birthdays
+                  </option>
+                ))}
+              </select>
+
+              {birthdayFilter !== "all" && (
+                <button
+                  onClick={() => setBirthdayFilter("all")}
+                  className="text-[11px] text-rose-600 font-bold hover:underline ml-auto flex items-center gap-1 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" /> Reset Milestone
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -1063,7 +1630,7 @@ export const MembersPage: React.FC = () => {
                     <th className="p-4">Age / Birthday</th>
                     <th className="p-4">Household</th>
                     <th className="p-4">Medical / Notes</th>
-                    <th className="p-4">Status</th>
+                    <th className="p-4">Status & Health</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1092,6 +1659,12 @@ export const MembersPage: React.FC = () => {
                             )}
                           </div>
                           <div className="text-[10px] text-charcoal/50">{m.contact_email || m.contact_phone || "No direct contact"}</div>
+                          {m.bible_study_group_name && (
+                            <div className="text-[10px] text-indigo-700 font-semibold flex items-center gap-1 mt-0.5">
+                              <BookOpen className="w-2.5 h-2.5 text-indigo-600" />
+                              <span className="truncate max-w-[150px]">{m.bible_study_group_name}</span>
+                            </div>
+                          )}
                         </div>
                       </td>
 
@@ -1155,15 +1728,82 @@ export const MembersPage: React.FC = () => {
                         )}
                       </td>
 
+                      {/* Status & Attendance Health Column */}
                       <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${m.status === "active" ? "bg-emerald-100 text-emerald-950 border border-emerald-300" : "bg-gray-100 text-gray-700"
-                          }`}>
-                          {m.status}
-                        </span>
+                        <div className="space-y-1">
+                          {/* Hybrid Status Badge */}
+                          {m.status === "visitor" || m.membership_type === "guest" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
+
+                              <span>Guest / Visitor</span>
+                            </span>
+                          ) : m.status === "inactive" || m.membership_type === "inactive" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+
+                              <span>Inactive / Absent</span>
+                            </span>
+                          ) : m.is_baptized || m.baptism_status === "baptized" || m.membership_type === "baptized_regular" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-950 border border-indigo-200 shadow-2xs">
+
+                              <span>Baptized Regular</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-sky-50 text-sky-950 border border-sky-200 shadow-2xs">
+
+                              <span>Regular (Unbaptized)</span>
+                            </span>
+                          )}
+
+                          {/* Attendance Health / Inactivity Warning Pills */}
+                          {m.status !== "inactive" && m.status !== "visitor" && (
+                            m.attendance_health === "action_required" || (m.consecutive_absences && m.consecutive_absences >= 3) ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black bg-rose-100 text-rose-950 border border-rose-300 px-2 py-0.5 rounded-md animate-pulse shadow-2xs" title="Consecutive absences in Sunday Service / Bible Study">
+                                  <AlertCircle className="w-3 h-3 text-rose-600" />
+                                  <span>Action Required: {m.consecutive_absences ? `${m.consecutive_absences} Absences` : "Absent 3+ wks"}</span>
+                                </span>
+                              </div>
+                            ) : m.attendance_health === "warning" || (m.consecutive_absences && m.consecutive_absences >= 1) ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs" title="Recent absence in Sunday Service or Bible Study">
+                                  <AlertTriangle className="w-3 h-3 text-amber-700" />
+                                  <span>Warning: {m.consecutive_absences ? `${m.consecutive_absences} Absence${m.consecutive_absences > 1 ? "s" : ""}` : "Missed Service"}</span>
+                                </span>
+                              </div>
+                            ) : null
+                          )}
+                        </div>
                       </td>
 
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAttendanceSummaryInitialTab("overview");
+                              setAttendanceSummaryMember(m);
+                            }}
+                            title="Attendance Intelligence, Rates & Streaks"
+                            className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 transition-all active:scale-95 shadow-2xs cursor-pointer flex items-center gap-1"
+                          >
+                            <TrendingUp className="w-3.5 h-3.5 text-indigo-700" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAttendanceSummaryInitialTab("milestones");
+                              setAttendanceSummaryMember(m);
+                            }}
+                            title="Water Baptism Milestones & Attendance Tracker"
+                            className="p-2 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-950 border border-cyan-200 transition-all active:scale-95 shadow-2xs cursor-pointer flex items-center gap-1"
+                          >
+                            <Calendar className="w-3.5 h-3.5 text-cyan-700" />
+                            {m.baptism_status === "candidate" || m.baptism_status === "scheduled" ? (
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" />
+                            ) : null}
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1280,8 +1920,8 @@ export const MembersPage: React.FC = () => {
                               type="button"
                               onClick={() => handlePageChange(pageNumber)}
                               className={`w-8 h-8 rounded-xl font-black text-xs transition-all cursor-pointer ${currentPage === pageNumber
-                                  ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 shadow-xs border border-amber-300 scale-105"
-                                  : "bg-white text-charcoal/70 hover:bg-indigo-50/70 border border-indigo-100"
+                                ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 shadow-xs border border-amber-300 scale-105"
+                                : "bg-white text-charcoal/70 hover:bg-indigo-50/70 border border-indigo-100"
                                 }`}
                             >
                               {pageNumber}
@@ -1346,7 +1986,7 @@ export const MembersPage: React.FC = () => {
                 {/* Family Members list */}
                 <div className="mt-3.5 space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-wider text-charcoal/50">Family Tree & Ministries</p>
-                  {h.members && h.members.map((fam) => (
+                  {h.members && [...h.members].sort((a, b) => `${a.first_name || ""} ${a.last_name || ""}`.trim().localeCompare(`${b.first_name || ""} ${b.last_name || ""}`.trim())).map((fam) => (
                     <div key={fam.id} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-ivory-light/70 border border-indigo-50/80">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-indigo-950">{fam.first_name} {fam.last_name}</span>
@@ -1376,9 +2016,23 @@ export const MembersPage: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl font-black text-indigo-950">{selectedMember.first_name} {selectedMember.last_name}</h2>
-                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-950 uppercase tracking-wider border border-emerald-300">
-                      {selectedMember.status}
-                    </span>
+                    {selectedMember.status === "visitor" || selectedMember.membership_type === "guest" ? (
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 uppercase tracking-wider border border-amber-300 shadow-2xs">
+                        Guest / Visitor
+                      </span>
+                    ) : selectedMember.status === "inactive" || selectedMember.membership_type === "inactive" ? (
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase tracking-wider border border-slate-300 shadow-2xs">
+                        Inactive / Absent
+                      </span>
+                    ) : selectedMember.is_baptized || selectedMember.baptism_status === "baptized" || selectedMember.membership_type === "baptized_regular" ? (
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-950 uppercase tracking-wider border border-indigo-300 shadow-2xs">
+                        Baptized Regular Member
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-950 uppercase tracking-wider border border-sky-300 shadow-2xs">
+                        Regular Member (Unbaptized)
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <span
@@ -1425,6 +2079,103 @@ export const MembersPage: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Telemetry Card: Membership Classification & Attendance Health */}
+            <div className="p-4 bg-gradient-to-br from-indigo-900/5 via-sky-500/5 to-amber-500/5 rounded-2xl border border-indigo-200/90 shadow-2xs space-y-3 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-indigo-100/80">
+                <div className="flex items-center gap-2 font-black text-indigo-950 text-xs">
+                  <ShieldCheck className="w-4 h-4 text-indigo-700" />
+                  <span>Membership Classification & Attendance Health</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = selectedMember;
+                    setSelectedMember(null);
+                    setAttendanceSummaryInitialTab("overview");
+                    setAttendanceSummaryMember(target);
+                  }}
+                  className="text-[11px] font-black text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Calendar className="w-3 h-3 text-indigo-600" />
+                  <span>Full Attendance Tracker</span>
+                </button>
+              </div>
+
+              {/* Attendance Health Alert Banner */}
+              {selectedMember.status === "inactive" || selectedMember.membership_type === "inactive" ? (
+                <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl flex items-start gap-2.5 text-slate-800">
+                  <AlertCircle className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-black text-xs text-slate-900">Inactive / Absent Record</strong>
+                    <span className="text-[11px]">This member is currently tagged as Inactive. Pastoral follow-up or visitation recommended.</span>
+                  </div>
+                </div>
+              ) : selectedMember.attendance_health === "action_required" || (selectedMember.consecutive_absences && selectedMember.consecutive_absences >= 3) ? (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-rose-950">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 animate-pulse" />
+                  <div>
+                    <strong className="block font-black text-xs text-rose-900">🔴 Action Required: 2–3+ Consecutive Absences</strong>
+                    <span className="text-[11px]">Member has missed {selectedMember.consecutive_absences || "3+"} consecutive services and small group sessions. Immediate pastoral follow-up or contact is recommended!</span>
+                  </div>
+                </div>
+              ) : selectedMember.attendance_health === "warning" || (selectedMember.consecutive_absences && selectedMember.consecutive_absences >= 1) ? (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-amber-950">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-black text-xs text-amber-900">🟡 Warning: Recent Service Absence</strong>
+                    <span className="text-[11px]">Member missed {selectedMember.consecutive_absences || "a recent"} Sunday service / small group session. An encouragement or check-in message is suggested.</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-emerald-950">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-black text-xs text-emerald-900">🟢 Healthy & Active Attendee</strong>
+                    <span className="text-[11px]">Regular active participant in Sunday Divine Services and fellowship activities.</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Telemetry Metric Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Baptism</span>
+                  <div className="font-black text-xs text-indigo-950 flex items-center gap-1 mt-0.5">
+                    {selectedMember.is_baptized || selectedMember.baptism_status === "baptized" ? (
+                      <span className="text-emerald-700 flex items-center gap-1">
+                        <span>✝️ Baptized</span>
+                        {selectedMember.baptism_date && <span className="text-[10px] text-charcoal/50">({selectedMember.baptism_date})</span>}
+                      </span>
+                    ) : selectedMember.baptism_status === "candidate" || selectedMember.baptism_status === "scheduled" ? (
+                      <span className="text-cyan-700 flex items-center gap-1">
+                        <Droplets className="w-3 h-3 text-cyan-600" />
+                        <span>Candidate</span>
+                      </span>
+                    ) : (
+                      <span className="text-charcoal/60">Not Baptized</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Last Present Attendance</span>
+                  <span className="font-black text-xs text-indigo-950 mt-0.5 block">
+                    {selectedMember.last_attended_date ? selectedMember.last_attended_date : "No check-in record"}
+                  </span>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Bible Study Small Group</span>
+                  <span className="font-black text-xs text-indigo-950 mt-0.5 block truncate">
+                    {selectedMember.bible_study_group_name ? selectedMember.bible_study_group_name : "Not enrolled"}
+                  </span>
+                  {selectedMember.bible_study_leader_name && (
+                    <span className="text-[9px] text-indigo-700 font-bold block">Leader: {selectedMember.bible_study_leader_name}</span>
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* Profile Grid Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -1592,6 +2343,95 @@ export const MembersPage: React.FC = () => {
                 <Gift className="w-4 h-4 text-indigo-950" />
                 <span>Send Birthday Blessing / Announcement</span>
               </button>
+            </div>
+
+            {/* Card: Annual Attendance & Water Baptism Ceremony Tracker */}
+            <div className="p-4 bg-gradient-to-br from-cyan-500/10 via-indigo-500/5 to-cyan-500/10 rounded-2xl border border-cyan-200/90 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-xl bg-cyan-100 text-cyan-800">
+                    <Droplets className="w-4 h-4 text-cyan-600 fill-cyan-300" />
+                  </div>
+                  <div>
+                    <span className="font-black text-indigo-950 text-xs block">
+                      Annual Attendance & Baptism Ceremony
+                    </span>
+                    <span className="text-[10px] text-charcoal/60">
+                      Sunday service attendance consistency and baptism ceremony milestone
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedMember;
+                      setSelectedMember(null);
+                      setAttendanceSummaryInitialTab("overview");
+                      setAttendanceSummaryMember(target);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-900 hover:from-indigo-600 hover:to-indigo-800 text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                  >
+                    <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Attendance Rates & Streaks</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedMember;
+                      setSelectedMember(null);
+                      setAttendanceSummaryInitialTab("monthly");
+                      setAttendanceSummaryMember(target);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-700 hover:from-cyan-500 hover:to-indigo-600 text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-cyan-200" />
+                    <span>Open Full-Year Attendance</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="bg-white/90 p-2.5 rounded-xl border border-cyan-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Baptism Status</span>
+                  <span className="font-black text-indigo-950 flex items-center gap-1">
+                    {selectedMember.baptism_status === "candidate" || selectedMember.baptism_status === "scheduled" ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-cyan-500 animate-ping" />
+                        <span className="text-cyan-700">🌊 Ceremony Candidate</span>
+                      </>
+                    ) : selectedMember.is_baptized || selectedMember.baptism_status === "baptized" ? (
+                      <>
+                        <span>✝️</span>
+                        <span className="text-emerald-700">Baptized</span>
+                      </>
+                    ) : (
+                      <span className="text-charcoal/60">⚪ Not Yet Baptized</span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="bg-white/90 p-2.5 rounded-xl border border-cyan-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Ceremony Date</span>
+                  <span className="font-black text-indigo-950">
+                    {selectedMember.baptism_date || "Not set / scheduled"}
+                  </span>
+                </div>
+
+                <div className="bg-white/90 p-2.5 rounded-xl border border-cyan-100 shadow-2xs">
+                  <span className="text-[10px] text-charcoal/50 block font-bold">Readiness / Alert</span>
+                  <span className="font-black text-indigo-950 flex items-center gap-1">
+                    {selectedMember.baptism_status === "candidate" || selectedMember.baptism_status === "scheduled" ? (
+                      <span className="text-cyan-800 font-black">🔔 Alert Triggered</span>
+                    ) : selectedMember.is_baptized ? (
+                      <span className="text-emerald-700 font-black">✅ Completed</span>
+                    ) : (
+                      <span className="text-amber-800 font-bold">Pending Evaluation</span>
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Official Application Card Details */}
@@ -1820,6 +2660,7 @@ export const MembersPage: React.FC = () => {
         document.body
       )}
 
+
       {/* Delete Member Confirmation Modal */}
       {deleteConfirmMember && createPortal(
         <div className="fixed inset-0 z-[110] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1989,67 +2830,170 @@ export const MembersPage: React.FC = () => {
 
 
                 <form onSubmit={handleSubmitMember} className="space-y-4 text-xs">
-                  {/* Status selector if editing */}
-                  {editingMember && (
-                    <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80 flex items-center justify-between gap-3">
-                      <label className="font-bold text-xs text-amber-950">Membership Status:</label>
-                      <select
-                        value={formData.status}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                        className="bg-white p-2 rounded-xl border border-amber-300 font-bold text-xs text-charcoal focus:outline-none focus:border-indigo cursor-pointer"
-                      >
-                        <option value="active">Active Member</option>
-                        <option value="inactive">Inactive / Absent</option>
-                        <option value="transferred">Transferred</option>
-                      </select>
+                  {/* Membership Classification & Water Baptism Settings */}
+                  <div className="p-3.5 bg-gradient-to-r from-indigo-50/80 via-ivory-light to-amber-50/60 rounded-2xl border border-indigo-200/90 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="font-black text-xs text-indigo-950 flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-indigo-700" />
+                        <span>Membership Classification & Baptism Status</span>
+                      </label>
+                      {/* Live Resulting Status Pill */}
+                      {formData.status === "visitor" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-amber-100 text-amber-950 border border-amber-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                          Guest / Visitor
+                        </span>
+                      ) : formData.status === "inactive" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                          Inactive / Absent
+                        </span>
+                      ) : formData.baptism_status === "baptized" || formData.is_baptized ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-indigo-100 text-indigo-950 border border-indigo-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                          Baptized Regular Member
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-sky-100 text-sky-950 border border-sky-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                          Regular Member (Unbaptized)
+                        </span>
+                      )}
                     </div>
-                  )}
-                  {/* Core Names */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-charcoal/70 mb-1">First Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Suzette / Rebecca"
-                        value={formData.first_name}
-                        onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-charcoal/70 mb-1">Last Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Victoria / Aspe"
-                        value={formData.last_name}
-                        onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                      />
-                    </div>
-                  </div>
 
-                  {/* Birthdate & Real-time Auto-Suggestion */}
-                  <div>
-                    <DatePickerInput
-                      label="Birthday (Calculates Age & Auto-suggests Ministry)"
-                      required
-                      value={formData.birthdate}
-                      onChange={(val) => handleBirthdateChange(val)}
-                      placeholder="Select birthdate"
-                    />
-                    {suggestedMinistryInfo && (
-                      <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-2">
-                        <span className="font-bold text-emerald-950 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Calculated Age: {suggestedMinistryInfo.age} yrs</span>
-                        </span>
-                        <span className="font-black text-indigo-950 bg-white px-2.5 py-0.5 rounded-md shadow-2xs border border-indigo-200">
-                          Suggested: {suggestedMinistryInfo.ministry?.name || "General"} Ministry
-                        </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-charcoal/80 mb-1">Base Membership Status</label>
+                        <select
+                          value={formData.status}
+                          onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                          className="w-full bg-white p-2 rounded-xl border border-indigo-200 font-bold text-xs text-indigo-950 focus:outline-none focus:border-indigo cursor-pointer shadow-2xs"
+                        >
+                          <option value="active">Active Regular Member</option>
+                          <option value="visitor">Guest / Visitor (Bisita)</option>
+                          <option value="inactive">Inactive / For Follow-up (Di-aktibo)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-charcoal/80 mb-1">Baptism Status</label>
+                        <select
+                          value={formData.baptism_status || (formData.is_baptized ? "baptized" : "not_baptized")}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              baptism_status: val,
+                              is_baptized: val === "baptized"
+                            }));
+                          }}
+                          className="w-full bg-white p-2 rounded-xl border border-indigo-200 font-bold text-xs text-indigo-950 focus:outline-none focus:border-indigo cursor-pointer shadow-2xs"
+                        >
+                          <option value="baptized">Baptized</option>
+                          <option value="not_baptized">Not Baptized</option>
+                          <option value="candidate">Baptism Candidate</option>
+                          <option value="scheduled">Scheduled for Baptism</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {(formData.baptism_status === "baptized" || formData.is_baptized) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-indigo-100/60">
+                        <div>
+                          <label className="block text-[10px] font-bold text-charcoal/70 mb-0.5">Baptism Date (Optional)</label>
+                          <input
+                            type="date"
+                            value={formData.baptism_date || ""}
+                            onChange={(e) => setFormData(prev => ({ ...prev, baptism_date: e.target.value }))}
+                            className="w-full bg-white p-1.5 rounded-xl border border-indigo-200 text-xs font-bold text-indigo-950"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-charcoal/70 mb-0.5">Baptism Notes / Officiating</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Baptized at DPC Pool"
+                            value={formData.baptism_notes || ""}
+                            onChange={(e) => setFormData(prev => ({ ...prev, baptism_notes: e.target.value }))}
+                            className="w-full bg-white p-1.5 rounded-xl border border-indigo-200 text-xs text-charcoal"
+                          />
+                        </div>
                       </div>
                     )}
+                  </div>
+                  {/* Full Name & Birthday Side-by-Side */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                    {/* Full Name with Live Duplicate Warning & Sample Guide */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-bold text-charcoal/70">Full Name *</label>
+                        <span className="text-[10px] text-charcoal/50 font-medium">First M.I. Last</span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Mark Andrie M. Remot"
+                          value={fullNameInput}
+                          onChange={(e) => handleFullNameChange(e.target.value)}
+                          className={`w-full bg-ivory-light p-2.5 rounded-xl border text-xs font-bold transition-all focus:outline-none pr-9 ${liveDuplicateMember
+                            ? "border-amber-400 bg-amber-50/40 text-amber-950 focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
+                            : fullNameInput.trim().length >= 2 && !isCheckingDuplicate
+                              ? "border-emerald-300 bg-emerald-50/20 focus:border-emerald-500"
+                              : "border-gray-200 focus:border-indigo"
+                            }`}
+                        />
+                        <div className="absolute right-2.5 top-2.5 pointer-events-none flex items-center">
+                          {isCheckingDuplicate ? (
+                            <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                          ) : liveDuplicateMember ? (
+                            <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          ) : fullNameInput.trim().length >= 2 ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* Sample format guide */}
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-charcoal/60 px-1">
+                        <span>Sample: <strong className="text-charcoal/80">Juan M. Dela Cruz</strong></span>
+                        <span className="text-charcoal/40">(Given Name + M.I. + Surname)</span>
+                      </div>
+
+                      {/* Live Duplicate Warning */}
+                      {liveDuplicateMember && (
+                        <div className="mt-2 p-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-[11px] flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div className="leading-tight">
+                            <p className="font-bold text-amber-900">Name already registered in database!</p>
+                            <p className="text-[10px] text-amber-800 mt-0.5">
+                              <strong>{liveDuplicateMember.first_name} {liveDuplicateMember.last_name}</strong>
+                              {liveDuplicateMember.ministry_name ? ` • ${liveDuplicateMember.ministry_name} Ministry` : ''}
+                              {liveDuplicateMember.birthdate ? ` • Age: ${calculateClientAge(liveDuplicateMember.birthdate)}` : ''}
+                              {` • ID #${liveDuplicateMember.id}`}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Birthdate & Real-time Auto-Suggestion */}
+                    <div>
+                      <DatePickerInput
+                        label="Birthday (Calculates Age & Auto-suggests Ministry)"
+                        required
+                        value={formData.birthdate}
+                        onChange={(val) => handleBirthdateChange(val)}
+                        placeholder="Select birthdate"
+                      />
+                      {suggestedMinistryInfo && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-1.5 text-xs">
+                          <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Age: {suggestedMinistryInfo.age} yrs</span>
+                          </span>
+                          <span className="font-black text-indigo-950 bg-white px-2 py-0.5 rounded-md shadow-2xs border border-indigo-200 text-[11px]">
+                            {suggestedMinistryInfo.ministry?.name || "General"} Ministry
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Gender & Application Date (for Non-Kinder/Non-Elementary) */}
@@ -2077,9 +3021,9 @@ export const MembersPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Civil Status / Marital Status Selector (for Non-Kinder/Non-Elementary) */}
-                  {(!isKinder && !isElementary) && (
-                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50/70 via-white to-indigo-50/70 border border-amber-200/90 shadow-2xs space-y-2.5">
+                  {/* Civil Status / Marital Status Selector (Visible for Adult Ministries or when Married) */}
+                  {(isJuniorAdult || isOldAdult || isYoungAdult || formData.civil_status === "Married") && (
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50/70 via-white to-indigo-50/70 border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
                           <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
@@ -2104,13 +3048,12 @@ export const MembersPage: React.FC = () => {
                             key={item.id}
                             type="button"
                             onClick={() => handleCivilStatusChange(item.id)}
-                            className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
-                              formData.civil_status === item.id
-                                ? item.isSpecial
-                                  ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-xs scale-[1.02]"
-                                  : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
-                                : "bg-white text-charcoal/80 border-gray-200 hover:bg-amber-50/40 hover:border-amber-300"
-                            }`}
+                            className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${formData.civil_status === item.id
+                              ? item.isSpecial
+                                ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-xs scale-[1.02]"
+                                : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                              : "bg-white text-charcoal/80 border-gray-200 hover:bg-amber-50/40 hover:border-amber-300"
+                              }`}
                           >
                             <span>{item.label}</span>
                           </button>
@@ -2209,7 +3152,7 @@ export const MembersPage: React.FC = () => {
                                 </button>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-2.5">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <div>
                                   <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
                                     Partner First Name *
@@ -2238,7 +3181,7 @@ export const MembersPage: React.FC = () => {
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-2.5">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                                 <div>
                                   <DatePickerInput
                                     label="Partner Birthday"
@@ -2261,33 +3204,166 @@ export const MembersPage: React.FC = () => {
                                     <option value="Male">Male</option>
                                   </select>
                                 </div>
+                                <div>
+                                  <DatePickerInput
+                                    label="Date of Application"
+                                    value={spouseFormData.application_date}
+                                    onChange={(val) => setSpouseFormData({ ...spouseFormData, application_date: val })}
+                                    placeholder="Select application date"
+                                  />
+                                </div>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-2.5">
+                              {/* Contact & Socials */}
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                                 <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner Contact Phone
-                                  </label>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block font-bold text-charcoal/70 text-[11px]">
+                                      Partner Contact Phone
+                                    </label>
+                                    {spouseFormData.contact_phone && (
+                                      <span className={`text-[10px] font-bold ${spouseFormData.contact_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
+                                        {spouseFormData.contact_phone.length}/11
+                                      </span>
+                                    )}
+                                  </div>
                                   <input
                                     type="tel"
-                                    placeholder="e.g. 0917 123 4567"
+                                    maxLength={11}
+                                    placeholder="e.g. 09123456789"
                                     value={spouseFormData.contact_phone}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, contact_phone: e.target.value })}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, contact_phone: sanitizePhoneInput(e.target.value) })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner Contact Email
+                                  </label>
+                                  <input
+                                    type="email"
+                                    placeholder="e.g. partner@email.com"
+                                    value={spouseFormData.contact_email}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, contact_email: e.target.value })}
                                     className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
                                   />
                                 </div>
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner Facebook Account
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Fb: Maria Clara"
+                                    value={spouseFormData.facebook_account}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, facebook_account: e.target.value })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Junior Adult Card Fields: Occupation, Hobbies, Family Details */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <div>
                                   <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
                                     Partner Occupation
                                   </label>
                                   <input
                                     type="text"
-                                    placeholder="e.g. Teacher, Nurse, Business"
+                                    placeholder="e.g. Teacher, Office staff, Nurse, Business"
                                     value={spouseFormData.occupation}
                                     onChange={(e) => setSpouseFormData({ ...spouseFormData, occupation: e.target.value })}
                                     className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
                                   />
                                 </div>
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Partner Hobbies
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Cooking, reading, music, gardening"
+                                    value={spouseFormData.hobbies}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, hobbies: e.target.value })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                  Partner Family Members / Children
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Children: Juan Jr., Mateo, Sophia"
+                                  value={spouseFormData.family_details}
+                                  onChange={(e) => setSpouseFormData({ ...spouseFormData, family_details: e.target.value })}
+                                  className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                  <SearchableAutocomplete
+                                    label="Who Invites Partner in DPC?"
+                                    value={spouseFormData.invited_by}
+                                    onChange={(val) => setSpouseFormData({ ...spouseFormData, invited_by: val })}
+                                    placeholder="Search member name or type custom..."
+                                    suggestions={memberSuggestions}
+                                    icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                    Previous Religion / Church Attended
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Roman Catholic / Baptist / None"
+                                    value={spouseFormData.previous_church}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, previous_church: e.target.value })}
+                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
+                                  Partner Medical / Allergy Notes
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Asthma, Seafood allergy, None"
+                                  value={spouseFormData.medical_notes}
+                                  onChange={(e) => setSpouseFormData({ ...spouseFormData, medical_notes: e.target.value })}
+                                  className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                />
+                              </div>
+
+                              {/* Address Option */}
+                              <div className="p-2.5 bg-white rounded-xl border border-indigo-100 space-y-2">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={spouseFormData.same_address_as_member}
+                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, same_address_as_member: e.target.checked })}
+                                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                  />
+                                  <span className="text-xs font-bold text-indigo-950">
+                                    Same present address as primary member
+                                  </span>
+                                </label>
+
+                                {!spouseFormData.same_address_as_member && (
+                                  <div className="pt-1">
+                                    <AddressPicker
+                                      label="Partner Present Address"
+                                      value={spouseFormData.address}
+                                      onChange={(addr) => setSpouseFormData((prev) => ({ ...prev, address: addr }))}
+                                    />
+                                  </div>
+                                )}
                               </div>
 
                               <div className="p-2 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-950 flex items-center gap-1.5 font-medium">
@@ -2311,59 +3387,240 @@ export const MembersPage: React.FC = () => {
                     onChange={(addr) => setFormData((prev) => ({ ...prev, address: addr }))}
                   />
 
-                  {/* Ministry Assignment & Household */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-bold text-charcoal/70">Ministry Assignment</label>
-                        <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-bold">
-                          {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Assigned" : "Auto-Assigned by Age")}
-                        </span>
+                  {/* Ministry Assignment */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-charcoal/70 text-xs">Ministry Assignment</label>
+                      <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-bold">
+                        {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Assigned" : "Auto-Assigned by Age")}
+                      </span>
+                    </div>
+                    <select
+                      value={coordinatorMinistryId ? String(coordinatorMinistryId) : formData.ministry_id}
+                      onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
+                      disabled={!!coordinatorMinistryId}
+                      className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal disabled:opacity-90 disabled:bg-gray-100 text-xs"
+                    >
+                      {coordinatorMinistryId ? (
+                        <option value={coordinatorMinistryId}>{coordinatorMinistryName} Ministry (Assigned)</option>
+                      ) : (
+                        <>
+                          <option value="">Auto-Assign by Age</option>
+                          {ministries.map((m) => (
+                            <option key={m.id} value={m.id}>{m.name} ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All'})</option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Enhanced Household & Family Linkage Section */}
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-white to-amber-50/50 border border-indigo-200 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                          <Home className="w-4 h-4 text-indigo-700" />
+                          <span>Household & Family Linkage:</span>
+                        </label>
+                        <p className="text-[10px] text-charcoal/60 mt-0.5">
+                          {formData.civil_status === "Married"
+                            ? "💍 Recommended: Create a new household for this new couple / family, or link to family."
+                            : "👨‍👩‍👧 Recommended: Link to parents' household or create an independent household."}
+                        </p>
                       </div>
-                      <select
-                        value={coordinatorMinistryId ? String(coordinatorMinistryId) : formData.ministry_id}
-                        onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
-                        disabled={!!coordinatorMinistryId}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal disabled:opacity-90 disabled:bg-gray-100"
-                      >
-                        {coordinatorMinistryId ? (
-                          <option value={coordinatorMinistryId}>{coordinatorMinistryName} Ministry (Assigned)</option>
+
+                      {/* Mode Badge Indicator */}
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-950 shadow-2xs">
+                        {householdMode === "link_parents" && "👨‍👩‍👧 Link to Parents"}
+                        {householdMode === "create_new" && "➕ New Household"}
+                        {householdMode === "existing" && "📋 Existing Household"}
+                        {householdMode === "none" && "👤 Individual"}
+                      </span>
+                    </div>
+
+                    {/* 4 Mode Switcher Buttons */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+                      {[
+                        { id: "link_parents", label: "👨‍👩‍👧 Link Parents", desc: "Link with parents" },
+                        { id: "create_new", label: "➕ Create New", desc: "For new family", isHighlighted: formData.civil_status === "Married" },
+                        { id: "existing", label: "📋 Select List", desc: "Pick household" },
+                        { id: "none", label: "👤 Individual", desc: "No household" }
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setHouseholdMode(item.id as any);
+                            if (item.id === "create_new" && !newHouseholdName) {
+                              setNewHouseholdName(`${formData.last_name ? `${formData.last_name} Household` : "New Family Household"}`);
+                            }
+                          }}
+                          className={`py-2 px-2 rounded-xl font-bold text-[11px] transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${householdMode === item.id
+                            ? item.isHighlighted
+                              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-xs scale-[1.02]"
+                              : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                            : item.isHighlighted
+                              ? "bg-amber-50/80 text-amber-950 border-amber-300 hover:bg-amber-100"
+                              : "bg-white text-charcoal/80 border-gray-200 hover:bg-indigo-50/50 hover:border-indigo-300"
+                            }`}
+                        >
+                          <span className="font-black">{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Mode 1: Link to Parents */}
+                    {householdMode === "link_parents" && (
+                      <div className="p-3 bg-white rounded-xl border border-indigo-100 space-y-2.5 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Search & Link to Parent in Church:</span>
+                          </span>
+                          {selectedParentMember && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedParentMember(null);
+                                setParentSearchName("");
+                              }}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                            >
+                              Clear Selection
+                            </button>
+                          )}
+                        </div>
+
+                        {selectedParentMember ? (
+                          <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50 to-indigo-50 border border-emerald-200 flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shadow-2xs">
+                                👨‍👩‍👧
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-emerald-800 font-bold block uppercase tracking-wider">
+                                  Linked Parent / Family Head
+                                </span>
+                                <h4 className="font-black text-xs text-indigo-950">
+                                  {selectedParentMember.first_name} {selectedParentMember.last_name}
+                                  {selectedParentMember.ministry_name && ` (${selectedParentMember.ministry_name})`}
+                                </h4>
+                                <p className="text-[11px] text-charcoal/70 mt-0.5">
+                                  {selectedParentMember.household_name ? (
+                                    <span>🏡 Household: <strong>{selectedParentMember.household_name}</strong></span>
+                                  ) : (
+                                    <span className="text-amber-800 font-medium">✨ Will auto-create <strong>{selectedParentMember.last_name} Household</strong> for family</span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] bg-emerald-100 text-emerald-950 font-black px-2 py-0.5 rounded-md border border-emerald-300">
+                              Linked
+                            </span>
+                          </div>
                         ) : (
-                          <>
-                            <option value="">Auto-Assign by Age</option>
-                            {ministries.map((m) => (
-                              <option key={m.id} value={m.id}>{m.name} ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All'})</option>
-                            ))}
-                          </>
+                          <SearchableAutocomplete
+                            label="Parent Name (Father / Mother / Guardian in DPC)"
+                            value={parentSearchName}
+                            onChange={(val) => handleSelectParent(val)}
+                            placeholder="Type parent's name to search church members..."
+                            suggestions={parentMemberSuggestions}
+                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                          />
                         )}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block font-bold text-charcoal/70 mb-1">Household / Family</label>
-                      <select
-                        value={formData.household_id}
-                        onChange={(e) => setFormData({ ...formData, household_id: e.target.value })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                      >
-                        <option value="">Individual (No Household)</option>
-                        {households.map((h) => (
-                          <option key={h.id} value={h.id}>{h.name}</option>
-                        ))}
-                      </select>
-                    </div>
+
+                        <div className="text-[10px] text-charcoal/60 bg-ivory-light/80 p-2 rounded-lg border border-indigo-50 flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <span>
+                            Linking a parent automatically attaches this member to their parent's household and syncs guardian information.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mode 2: Create New Household */}
+                    {householdMode === "create_new" && (
+                      <div className="p-3 bg-white rounded-xl border border-amber-200 space-y-2.5 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                            <Plus className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Create New Family Household Record</span>
+                          </span>
+                          <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md">
+                            Independent Family
+                          </span>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-charcoal/80 mb-1">
+                            Household / Family Name *
+                          </label>
+                          <input
+                            type="text"
+                            required={householdMode === "create_new"}
+                            placeholder="e.g. Dela Cruz Household / Juan & Maria Family"
+                            value={newHouseholdName}
+                            onChange={(e) => setNewHouseholdName(e.target.value)}
+                            className="w-full bg-ivory-light p-2.5 rounded-xl border border-amber-300 text-xs font-bold text-indigo-950 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-950 flex items-start gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                          <span>
+                            Upon saving, a new household <strong>"{newHouseholdName || `${formData.last_name || 'New'} Household`}"</strong> will be created at the address above. Both this member and spouse (if married) will be automatically assigned to it.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mode 3: Select Existing Household */}
+                    {householdMode === "existing" && (
+                      <div className="p-3 bg-white rounded-xl border border-indigo-100 space-y-2 animate-in fade-in duration-150">
+                        <label className="block text-xs font-bold text-indigo-950 mb-1">
+                          Select Registered Household:
+                        </label>
+                        <select
+                          value={formData.household_id}
+                          onChange={(e) => setFormData({ ...formData, household_id: e.target.value })}
+                          className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-xs text-indigo-950 cursor-pointer"
+                        >
+                          <option value="">-- Choose Existing Household --</option>
+                          {households.map((h) => (
+                            <option key={h.id} value={h.id}>
+                              🏡 {h.name} ({h.member_count || 0} family members)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Mode 4: Individual */}
+                    {householdMode === "none" && (
+                      <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-[11px] text-charcoal/70 flex items-center gap-1.5">
+                        <Info className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                        <span>This member will be registered as a standalone individual profile (no household linked).</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Contact Phone & Email */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-bold text-charcoal/70 mb-1">Contact No *</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-bold text-charcoal/70">Contact No *</label>
+                        <span className={`text-[10px] font-bold ${formData.contact_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
+                          {formData.contact_phone.length}/11 digits
+                        </span>
+                      </div>
                       <input
                         type="tel"
                         required={!isKinder}
-                        placeholder="e.g. 0930 079 5141 / 0950 931 8104"
+                        maxLength={11}
+                        placeholder="e.g. 09123456789"
                         value={formData.contact_phone}
-                        onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                        onChange={(e) => setFormData({ ...formData, contact_phone: sanitizePhoneInput(e.target.value) })}
+                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-xs"
                       />
                     </div>
                     <div>
@@ -2373,7 +3630,7 @@ export const MembersPage: React.FC = () => {
                         placeholder="e.g. member@email.com"
                         value={formData.contact_email}
                         onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
                       />
                     </div>
                   </div>
@@ -2399,20 +3656,35 @@ export const MembersPage: React.FC = () => {
                             placeholder="e.g. Juan & Maria Bautista"
                             value={formData.guardian_names}
                             onChange={(e) => setFormData({ ...formData, guardian_names: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
                           />
                         </div>
                         <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">
-                            Contact number of parents *
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block font-bold text-charcoal/70">
+                              Contact number of parents *
+                            </label>
+                            {formData.guardian_phone && (
+                              <span className={`text-[10px] font-bold ${formData.guardian_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
+                                {formData.guardian_phone.length}/11
+                              </span>
+                            )}
+                          </div>
                           <input
                             type="tel"
                             required={isKinder}
-                            placeholder="e.g. 0917-123-4567"
+                            maxLength={11}
+                            placeholder="e.g. 09123456789"
                             value={formData.guardian_phone}
-                            onChange={(e) => setFormData({ ...formData, guardian_phone: e.target.value, contact_phone: formData.contact_phone || e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            onChange={(e) => {
+                              const cleaned = sanitizePhoneInput(e.target.value);
+                              setFormData({
+                                ...formData,
+                                guardian_phone: cleaned,
+                                contact_phone: formData.contact_phone || cleaned
+                              });
+                            }}
+                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold"
                           />
                         </div>
                       </div>
@@ -2674,8 +3946,8 @@ export const MembersPage: React.FC = () => {
                                   }
                                 }}
                                 className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${gradWorkStatus === "with_work"
-                                    ? "bg-indigo-600 text-white shadow-xs font-black"
-                                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                  ? "bg-indigo-600 text-white shadow-xs font-black"
+                                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                                   }`}
                               >
                                 <Briefcase className="w-3.5 h-3.5" />
@@ -2688,8 +3960,8 @@ export const MembersPage: React.FC = () => {
                                   setFormData({ ...formData, occupation: "", class_schedule: "" });
                                 }}
                                 className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${gradWorkStatus === "no_work"
-                                    ? "bg-indigo-600 text-white shadow-xs font-black"
-                                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                  ? "bg-indigo-600 text-white shadow-xs font-black"
+                                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                                   }`}
                               >
                                 <span>No Work / Currently Looking</span>
@@ -3039,13 +4311,21 @@ export const MembersPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Family Emergency Contact Phone</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-charcoal/70">Family Emergency Contact Phone</label>
+                  {householdForm.primary_contact_phone && (
+                    <span className={`text-[10px] font-bold ${householdForm.primary_contact_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
+                      {householdForm.primary_contact_phone.length}/11
+                    </span>
+                  )}
+                </div>
                 <input
                   type="tel"
-                  placeholder="+1 (555) 000-0000"
+                  maxLength={11}
+                  placeholder="e.g. 09123456789"
                   value={householdForm.primary_contact_phone}
-                  onChange={(e) => setHouseholdForm({ ...householdForm, primary_contact_phone: e.target.value })}
-                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                  onChange={(e) => setHouseholdForm({ ...householdForm, primary_contact_phone: sanitizePhoneInput(e.target.value) })}
+                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold"
                 />
               </div>
 
@@ -3214,6 +4494,20 @@ export const MembersPage: React.FC = () => {
         isLoading={confirmModalConfig.isLoading}
         onConfirm={confirmModalConfig.onConfirm}
         onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Member Attendance Intelligence, Rates & Streaks Modal */}
+      <MemberAttendanceSummaryModal
+        member={attendanceSummaryMember}
+        isOpen={!!attendanceSummaryMember}
+        initialTab={attendanceSummaryInitialTab}
+        onClose={() => setAttendanceSummaryMember(null)}
+        onMemberUpdated={(updated) => {
+          setMembers(prev => prev.map(m => m.id === attendanceSummaryMember?.id ? { ...m, ...updated } : m));
+          if (selectedMember && selectedMember.id === attendanceSummaryMember?.id) {
+            setSelectedMember(prev => prev ? { ...prev, ...updated } : null);
+          }
+        }}
       />
     </div>
   );
