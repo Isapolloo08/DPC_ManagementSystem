@@ -123,6 +123,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const checkCurrentTokenExpiration = () => {
+      // Pause check if window is minimized or hidden in background
+      if (typeof document !== "undefined" && document.hidden) return;
+
       const currentToken = localStorage.getItem("chms_token");
       if (currentToken && isJwtExpired(currentToken)) {
         setSessionExpiredMessage("Your 3-day login session has expired. Please log in again to continue.");
@@ -132,11 +135,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     window.addEventListener("auth:session-expired", handleSessionExpiredEvent);
     window.addEventListener("focus", checkCurrentTokenExpiration);
-    const timer = setInterval(checkCurrentTokenExpiration, 20000); // Check every 20 seconds
+    document.addEventListener("visibilitychange", checkCurrentTokenExpiration);
+    const timer = setInterval(checkCurrentTokenExpiration, 30000); // 30-second interval, pauses when hidden
 
     return () => {
       window.removeEventListener("auth:session-expired", handleSessionExpiredEvent);
       window.removeEventListener("focus", checkCurrentTokenExpiration);
+      document.removeEventListener("visibilitychange", checkCurrentTokenExpiration);
       clearInterval(timer);
     };
   }, []);

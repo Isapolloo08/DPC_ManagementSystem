@@ -2,11 +2,12 @@ import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
+import { cache, cacheMiddleware } from "../utils/cache";
 
 const router = Router();
 
-// List all funds with financial progress (Optimized: single aggregated query)
-router.get("/funds", async (req: Request, res: Response) => {
+// List all funds with financial progress (Cached for 3 min with ETag)
+router.get("/funds", cacheMiddleware("funds", 180), async (req: Request, res: Response) => {
   try {
     const funds = await db.all(`
       SELECT 
@@ -65,6 +66,7 @@ router.post("/funds", authMiddleware, requireRoles("Admin"), async (req: AuthReq
     `, [name.trim(), description || null, Number(target_amount) || 0]);
 
     const newId = result.lastInsertRowid;
+    cache.invalidate("funds");
     await logAuditAction(req.user!.id, "CREATE", "funds", newId, `Created fund: ${name}`);
     emitRealtimeEvent("finance:changed", { action: "create_fund", id: newId });
 
@@ -94,6 +96,7 @@ router.put("/funds/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
       WHERE id = $4
     `, [name !== undefined ? name.trim() : null, description, target_amount !== undefined ? Number(target_amount) : null, id]);
 
+    cache.invalidate("funds");
     await logAuditAction(req.user!.id, "UPDATE", "funds", Number(id), `Updated fund #${id}`);
     emitRealtimeEvent("finance:changed", { action: "update_fund", id: Number(id) });
     res.json({ message: "Fund updated successfully" });
@@ -107,6 +110,7 @@ router.delete("/funds/:id", authMiddleware, requireRoles("Admin"), async (req: A
   try {
     const id = req.params.id;
     await db.run("DELETE FROM funds WHERE id = $1", [id]);
+    cache.invalidate("funds");
     await logAuditAction(req.user!.id, "DELETE", "funds", Number(id), `Deleted fund #${id}`);
     emitRealtimeEvent("finance:changed", { action: "delete_fund", id: Number(id) });
     res.json({ message: "Fund deleted successfully" });
@@ -118,17 +122,9 @@ router.delete("/funds/:id", authMiddleware, requireRoles("Admin"), async (req: A
 // List donations (Admin sees all; Member sees only personal giving)
 router.get("/donations", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { fund_id, member_id } = req.query;
+    const { fund_id, member_id, page, limit, start_date, end_date } = req.query;
 
-    let query = `
-      SELECT d.*, 
-             f.name as fund_name,
-             m.first_name, m.last_name, m.contact_email
-      FROM donations d
-      JOIN funds f ON d.fund_id = f.id
-      LEFT JOIN members m ON d.member_id = m.id
-      WHERE 1=1
-    `;
+    let whereClause = " WHERE 1=1";
     const params: any[] = [];
 
     // Scoping: If user is Member, only show their linked member records
@@ -138,25 +134,82 @@ router.get("/donations", authMiddleware, async (req: AuthRequest, res: Response)
         return res.json([]);
       }
       params.push(linkedMember.id);
-      query += ` AND d.member_id = $${params.length}`;
+      whereClause += ` AND d.member_id = $${params.length}`;
     } else if (member_id) {
       params.push(member_id);
-      query += ` AND d.member_id = $${params.length}`;
+      whereClause += ` AND d.member_id = $${params.length}`;
     }
 
     if (fund_id) {
       params.push(fund_id);
-      query += ` AND d.fund_id = $${params.length}`;
+      whereClause += ` AND d.fund_id = $${params.length}`;
     }
 
-    query += " ORDER BY d.donated_at DESC";
+    if (start_date && typeof start_date === "string") {
+      params.push(start_date);
+      whereClause += ` AND d.donated_at >= $${params.length}`;
+    }
 
-    const donations = await db.all(query, params);
+    if (end_date && typeof end_date === "string") {
+      params.push(end_date);
+      whereClause += ` AND d.donated_at <= $${params.length}`;
+    }
+
+    const isPaginated = page !== undefined || limit !== undefined;
+    let totalCount = 0;
+    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
+    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
+
+    if (isPaginated) {
+      const countRes = await db.get<{ total: string | number }>(`
+        SELECT COUNT(*) as total
+        FROM donations d
+        JOIN funds f ON d.fund_id = f.id
+        LEFT JOIN members m ON d.member_id = m.id
+        ${whereClause}
+      `, params);
+      totalCount = parseInt(String(countRes?.total || 0), 10);
+    }
+
+    let query = `
+      SELECT d.id, d.member_id, d.fund_id, d.amount, d.donated_at, d.payment_method, d.notes, d.recorded_by,
+             f.name as fund_name,
+             m.first_name, m.last_name, m.contact_email
+      FROM donations d
+      JOIN funds f ON d.fund_id = f.id
+      LEFT JOIN members m ON d.member_id = m.id
+      ${whereClause}
+      ORDER BY d.donated_at DESC
+    `;
+
+    let donations: any[] = [];
+    if (isPaginated) {
+      const offset = (curPage - 1) * curLimit;
+      const paginatedParams = [...params, curLimit, offset];
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      donations = await db.all(query, paginatedParams);
+    } else {
+      donations = await db.all(query, params);
+    }
+
     const formatted = donations.map(d => ({
       ...d,
       amount: Number(d.amount)
     }));
-    res.json(formatted);
+
+    if (isPaginated) {
+      res.json({
+        data: formatted,
+        pagination: {
+          total: totalCount,
+          page: curPage,
+          limit: curLimit,
+          totalPages: Math.ceil(totalCount / curLimit) || 1
+        }
+      });
+    } else {
+      res.json(formatted);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -190,6 +243,7 @@ router.post("/donations", authMiddleware, async (req: AuthRequest, res: Response
     ]);
 
     const newId = result.lastInsertRowid;
+    cache.invalidate("funds");
     await logAuditAction(req.user!.id, "DONATION", "donations", newId, `Recorded donation of $${amount} to fund #${fund_id}`);
     emitRealtimeEvent("finance:changed", { action: "create_donation", id: newId, fund_id, amount });
 

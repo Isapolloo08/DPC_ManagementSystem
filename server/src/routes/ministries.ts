@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
+import { cache, cacheMiddleware } from "../utils/cache";
 
 const router = Router();
 
@@ -48,8 +49,8 @@ router.get("/suggest", async (req: Request, res: Response) => {
   }
 });
 
-// List all ministries with summary metrics (Optimized: 0 N+1 roundtrips)
-router.get("/", async (req: Request, res: Response) => {
+// List all ministries with summary metrics (Optimized: 0 N+1 roundtrips, cached for 2 min with ETag)
+router.get("/", cacheMiddleware("ministries", 120), async (req: Request, res: Response) => {
   try {
     const ministriesSql = `
       SELECT 
@@ -177,6 +178,7 @@ router.post("/", authMiddleware, requireRoles("Admin"), async (req: AuthRequest,
     ]);
 
     const newId = result.lastInsertRowid;
+    cache.invalidate("ministries");
     await logAuditAction(req.user?.id || null, "CREATE", "ministries", newId, `Created ministry ${name.trim()}`);
     emitRealtimeEvent("ministries:changed", { action: "create", id: newId });
     res.status(201).json({ id: newId, message: "Ministry created successfully" });
@@ -225,6 +227,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthReques
       id
     ]);
 
+    cache.invalidate("ministries");
     await logAuditAction(req.user?.id || null, "UPDATE", "ministries", Number(id), `Updated ministry ${name || current.name} age range (${minAgeVal ?? 'all'}-${maxAgeVal ?? 'all'})`);
     
     // Emit real-time events so all pages recalculate members aging-out, ministry metrics, and reports
@@ -250,6 +253,7 @@ router.delete("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthReq
     await db.run("DELETE FROM user_ministries WHERE ministry_id = $1", [id]);
     await db.run("DELETE FROM ministries WHERE id = $1", [id]);
 
+    cache.invalidate("ministries");
     await logAuditAction(req.user?.id || null, "DELETE", "ministries", Number(id), `Deleted ministry ${current.name}`);
     emitRealtimeEvent("ministries:changed", { action: "delete", id: Number(id) });
     res.json({ message: `Ministry '${current.name}' deleted successfully` });

@@ -249,121 +249,151 @@ router.post("/batch-mark", authMiddleware, requireRoles("Admin", "Coordinator", 
     let markedExcusedCount = 0;
     let unmarkedCount = 0;
 
-    // 1. Process Present IDs
-    if (Array.isArray(present_ids) && present_ids.length > 0) {
-      for (const mId of present_ids) {
-        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
-        if (!member) continue;
+    const allMemberIds = Array.from(new Set([
+      ...present_ids,
+      ...absent_ids,
+      ...excused_ids,
+      ...unmark_ids
+    ].map(Number))).filter(id => Boolean(id) && !isNaN(id));
 
-        const ministryId = member.ministry_id || 1;
-        const ministry = await db.get("SELECT * FROM ministries WHERE id = $1", [ministryId]);
-
-        let securityCode: string | null = null;
-        if (ministry && (ministry.name === "Kinder" || ministry.name === "Elementary" || (ministry.max_age && ministry.max_age <= 12))) {
-          securityCode = generateSecurityCode(ministry.name);
-        }
-
-        const dateParams = target_date ? [mId, target_date] : [mId];
-        const existing = await db.get(`SELECT id FROM attendance WHERE member_id = $1 AND ${dateClause}`, dateParams);
-
-        if (existing) {
-          await db.run(`
-            UPDATE attendance
-            SET ministry_id = $1,
-                security_code = COALESCE(security_code, $2),
-                notes = $3,
-                checked_out_at = NULL,
-                checked_in_by = $4
-            WHERE id = $5
-          `, [ministryId, securityCode, service_name, req.user?.id || null, existing.id]);
-        } else {
-          await db.run(`
-            INSERT INTO attendance (
-              member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-          `, [mId, ministryId, securityCode, req.user?.id || null, service_name, checkinTimestamp]);
-        }
-        markedPresentCount++;
-      }
+    if (allMemberIds.length === 0) {
+      return res.json({ success: true, message: "No members to update", stats: {} });
     }
 
-    // 2. Process Absent IDs
-    if (Array.isArray(absent_ids) && absent_ids.length > 0) {
-      for (const mId of absent_ids) {
-        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
-        if (!member) continue;
+    // Single query to fetch all relevant members and ministries
+    const memberRows = await db.all(`
+      SELECT m.id, m.ministry_id, min.name as ministry_name, min.max_age
+      FROM members m
+      LEFT JOIN ministries min ON m.ministry_id = min.id
+      WHERE m.id = ANY($1)
+    `, [allMemberIds]);
 
-        const ministryId = member.ministry_id || 1;
-        const absentNotes = `[ABSENT] Absent from ${service_name}`;
-
-        const dateParams = target_date ? [mId, target_date] : [mId];
-        const existing = await db.get(`SELECT id FROM attendance WHERE member_id = $1 AND ${dateClause}`, dateParams);
-
-        if (existing) {
-          await db.run(`
-            UPDATE attendance
-            SET ministry_id = $1,
-                security_code = NULL,
-                notes = $2,
-                checked_out_at = NULL,
-                checked_in_by = $3
-            WHERE id = $4
-          `, [ministryId, absentNotes, req.user?.id || null, existing.id]);
-        } else {
-          await db.run(`
-            INSERT INTO attendance (
-              member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
-            ) VALUES ($1, $2, NULL, $3, $4, $5)
-          `, [mId, ministryId, req.user?.id || null, absentNotes, checkinTimestamp]);
-        }
-        markedAbsentCount++;
-      }
+    const memberMap = new Map<number, any>();
+    for (const m of memberRows) {
+      memberMap.set(m.id, m);
     }
 
-    // 3. Process Excused IDs
-    if (Array.isArray(excused_ids) && excused_ids.length > 0) {
-      for (const mId of excused_ids) {
-        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
-        if (!member) continue;
+    // Single query to fetch existing attendance records
+    const existingParams = target_date ? [allMemberIds, target_date] : [allMemberIds];
+    const existingRows = await db.all(`
+      SELECT id, member_id, security_code
+      FROM attendance
+      WHERE member_id = ANY($1) AND ${dateClause}
+    `, existingParams);
 
-        const ministryId = member.ministry_id || 1;
-        const excusedNotes = `[EXCUSED] Excused Absence (${service_name})`;
-
-        const dateParams = target_date ? [mId, target_date] : [mId];
-        const existing = await db.get(`SELECT id FROM attendance WHERE member_id = $1 AND ${dateClause}`, dateParams);
-
-        if (existing) {
-          await db.run(`
-            UPDATE attendance
-            SET ministry_id = $1,
-                security_code = NULL,
-                notes = $2,
-                checked_out_at = NULL,
-                checked_in_by = $3
-            WHERE id = $4
-          `, [ministryId, excusedNotes, req.user?.id || null, existing.id]);
-        } else {
-          await db.run(`
-            INSERT INTO attendance (
-              member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
-            ) VALUES ($1, $2, NULL, $3, $4, $5)
-          `, [mId, ministryId, req.user?.id || null, excusedNotes, checkinTimestamp]);
-        }
-        markedExcusedCount++;
-      }
+    const existingMap = new Map<number, any>();
+    for (const r of existingRows) {
+      existingMap.set(r.member_id, r);
     }
 
-    // 4. Process Unmark IDs (Delete attendance record)
-    if (Array.isArray(unmark_ids) && unmark_ids.length > 0) {
-      for (const mId of unmark_ids) {
-        const dateParams = target_date ? [mId, target_date] : [mId];
-        await db.run(`
+    // Execute all updates and inserts atomically in a transaction
+    await db.transaction(async (client) => {
+      // 1. Process Present IDs
+      if (Array.isArray(present_ids) && present_ids.length > 0) {
+        for (const mId of present_ids) {
+          const member = memberMap.get(Number(mId));
+          if (!member) continue;
+
+          const ministryId = member.ministry_id || 1;
+          let securityCode: string | null = null;
+          if (member.ministry_name === "Kinder" || member.ministry_name === "Elementary" || (member.max_age && member.max_age <= 12)) {
+            securityCode = generateSecurityCode(member.ministry_name || "MIN");
+          }
+
+          const existing = existingMap.get(Number(mId));
+          if (existing) {
+            await client.query(`
+              UPDATE attendance
+              SET ministry_id = $1,
+                  security_code = COALESCE(security_code, $2),
+                  notes = $3,
+                  checked_out_at = NULL,
+                  checked_in_by = $4
+              WHERE id = $5
+            `, [ministryId, securityCode, service_name, req.user?.id || null, existing.id]);
+          } else {
+            await client.query(`
+              INSERT INTO attendance (
+                member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
+              ) VALUES ($1, $2, $3, $4, $5, $6)
+            `, [mId, ministryId, securityCode, req.user?.id || null, service_name, checkinTimestamp]);
+          }
+          markedPresentCount++;
+        }
+      }
+
+      // 2. Process Absent IDs
+      if (Array.isArray(absent_ids) && absent_ids.length > 0) {
+        for (const mId of absent_ids) {
+          const member = memberMap.get(Number(mId));
+          if (!member) continue;
+
+          const ministryId = member.ministry_id || 1;
+          const absentNotes = `[ABSENT] Absent from ${service_name}`;
+          const existing = existingMap.get(Number(mId));
+
+          if (existing) {
+            await client.query(`
+              UPDATE attendance
+              SET ministry_id = $1,
+                  security_code = NULL,
+                  notes = $2,
+                  checked_out_at = NULL,
+                  checked_in_by = $3
+              WHERE id = $4
+            `, [ministryId, absentNotes, req.user?.id || null, existing.id]);
+          } else {
+            await client.query(`
+              INSERT INTO attendance (
+                member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
+              ) VALUES ($1, $2, NULL, $3, $4, $5)
+            `, [mId, ministryId, req.user?.id || null, absentNotes, checkinTimestamp]);
+          }
+          markedAbsentCount++;
+        }
+      }
+
+      // 3. Process Excused IDs
+      if (Array.isArray(excused_ids) && excused_ids.length > 0) {
+        for (const mId of excused_ids) {
+          const member = memberMap.get(Number(mId));
+          if (!member) continue;
+
+          const ministryId = member.ministry_id || 1;
+          const excusedNotes = `[EXCUSED] Excused Absence (${service_name})`;
+          const existing = existingMap.get(Number(mId));
+
+          if (existing) {
+            await client.query(`
+              UPDATE attendance
+              SET ministry_id = $1,
+                  security_code = NULL,
+                  notes = $2,
+                  checked_out_at = NULL,
+                  checked_in_by = $3
+              WHERE id = $4
+            `, [ministryId, excusedNotes, req.user?.id || null, existing.id]);
+          } else {
+            await client.query(`
+              INSERT INTO attendance (
+                member_id, ministry_id, security_code, checked_in_by, notes, checked_in_at
+              ) VALUES ($1, $2, NULL, $3, $4, $5)
+            `, [mId, ministryId, req.user?.id || null, excusedNotes, checkinTimestamp]);
+          }
+          markedExcusedCount++;
+        }
+      }
+
+      // 4. Process Unmark IDs (Delete attendance record)
+      if (Array.isArray(unmark_ids) && unmark_ids.length > 0) {
+        const deleteParams = target_date ? [unmark_ids, target_date] : [unmark_ids];
+        const delRes = await client.query(`
           DELETE FROM attendance
-          WHERE member_id = $1 AND ${dateClause}
-        `, dateParams);
-        unmarkedCount++;
+          WHERE member_id = ANY($1) AND ${dateClause}
+        `, deleteParams);
+        unmarkedCount += delRes.rowCount || 0;
       }
-    }
+    });
 
     const totalUpdated = markedPresentCount + markedAbsentCount + markedExcusedCount + unmarkedCount;
     await logAuditAction(

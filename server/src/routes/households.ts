@@ -9,16 +9,56 @@ const router = Router();
 // List households with member summaries (Optimized: 0 N+1 roundtrips)
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const [households, allMembers] = await Promise.all([
-      db.all(`SELECT * FROM households ORDER BY name ASC`),
-      db.all(`
+    const { page, limit, search } = req.query;
+
+    let whereClause = " WHERE 1=1";
+    const params: any[] = [];
+
+    if (search && typeof search === "string" && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      whereClause += ` AND (name ILIKE $${params.length} OR address ILIKE $${params.length} OR primary_contact_phone ILIKE $${params.length})`;
+    }
+
+    const isPaginated = page !== undefined || limit !== undefined;
+    let totalCount = 0;
+    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
+    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
+
+    if (isPaginated) {
+      const countRes = await db.get<{ total: string | number }>(`
+        SELECT COUNT(*) as total FROM households ${whereClause}
+      `, params);
+      totalCount = parseInt(String(countRes?.total || 0), 10);
+    }
+
+    let query = `
+      SELECT id, name, address, primary_contact_phone, created_at
+      FROM households
+      ${whereClause}
+      ORDER BY name ASC
+    `;
+
+    let households: any[] = [];
+    if (isPaginated) {
+      const offset = (curPage - 1) * curLimit;
+      const paginatedParams = [...params, curLimit, offset];
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      households = await db.all(query, paginatedParams);
+    } else {
+      households = await db.all(query, params);
+    }
+
+    const householdIds = households.map(h => h.id);
+    let allMembers: any[] = [];
+    if (householdIds.length > 0) {
+      allMembers = await db.all(`
         SELECT m.id, m.household_id, m.first_name, m.last_name, m.birthdate, m.gender, min.name as ministry_name, min.color as ministry_color
         FROM members m
         LEFT JOIN ministries min ON m.ministry_id = min.id
-        WHERE m.household_id IS NOT NULL
+        WHERE m.household_id = ANY($1)
         ORDER BY LOWER(m.first_name) ASC, LOWER(m.last_name) ASC
-      `)
-    ]);
+      `, [householdIds]);
+    }
 
     // Group members by household_id in memory
     const membersByHousehold = new Map<number, any[]>();
@@ -42,7 +82,19 @@ router.get("/", async (req: Request, res: Response) => {
       };
     });
 
-    res.json(detailed);
+    if (isPaginated) {
+      res.json({
+        data: detailed,
+        pagination: {
+          total: totalCount,
+          page: curPage,
+          limit: curLimit,
+          totalPages: Math.ceil(totalCount / curLimit) || 1
+        }
+      });
+    } else {
+      res.json(detailed);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

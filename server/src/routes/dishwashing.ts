@@ -198,9 +198,8 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
           `SELECT id FROM members 
            WHERE status = 'active' 
              AND birthdate IS NOT NULL 
-             AND birthdate != '' 
-             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) >= $1 
-             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) <= $2`,
+             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) >= $1 
+             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) <= $2`,
           [minAge, maxAge]
         );
         ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
@@ -332,9 +331,8 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
           `SELECT id FROM members 
            WHERE status = 'active' 
              AND birthdate IS NOT NULL 
-             AND birthdate != '' 
-             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) >= $1 
-             AND (CAST(strftime('%Y', 'now') AS INTEGER) - CAST(strftime('%Y', birthdate) AS INTEGER)) <= $2`,
+             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) >= $1 
+             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) <= $2`,
           [minAge, maxAge]
         );
         ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
@@ -626,45 +624,48 @@ router.post("/schedule/swap", authMiddleware, async (req: AuthRequest, res: Resp
     const team1 = await db.get("SELECT name, ministry_id, biblestudy_group_id, leader_name FROM dishwashing_teams WHERE id = $1", [teamId1]);
     const team2 = await db.get("SELECT name, ministry_id, biblestudy_group_id, leader_name FROM dishwashing_teams WHERE id = $1", [teamId2]);
 
-    // Save team2 to date1
-    await db.run(`
-      INSERT INTO dishwashing_schedules (
-        duty_date, team_id, biblestudy_group_id, ministry_id, assigned_name, leader_name, status, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'swapped', $7)
-      ON CONFLICT (duty_date, team_id) DO UPDATE SET
-        team_id = EXCLUDED.team_id,
-        assigned_name = EXCLUDED.assigned_name,
-        status = 'swapped',
-        notes = EXCLUDED.notes
-    `, [
-      date1,
-      teamId2,
-      team2?.biblestudy_group_id || null,
-      team2?.ministry_id || null,
-      team2?.name || "Assigned Team",
-      team2?.leader_name || "",
-      `Swapped turn with ${team1?.name} (originally scheduled for ${date2})`
-    ]);
+    // Execute swap atomically inside a transaction
+    await db.transaction(async (client) => {
+      // Save team2 to date1
+      await client.query(`
+        INSERT INTO dishwashing_schedules (
+          duty_date, team_id, biblestudy_group_id, ministry_id, assigned_name, leader_name, status, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'swapped', $7)
+        ON CONFLICT (duty_date, team_id) DO UPDATE SET
+          team_id = EXCLUDED.team_id,
+          assigned_name = EXCLUDED.assigned_name,
+          status = 'swapped',
+          notes = EXCLUDED.notes
+      `, [
+        date1,
+        teamId2,
+        team2?.biblestudy_group_id || null,
+        team2?.ministry_id || null,
+        team2?.name || "Assigned Team",
+        team2?.leader_name || "",
+        `Swapped turn with ${team1?.name} (originally scheduled for ${date2})`
+      ]);
 
-    // Save team1 to date2
-    await db.run(`
-      INSERT INTO dishwashing_schedules (
-        duty_date, team_id, biblestudy_group_id, ministry_id, assigned_name, leader_name, status, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'swapped', $7)
-      ON CONFLICT (duty_date, team_id) DO UPDATE SET
-        team_id = EXCLUDED.team_id,
-        assigned_name = EXCLUDED.assigned_name,
-        status = 'swapped',
-        notes = EXCLUDED.notes
-    `, [
-      date2,
-      teamId1,
-      team1?.biblestudy_group_id || null,
-      team1?.ministry_id || null,
-      team1?.name || "Assigned Team",
-      team1?.leader_name || "",
-      `Swapped turn with ${team2?.name} (originally scheduled for ${date1})`
-    ]);
+      // Save team1 to date2
+      await client.query(`
+        INSERT INTO dishwashing_schedules (
+          duty_date, team_id, biblestudy_group_id, ministry_id, assigned_name, leader_name, status, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'swapped', $7)
+        ON CONFLICT (duty_date, team_id) DO UPDATE SET
+          team_id = EXCLUDED.team_id,
+          assigned_name = EXCLUDED.assigned_name,
+          status = 'swapped',
+          notes = EXCLUDED.notes
+      `, [
+        date2,
+        teamId1,
+        team1?.biblestudy_group_id || null,
+        team1?.ministry_id || null,
+        team1?.name || "Assigned Team",
+        team1?.leader_name || "",
+        `Swapped turn with ${team2?.name} (originally scheduled for ${date1})`
+      ]);
+    });
 
     if (req.user) {
       await logAuditAction(req.user.id, "SWAP_DISHWASHING_DUTY", "dishwashing_schedules", Number(teamId1), `Swapped dishwashing turns between ${date1} and ${date2}`);

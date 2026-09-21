@@ -2,11 +2,12 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
+import { cache, cacheMiddleware } from "../utils/cache";
 
 const router = Router();
 
-// List all roles
-router.get("/roles", async (req: Request, res: Response) => {
+// List all roles (Cached for 10 minutes with ETag)
+router.get("/roles", cacheMiddleware("roles", 600), async (req: Request, res: Response) => {
   try {
     const roles = await db.all(`
       SELECT r.*, COUNT(u.id) as user_count
@@ -39,7 +40,42 @@ router.get("/roles", async (req: Request, res: Response) => {
 // List users with filtering (Accessible to authenticated staff/leaders for lookups)
 router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { role_id, role_name, search } = req.query;
+    const { role_id, role_name, search, page, limit } = req.query;
+
+    let whereClause = " WHERE 1=1";
+    const params: any[] = [];
+
+    if (role_id) {
+      params.push(role_id);
+      whereClause += ` AND u.role_id = $${params.length}`;
+    }
+
+    if (role_name && typeof role_name === "string") {
+      params.push(role_name);
+      whereClause += ` AND LOWER(r.name) = LOWER($${params.length})`;
+    }
+
+    if (search && typeof search === "string") {
+      params.push(`%${search}%`);
+      const pIdx = params.length;
+      whereClause += ` AND (u.name ILIKE $${pIdx} OR u.email ILIKE $${pIdx} OR (u.username IS NOT NULL AND u.username ILIKE $${pIdx}))`;
+    }
+
+    const isPaginated = page !== undefined || limit !== undefined;
+    let totalCount = 0;
+    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
+    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
+
+    if (isPaginated) {
+      const countRes = await db.get<{ total: string | number }>(`
+        SELECT COUNT(*) as total
+        FROM users u
+        JOIN roles r ON u.role_id = r.id
+        LEFT JOIN members m ON m.user_id = u.id
+        ${whereClause}
+      `, params);
+      totalCount = parseInt(String(countRes?.total || 0), 10);
+    }
 
     let query = `
       SELECT u.id, u.name, u.username, u.email, u.role_id, u.created_at,
@@ -50,36 +86,30 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
       FROM users u
       JOIN roles r ON u.role_id = r.id
       LEFT JOIN members m ON m.user_id = u.id
-      WHERE 1=1
+      ${whereClause}
+      ORDER BY u.role_id ASC, u.name ASC
     `;
-    const params: any[] = [];
 
-    if (role_id) {
-      params.push(role_id);
-      query += ` AND u.role_id = $${params.length}`;
+    let users: any[] = [];
+    if (isPaginated) {
+      const offset = (curPage - 1) * curLimit;
+      const paginatedParams = [...params, curLimit, offset];
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      users = await db.all(query, paginatedParams);
+    } else {
+      users = await db.all(query, params);
     }
 
-    if (role_name && typeof role_name === "string") {
-      params.push(role_name);
-      query += ` AND LOWER(r.name) = LOWER($${params.length})`;
-    }
-
-    if (search && typeof search === "string") {
-      params.push(`%${search}%`);
-      const pIdx = params.length;
-      query += ` AND (u.name ILIKE $${pIdx} OR u.email ILIKE $${pIdx} OR (u.username IS NOT NULL AND u.username ILIKE $${pIdx}))`;
-    }
-
-    query += " ORDER BY u.role_id ASC, u.name ASC";
-
-    const [users, allUserMinistries] = await Promise.all([
-      db.all(query, params),
-      db.all(`
+    const userIds = users.map(u => u.id);
+    let allUserMinistries: any[] = [];
+    if (userIds.length > 0) {
+      allUserMinistries = await db.all(`
         SELECT um.user_id, m.id, m.name, m.color
         FROM user_ministries um
         JOIN ministries m ON um.ministry_id = m.id
-      `)
-    ]);
+        WHERE um.user_id = ANY($1)
+      `, [userIds]);
+    }
 
     // Group user ministries in memory
     const ministriesByUser = new Map<number, any[]>();
@@ -97,7 +127,19 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
       linked_member_name: u.member_first_name ? `${u.member_first_name} ${u.member_last_name}` : null
     }));
 
-    res.json(formatted);
+    if (isPaginated) {
+      res.json({
+        data: formatted,
+        pagination: {
+          total: totalCount,
+          page: curPage,
+          limit: curLimit,
+          totalPages: Math.ceil(totalCount / curLimit) || 1
+        }
+      });
+    } else {
+      res.json(formatted);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

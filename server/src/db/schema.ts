@@ -1,8 +1,7 @@
-import postgres from "postgres";
+import { Pool, PoolClient, QueryResult } from "pg";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
-import { error } from "console";
 
 const envCandidates = [
   path.resolve(process.cwd(), ".env"),
@@ -29,59 +28,163 @@ export function cleanDbConnectionString(raw?: string): string {
 }
 
 const connectionString = cleanDbConnectionString(process.env.DATABASE_URL);
-
 const isSupabaseOrRemote = connectionString.includes("supabase") || connectionString.includes("render") || connectionString.includes("sslmode=require") || process.env.NODE_ENV === "production";
 
-export const sql = postgres(connectionString, {
-  max: 20,
-  idle_timeout: 120,
-  connect_timeout: 20,
-  max_lifetime: 60 * 30, // 30 minutes
-  ssl: isSupabaseOrRemote ? "require" : undefined,
-  prepare: false, // Prevents statement cache issues on PgBouncer / Supabase transaction poolers
-  onnotice: () => { }, // Silence harmless PostgreSQL NOTICE logs
-  transform: {
-    undefined: null
-  }
+/**
+ * Shared PostgreSQL connection pool (Single instance across all requests)
+ * Configured with max 15, idleTimeoutMillis 30000, connectionTimeoutMillis 5000
+ */
+export const pool = new Pool({
+  connectionString,
+  max: 15,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+  ssl: isSupabaseOrRemote ? { rejectUnauthorized: false } : undefined
 });
 
+// Handle unexpected idle client errors
+pool.on("error", (err: Error) => {
+  console.error("⚠️ [pg.Pool] Unexpected error on idle PostgreSQL client:", err);
+});
+
+import { logSlowQuery } from "../utils/logger";
+
 /**
- * Clean helper wrapper for executing PostgreSQL queries
+ * Clean helper wrapper for executing PostgreSQL queries & transactions
  */
 export const db = {
+  pool,
+
   /**
    * Execute raw SQL string (e.g. DDL / multi-statement script)
    */
   async exec(queryStr: string) {
-    return await sql.unsafe(queryStr);
+    const start = Date.now();
+    try {
+      return await pool.query(queryStr);
+    } finally {
+      logSlowQuery(queryStr, Date.now() - start);
+    }
+  },
+
+  /**
+   * Execute parameterized query
+   */
+  async query<T = any>(queryStr: string, params: any[] = []): Promise<QueryResult<T>> {
+    const start = Date.now();
+    try {
+      return await pool.query<T>(queryStr, params);
+    } finally {
+      logSlowQuery(queryStr, Date.now() - start, params);
+    }
   },
 
   /**
    * Query all rows
    */
   async all<T = any>(queryStr: string, params: any[] = []): Promise<T[]> {
-    const rows = await sql.unsafe(queryStr, params);
-    return Array.from(rows) as T[];
+    const start = Date.now();
+    try {
+      const res = await pool.query<T>(queryStr, params);
+      return res.rows;
+    } finally {
+      logSlowQuery(queryStr, Date.now() - start, params);
+    }
   },
 
   /**
    * Query single row
    */
   async get<T = any>(queryStr: string, params: any[] = []): Promise<T | null> {
-    const rows = await sql.unsafe(queryStr, params);
-    return (rows[0] as T) || null;
+    const start = Date.now();
+    try {
+      const res = await pool.query<T>(queryStr, params);
+      return res.rows[0] || null;
+    } finally {
+      logSlowQuery(queryStr, Date.now() - start, params);
+    }
   },
 
   /**
    * Execute INSERT/UPDATE/DELETE and return metadata
    */
   async run(queryStr: string, params: any[] = []) {
-    const rows = await sql.unsafe(queryStr, params);
-    return {
-      lastInsertRowid: (rows[0] as any)?.id || null,
-      changes: rows.count || 0
-    };
+    const start = Date.now();
+    try {
+      const res = await pool.query(queryStr, params);
+      return {
+        lastInsertRowid: (res.rows[0] as any)?.id || null,
+        changes: res.rowCount || 0
+      };
+    } finally {
+      logSlowQuery(queryStr, Date.now() - start, params);
+    }
+  },
+
+  /**
+   * Execute operations inside a database transaction
+   */
+  async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+    const start = Date.now();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await callback(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+      logSlowQuery("TRANSACTION BLOCK", Date.now() - start);
+    }
   }
+};
+
+/**
+ * Tagged template helper for raw / parameterized SQL compatibility
+ */
+export const sql: any = async (strings: TemplateStringsArray, ...values: any[]) => {
+  let text = "";
+  const params: any[] = [];
+  for (let i = 0; i < strings.length; i++) {
+    text += strings[i];
+    if (i < values.length) {
+      params.push(values[i]);
+      text += `$${params.length}`;
+    }
+  }
+  const result = await pool.query(text, params);
+  return result.rows;
+};
+
+sql.unsafe = async (queryStr: string, params: any[] = []) => {
+  const result = await pool.query(queryStr, params);
+  return result.rows;
+};
+
+sql.begin = async (callback: (tx: any) => Promise<any>) => {
+  return db.transaction(async (client) => {
+    const txSql: any = async (strings: TemplateStringsArray, ...values: any[]) => {
+      let text = "";
+      const params: any[] = [];
+      for (let i = 0; i < strings.length; i++) {
+        text += strings[i];
+        if (i < values.length) {
+          params.push(values[i]);
+          text += `$${params.length}`;
+        }
+      }
+      const res = await client.query(text, params);
+      return res.rows;
+    };
+    txSql.unsafe = async (q: string, p: any[] = []) => {
+      const res = await client.query(q, p);
+      return res.rows;
+    };
+    return await callback(txSql);
+  });
 };
 
 /**
@@ -607,6 +710,18 @@ export async function initSchema() {
         }
       } catch (srvErr: any) {
         console.warn("Services migration note:", srvErr.message);
+      }
+
+      // 14. Ensure composite and query performance indexes exist
+      try {
+        const perfIndexesMigrationPath = getMigrationFilePath("006_performance_indexes.sql");
+        if (perfIndexesMigrationPath && fs.existsSync(perfIndexesMigrationPath)) {
+          const perfIndexesSql = fs.readFileSync(perfIndexesMigrationPath, "utf-8");
+          await sql.unsafe(perfIndexesSql);
+          console.log("⚡ Applied performance composite indexes (Migration 006).");
+        }
+      } catch (perfErr: any) {
+        console.warn("Performance indexes note:", perfErr.message);
       }
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {

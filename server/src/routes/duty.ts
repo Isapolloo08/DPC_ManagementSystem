@@ -37,7 +37,7 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
   try {
     const { ministry_id } = req.query;
     let query = `
-      SELECT dt.*, 
+      SELECT dt.id, dt.name, dt.ministry_id, dt.leader_id, dt.leader_name, dt.color, dt.order_seq, dt.tasks_checklist, dt.created_at,
              min.name as ministry_name, min.color as ministry_color,
              m.first_name as leader_first_name, m.last_name as leader_last_name, m.contact_phone as leader_phone
       FROM duty_teams dt
@@ -52,18 +52,22 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
     }
     query += " ORDER BY dt.order_seq ASC, dt.id ASC";
 
-    const [teams, allDutyMembers] = await Promise.all([
-      db.all(query, params),
-      db.all(`
+    const teams = await db.all(query, params);
+    const teamIds = teams.map(t => t.id);
+
+    let allDutyMembers: any[] = [];
+    if (teamIds.length > 0) {
+      allDutyMembers = await db.all(`
         SELECT dtm.id as assignment_id, dtm.team_id, dtm.role as team_role, dtm.joined_at,
                m.id as member_id, m.first_name, m.last_name, m.contact_phone, m.contact_email, m.photo_url,
                min.name as ministry_name
         FROM duty_team_members dtm
         JOIN members m ON dtm.member_id = m.id
         LEFT JOIN ministries min ON m.ministry_id = min.id
+        WHERE dtm.team_id = ANY($1)
         ORDER BY CASE WHEN dtm.role = 'Team Leader' THEN 1 ELSE 2 END, LOWER(m.first_name) ASC, LOWER(m.last_name) ASC
-      `)
-    ]);
+      `, [teamIds]);
+    }
 
     // Group members by team_id in memory
     const membersByTeam = new Map<number, any[]>();

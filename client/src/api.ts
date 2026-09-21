@@ -58,6 +58,42 @@ export const getApiBase = () => {
   return `${protocol}//${hostname}:4000/api`;
 };
 
+// ============================================================
+// Local In-Memory Reference Cache & Invalidation Engine
+// ============================================================
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const referenceCache = new Map<string, CacheEntry<any>>();
+
+export function getCached<T>(key: string): T | null {
+  const entry = referenceCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    referenceCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+export function setCached<T>(key: string, data: T, ttlMs = 5 * 60 * 1000): void {
+  referenceCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+
+export function invalidateCache(pattern?: string | RegExp): void {
+  if (!pattern) {
+    referenceCache.clear();
+    return;
+  }
+  for (const key of Array.from(referenceCache.keys())) {
+    if (typeof pattern === "string" ? key.startsWith(pattern) : pattern.test(key)) {
+      referenceCache.delete(key);
+    }
+  }
+}
+
 function getHeaders(): HeadersInit {
   const token = localStorage.getItem("chms_token");
   return {
@@ -66,44 +102,86 @@ function getHeaders(): HeadersInit {
   };
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Robust HTTP client with Exponential Backoff + Jitter retry for network & 5xx errors
+ */
+async function request<T>(endpoint: string, options: RequestInit = {}, maxRetries = 3): Promise<T> {
   const apiBase = getApiBase();
-  const res = await fetch(`${apiBase}${endpoint}`, {
-    ...options,
-    headers: {
-      ...getHeaders(),
-      ...options.headers
-    }
-  });
+  const method = (options.method || "GET").toUpperCase();
+  const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
 
-  let data: any = null;
-  try {
-    data = await res.json();
-  } catch {
-    // If response is not JSON
-  }
+  let attempt = 0;
+  while (true) {
+    attempt++;
+    try {
+      const res = await fetch(`${apiBase}${endpoint}`, {
+        ...options,
+        headers: {
+          ...getHeaders(),
+          ...options.headers
+        }
+      });
 
-  if (!res.ok) {
-    if (res.status === 401 && typeof window !== "undefined") {
-      const currentToken = localStorage.getItem("chms_token");
-      if (
-        currentToken &&
-        !endpoint.includes("/auth/login") &&
-        !endpoint.includes("/auth/register") &&
-        !endpoint.includes("/auth/setup-status")
-      ) {
-        window.dispatchEvent(
-          new CustomEvent("auth:session-expired", {
-            detail: {
-              message: data?.error || "Your 3-day login session has expired. Please log in again to continue."
-            }
-          })
-        );
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // If response is not JSON
       }
+
+      if (!res.ok) {
+        // 1. Handle 401 Session Expiration
+        if (res.status === 401 && typeof window !== "undefined") {
+          const currentToken = localStorage.getItem("chms_token");
+          if (
+            currentToken &&
+            !endpoint.includes("/auth/login") &&
+            !endpoint.includes("/auth/register") &&
+            !endpoint.includes("/auth/setup-status")
+          ) {
+            window.dispatchEvent(
+              new CustomEvent("auth:session-expired", {
+                detail: {
+                  message: data?.error || "Your 3-day login session has expired. Please log in again to continue."
+                }
+              })
+            );
+          }
+        }
+
+        // 2. Retry only on 5xx server errors for idempotent GET requests
+        if (res.status >= 500 && isIdempotent && attempt <= maxRetries) {
+          const backoff = Math.pow(2, attempt) * 200; // 400ms, 800ms, 1600ms
+          const jitter = Math.random() * 150; // Random jitter prevents synchronized retry waves
+          await sleep(backoff + jitter);
+          continue;
+        }
+
+        throw new Error(data?.error || data?.message || `Server request failed with status ${res.status}`);
+      }
+
+      return data as T;
+    } catch (err: any) {
+      // If user/component intentionally aborted request, don't retry
+      if (err.name === "AbortError") {
+        throw err;
+      }
+
+      // Retry on network errors for idempotent requests
+      if (isIdempotent && attempt <= maxRetries) {
+        const backoff = Math.pow(2, attempt) * 200;
+        const jitter = Math.random() * 150;
+        await sleep(backoff + jitter);
+        continue;
+      }
+
+      throw err;
     }
-    throw new Error(data?.error || data?.message || `Server request failed with status ${res.status}`);
   }
-  return data;
 }
 
 export const api = {
@@ -133,20 +211,33 @@ export const api = {
   }),
   getProfileActivity: () => request<UserActivityStats>("/auth/profile-activity"),
 
-  // Users & Roles Management
-  getRoles: () => request<Role[]>("/roles"),
-  getUsers: (params?: { role_id?: number; role_name?: string; search?: string }) => {
+  // Users & Roles Management (Cached reference data)
+  getRoles: async (forceRefresh = false) => {
+    if (!forceRefresh) {
+      const cached = getCached<Role[]>("ref:roles");
+      if (cached) return cached;
+    }
+    const roles = await request<Role[]>("/roles");
+    setCached("ref:roles", roles, 15 * 60 * 1000); // 15 mins
+    return roles;
+  },
+  getUsers: (params?: { role_id?: number; role_name?: string; search?: string; page?: number; limit?: number }, options?: { signal?: AbortSignal }) => {
     const q = new URLSearchParams();
     if (params?.role_id) q.set("role_id", String(params.role_id));
     if (params?.role_name) q.set("role_name", params.role_name);
     if (params?.search) q.set("search", params.search);
-    return request<User[]>(`/users?${q.toString()}`);
+    if (params?.page !== undefined) q.set("page", String(params.page));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    return request<any>(`/users?${q.toString()}`, { signal: options?.signal });
   },
   getUser: (id: number) => request<User>(`/users/${id}`),
-  createUser: (userData: { name: string; username?: string; email: string; password: string; role_id: number; ministry_ids?: number[]; member_id?: number | null }) => request<{ id: number; message: string }>("/users", {
-    method: "POST",
-    body: JSON.stringify(userData)
-  }),
+  createUser: async (userData: { name: string; username?: string; email: string; password: string; role_id: number; ministry_ids?: number[]; member_id?: number | null }) => {
+    const res = await request<{ id: number; message: string }>("/users", {
+      method: "POST",
+      body: JSON.stringify(userData)
+    });
+    return res;
+  },
   updateUser: (id: number, userData: { name?: string; username?: string; email?: string; password?: string; role_id?: number; ministry_ids?: number[]; member_id?: number | null }) => request<{ message: string }>(`/users/${id}`, {
     method: "PUT",
     body: JSON.stringify(userData)
@@ -155,21 +246,41 @@ export const api = {
     method: "DELETE"
   }),
 
-  // Ministries
-  getMinistries: () => request<Ministry[]>("/ministries"),
+  // Ministries (Cached reference data)
+  getMinistries: async (forceRefresh = false) => {
+    if (!forceRefresh) {
+      const cached = getCached<Ministry[]>("ref:ministries");
+      if (cached) return cached;
+    }
+    const data = await request<Ministry[]>("/ministries");
+    setCached("ref:ministries", data, 10 * 60 * 1000); // 10 mins
+    return data;
+  },
   getMinistry: (id: number) => request<Ministry & { members: Member[] }>(`/ministries/${id}`),
   suggestMinistry: (birthdate: string) => request<{ calculated_age: number; suggested_ministry: Ministry }>(`/ministries/suggest?birthdate=${birthdate}`),
-  createMinistry: (data: Partial<Ministry>) => request<{ id: number; message: string }>("/ministries", {
-    method: "POST",
-    body: JSON.stringify(data)
-  }),
-  updateMinistry: (id: number, data: Partial<Ministry>) => request<{ message: string }>(`/ministries/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data)
-  }),
-  deleteMinistry: (id: number) => request<{ message: string }>(`/ministries/${id}`, {
-    method: "DELETE"
-  }),
+  createMinistry: async (data: Partial<Ministry>) => {
+    const res = await request<{ id: number; message: string }>("/ministries", {
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+    invalidateCache("ref:ministries");
+    return res;
+  },
+  updateMinistry: async (id: number, data: Partial<Ministry>) => {
+    const res = await request<{ message: string }>(`/ministries/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data)
+    });
+    invalidateCache("ref:ministries");
+    return res;
+  },
+  deleteMinistry: async (id: number) => {
+    const res = await request<{ message: string }>(`/ministries/${id}`, {
+      method: "DELETE"
+    });
+    invalidateCache("ref:ministries");
+    return res;
+  },
 
   // Members & Households
   getMembers: (params?: {
@@ -449,22 +560,46 @@ export const api = {
     method: "DELETE"
   }),
 
-  // Finance & Giving
-  getFunds: () => request<Fund[]>("/finance/funds"),
-  createFund: (data: Partial<Fund>) => request<{ id: number; message: string }>("/finance/funds", {
-    method: "POST",
-    body: JSON.stringify(data)
-  }),
-  updateFund: (id: number, data: Partial<Fund>) => request<{ message: string }>(`/finance/funds/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data)
-  }),
-  deleteFund: (id: number) => request<{ message: string }>(`/finance/funds/${id}`, {
-    method: "DELETE"
-  }),
-  getDonations: (fund_id?: number) => {
-    const q = fund_id ? `?fund_id=${fund_id}` : "";
-    return request<Donation[]>(`/finance/donations${q}`);
+  // Finance & Giving (Cached reference data for funds)
+  getFunds: async (forceRefresh = false) => {
+    if (!forceRefresh) {
+      const cached = getCached<Fund[]>("ref:funds");
+      if (cached) return cached;
+    }
+    const data = await request<Fund[]>("/finance/funds");
+    setCached("ref:funds", data, 10 * 60 * 1000); // 10 mins
+    return data;
+  },
+  createFund: async (data: Partial<Fund>) => {
+    const res = await request<{ id: number; message: string }>("/finance/funds", {
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+    invalidateCache("ref:funds");
+    return res;
+  },
+  updateFund: async (id: number, data: Partial<Fund>) => {
+    const res = await request<{ message: string }>(`/finance/funds/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data)
+    });
+    invalidateCache("ref:funds");
+    return res;
+  },
+  deleteFund: async (id: number) => {
+    const res = await request<{ message: string }>(`/finance/funds/${id}`, {
+      method: "DELETE"
+    });
+    invalidateCache("ref:funds");
+    return res;
+  },
+  getDonations: (fund_id?: number, params?: { page?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (fund_id) q.set("fund_id", String(fund_id));
+    if (params?.page !== undefined) q.set("page", String(params.page));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    const queryStr = q.toString() ? `?${q.toString()}` : "";
+    return request<any>(`/finance/donations${queryStr}`);
   },
   recordDonation: (data: { member_id?: number; fund_id: number; amount: number; method?: string; notes?: string }) =>
     request<{ id: number; message: string }>("/finance/donations", {
@@ -476,35 +611,70 @@ export const api = {
     return request<any>(`/finance/statement/${memberId}${q}`);
   },
 
-  // Master Lookups & System Settings
-  getLookups: (paramsOrType?: { type?: string; active_only?: boolean } | string, activeOnly = true) => {
+  // Master Lookups & System Settings (Cached reference data)
+  getLookups: async (paramsOrType?: { type?: string; active_only?: boolean } | string, activeOnly = true, forceRefresh = false) => {
     const q = new URLSearchParams();
+    let cacheKey = "ref:lookups:all";
     if (typeof paramsOrType === "string") {
       if (paramsOrType) q.set("type", paramsOrType);
       if (activeOnly) q.set("active_only", "true");
+      cacheKey = `ref:lookups:${paramsOrType}:${activeOnly}`;
     } else if (paramsOrType) {
       if (paramsOrType.type) q.set("type", paramsOrType.type);
       if (paramsOrType.active_only !== undefined) q.set("active_only", String(paramsOrType.active_only));
+      cacheKey = `ref:lookups:${paramsOrType.type || "all"}:${paramsOrType.active_only ?? true}`;
     }
-    return request<SystemLookup[]>(`/settings/lookups?${q.toString()}`);
-  },
-  createLookup: (data: Partial<SystemLookup>) => request<{ id: number; message: string }>("/settings/lookups", {
-    method: "POST",
-    body: JSON.stringify(data)
-  }),
-  updateLookup: (id: number, data: Partial<SystemLookup>) => request<{ message: string }>(`/settings/lookups/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data)
-  }),
-  deleteLookup: (id: number) => request<{ message: string }>(`/settings/lookups/${id}`, {
-    method: "DELETE"
-  }),
 
-  getGeneralSettings: () => request<{ settings: Record<string, string>; list: SystemSetting[] }>("/settings/general"),
-  updateGeneralSettings: (settings: Record<string, string>) => request<{ message: string }>("/settings/general", {
-    method: "PUT",
-    body: JSON.stringify({ settings })
-  }),
+    if (!forceRefresh) {
+      const cached = getCached<SystemLookup[]>(cacheKey);
+      if (cached) return cached;
+    }
+
+    const data = await request<SystemLookup[]>(`/settings/lookups?${q.toString()}`);
+    setCached(cacheKey, data, 10 * 60 * 1000); // 10 mins
+    return data;
+  },
+  createLookup: async (data: Partial<SystemLookup>) => {
+    const res = await request<{ id: number; message: string }>("/settings/lookups", {
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+    invalidateCache("ref:lookups");
+    return res;
+  },
+  updateLookup: async (id: number, data: Partial<SystemLookup>) => {
+    const res = await request<{ message: string }>(`/settings/lookups/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data)
+    });
+    invalidateCache("ref:lookups");
+    return res;
+  },
+  deleteLookup: async (id: number) => {
+    const res = await request<{ message: string }>(`/settings/lookups/${id}`, {
+      method: "DELETE"
+    });
+    invalidateCache("ref:lookups");
+    return res;
+  },
+
+  getGeneralSettings: async (forceRefresh = false) => {
+    if (!forceRefresh) {
+      const cached = getCached<{ settings: Record<string, string>; list: SystemSetting[] }>("ref:settings_general");
+      if (cached) return cached;
+    }
+    const data = await request<{ settings: Record<string, string>; list: SystemSetting[] }>("/settings/general");
+    setCached("ref:settings_general", data, 10 * 60 * 1000); // 10 mins
+    return data;
+  },
+  updateGeneralSettings: async (settings: Record<string, string>) => {
+    const res = await request<{ message: string }>("/settings/general", {
+      method: "PUT",
+      body: JSON.stringify({ settings })
+    });
+    invalidateCache("ref:settings_general");
+    return res;
+  },
 
   // Dashboard Reports & Audit
   getDashboardMetrics: (ministry_id?: number) => {

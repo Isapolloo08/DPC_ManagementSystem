@@ -9,49 +9,77 @@ const router = Router();
 // List Bible study groups with members
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { ministry_id, category, meeting_day, search } = req.query;
+    const { ministry_id, category, meeting_day, search, page, limit } = req.query;
 
-    let query = `
-      SELECT g.*, min.name as ministry_name, min.color as ministry_color,
-             (SELECT COUNT(*) FROM bible_study_members WHERE group_id = g.id) as current_member_count
-      FROM bible_study_groups g
-      LEFT JOIN ministries min ON g.ministry_id = min.id
-      WHERE 1=1
-    `;
+    let whereClause = " WHERE 1=1";
     const params: any[] = [];
 
     if (ministry_id) {
       params.push(ministry_id);
-      query += ` AND g.ministry_id = $${params.length}`;
+      whereClause += ` AND g.ministry_id = $${params.length}`;
     }
 
     if (category) {
       params.push(category);
-      query += ` AND g.category = $${params.length}`;
+      whereClause += ` AND g.category = $${params.length}`;
     }
 
     if (meeting_day) {
       params.push(meeting_day);
-      query += ` AND g.meeting_day = $${params.length}`;
+      whereClause += ` AND g.meeting_day = $${params.length}`;
     }
 
-    if (search && typeof search === "string") {
-      params.push(`%${search}%`);
+    if (search && typeof search === "string" && search.trim()) {
+      params.push(`%${search.trim()}%`);
       const pIdx = params.length;
-      query += ` AND (g.name ILIKE $${pIdx} OR g.leader_name ILIKE $${pIdx} OR g.curriculum ILIKE $${pIdx} OR g.location ILIKE $${pIdx})`;
+      whereClause += ` AND (g.name ILIKE $${pIdx} OR g.leader_name ILIKE $${pIdx} OR g.curriculum ILIKE $${pIdx} OR g.location ILIKE $${pIdx})`;
     }
 
-    query += " ORDER BY g.id ASC";
+    const isPaginated = page !== undefined || limit !== undefined;
+    let totalCount = 0;
+    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
+    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
 
-    const [groups, dbTopics, allGroupMembers] = await Promise.all([
-      db.all(query, params),
+    if (isPaginated) {
+      const countRes = await db.get<{ total: string | number }>(`
+        SELECT COUNT(*) as total FROM bible_study_groups g ${whereClause}
+      `, params);
+      totalCount = parseInt(String(countRes?.total || 0), 10);
+    }
+
+    let query = `
+      SELECT g.id, g.name, g.description, g.curriculum, g.ministry_id, g.leader_name,
+             g.leader_contact, g.meeting_day, g.meeting_time, g.location, g.category,
+             g.max_capacity, g.created_at,
+             min.name as ministry_name, min.color as ministry_color,
+             (SELECT COUNT(*) FROM bible_study_members WHERE group_id = g.id) as current_member_count
+      FROM bible_study_groups g
+      LEFT JOIN ministries min ON g.ministry_id = min.id
+      ${whereClause}
+      ORDER BY g.id ASC
+    `;
+
+    let groups: any[] = [];
+    if (isPaginated) {
+      const offset = (curPage - 1) * curLimit;
+      const paginatedParams = [...params, curLimit, offset];
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      groups = await db.all(query, paginatedParams);
+    } else {
+      groups = await db.all(query, params);
+    }
+
+    const groupIds = groups.map(g => g.id);
+    const [dbTopics, allGroupMembers] = await Promise.all([
       db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => []),
-      db.all(`
-        SELECT bsm.*, m.first_name, m.last_name, m.contact_email, m.contact_phone
+      groupIds.length > 0 ? db.all(`
+        SELECT bsm.id, bsm.group_id, bsm.member_id, bsm.member_name, bsm.joined_at,
+               m.first_name, m.last_name, m.contact_email, m.contact_phone
         FROM bible_study_members bsm
         LEFT JOIN members m ON bsm.member_id = m.id
+        WHERE bsm.group_id = ANY($1)
         ORDER BY COALESCE(LOWER(m.first_name), LOWER(bsm.member_name)) ASC, LOWER(m.last_name) ASC
-      `)
+      `, [groupIds]) : Promise.resolve([])
     ]);
 
     // Group members by group_id in memory
@@ -773,74 +801,75 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
       }
     }
 
-    // 3. Upsert session record
-    await db.run(`
-      INSERT INTO bible_study_sessions (group_id, session_date, topic_title, chapter, notes, is_special, special_reason, recorded_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (group_id, session_date) DO UPDATE SET
-        topic_title = EXCLUDED.topic_title,
-        chapter = EXCLUDED.chapter,
-        notes = EXCLUDED.notes,
-        is_special = EXCLUDED.is_special,
-        special_reason = EXCLUDED.special_reason,
-        recorded_by = EXCLUDED.recorded_by
-    `, [
-      groupId,
-      session_date,
-      topic_title || group.curriculum || "Weekly Bible Study",
-      chapter || group.current_chapter || "Chapter 1",
-      notes || "",
-      isSpecialBool,
-      cleanReason,
-      req.user?.id || null
-    ]);
+    // 3. Upsert session record and attendance records inside a transaction
+    await db.transaction(async (client) => {
+      await client.query(`
+        INSERT INTO bible_study_sessions (group_id, session_date, topic_title, chapter, notes, is_special, special_reason, recorded_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (group_id, session_date) DO UPDATE SET
+          topic_title = EXCLUDED.topic_title,
+          chapter = EXCLUDED.chapter,
+          notes = EXCLUDED.notes,
+          is_special = EXCLUDED.is_special,
+          special_reason = EXCLUDED.special_reason,
+          recorded_by = EXCLUDED.recorded_by
+      `, [
+        groupId,
+        session_date,
+        topic_title || group.curriculum || "Weekly Bible Study",
+        chapter || group.current_chapter || "Chapter 1",
+        notes || "",
+        isSpecialBool,
+        cleanReason,
+        req.user?.id || null
+      ]);
 
-    // 2. Fetch all group members
-    const groupMembers = await db.all<{ member_id: number }>(
-      "SELECT member_id FROM bible_study_members WHERE group_id = $1",
-      [groupId]
-    );
+      const groupMembersRes = await client.query<{ member_id: number }>(
+        "SELECT member_id FROM bible_study_members WHERE group_id = $1",
+        [groupId]
+      );
+      const groupMembers = groupMembersRes.rows;
 
-    // 3. Process records
-    if (Array.isArray(records) && records.length > 0) {
-      for (const rec of records) {
-        await db.run(`
-          INSERT INTO bible_study_attendance (group_id, session_date, member_id, status, notes, recorded_by)
-          VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (group_id, session_date, member_id) DO UPDATE SET
-            status = EXCLUDED.status,
-            notes = EXCLUDED.notes,
-            recorded_by = EXCLUDED.recorded_by
-        `, [
-          groupId,
-          session_date,
-          rec.member_id,
-          rec.status || "present",
-          rec.notes || "",
-          req.user?.id || null
-        ]);
+      if (Array.isArray(records) && records.length > 0) {
+        for (const rec of records) {
+          await client.query(`
+            INSERT INTO bible_study_attendance (group_id, session_date, member_id, status, notes, recorded_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (group_id, session_date, member_id) DO UPDATE SET
+              status = EXCLUDED.status,
+              notes = EXCLUDED.notes,
+              recorded_by = EXCLUDED.recorded_by
+          `, [
+            groupId,
+            session_date,
+            rec.member_id,
+            rec.status || "present",
+            rec.notes || "",
+            req.user?.id || null
+          ]);
+        }
+      } else if (Array.isArray(present_member_ids)) {
+        const presentSet = new Set(present_member_ids.map(Number));
+        for (const gm of groupMembers) {
+          if (!gm.member_id) continue;
+          const status = presentSet.has(gm.member_id) ? "present" : "absent";
+          await client.query(`
+            INSERT INTO bible_study_attendance (group_id, session_date, member_id, status, notes, recorded_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (group_id, session_date, member_id) DO UPDATE SET
+              status = EXCLUDED.status,
+              recorded_by = EXCLUDED.recorded_by
+          `, [
+            groupId,
+            session_date,
+            gm.member_id,
+            status,
+            "",
+            req.user?.id || null
+          ]);
+        }
       }
-    } else if (Array.isArray(present_member_ids)) {
-      const presentSet = new Set(present_member_ids.map(Number));
-      for (const gm of groupMembers) {
-        if (!gm.member_id) continue;
-        const status = presentSet.has(gm.member_id) ? "present" : "absent";
-        await db.run(`
-          INSERT INTO bible_study_attendance (group_id, session_date, member_id, status, notes, recorded_by)
-          VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (group_id, session_date, member_id) DO UPDATE SET
-            status = EXCLUDED.status,
-            recorded_by = EXCLUDED.recorded_by
-        `, [
-          groupId,
-          session_date,
-          gm.member_id,
-          status,
-          "",
-          req.user?.id || null
-        ]);
-      }
-    }
+    });
 
     await logAuditAction(
       req.user?.id || null,

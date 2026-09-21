@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
+import { cache, cacheMiddleware } from "../utils/cache";
 
 const router = Router();
 
@@ -67,7 +68,7 @@ const DEFAULT_SETTINGS: Record<string, { value: string; category: string }> = {
 // ----------------------------------------------------
 
 // List lookups (auto-populates defaults if table is empty)
-router.get("/lookups", async (req: Request, res: Response) => {
+router.get("/lookups", cacheMiddleware("lookups", 600), async (req: Request, res: Response) => {
   try {
     const { type, active_only } = req.query;
 
@@ -145,6 +146,7 @@ router.post("/lookups", authMiddleware, requireRoles("Admin"), async (req: AuthR
     ]);
 
     const newId = result.lastInsertRowid;
+    cache.invalidate("lookups");
     await logAuditAction(req.user?.id || null, "CREATE", "system_lookups", newId, `Created ${type}: ${name.trim()}`);
     emitRealtimeEvent("lookups:changed", { action: "create", type, id: newId });
     emitRealtimeEvent("settings:changed");
@@ -189,6 +191,7 @@ router.put("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req: Au
     ]);
 
     await logAuditAction(req.user?.id || null, "UPDATE", "system_lookups", Number(id), `Updated ${current.type}: ${updatedName}`);
+    cache.invalidate("lookups");
     emitRealtimeEvent("lookups:changed", { action: "update", type: current.type, id: Number(id) });
     emitRealtimeEvent("settings:changed");
     res.json({ message: "Lookup updated successfully" });
@@ -205,6 +208,7 @@ router.delete("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req:
     if (!current) return res.status(404).json({ error: "Lookup not found" });
 
     await db.run("DELETE FROM system_lookups WHERE id = $1", [id]);
+    cache.invalidate("lookups");
     await logAuditAction(req.user?.id || null, "DELETE", "system_lookups", Number(id), `Deleted ${current.type}: ${current.name}`);
     emitRealtimeEvent("lookups:changed", { action: "delete", type: current.type, id: Number(id) });
     emitRealtimeEvent("settings:changed");
@@ -229,6 +233,7 @@ router.post("/lookups/reset", authMiddleware, requireRoles("Admin"), async (req:
           is_active = 1
       `, [item.type, item.name, item.description, item.color, item.sort_order]);
     }
+    cache.invalidate("lookups");
     await logAuditAction(req.user?.id || null, "UPDATE", "system_lookups", null, "Reset system lookups to defaults");
     emitRealtimeEvent("lookups:changed", { action: "reset" });
     emitRealtimeEvent("settings:changed");
@@ -243,7 +248,7 @@ router.post("/lookups/reset", authMiddleware, requireRoles("Admin"), async (req:
 // ----------------------------------------------------
 
 // Get general settings (auto-populates defaults if empty)
-router.get("/general", async (req: Request, res: Response) => {
+router.get("/general", cacheMiddleware("general_settings", 600), async (req: Request, res: Response) => {
   try {
     let list = await db.all("SELECT * FROM system_settings ORDER BY category ASC, key ASC");
 
@@ -284,6 +289,7 @@ router.put("/general", authMiddleware, requireRoles("Admin"), async (req: AuthRe
       }
     }
 
+    cache.invalidate("general_settings");
     await logAuditAction(req.user?.id || null, "UPDATE", "system_settings", null, "Updated system general settings");
     res.json({ message: "General settings saved successfully" });
   } catch (err: any) {
@@ -301,6 +307,7 @@ router.post("/general/reset", authMiddleware, requireRoles("Admin"), async (req:
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
       `, [key, val.value, val.category]);
     }
+    cache.invalidate("general_settings");
     await logAuditAction(req.user?.id || null, "UPDATE", "system_settings", null, "Reset general settings to defaults");
     res.json({ message: "General settings reset to defaults successfully" });
   } catch (err: any) {

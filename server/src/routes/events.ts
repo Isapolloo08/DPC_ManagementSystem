@@ -8,37 +8,78 @@ const router = Router();
 // List events
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { ministry_id, upcoming } = req.query;
+    const { ministry_id, upcoming, page, limit, search } = req.query;
+
+    let whereClause = " WHERE 1=1";
+    const params: any[] = [];
+
+    if (ministry_id) {
+      params.push(ministry_id);
+      whereClause += ` AND (e.ministry_id = $${params.length} OR e.ministry_id IS NULL)`;
+    }
+
+    if (upcoming === "true") {
+      whereClause += " AND e.start_time >= CURRENT_TIMESTAMP";
+    }
+
+    if (search && typeof search === "string" && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      whereClause += ` AND (e.title ILIKE $${params.length} OR e.description ILIKE $${params.length} OR e.location ILIKE $${params.length})`;
+    }
+
+    const isPaginated = page !== undefined || limit !== undefined;
+    let totalCount = 0;
+    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
+    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
+
+    if (isPaginated) {
+      const countRes = await db.get<{ total: string | number }>(`
+        SELECT COUNT(*) as total FROM events e ${whereClause}
+      `, params);
+      totalCount = parseInt(String(countRes?.total || 0), 10);
+    }
 
     let query = `
-      SELECT e.*, 
+      SELECT e.id, e.title, e.description, e.start_time, e.end_time, e.location, 
+             e.ministry_id, e.created_by, e.created_at,
              min.name as ministry_name, min.color as ministry_color,
              u.name as creator_name,
              (SELECT COUNT(*) FROM event_registrations WHERE event_id = e.id AND status = 'registered') as rsvp_count
       FROM events e
       LEFT JOIN ministries min ON e.ministry_id = min.id
       LEFT JOIN users u ON e.created_by = u.id
-      WHERE 1=1
+      ${whereClause}
+      ORDER BY e.start_time ASC
     `;
-    const params: any[] = [];
 
-    if (ministry_id) {
-      params.push(ministry_id);
-      query += ` AND (e.ministry_id = $${params.length} OR e.ministry_id IS NULL)`;
+    let events: any[] = [];
+    if (isPaginated) {
+      const offset = (curPage - 1) * curLimit;
+      const paginatedParams = [...params, curLimit, offset];
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      events = await db.all(query, paginatedParams);
+    } else {
+      events = await db.all(query, params);
     }
 
-    if (upcoming === "true") {
-      query += " AND e.start_time >= CURRENT_TIMESTAMP";
-    }
-
-    query += " ORDER BY e.start_time ASC";
-
-    const events = await db.all(query, params);
     const formatted = events.map(e => ({
       ...e,
       rsvp_count: Number(e.rsvp_count || 0)
     }));
-    res.json(formatted);
+
+    if (isPaginated) {
+      res.json({
+        data: formatted,
+        pagination: {
+          total: totalCount,
+          page: curPage,
+          limit: curLimit,
+          totalPages: Math.ceil(totalCount / curLimit) || 1
+        }
+      });
+    } else {
+      res.json(formatted);
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -291,8 +332,8 @@ router.post("/recurring-sunday-cycle/:id/sync-to-calendar", authMiddleware, requ
     const endTimeISO = `${projection.dateStr}T${end_time_str}:00`;
 
     const result = await db.run(`
-      INSERT INTO events (title, description, start_time, end_time, location, ministry_id, created_by, rsvp_enabled)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+      INSERT INTO events (title, description, start_time, end_time, location, ministry_id, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id
     `, [
       recurring.title,

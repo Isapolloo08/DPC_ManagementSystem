@@ -1,8 +1,11 @@
 import http from "http";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
-import { initSchema } from "./db/schema";
+import { db, initSchema } from "./db/schema";
 import { initSocketServer } from "./socket";
 
 import authRouter from "./routes/auth";
@@ -27,70 +30,117 @@ import cloudSyncRouter from "./routes/cloudSync";
 import attendanceLogRouter from "./routes/attendanceLog";
 import servicesRouter from "./routes/services";
 
+import { logger, httpLogger } from "./utils/logger";
+import { initSentry, setupSentryErrorHandler } from "./utils/sentry";
+
 dotenv.config();
 
+// Initialize Sentry error tracking if SENTRY_DSN is configured
+initSentry();
+
 const app = express();
+
 const httpServer = http.createServer(app);
 const rawPort = process.env.PORT;
 const PORT: number = rawPort && !isNaN(Number(rawPort)) ? Number(rawPort) : (process.env.NODE_ENV === "production" ? 10000 : 4000);
 
-import zlib from "zlib";
+// 1. Trust Reverse Proxy (Render / Nginx / Load Balancer) for accurate client IP rate limiting
+app.set("trust proxy", 1);
 
-// Initialize Socket.IO
+// 2. Initialize Socket.IO
 initSocketServer(httpServer);
 
-// Middleware
+// 3. Security Headers via Helmet
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false // Allows Electron and local API fetching
+}));
+
+// 4. CORS
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// Native Gzip Compression for API payloads > 1KB
-app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const acceptEncoding = (req.headers["accept-encoding"] as string) || "";
-  if (!acceptEncoding.includes("gzip")) {
-    return next();
-  }
+// 5. Structured Pino HTTP Request Logger (captures request duration ms and status)
+app.use(httpLogger);
 
-  const originalJson = res.json.bind(res);
-  res.json = function (body: any) {
-    try {
-      const jsonStr = JSON.stringify(body);
-      if (jsonStr && jsonStr.length > 1024) {
-        zlib.gzip(Buffer.from(jsonStr), (err, buffer) => {
-          if (err || !buffer) {
-            return originalJson(body);
-          }
-          if (!res.headersSent) {
-            res.setHeader("Content-Encoding", "gzip");
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.setHeader("Content-Length", buffer.length);
-            res.end(buffer);
-          }
-        });
-        return res;
-      }
-    } catch {}
-    return originalJson(body);
-  };
+// 6. High-Performance Gzip / Deflate Compression (Payloads > 1KB)
+app.use(compression({
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers["x-no-compression"]) return false;
+    return compression.filter(req, res);
+  }
+}));
+
+// 7. Rate Limiters
+// General API rate limiter: 300 requests per minute per IP
+export const generalLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests from this IP, please try again after a minute." }
+});
+
+// Strict Auth rate limiter: 10 requests per 15 minutes per IP (Brute-force protection)
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many authentication attempts. Please try again after 15 minutes." }
+});
+
+// Apply general limiter across all /api routes
+app.use("/api", generalLimiter);
+
+// 8. Request Timeout Middleware (15 seconds)
+app.use((_req, res, next) => {
+  res.setTimeout(15000, () => {
+    if (!res.headersSent) {
+      res.status(504).json({ error: "Gateway Timeout: Request exceeded 15 seconds limit" });
+    }
+  });
   next();
 });
 
+// 9. Body Parsers
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Health Check
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    service: "Church Management System API (Node.js + PostgreSQL + Socket.IO)",
-    time: new Date().toISOString()
-  });
+// 10. Database-Aware Health Check Endpoint
+app.get("/api/health", async (_req, res) => {
+  const startTime = Date.now();
+  try {
+    await db.query("SELECT 1 as healthy");
+    const dbLatencyMs = Date.now() - startTime;
+    res.json({
+      status: "ok",
+      database: "connected",
+      dbLatencyMs: `${dbLatencyMs}ms`,
+      service: "Church Management System API (Node.js + PostgreSQL + Socket.IO)",
+      uptimeSeconds: Math.floor(process.uptime()),
+      time: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(503).json({
+      status: "degraded",
+      database: "disconnected",
+      error: err.message,
+      time: new Date().toISOString()
+    });
+  }
 });
 
-// API Routes
+// 11. API Routes (Auth routes use strict authLimiter on sensitive sub-routes)
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/change-password", authLimiter);
 app.use("/api/auth", authRouter);
+
 app.use("/api", usersRouter); // provides /api/roles and /api/users
 app.use("/api/ministries", ministriesRouter);
 app.use("/api/members", membersRouter);
@@ -112,9 +162,12 @@ app.use("/api/cloud-sync", cloudSyncRouter);
 app.use("/api/attendance-log", attendanceLogRouter);
 app.use("/api/services", servicesRouter);
 
+// Sentry error handler (must be before any other error middleware)
+setupSentryErrorHandler(app);
+
 // Global Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("Unhandled API Error:", err);
+  logger.error({ err }, "Unhandled API Error");
   res.status(500).json({ error: err.message || "Internal server error" });
 });
 

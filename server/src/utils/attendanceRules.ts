@@ -164,13 +164,17 @@ export async function autoGenerateSundayServices(
   }
 
   let insertedCount = 0;
-  for (const sDate of sundayDates) {
-    const res = await db.run(`
-      INSERT INTO services (service_date, service_type, title, status, notes, created_by)
-      VALUES ($1, 'sunday_service', 'Sunday Worship Service', 'held', '', $2)
-      ON CONFLICT (service_date, service_type) DO NOTHING
-    `, [sDate, userId]);
-    if (res.changes > 0) insertedCount++;
+  if (sundayDates.length > 0) {
+    await db.transaction(async (client) => {
+      for (const sDate of sundayDates) {
+        const res = await client.query(`
+          INSERT INTO services (service_date, service_type, title, status, notes, created_by)
+          VALUES ($1, 'sunday_service', 'Sunday Worship Service', 'held', '', $2)
+          ON CONFLICT (service_date, service_type) DO NOTHING
+        `, [sDate, userId]);
+        if ((res.rowCount || 0) > 0) insertedCount += res.rowCount || 0;
+      }
+    });
   }
 
   return insertedCount;
