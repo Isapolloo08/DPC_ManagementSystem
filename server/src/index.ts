@@ -111,13 +111,30 @@ app.use((_req, res, next) => {
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// 10. Database-Aware Health Check Endpoint
-app.get("/api/health", async (_req, res) => {
+// 10. Root Landing & Health Check Endpoints
+app.get("/", (_req, res) => {
+  res.status(200).json({
+    status: "online",
+    name: "Daet Presbyterian Church — ChMS Backend API",
+    version: "1.0.0",
+    service: "Node.js + Express + PostgreSQL + Socket.IO",
+    healthCheck: "/api/health",
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.head("/", (_req, res) => {
+  res.status(200).end();
+});
+
+// Database-Aware Health Check Endpoint (accessible at both /api/health and /health)
+const handleHealthCheck = async (_req: express.Request, res: express.Response) => {
   const startTime = Date.now();
   try {
     await db.query("SELECT 1 as healthy");
     const dbLatencyMs = Date.now() - startTime;
-    res.json({
+    res.status(200).json({
       status: "ok",
       database: "connected",
       dbLatencyMs: `${dbLatencyMs}ms`,
@@ -133,7 +150,12 @@ app.get("/api/health", async (_req, res) => {
       time: new Date().toISOString()
     });
   }
-});
+};
+
+app.get("/api/health", handleHealthCheck);
+app.get("/health", handleHealthCheck);
+app.head("/health", (_req, res) => res.status(200).end());
+app.head("/api/health", (_req, res) => res.status(200).end());
 
 // 11. API Routes (Auth routes use strict authLimiter on sensitive sub-routes)
 app.use("/api/auth/login", authLimiter);

@@ -42,7 +42,7 @@ export const httpLogger = pinoHttp({
  * Helper to log slow database queries (>200ms)
  */
 export function logSlowQuery(query: string, durationMs: number, params?: any[]) {
-  const thresholdMs = Number(process.env.SLOW_QUERY_THRESHOLD_MS) || 200;
+  const thresholdMs = Number(process.env.SLOW_QUERY_THRESHOLD_MS) || 500;
   if (durationMs >= thresholdMs) {
     logger.warn({
       type: "slow_query",

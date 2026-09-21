@@ -34,6 +34,7 @@
       "output": "dist_electron"
     },
     "files": [
+      "package.json",
       "electron/**/*",
       "client/dist/**/*"
     ],
@@ -58,7 +59,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DPC Management System"
+      "shortcutName": "DPC Management System",
+      "runAfterFinish": true
     }
   }
 }

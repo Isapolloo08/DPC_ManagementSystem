@@ -1,13 +1,52 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, Menu } = require("electron");
 const path = require("path");
-const isDev = !app.isPackaged || process.env.NODE_ENV === "development";
+const fs = require("fs");
+
+// Single-instance lock to prevent multiple conflicting processes
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+}
+
+// In production packaged apps (app.isPackaged = true), isDev is ALWAYS false regardless of environment variables
+const isDev = !app.isPackaged && process.env.NODE_ENV === "development";
 
 let mainWindow = null;
 
 // Remove the default Electron menu bar completely (File, Edit, View, Window, Help)
 Menu.setApplicationMenu(null);
 
+function getAppIcon() {
+  const possibleIcons = [
+    path.join(__dirname, "../client/dist/favicon.ico"),
+    path.join(__dirname, "../client/public/favicon.ico"),
+    path.join(app.getAppPath(), "client/dist/favicon.ico")
+  ];
+  for (const iconPath of possibleIcons) {
+    if (fs.existsSync(iconPath)) return iconPath;
+  }
+  return undefined;
+}
+
+function getIndexPath() {
+  const candidates = [
+    path.join(app.getAppPath(), "client", "dist", "index.html"),
+    path.join(__dirname, "..", "client", "dist", "index.html"),
+    path.join(__dirname, "client", "dist", "index.html"),
+    path.join(process.resourcesPath, "client", "dist", "index.html"),
+    path.join(process.resourcesPath, "app.asar", "client", "dist", "index.html")
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return path.join(app.getAppPath(), "client", "dist", "index.html");
+}
+
 function createWindow() {
+  const appIcon = getAppIcon();
+
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 860,
@@ -16,8 +55,9 @@ function createWindow() {
     frame: false, // Frameless window to allow custom control panel
     autoHideMenuBar: true,
     title: "Daet Presbyterian Church — ChMS",
-    icon: path.join(__dirname, "../client/public/favicon.ico"),
+    ...(appIcon ? { icon: appIcon } : {}),
     show: false,
+    backgroundColor: "#1e293b",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -29,16 +69,41 @@ function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
 
+  // Show window smoothly when ready
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  // Safety fallback: Ensure window is visible even if ready-to-show event is missed/delayed
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      console.log("[Electron] Displaying window via fallback timer.");
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  }, 1500);
+
+  // Handle load failure gracefully
+  mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[Electron] Page failed to load (${errorCode}): ${errorDescription} at ${validatedURL}`);
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
   });
 
   // Handle maximize / unmaximize events to notify renderer
   mainWindow.on("maximize", () => {
-    mainWindow.webContents.send("window:maximize-change", true);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("window:maximize-change", true);
+    }
   });
   mainWindow.on("unmaximize", () => {
-    mainWindow.webContents.send("window:maximize-change", false);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("window:maximize-change", false);
+    }
   });
 
   // Handle keyboard shortcuts (Ctrl+R, F5, Ctrl+Shift+R, Ctrl+Shift+I, F12, Zoom) even with custom frameless window and hidden menu
@@ -62,7 +127,12 @@ function createWindow() {
       return;
     }
 
-
+    // Toggle DevTools: Ctrl+Shift+I or F12
+    if ((controlKey && input.key.toLowerCase() === "i" && input.shift) || input.key === "F12") {
+      event.preventDefault();
+      mainWindow.webContents.toggleDevTools();
+      return;
+    }
   });
 
   // Handle external links safely in system default browser
@@ -77,12 +147,13 @@ function createWindow() {
   if (isDev) {
     const devUrl = process.env.ELECTRON_START_URL || "http://localhost:3000";
     mainWindow.loadURL(devUrl).catch((err) => {
-      console.error("Failed to load dev server URL:", err);
+      console.error("[Electron] Failed to load dev server URL:", err);
     });
   } else {
-    const distPath = path.join(__dirname, "../client/dist/index.html");
+    const distPath = getIndexPath();
+    console.log("[Electron] Loading production HTML from:", distPath);
     mainWindow.loadFile(distPath).catch((err) => {
-      console.error("Failed to load production HTML:", err);
+      console.error("[Electron] Failed to load production HTML:", err);
     });
   }
 
@@ -90,6 +161,20 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// Focus existing window if a second instance is launched
+app.on("second-instance", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+// Global unhandled error logging
+process.on("uncaughtException", (err) => {
+  console.error("[Electron] Uncaught Exception:", err);
+});
 
 // IPC Handlers for desktop control panel
 ipcMain.handle("app:get-version", () => app.getVersion());

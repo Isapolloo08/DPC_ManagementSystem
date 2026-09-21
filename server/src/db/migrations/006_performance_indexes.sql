@@ -35,9 +35,16 @@ CREATE INDEX IF NOT EXISTS idx_events_start_time ON events (start_time ASC);
 -- Optimizes ministry-scoped upcoming events filtering
 CREATE INDEX IF NOT EXISTS idx_events_ministry_start ON events (ministry_id, start_time ASC);
 
--- 4. Event RSVPs & Registrations Indexes
-CREATE INDEX IF NOT EXISTS idx_event_rsvps_event_member ON event_rsvps (event_id, member_id);
-CREATE INDEX IF NOT EXISTS idx_event_rsvps_member_id ON event_rsvps (member_id);
+-- 4. Event Registrations & RSVPs Indexes
+CREATE TABLE IF NOT EXISTS event_registrations (
+  id SERIAL PRIMARY KEY,
+  event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  member_id INT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  status VARCHAR(50) DEFAULT 'registered',
+  registered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_event_registrations_event_member ON event_registrations (event_id, member_id);
+CREATE INDEX IF NOT EXISTS idx_event_registrations_member_id ON event_registrations (member_id);
 
 -- 5. Donations & Finance Indexes
 -- Speeds up member giving history and annual statements
