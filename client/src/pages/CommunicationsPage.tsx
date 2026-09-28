@@ -1,20 +1,41 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
 import { useSocketEvent } from "../socket";
 import { CommunicationsPageSkeleton, CardGridSkeleton } from "../components/common/SkeletonLoader";
 import { Announcement } from "../types";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
 import { 
-  MessageSquare, Pin, Plus, Clock, User, X, Sparkles, Megaphone
+  MessageSquare, Pin, Plus, Clock, User, X, Megaphone, Trash2
 } from "lucide-react";
 
 export const CommunicationsPage: React.FC = () => {
   const { user, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAnnounceModalOpen, setIsAnnounceModalOpen] = useState(false);
+
+  const canManageBulletins = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+
+  const handleDeleteAnnouncement = (id: number, title: string) => {
+    const originalAnnouncements = announcements;
+    deleteWithUndo({
+      itemName: title,
+      itemType: "Announcement",
+      onOptimisticDelete: () => {
+        setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+      },
+      onRestore: () => {
+        setAnnouncements(originalAnnouncements);
+      },
+      onCommitDelete: async () => {
+        await api.deleteAnnouncement(id);
+      }
+    });
+  };
 
   // Custom Confirmation & Alert Modal State
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
@@ -111,7 +132,7 @@ export const CommunicationsPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -140,7 +161,7 @@ export const CommunicationsPage: React.FC = () => {
           {canPostAnnouncement && (
             <button
               onClick={() => setIsAnnounceModalOpen(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4 text-indigo-950" />
               <span>Post Announcement</span>
@@ -208,10 +229,22 @@ export const CommunicationsPage: React.FC = () => {
                   <User className="w-3.5 h-3.5 text-indigo-700" />
                   <strong className="text-charcoal font-bold">{a.author_name}</strong> ({a.author_role})
                 </span>
-                <span className="flex items-center gap-1 font-medium">
-                  <Clock className="w-3.5 h-3.5 text-amber-600" />
-                  {new Date(a.created_at).toLocaleDateString([], { dateStyle: 'long' })}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1 font-medium">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    {new Date(a.created_at).toLocaleDateString([], { dateStyle: 'long' })}
+                  </span>
+                  {canManageBulletins && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAnnouncement(a.id, a.title)}
+                      className="p-1 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                      title="Delete announcement"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -295,7 +328,7 @@ export const CommunicationsPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black shadow-md cursor-pointer active:scale-95"
+                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black shadow-md cursor-pointer active:scale-95"
                 >
                   Broadcast Announcement
                 </button>

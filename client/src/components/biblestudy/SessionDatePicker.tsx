@@ -15,7 +15,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  Calendar, CheckCircle2, Clock, Sparkles, ArrowLeft,
+  Calendar, CheckCircle2, Clock, BookmarkCheck, ArrowLeft,
   ChevronLeft, ChevronRight, Plus, Info, X
 } from "lucide-react";
 import { DatePickerInput } from "../common/DatePickerInput";
@@ -94,7 +94,7 @@ export const SessionDatePickerCompactRow: React.FC<{
         <div className="space-y-3 p-3.5 bg-amber-50/90 rounded-2xl border border-amber-200 animate-in fade-in text-xs shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 font-black text-amber-950">
-              <Sparkles className="w-4 h-4 text-amber-600" />
+              <BookmarkCheck className="w-4 h-4 text-amber-600" />
               <span>Special / Rescheduled Session</span>
             </div>
             <button

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Search, ChevronDown, Check, X, Sparkles, School, GraduationCap, BookOpen, Layers, Edit3, PlusCircle } from "lucide-react";
+import { Search, ChevronDown, Check, X, School, GraduationCap, BookOpen, Layers, Edit3, PlusCircle } from "lucide-react";
 
 export interface AutocompleteSuggestion {
   title: string;

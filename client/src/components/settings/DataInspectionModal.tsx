@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  X, Database, Calendar, Users, DollarSign, Clock, MessageSquare,
-  Search, Download, Eye, FileText, CheckCircle2, ShieldAlert, Sparkles, Filter, ChevronRight
+  X, Database, Calendar, Users, Clock, MessageSquare,
+  Search, Download, Eye, FileText, CheckCircle2, ShieldAlert, Filter, ChevronRight
 } from "lucide-react";
 
 interface DataInspectionModalProps {
@@ -12,7 +12,6 @@ interface DataInspectionModalProps {
   title?: string;
   data: {
     attendance?: any[];
-    donations?: any[];
     events?: any[];
     duty_schedules?: any[];
     dishwashing_roster?: any[];
@@ -61,7 +60,6 @@ export const DataInspectionModal: React.FC<DataInspectionModalProps> = ({
   const getTableIcon = (name: string) => {
     switch (name) {
       case "attendance": return <Clock className="w-4 h-4 text-emerald-600" />;
-      case "donations": return <DollarSign className="w-4 h-4 text-amber-600" />;
       case "events": return <Calendar className="w-4 h-4 text-indigo-600" />;
       case "duty_schedules":
       case "dishwashing_roster": return <Users className="w-4 h-4 text-blue-600" />;
@@ -93,7 +91,7 @@ export const DataInspectionModal: React.FC<DataInspectionModalProps> = ({
       <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden">
         
         {/* Header */}
-        <div className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-gradient-to-r from-indigo-50/70 via-white to-amber-50/50">
+        <div className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-indigo-50/50">
           <div className="flex items-center gap-3">
             <span className="p-3 rounded-2xl bg-indigo text-white shadow-md shadow-indigo-950/20">
               <Database className="w-6 h-6" />

@@ -3,13 +3,130 @@ import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
 import { resolveTotalChapters } from "./studyTopics";
+import { notify } from "../services/notificationService";
+import { countConsecutiveAbsences } from "../utils/groupAttendanceIntelligence";
 
 const router = Router();
+
+interface GroupNotificationRow {
+  id: number;
+  name: string;
+  ministry_id: number | null;
+  leader_name: string | null;
+  leader_contact: string | null;
+  curriculum: string | null;
+  meeting_day: string;
+  meeting_time: string;
+}
+
+function htmlEscape(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+async function sendAbsenceSessionNotification(groupId: number, sessionDate: string): Promise<void> {
+  try {
+    const group = await db.get<GroupNotificationRow>("SELECT id, name, ministry_id, leader_name, leader_contact, curriculum, meeting_day, meeting_time FROM bible_study_groups WHERE id = $1", [groupId]);
+    const session = await db.get<{ id: number; topic_title: string | null }>(
+      "SELECT id, topic_title FROM bible_study_sessions WHERE group_id = $1 AND session_date = $2",
+      [groupId, sessionDate]
+    );
+    if (!group || !session) return;
+
+    const absentMembers = await db.all<{ member_id: number; display_name: string }>(`
+      SELECT bsa.member_id, COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), bsm.member_name, 'Disciple') AS display_name
+      FROM bible_study_attendance bsa
+      LEFT JOIN members m ON m.id = bsa.member_id
+      LEFT JOIN bible_study_members bsm ON bsm.group_id = bsa.group_id AND bsm.member_id = bsa.member_id
+      WHERE bsa.group_id = $1 AND bsa.session_date = $2 AND bsa.status = 'absent'
+      ORDER BY display_name ASC
+    `, [groupId, sessionDate]);
+    if (absentMembers.length === 0) return;
+
+    const thresholdRow = await db.get<{ threshold: number | null }>(`
+      SELECT threshold FROM notification_rules
+      WHERE event_type = 'absence_alert' AND enabled = TRUE AND threshold IS NOT NULL
+      ORDER BY threshold ASC LIMIT 1
+    `);
+    const threshold = Number(thresholdRow?.threshold || 3);
+    const absentIds = absentMembers.map(member => member.member_id);
+    const history = await db.all<{ member_id: number; session_date: string; status: string }>(`
+      SELECT member_id, session_date, status
+      FROM bible_study_attendance
+      WHERE group_id = $1 AND member_id = ANY($2::int[]) AND session_date <= $3
+      ORDER BY member_id ASC, session_date DESC
+    `, [groupId, absentIds, sessionDate]);
+    const histories = new Map<number, typeof history>();
+    for (const item of history) {
+      const list = histories.get(item.member_id) || [];
+      list.push(item);
+      histories.set(item.member_id, list);
+    }
+    const streaks = new Map(absentMembers.map(member => [member.member_id, countConsecutiveAbsences(histories.get(member.member_id) || [])]));
+    const absentLines = absentMembers.map(member => {
+      const streak = streaks.get(member.member_id) || 0;
+      return streak >= threshold ? `${member.display_name} (${streak} consecutive absences — attention needed)` : member.display_name;
+    });
+    const topic = session.topic_title || group.curriculum || "Weekly Bible Study";
+    const message = `${group.name} attendance for ${sessionDate}\nTopic: ${topic}\nAbsent: ${absentLines.join(", ")}`;
+    const listHtml = absentMembers.map(member => {
+      const streak = streaks.get(member.member_id) || 0;
+      const flag = streak >= threshold ? ` <strong style="color:#b45309">(${streak} consecutive absences)</strong>` : "";
+      return `<li>${htmlEscape(member.display_name)}${flag}</li>`;
+    }).join("");
+
+    await notify("absence_alert", {
+      eventKey: `group-session:${session.id}`,
+      title: `Absence summary: ${group.name}`,
+      message,
+      linkTab: "biblestudy",
+      linkRefId: groupId,
+      ministryId: group.ministry_id,
+      emailSubject: `Bible Study absence summary — ${group.name} — ${sessionDate}`,
+      emailHtml: `<div style="font-family:Arial,sans-serif;line-height:1.6"><h2>${htmlEscape(group.name)}</h2><p><strong>Date:</strong> ${htmlEscape(sessionDate)}<br><strong>Topic:</strong> ${htmlEscape(topic)}</p><p>The following disciples were marked absent:</p><ul>${listHtml}</ul><p style="font-size:12px;color:#64748b">This message contains private attendance information and was sent only to configured church recipients.</p></div>`
+    });
+  } catch (error) {
+    console.error("Failed to prepare absence notification:", error);
+  }
+}
+
+async function sendRescheduleNotification(group: GroupNotificationRow, date: string | null, time: string | null, reason: string | null): Promise<void> {
+  try {
+    const memberUsers = await db.all<{ id: number }>(`
+      SELECT DISTINCT m.user_id AS id
+      FROM bible_study_members bsm
+      JOIN members m ON m.id = bsm.member_id
+      WHERE bsm.group_id = $1 AND m.user_id IS NOT NULL
+    `, [group.id]);
+    const leaderUsers = await db.all<{ id: number }>(`
+      SELECT DISTINCT u.id
+      FROM users u
+      LEFT JOIN members m ON m.user_id = u.id
+      WHERE LOWER(TRIM(u.email)) = LOWER(TRIM(COALESCE($1, '')))
+         OR LOWER(TRIM(u.name)) = LOWER(TRIM(COALESCE($2, '')))
+         OR LOWER(TRIM(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, ''))) = LOWER(TRIM(COALESCE($2, '')))
+    `, [group.leader_contact, group.leader_name]);
+    const memberIds = memberUsers.map(user => user.id);
+    const leaderIds = leaderUsers.map(user => user.id);
+    const message = `${group.name} has been rescheduled to ${date || "a date to be announced"}${time ? ` at ${time}` : ""}.${reason ? ` Reason: ${reason}` : ""}`;
+    await notify("session_rescheduled", {
+      eventKey: `group:${group.id}:${date || "tbd"}:${time || "tbd"}:${reason || "none"}`,
+      title: `Session rescheduled: ${group.name}`,
+      message,
+      linkTab: "biblestudy",
+      linkRefId: group.id,
+      ministryId: group.ministry_id,
+      roleUserIds: { Member: memberIds, Leader: leaderIds },
+      emailSubject: `Schedule update — ${group.name}`
+    });
+  } catch (error) {
+    console.error("Failed to prepare reschedule notification:", error);
+  }
+}
 
 // List Bible study groups with members
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { ministry_id, category, meeting_day, search, page, limit } = req.query;
+    const { ministry_id, category, meeting_day, search, status, page, limit } = req.query;
 
     let whereClause = " WHERE 1=1";
     const params: any[] = [];
@@ -29,10 +146,15 @@ router.get("/", async (req: Request, res: Response) => {
       whereClause += ` AND g.meeting_day = $${params.length}`;
     }
 
+    if (status && typeof status === "string" && status.trim() && status !== "all") {
+      params.push(status.trim());
+      whereClause += ` AND g.status = $${params.length}`;
+    }
+
     if (search && typeof search === "string" && search.trim()) {
       params.push(`%${search.trim()}%`);
       const pIdx = params.length;
-      whereClause += ` AND (g.name ILIKE $${pIdx} OR g.leader_name ILIKE $${pIdx} OR g.curriculum ILIKE $${pIdx} OR g.location ILIKE $${pIdx})`;
+      whereClause += ` AND (g.name ILIKE $${pIdx} OR g.leader_name ILIKE $${pIdx} OR g.curriculum ILIKE $${pIdx} OR g.location ILIKE $${pIdx} OR COALESCE(g.assistant_leader_name, '') ILIKE $${pIdx})`;
     }
 
     const isPaginated = page !== undefined || limit !== undefined;
@@ -50,13 +172,20 @@ router.get("/", async (req: Request, res: Response) => {
     let query = `
       SELECT g.id, g.name, g.description, g.curriculum, g.ministry_id, g.leader_name,
              g.leader_contact, g.meeting_day, g.meeting_time, g.location, g.category,
-             g.max_capacity, g.created_at,
+             g.max_capacity, g.created_at, g.current_chapter, g.progress_stage, g.progress_notes,
+             g.is_rescheduled, g.rescheduled_date, g.rescheduled_time, g.reschedule_reason,
+             COALESCE(g.status, 'active') as status, g.merged_into_group_id, g.closed_at, g.effective_date,
+             g.assistant_leader_name, g.assistant_leader_contact, g.assistant_leader_id,
              min.name as ministry_name, min.color as ministry_color,
-             (SELECT COUNT(*) FROM bible_study_members WHERE group_id = g.id) as current_member_count
+             mg.name as merged_into_group_name,
+             (SELECT COUNT(*) FROM bible_study_members WHERE group_id = g.id AND COALESCE(status, 'active') = 'active') as current_member_count
       FROM bible_study_groups g
       LEFT JOIN ministries min ON g.ministry_id = min.id
+      LEFT JOIN bible_study_groups mg ON g.merged_into_group_id = mg.id
       ${whereClause}
-      ORDER BY g.id ASC
+      ORDER BY 
+        CASE WHEN COALESCE(g.status, 'active') = 'active' THEN 0 ELSE 1 END ASC,
+        g.id ASC
     `;
 
     let groups: any[] = [];
@@ -70,16 +199,29 @@ router.get("/", async (req: Request, res: Response) => {
     }
 
     const groupIds = groups.map(g => g.id);
-    const [dbTopics, allGroupMembers] = await Promise.all([
+    const [dbTopics, allGroupMembers, allTransitions] = await Promise.all([
       db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => []),
       groupIds.length > 0 ? db.all(`
-        SELECT bsm.id, bsm.group_id, bsm.member_id, bsm.member_name, bsm.joined_at,
+        SELECT bsm.id, bsm.group_id, bsm.member_id, bsm.member_name, bsm.joined_at, bsm.status as member_status,
                m.first_name, m.last_name, m.contact_email, m.contact_phone
         FROM bible_study_members bsm
         LEFT JOIN members m ON bsm.member_id = m.id
         WHERE bsm.group_id = ANY($1)
         ORDER BY COALESCE(LOWER(m.first_name), LOWER(bsm.member_name)) ASC, LOWER(m.last_name) ASC
-      `, [groupIds]) : Promise.resolve([])
+      `, [groupIds]) : Promise.resolve([]),
+      groupIds.length > 0 ? db.all(`
+        SELECT t.id, t.transition_type, t.new_group_id, t.effective_date, t.reason, t.notes, t.created_at,
+               u.name as created_by_name,
+               (
+                 SELECT json_agg(json_build_object('id', sg.id, 'name', sg.name, 'leader_name', sg.leader_name, 'status', sg.status))
+                 FROM bible_study_group_transition_sources ts
+                 JOIN bible_study_groups sg ON ts.source_group_id = sg.id
+                 WHERE ts.transition_id = t.id
+               ) as source_groups
+        FROM bible_study_group_transitions t
+        LEFT JOIN users u ON t.created_by = u.id
+        WHERE t.new_group_id = ANY($1)
+      `, [groupIds]).catch(() => []) : Promise.resolve([])
     ]);
 
     // Group members by group_id in memory
@@ -93,15 +235,24 @@ router.get("/", async (req: Request, res: Response) => {
       });
     }
 
+    const transitionsByNewGroup = new Map<number, any>();
+    for (const t of allTransitions) {
+      if (t.new_group_id) {
+        transitionsByNewGroup.set(t.new_group_id, t);
+      }
+    }
+
     const detailed = groups.map((g) => {
       const members = membersByGroup.get(g.id) || [];
       const totalChapters = resolveTotalChapters(g.curriculum || "", dbTopics);
+      const createdTransition = transitionsByNewGroup.get(g.id) || null;
 
       return {
         ...g,
         curriculum_total_chapters: totalChapters,
-        current_member_count: members.length || Number(g.current_member_count || 0),
-        members
+        current_member_count: members.filter(m => m.member_status !== 'transferred').length || Number(g.current_member_count || 0),
+        members,
+        created_transition: createdTransition
       };
     });
 
@@ -111,13 +262,376 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Get specific group
-router.get("/:id", async (req: Request, res: Response) => {
+// =========================================================================
+// BIBLE STUDY GROUP TRANSITIONS ENDPOINTS
+// =========================================================================
+
+// POST /api/groups/transitions/merge — Merge two or more groups into a new group
+router.post("/transitions/merge", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
+    const {
+      source_group_ids,
+      new_group_name,
+      description,
+      curriculum,
+      ministry_id,
+      primary_leader_name,
+      primary_leader_contact,
+      primary_leader_id,
+      assistant_leader_name,
+      assistant_leader_contact,
+      assistant_leader_id,
+      meeting_day,
+      meeting_time,
+      location,
+      category = "General",
+      max_capacity = 12,
+      effective_date,
+      reason,
+      notes
+    } = req.body;
+
+    // 1. Validation: source_group_ids
+    if (!Array.isArray(source_group_ids) || source_group_ids.length < 2) {
+      return res.status(400).json({ error: "At least two Bible study groups are required to perform a merge." });
+    }
+
+    const uniqueSourceIds = Array.from(new Set(source_group_ids.map(Number).filter(Boolean)));
+    if (uniqueSourceIds.length < 2) {
+      return res.status(400).json({ error: "Please select at least two distinct Bible study groups." });
+    }
+
+    // 2. Validation: new_group_name
+    if (!new_group_name || !new_group_name.trim()) {
+      return res.status(400).json({ error: "Resulting group name is required." });
+    }
+
+    // Check if another active group already has this name
+    const existingGroup = await db.get(
+      "SELECT id, name FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND COALESCE(status, 'active') != 'merged'",
+      [new_group_name.trim()]
+    );
+    if (existingGroup) {
+      return res.status(400).json({ error: `An active Bible study group named "${new_group_name.trim()}" already exists.` });
+    }
+
+    // 3. Validation: leaders
+    if (!primary_leader_name || !primary_leader_name.trim()) {
+      return res.status(400).json({ error: "Primary Leader is required for the merged group." });
+    }
+
+    const cleanPrimary = primary_leader_name.trim();
+    const cleanAssistant = assistant_leader_name && assistant_leader_name.trim() ? assistant_leader_name.trim() : null;
+
+    if (cleanAssistant) {
+      if (cleanPrimary.toLowerCase() === cleanAssistant.toLowerCase()) {
+        return res.status(400).json({ error: "Primary Leader and Assistant Leader cannot be the same person." });
+      }
+      if (primary_leader_id && assistant_leader_id && Number(primary_leader_id) === Number(assistant_leader_id)) {
+        return res.status(400).json({ error: "Primary Leader and Assistant Leader cannot be the same person." });
+      }
+    }
+
+    // 4. Validate source groups existence and status
+    const sourceGroups = await db.all<any>(
+      "SELECT * FROM bible_study_groups WHERE id = ANY($1)",
+      [uniqueSourceIds]
+    );
+
+    if (sourceGroups.length !== uniqueSourceIds.length) {
+      return res.status(400).json({ error: "One or more selected source groups could not be found." });
+    }
+
+    for (const sg of sourceGroups) {
+      if (sg.status === "merged") {
+        return res.status(400).json({
+          error: `Group "${sg.name}" has already been merged into another group and cannot be merged again.`
+        });
+      }
+    }
+
+    // 5. Resolve effective date
+    const effDate = (effective_date && typeof effective_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(effective_date))
+      ? effective_date
+      : new Date().toISOString().split("T")[0];
+
+    // Defaults from source groups if not provided
+    const resolvedMeetingDay = meeting_day || sourceGroups[0].meeting_day || "Wednesday";
+    const resolvedMeetingTime = meeting_time || sourceGroups[0].meeting_time || "7:00 PM - 8:30 PM";
+    const resolvedLocation = location || sourceGroups[0].location || "Fellowship Hall Room 201";
+    const resolvedCurriculum = curriculum || sourceGroups[0].curriculum || "General Scripture Study";
+    const resolvedMinistryId = ministry_id !== undefined ? (ministry_id ? Number(ministry_id) : null) : sourceGroups[0].ministry_id;
+    const resolvedCapacity = Number(max_capacity) || Math.max(12, sourceGroups.reduce((s: number, g: any) => s + (g.max_capacity || 12), 0));
+
+    // 6. Execute PostgreSQL transaction
+    let newGroupId: number = 0;
+    let transitionId: number = 0;
+    let migratedMemberCount: number = 0;
+
+    await db.transaction(async (client) => {
+      // Step A: Insert resulting group
+      const newGroupRes = await client.query(`
+        INSERT INTO bible_study_groups (
+          name, description, curriculum, ministry_id, leader_name, leader_contact,
+          assistant_leader_name, assistant_leader_contact, assistant_leader_id,
+          meeting_day, meeting_time, location, category, max_capacity,
+          current_chapter, progress_stage, progress_notes, status, effective_date
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'active', $18)
+        RETURNING id
+      `, [
+        new_group_name.trim(),
+        description ? description.trim() : `Merged group from ${sourceGroups.map((g: any) => g.name).join(" + ")}`,
+        resolvedCurriculum,
+        resolvedMinistryId,
+        cleanPrimary,
+        primary_leader_contact ? primary_leader_contact.trim() : null,
+        cleanAssistant,
+        assistant_leader_contact ? assistant_leader_contact.trim() : null,
+        assistant_leader_id ? Number(assistant_leader_id) : null,
+        resolvedMeetingDay,
+        resolvedMeetingTime,
+        resolvedLocation,
+        category,
+        resolvedCapacity,
+        sourceGroups[0].current_chapter || "Chapter 1",
+        "in_progress",
+        notes ? notes.trim() : `Group created through merge transition on ${effDate}. Reason: ${reason || "Restructuring"}`,
+        effDate
+      ]);
+
+      newGroupId = newGroupRes.rows[0].id;
+
+      // Step B: Insert master transition record
+      const transRes = await client.query(`
+        INSERT INTO bible_study_group_transitions (
+          transition_type, new_group_id, effective_date, reason, notes, metadata, created_by
+        )
+        VALUES ('MERGE', $1, $2, $3, $4, $5, $6)
+        RETURNING id
+      `, [
+        newGroupId,
+        effDate,
+        reason ? reason.trim() : "Group restructuring",
+        notes ? notes.trim() : null,
+        JSON.stringify({
+          source_group_ids: uniqueSourceIds,
+          source_groups: sourceGroups.map((g: any) => ({ id: g.id, name: g.name, leader_name: g.leader_name })),
+          primary_leader: cleanPrimary,
+          assistant_leader: cleanAssistant
+        }),
+        req.user?.id || null
+      ]);
+
+      transitionId = transRes.rows[0].id;
+
+      // Step C: Insert transition source links
+      for (const sgId of uniqueSourceIds) {
+        await client.query(`
+          INSERT INTO bible_study_group_transition_sources (transition_id, source_group_id)
+          VALUES ($1, $2)
+          ON CONFLICT (transition_id, source_group_id) DO NOTHING
+        `, [transitionId, sgId]);
+      }
+
+      // Step D: Collect all distinct active members from source groups
+      const sourceMembersRes = await client.query(`
+        SELECT DISTINCT ON (COALESCE(member_id, 0), LOWER(TRIM(member_name)))
+          member_id, member_name
+        FROM bible_study_members
+        WHERE group_id = ANY($1)
+      `, [uniqueSourceIds]);
+
+      const distinctMembers = sourceMembersRes.rows;
+      migratedMemberCount = distinctMembers.length;
+
+      // Step E: Copy members into new group with status = 'active'
+      for (const m of distinctMembers) {
+        await client.query(`
+          INSERT INTO bible_study_members (group_id, member_id, member_name, status, joined_at, transition_id)
+          VALUES ($1, $2, $3, 'active', $4, $5)
+          ON CONFLICT (group_id, member_id) DO UPDATE SET
+            status = 'active',
+            transition_id = EXCLUDED.transition_id
+        `, [newGroupId, m.member_id || null, m.member_name || "Member", effDate, transitionId]);
+      }
+
+      // Step F: Mark source group memberships as transferred (preserving history)
+      await client.query(`
+        UPDATE bible_study_members
+        SET status = 'transferred', left_at = CURRENT_TIMESTAMP, transition_id = $1
+        WHERE group_id = ANY($2)
+      `, [transitionId, uniqueSourceIds]);
+
+      // Step G: Record Primary and Assistant Leaders in bible_study_group_leaders
+      await client.query(`
+        INSERT INTO bible_study_group_leaders (group_id, leader_name, leader_contact, role, started_at, status)
+        VALUES ($1, $2, $3, 'primary', $4, 'active')
+      `, [newGroupId, cleanPrimary, primary_leader_contact ? primary_leader_contact.trim() : null, effDate]);
+
+      if (cleanAssistant) {
+        await client.query(`
+          INSERT INTO bible_study_group_leaders (group_id, leader_name, leader_contact, role, started_at, status)
+          VALUES ($1, $2, $3, 'assistant', $4, 'active')
+        `, [newGroupId, cleanAssistant, assistant_leader_contact ? assistant_leader_contact.trim() : null, effDate]);
+      }
+
+      // Record former leaders of source groups
+      for (const sg of sourceGroups) {
+        if (
+          sg.leader_name &&
+          sg.leader_name.trim().toLowerCase() !== cleanPrimary.toLowerCase() &&
+          (!cleanAssistant || sg.leader_name.trim().toLowerCase() !== cleanAssistant.toLowerCase())
+        ) {
+          await client.query(`
+            INSERT INTO bible_study_group_leaders (group_id, leader_name, leader_contact, role, started_at, ended_at, status)
+            VALUES ($1, $2, $3, 'former', $4, $4, 'inactive')
+          `, [sg.id, sg.leader_name.trim(), sg.leader_contact || null, effDate]);
+        }
+      }
+
+      // Step H: Mark source groups as MERGED into new group
+      await client.query(`
+        UPDATE bible_study_groups
+        SET status = 'merged',
+            merged_into_group_id = $1,
+            closed_at = CURRENT_TIMESTAMP,
+            effective_date = $2
+        WHERE id = ANY($3)
+      `, [newGroupId, effDate, uniqueSourceIds]);
+    });
+
+    // Step I: Audit Logging
+    const sourceNames = sourceGroups.map((g: any) => g.name).join(", ");
+    const auditDetails = `Action: BIBLE_STUDY_GROUP_MERGE\nPerformed by: ${req.user?.name || "Admin"}\nSource Groups: ${sourceNames}\nResulting Group: ${new_group_name.trim()}\nPrimary Leader: ${cleanPrimary}\nAssistant Leader: ${cleanAssistant || "None"}\nEffective Date: ${effDate}\nMigrated Members: ${migratedMemberCount}\nReason: ${reason || "Group restructuring"}`;
+
+    await logAuditAction(
+      req.user?.id || null,
+      "BIBLE_STUDY_GROUP_MERGE",
+      "bible_study_groups",
+      newGroupId,
+      auditDetails
+    );
+
+    // Step J: Real-time Socket.io updates
+    emitRealtimeEvent("groups:changed", {
+      action: "transition_merge",
+      id: newGroupId,
+      source_group_ids: uniqueSourceIds,
+      new_group_name: new_group_name.trim()
+    });
+    emitRealtimeEvent("bible-study:changed", {
+      action: "merge",
+      new_group_id: newGroupId,
+      source_group_ids: uniqueSourceIds
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `✓ Successfully merged ${sourceGroups.length} groups into "${new_group_name.trim()}"! Combined ${migratedMemberCount} disciples.`,
+      group_id: newGroupId,
+      transition_id: transitionId,
+      migrated_members: migratedMemberCount
+    });
+  } catch (err: any) {
+    console.error("Failed to perform Bible Study group merge:", err);
+    res.status(500).json({ error: err.message || "Failed to complete group merge transition." });
+  }
+});
+
+// GET /api/groups/transitions — List all group transitions
+router.get("/transitions", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const transitions = await db.all(`
+      SELECT t.*, u.name as created_by_name, bg.name as new_group_name,
+             (
+               SELECT json_agg(json_build_object('id', sg.id, 'name', sg.name, 'leader_name', sg.leader_name, 'status', sg.status))
+               FROM bible_study_group_transition_sources ts
+               JOIN bible_study_groups sg ON ts.source_group_id = sg.id
+               WHERE ts.transition_id = t.id
+             ) as source_groups
+      FROM bible_study_group_transitions t
+      LEFT JOIN users u ON t.created_by = u.id
+      LEFT JOIN bible_study_groups bg ON t.new_group_id = bg.id
+      ORDER BY t.effective_date DESC, t.id DESC
+    `);
+    res.json(transitions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/groups/:id/history — Get transition & leadership history for a specific group
+router.get("/:id/history", async (req: Request, res: Response) => {
+  try {
+    const groupId = Number(req.params.id);
     const group = await db.get(`
       SELECT g.*, min.name as ministry_name, min.color as ministry_color
       FROM bible_study_groups g
       LEFT JOIN ministries min ON g.ministry_id = min.id
+      WHERE g.id = $1
+    `, [groupId]);
+
+    if (!group) return res.status(404).json({ error: "Small group not found" });
+
+    // Transition that created this group (e.g. this group was new_group_id in a merge)
+    const createdTransition = await db.get(`
+      SELECT t.*, u.name as created_by_name
+      FROM bible_study_group_transitions t
+      LEFT JOIN users u ON t.created_by = u.id
+      WHERE t.new_group_id = $1
+      ORDER BY t.id DESC LIMIT 1
+    `, [groupId]);
+
+    let sourceGroups: any[] = [];
+    if (createdTransition) {
+      sourceGroups = await db.all(`
+        SELECT sg.id, sg.name, sg.leader_name, sg.leader_contact, sg.category, sg.status, sg.meeting_day, sg.meeting_time,
+               (SELECT COUNT(*) FROM bible_study_members WHERE group_id = sg.id) as member_count
+        FROM bible_study_group_transition_sources ts
+        JOIN bible_study_groups sg ON ts.source_group_id = sg.id
+        WHERE ts.transition_id = $1
+        ORDER BY sg.name ASC
+      `, [createdTransition.id]);
+    }
+
+    // Target group if this group was merged into another
+    let mergedIntoGroup = null;
+    if (group.merged_into_group_id) {
+      mergedIntoGroup = await db.get(`
+        SELECT id, name, leader_name, leader_contact, assistant_leader_name, status, meeting_day, meeting_time, location
+        FROM bible_study_groups
+        WHERE id = $1
+      `, [group.merged_into_group_id]);
+    }
+
+    // Leadership roster & history
+    const leaders = await db.all(`
+      SELECT * FROM bible_study_group_leaders
+      WHERE group_id = $1
+      ORDER BY started_at DESC, id DESC
+    `, [groupId]);
+
+    res.json({
+      group,
+      created_transition: createdTransition ? { ...createdTransition, source_groups: sourceGroups } : null,
+      merged_into_group: mergedIntoGroup,
+      leaders
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get specific group
+router.get("/:id", async (req: Request, res: Response) => {
+  try {
+    const group = await db.get(`
+      SELECT g.*, min.name as ministry_name, min.color as ministry_color,
+             mg.name as merged_into_group_name
+      FROM bible_study_groups g
+      LEFT JOIN ministries min ON g.ministry_id = min.id
+      LEFT JOIN bible_study_groups mg ON g.merged_into_group_id = mg.id
       WHERE g.id = $1
     `, [req.params.id]);
 
@@ -125,7 +639,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Small group not found" });
     }
 
-    const [members, dbTopics] = await Promise.all([
+    const [members, dbTopics, createdTransition, leaders] = await Promise.all([
       db.all(`
         SELECT bsm.*, m.first_name, m.last_name, m.contact_email, m.contact_phone
         FROM bible_study_members bsm
@@ -133,8 +647,41 @@ router.get("/:id", async (req: Request, res: Response) => {
         WHERE bsm.group_id = $1
         ORDER BY COALESCE(LOWER(m.first_name), LOWER(bsm.member_name)) ASC, LOWER(m.last_name) ASC
       `, [group.id]),
-      db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => [])
+      db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => []),
+      db.get(`
+        SELECT t.*, u.name as created_by_name
+        FROM bible_study_group_transitions t
+        LEFT JOIN users u ON t.created_by = u.id
+        WHERE t.new_group_id = $1
+        ORDER BY t.id DESC LIMIT 1
+      `, [group.id]).catch(() => null),
+      db.all(`
+        SELECT * FROM bible_study_group_leaders
+        WHERE group_id = $1
+        ORDER BY started_at DESC, id DESC
+      `, [group.id]).catch(() => [])
     ]);
+
+    let sourceGroups: any[] = [];
+    if (createdTransition) {
+      sourceGroups = await db.all(`
+        SELECT sg.id, sg.name, sg.leader_name, sg.leader_contact, sg.category, sg.status,
+               (SELECT COUNT(*) FROM bible_study_members WHERE group_id = sg.id) as member_count
+        FROM bible_study_group_transition_sources ts
+        JOIN bible_study_groups sg ON ts.source_group_id = sg.id
+        WHERE ts.transition_id = $1
+        ORDER BY sg.name ASC
+      `, [createdTransition.id]).catch(() => []);
+    }
+
+    let mergedIntoGroup = null;
+    if (group.merged_into_group_id) {
+      mergedIntoGroup = await db.get(`
+        SELECT id, name, leader_name, assistant_leader_name, status, meeting_day, meeting_time, location
+        FROM bible_study_groups
+        WHERE id = $1
+      `, [group.merged_into_group_id]).catch(() => null);
+    }
 
     const totalChapters = resolveTotalChapters(group.curriculum || "", dbTopics);
 
@@ -144,7 +691,10 @@ router.get("/:id", async (req: Request, res: Response) => {
       members: members.map(m => ({
         ...m,
         display_name: m.first_name ? `${m.first_name} ${m.last_name}` : m.member_name
-      }))
+      })),
+      created_transition: createdTransition ? { ...createdTransition, source_groups: sourceGroups } : null,
+      merged_into_group: mergedIntoGroup,
+      leaders
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -161,6 +711,9 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       ministry_id,
       leader_name,
       leader_contact,
+      assistant_leader_name,
+      assistant_leader_contact,
+      assistant_leader_id,
       meeting_day,
       meeting_time,
       location,
@@ -176,7 +729,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       return res.status(400).json({ error: "Group name, leader name, day, time, and location are required" });
     }
 
-    const existing = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1)", [name.trim()]);
+    const existing = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND COALESCE(status, 'active') != 'merged'", [name.trim()]);
     if (existing) {
       return res.status(400).json({ error: "A Bible study group with this name already exists" });
     }
@@ -184,10 +737,11 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
     const result = await db.run(`
       INSERT INTO bible_study_groups (
         name, description, curriculum, ministry_id, leader_name, leader_contact,
+        assistant_leader_name, assistant_leader_contact, assistant_leader_id,
         meeting_day, meeting_time, location, category, max_capacity,
-        current_chapter, progress_stage, progress_notes
+        current_chapter, progress_stage, progress_notes, status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'active')
       RETURNING id
     `, [
       name.trim(),
@@ -196,6 +750,9 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       ministry_id ? Number(ministry_id) : null,
       leader_name.trim(),
       leader_contact || null,
+      assistant_leader_name ? assistant_leader_name.trim() : null,
+      assistant_leader_contact || null,
+      assistant_leader_id ? Number(assistant_leader_id) : null,
       meeting_day,
       meeting_time,
       location,
@@ -208,14 +765,29 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
 
     const newId = result.lastInsertRowid;
 
+    // Record primary leader in bible_study_group_leaders
+    try {
+      await db.run(`
+        INSERT INTO bible_study_group_leaders (group_id, leader_name, leader_contact, role, started_at, status)
+        VALUES ($1, $2, $3, 'primary', CURRENT_DATE, 'active')
+      `, [newId, leader_name.trim(), leader_contact || null]);
+
+      if (assistant_leader_name && assistant_leader_name.trim()) {
+        await db.run(`
+          INSERT INTO bible_study_group_leaders (group_id, leader_name, leader_contact, role, started_at, status)
+          VALUES ($1, $2, $3, 'assistant', CURRENT_DATE, 'active')
+        `, [newId, assistant_leader_name.trim(), assistant_leader_contact || null]);
+      }
+    } catch { }
+
     // Enroll initial selected members if provided
     if (Array.isArray(member_ids) && member_ids.length > 0) {
       for (const mId of member_ids) {
         const member = await db.get("SELECT first_name, last_name FROM members WHERE id = $1", [mId]);
         const mName = member ? `${member.first_name} ${member.last_name}` : "Member";
         await db.run(`
-          INSERT INTO bible_study_members (group_id, member_id, member_name)
-          VALUES ($1, $2, $3)
+          INSERT INTO bible_study_members (group_id, member_id, member_name, status)
+          VALUES ($1, $2, $3, 'active')
           ON CONFLICT (group_id, member_id) DO NOTHING
         `, [newId, mId, mName]);
       }
@@ -241,6 +813,9 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
       ministry_id,
       leader_name,
       leader_contact,
+      assistant_leader_name,
+      assistant_leader_contact,
+      assistant_leader_id,
       meeting_day,
       meeting_time,
       location,
@@ -253,7 +828,8 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
       is_rescheduled,
       rescheduled_date,
       rescheduled_time,
-      reschedule_reason
+      reschedule_reason,
+      status
     } = req.body;
 
     const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
@@ -261,7 +837,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
 
     if (name !== undefined) {
       if (!name.trim()) return res.status(400).json({ error: "Group name cannot be empty" });
-      const duplicate = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND id != $2", [name.trim(), id]);
+      const duplicate = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND id != $2 AND COALESCE(status, 'active') != 'merged'", [name.trim(), id]);
       if (duplicate) return res.status(400).json({ error: "Another Bible study group already has this name" });
     }
 
@@ -273,19 +849,23 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
           ministry_id = COALESCE($4, ministry_id),
           leader_name = COALESCE($5, leader_name),
           leader_contact = COALESCE($6, leader_contact),
-          meeting_day = COALESCE($7, meeting_day),
-          meeting_time = COALESCE($8, meeting_time),
-          location = COALESCE($9, location),
-          category = COALESCE($10, category),
-          max_capacity = COALESCE($11, max_capacity),
-          current_chapter = COALESCE($12, current_chapter),
-          progress_stage = COALESCE($13, progress_stage),
-          progress_notes = COALESCE($14, progress_notes),
-          is_rescheduled = COALESCE($15, is_rescheduled),
-          rescheduled_date = COALESCE($16, rescheduled_date),
-          rescheduled_time = COALESCE($17, rescheduled_time),
-          reschedule_reason = COALESCE($18, reschedule_reason)
-      WHERE id = $19
+          assistant_leader_name = COALESCE($7, assistant_leader_name),
+          assistant_leader_contact = COALESCE($8, assistant_leader_contact),
+          assistant_leader_id = COALESCE($9, assistant_leader_id),
+          meeting_day = COALESCE($10, meeting_day),
+          meeting_time = COALESCE($11, meeting_time),
+          location = COALESCE($12, location),
+          category = COALESCE($13, category),
+          max_capacity = COALESCE($14, max_capacity),
+          current_chapter = COALESCE($15, current_chapter),
+          progress_stage = COALESCE($16, progress_stage),
+          progress_notes = COALESCE($17, progress_notes),
+          is_rescheduled = COALESCE($18, is_rescheduled),
+          rescheduled_date = COALESCE($19, rescheduled_date),
+          rescheduled_time = COALESCE($20, rescheduled_time),
+          reschedule_reason = COALESCE($21, reschedule_reason),
+          status = COALESCE($22, status)
+      WHERE id = $23
     `, [
       name !== undefined ? name.trim() : null,
       description,
@@ -293,6 +873,9 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
       ministry_id !== undefined ? (ministry_id ? Number(ministry_id) : null) : null,
       leader_name !== undefined ? leader_name.trim() : null,
       leader_contact,
+      assistant_leader_name !== undefined ? (assistant_leader_name ? assistant_leader_name.trim() : null) : null,
+      assistant_leader_contact,
+      assistant_leader_id !== undefined ? (assistant_leader_id ? Number(assistant_leader_id) : null) : null,
       meeting_day,
       meeting_time,
       location,
@@ -305,6 +888,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
       rescheduled_date,
       rescheduled_time,
       reschedule_reason,
+      status,
       id
     ]);
 
@@ -373,7 +957,7 @@ router.patch("/:id/reschedule", authMiddleware, requireRoles("Admin", "Coordinat
     const id = req.params.id;
     const { is_rescheduled, rescheduled_date, rescheduled_time, reschedule_reason, location } = req.body;
 
-    const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
+    const current = await db.get<GroupNotificationRow>("SELECT id, name, ministry_id, leader_name, leader_contact, curriculum, meeting_day, meeting_time FROM bible_study_groups WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Small group not found" });
 
     await db.run(`
@@ -406,6 +990,15 @@ router.patch("/:id/reschedule", authMiddleware, requireRoles("Admin", "Coordinat
     );
 
     emitRealtimeEvent("groups:changed", { action: "reschedule", id: Number(id) });
+
+    if (Boolean(is_rescheduled)) {
+      void sendRescheduleNotification(
+        current,
+        rescheduled_date || null,
+        rescheduled_time || null,
+        reschedule_reason || null
+      );
+    }
 
     res.json({
       message: is_rescheduled
@@ -624,14 +1217,11 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
       const rate = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 100;
 
       // Check consecutive absences from most recent sessions
-      let consecutiveAbsences = 0;
-      for (const h of history) {
-        if (h.status === "absent") {
-          consecutiveAbsences++;
-        } else {
-          break;
-        }
-      }
+      const consecutiveAbsences = countConsecutiveAbsences(history.map(h => ({
+        member_id: memId,
+        session_date: h.session_date,
+        status: h.status
+      })));
 
       let healthStatus: "consistent" | "moderate" | "at_risk" = "consistent";
       if (absentCount >= 3 || consecutiveAbsences >= 2 || (totalSessions >= 3 && rate < 60)) {
@@ -882,6 +1472,8 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
     emitRealtimeEvent("attendance:changed", { action: "save_session", group_id: groupId, session_date });
     emitRealtimeEvent("groups:changed", { action: "attendance_update", id: groupId });
 
+    void sendAbsenceSessionNotification(groupId, session_date);
+
     res.json({ message: `✓ Attendance session for ${session_date} logged successfully!` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -907,4 +1499,3 @@ router.delete("/:id/attendance/:date", authMiddleware, async (req: AuthRequest, 
 });
 
 export default router;
-

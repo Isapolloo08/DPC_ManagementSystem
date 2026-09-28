@@ -1,6 +1,6 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
-import { ShieldCheck, UserCheck, HeartHandshake, User, Sparkles, BookOpen } from "lucide-react";
+import { ShieldCheck, UserCheck, HeartHandshake, User, Sliders, BookOpen } from "lucide-react";
 
 export const DemoRoleBar: React.FC = () => {
   const { user, demoUsers, switchDemoUser } = useAuth();
@@ -23,8 +23,8 @@ export const DemoRoleBar: React.FC = () => {
   return (
     <div className="bg-indigo-900 text-white px-4 py-1.5 text-xs flex flex-wrap items-center justify-between border-b border-indigo-800 gap-2">
       <div className="flex items-center gap-2">
-        <span className="flex items-center gap-1 font-semibold text-amber-400">
-          <Sparkles className="w-3.5 h-3.5" />
+        <span className="flex items-center gap-1.5 font-semibold text-amber-400">
+          <Sliders className="w-3.5 h-3.5" />
           Interactive Role Switcher:
         </span>
         <span className="text-indigo-200 hidden sm:inline">

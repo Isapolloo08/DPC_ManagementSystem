@@ -123,25 +123,6 @@ entity "document_approval_steps" as approval_steps {
   reviewed_at : TIMESTAMPTZ
 }
 
-entity "funds" as funds {
-  * id : SERIAL <<PK>>
-  --
-  * name : VARCHAR(100) <<UNIQUE>>
-  description : TEXT
-  target_amount : DECIMAL(12,2)
-  is_active : INT
-}
-
-entity "donations" as donations {
-  * id : SERIAL <<PK>>
-  --
-  member_id : INT <<FK>>
-  * fund_id : INT <<FK>>
-  * amount : DECIMAL(12,2)
-  payment_method : VARCHAR(50)
-  donated_at : TIMESTAMPTZ
-}
-
 roles ||--o{ users : "assigns"
 users ||--o{ user_ministries : "has"
 ministries ||--o{ user_ministries : "in"
@@ -156,6 +137,4 @@ events ||--o{ attendance : "logs"
 users ||--o{ documents : "authors"
 events ||--o{ documents : "relates"
 documents ||--o{ approval_steps : "workflow steps"
-funds ||--o{ donations : "credits"
-members ||--o{ donations : "gives"
 @enduml

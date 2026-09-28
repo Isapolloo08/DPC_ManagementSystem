@@ -204,10 +204,10 @@ router.post("/users", authMiddleware, requireRoles("Admin"), async (req: AuthReq
     const passwordHash = bcrypt.hashSync(password, 10);
 
     const result = await db.run(`
-      INSERT INTO users (name, username, email, password_hash, role_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO users (name, username, email, password_hash, temp_password, role_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
-    `, [name.trim(), cleanUsername || null, email.trim().toLowerCase(), passwordHash, Number(role_id)]);
+    `, [name.trim(), cleanUsername || null, email.trim().toLowerCase(), passwordHash, password.trim(), Number(role_id)]);
 
     const newUserId = result.lastInsertRowid;
 
@@ -266,20 +266,23 @@ router.put("/users/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
     }
 
     let newHash = current.password_hash;
+    let tempPass = current.temp_password;
     if (password !== undefined && password.trim().length > 0) {
       if (password.trim().length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
       newHash = bcrypt.hashSync(password.trim(), 10);
+      tempPass = password.trim();
     }
 
     await db.run(`
       UPDATE users
-      SET name = $1, username = $2, email = $3, password_hash = $4, role_id = $5
-      WHERE id = $6
+      SET name = $1, username = $2, email = $3, password_hash = $4, temp_password = $5, role_id = $6
+      WHERE id = $7
     `, [
       name !== undefined ? name.trim() : current.name,
       cleanUsername || null,
       email !== undefined ? email.trim().toLowerCase() : current.email,
       newHash,
+      tempPass,
       role_id !== undefined ? Number(role_id) : current.role_id,
       id
     ]);
@@ -304,6 +307,117 @@ router.put("/users/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
 
     await logAuditAction(req.user?.id || null, "UPDATE", "users", Number(id), `Updated user account '${name || current.name}'`);
     res.json({ message: "User account updated successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reveal password for a user (Requires Admin Re-Authentication Password)
+router.post("/users/:id/reveal-password", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+  try {
+    const targetUserId = req.params.id;
+    const { admin_password } = req.body;
+
+    if (!admin_password || !admin_password.trim()) {
+      return res.status(400).json({ error: "Administrator authentication password is required to reveal credentials" });
+    }
+
+    // Verify requesting admin's current password
+    const adminUser = await db.get("SELECT id, name, password_hash FROM users WHERE id = $1", [req.user?.id]);
+    const isPasswordValid = adminUser && (
+      adminUser.password_hash?.startsWith("$2")
+        ? bcrypt.compareSync(admin_password.trim(), adminUser.password_hash)
+        : admin_password.trim() === adminUser.password_hash
+    );
+
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: "Incorrect administrator password. Authentication failed." });
+    }
+
+    // Fetch target user credentials
+    const targetUser = await db.get(`
+      SELECT u.id, u.name, u.username, u.email, u.temp_password, u.password_hash, r.name as role_name
+      FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.id = $1
+    `, [targetUserId]);
+
+    if (!targetUser) {
+      return res.status(404).json({ error: "Target user account not found" });
+    }
+
+    const hasPlainPassword = !!(targetUser.temp_password && targetUser.temp_password.trim());
+    const revealedPassword = hasPlainPassword ? targetUser.temp_password.trim() : null;
+
+    await logAuditAction(
+      req.user!.id,
+      "SECURITY_VERIFY",
+      "users",
+      Number(targetUserId),
+      `Admin '${adminUser.name}' authenticated to view credentials for '${targetUser.name}' (${targetUser.email})`
+    );
+
+    res.json({
+      success: true,
+      user_id: targetUser.id,
+      name: targetUser.name,
+      username: targetUser.username,
+      email: targetUser.email,
+      role_name: targetUser.role_name,
+      hasPlainPassword,
+      password: revealedPassword,
+      message: hasPlainPassword
+        ? "Credentials successfully verified and revealed."
+        : "This account's password was securely hashed (Bcrypt) and is not stored in plaintext. You can assign or reset a new password."
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Quick Reset Password for a user (Admin only, requires admin password verification)
+router.post("/users/:id/reset-password", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+  try {
+    const targetUserId = req.params.id;
+    const { admin_password, new_password } = req.body;
+
+    if (!admin_password || !admin_password.trim()) {
+      return res.status(400).json({ error: "Administrator authentication password is required" });
+    }
+    if (!new_password || new_password.trim().length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters" });
+    }
+
+    // Verify requesting admin's current password
+    const adminUser = await db.get("SELECT id, name, password_hash FROM users WHERE id = $1", [req.user?.id]);
+    const isPasswordValid = adminUser && (
+      adminUser.password_hash?.startsWith("$2")
+        ? bcrypt.compareSync(admin_password.trim(), adminUser.password_hash)
+        : admin_password.trim() === adminUser.password_hash
+    );
+
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: "Incorrect administrator password. Authentication failed." });
+    }
+
+    const newHash = bcrypt.hashSync(new_password.trim(), 10);
+    await db.run("UPDATE users SET password_hash = $1, temp_password = $2 WHERE id = $3", [newHash, new_password.trim(), targetUserId]);
+
+    const targetUser = await db.get("SELECT id, name, email FROM users WHERE id = $1", [targetUserId]);
+
+    await logAuditAction(
+      req.user!.id,
+      "UPDATE",
+      "users",
+      Number(targetUserId),
+      `Admin '${adminUser.name}' reset password for user '${targetUser?.name || targetUserId}'`
+    );
+
+    res.json({
+      success: true,
+      message: `Password for ${targetUser?.name || 'user'} has been reset successfully.`,
+      new_password: new_password.trim()
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

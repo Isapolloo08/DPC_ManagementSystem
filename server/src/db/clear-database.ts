@@ -24,8 +24,6 @@ export async function clearDatabase() {
     await sql.unsafe(`
       TRUNCATE TABLE 
         attendance,
-        donations,
-        funds,
         event_registrations,
         events,
         announcements,
@@ -39,6 +37,9 @@ export async function clearDatabase() {
         members,
         households,
         user_ministries,
+        email_outbox,
+        notification_log,
+        notifications,
         audit_logs,
         users
       RESTART IDENTITY CASCADE;
@@ -80,7 +81,6 @@ export async function clearDatabase() {
     const memberCount = await sql`SELECT count(*) FROM members`;
     const groupCount = await sql`SELECT count(*) FROM bible_study_groups`;
     const eventCount = await sql`SELECT count(*) FROM events`;
-    const donationCount = await sql`SELECT count(*) FROM donations`;
     const dutyCount = await sql`SELECT count(*) FROM duty_teams`;
     const dishCount = await sql`SELECT count(*) FROM dishwashing_roster`;
 
@@ -89,7 +89,6 @@ export async function clearDatabase() {
     console.log(`   - Members: ${memberCount[0].count}`);
     console.log(`   - Bible Study Groups: ${groupCount[0].count}`);
     console.log(`   - Events: ${eventCount[0].count}`);
-    console.log(`   - Donations: ${donationCount[0].count}`);
     console.log(`   - Duty Teams: ${dutyCount[0].count}`);
     console.log(`   - Dishwashing Schedules: ${dishCount[0].count}`);
   } catch (err: any) {

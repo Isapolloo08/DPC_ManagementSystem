@@ -16,5 +16,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("window:maximize-change", listener);
     return () => ipcRenderer.removeListener("window:maximize-change", listener);
   },
-  showMessage: (options) => ipcRenderer.invoke("dialog:show-message", options)
+  showMessage: (options) => ipcRenderer.invoke("dialog:show-message", options),
+  // Master PC & Server Mode Management
+  getServerConfig: () => ipcRenderer.invoke("server:get-config"),
+  setServerConfig: (config) => ipcRenderer.invoke("server:set-config", config),
+  getLocalIps: () => ipcRenderer.invoke("server:get-local-ips"),
+  restartServer: () => ipcRenderer.invoke("server:restart"),
+  onServerStatusChange: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on("server:status-change", listener);
+    return () => ipcRenderer.removeListener("server:status-change", listener);
+  }
 });

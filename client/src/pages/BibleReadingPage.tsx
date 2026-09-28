@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
-  BookOpen, Calendar, Search, Printer, Sparkles,
+  BookOpen, Calendar, Search, Printer,
   ArrowUpRight, BookMarked, BookmarkCheck, Award, Sliders
 } from "lucide-react";
 import {
@@ -89,7 +89,7 @@ export const BibleReadingPage: React.FC = () => {
     <div className="space-y-8 pb-16 animate-in fade-in duration-300">
       
       {/* Top Hero Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-white/10">
+      <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-white/10">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -102,7 +102,7 @@ export const BibleReadingPage: React.FC = () => {
           <div className="space-y-3 max-w-2xl">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                <Sparkles className="w-3.5 h-3.5" /> 1-Year Bible Reading Plan & Cycle
+                <BookOpen className="w-3.5 h-3.5" /> 1-Year Bible Reading Plan & Cycle
               </span>
               <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30">
                 NIV Edition
@@ -216,7 +216,7 @@ export const BibleReadingPage: React.FC = () => {
         </div>
 
         {/* Big Passage Display */}
-        <div className="bg-gradient-to-r from-sky-50 via-indigo-50/40 to-slate-50 rounded-2xl p-5 border border-sky-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="bg-sky-50 rounded-2xl p-5 border border-sky-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <span className="text-[11px] font-black text-sky-700 uppercase tracking-wider">Passage for Today</span>
             <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
@@ -366,7 +366,7 @@ export const BibleReadingPage: React.FC = () => {
                   onClick={() => setActivePassageModal(day)}
                   className={`group cursor-pointer rounded-2xl p-4 transition-all duration-200 border relative flex flex-col justify-between gap-3 ${
                     isToday
-                      ? "bg-gradient-to-br from-sky-50 via-white to-sky-50/30 border-sky-400 shadow-md ring-2 ring-sky-400/20"
+                      ? "bg-sky-50 border-sky-400 shadow-md ring-2 ring-sky-400/20"
                       : isPassed
                       ? "bg-slate-50/60 border-slate-200/80 shadow-2xs hover:shadow-md hover:border-sky-300"
                       : "bg-white border-slate-200 shadow-2xs hover:shadow-md hover:border-sky-300"

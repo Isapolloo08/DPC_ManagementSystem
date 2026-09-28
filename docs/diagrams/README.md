@@ -27,8 +27,6 @@ erDiagram
     users ||--o{ documents : authors
     events ||--o{ documents : "relates to"
     documents ||--o{ document_approval_steps : "workflow steps"
-    funds ||--o{ donations : "credits to"
-    members ||--o{ donations : "contributed by"
 
     users {
         int id PK
@@ -76,22 +74,6 @@ erDiagram
         int event_id FK
     }
 
-    funds {
-        int id PK
-        string name
-        text description
-        decimal target_amount
-        int is_active
-    }
-
-    donations {
-        int id PK
-        int member_id FK
-        int fund_id FK
-        decimal amount
-        string payment_method
-        timestamp donated_at
-    }
 ```
 
 *PlantUML Source file:* [`erd.puml`](./erd.puml)
@@ -221,15 +203,7 @@ flowchart TD
         RostMod --> SunDish[Sunday Fellowship Meal Rotation & Volunteers]
     end
 
-    %% Module 5: Giving & Financials
-    ModSelect -->|Stewardship| FinMod[Funds, Donations & Stewardship]
-    subgraph M5 [Financial Management]
-        FinMod --> FundCreate[Create Campaign Funds & Target Goals]
-        FundCreate --> DonRecord[Record Tithes, Offerings & Payment Methods]
-        DonRecord --> FinSummary[Budget vs. Actuals & Financial Reports]
-    end
-
-    %% Module 6: Document Management
+    %% Module 5: Document Management
     ModSelect -->|Documents & Approvals| DocMod[Document Workflow & Approvals]
     subgraph M6 [Document Approvals]
         DocMod --> DocGen[Auto-Populate Headers & Generate PDF]
@@ -240,7 +214,7 @@ flowchart TD
     end
 
     %% System Persistence
-    M1 & M2 & M3 & M4 & M5 & M6 --> Sync[PostgreSQL DB Sync & Audit Logging]
+    M1 & M2 & M3 & M4 & M6 --> Sync[PostgreSQL DB Sync & Audit Logging]
     Sync --> LiveKPI[Refresh Dashboard KPI Cards & In-App Alerts]
     LiveKPI --> EndSync([Complete / Real-Time Sync])
 ```

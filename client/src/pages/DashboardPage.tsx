@@ -8,7 +8,7 @@ import { useSocketEvent } from "../socket";
 import { DashboardSkeleton } from "../components/common/SkeletonLoader";
 import {
   Users, UserCheck, Heart, MessageSquare, Calendar,
-  AlertTriangle, ArrowRight, Sparkles, PlusCircle, CheckCircle2, Clock,
+  AlertTriangle, ArrowRight, PlusCircle, CheckCircle2, Clock,
   Cake, Gift, PartyPopper, Send, X, Check, Share2, BookOpen, MapPin, ShieldCheck, Layers,
   Utensils, Droplets, Award, TrendingUp, UserPlus, CheckCircle, Megaphone, Home, User
 } from "lucide-react";
@@ -75,7 +75,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   useSocketEvent("members:changed", () => loadDashboard());
   useSocketEvent("ministries:changed", () => loadDashboard());
   useSocketEvent("events:changed", () => loadDashboard());
-  useSocketEvent("finance:changed", () => loadDashboard());
   useSocketEvent("dishwashing:changed", () => loadDashboard());
   useSocketEvent("duty:changed", () => loadDashboard());
   useSocketEvent("groups:changed", () => loadDashboard());
@@ -290,7 +289,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </button>
             <button
               onClick={() => onNavigate("communications")}
-              className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black px-4 py-2 rounded-xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+              className="flex items-center justify-center gap-2 bg-amber-500  text-white font-black px-4 py-2 rounded-xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
             >
               <Megaphone className="w-3.5 h-3.5 text-white" />
               <span>Broadcast Notice</span>
@@ -304,7 +303,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
       {/* Aging Out / Ministry Transition Urgent Alert Banner */}
       {agingOutMembers.length > 0 && (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/5 border border-amber-300/80 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm backdrop-blur-xs">
+        <div className="relative overflow-hidden rounded-3xl bg-amber-50 border border-amber-300/80 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm backdrop-blur-xs">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-amber-500/20 text-amber-700 rounded-2xl shrink-0 mt-0.5 shadow-xs">
               <AlertTriangle className="w-5 h-5 animate-bounce" />
@@ -346,9 +345,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
       {/* 🌊 Water Baptism Candidate Readiness & 1-Click Nomination Alert Banner */}
       {baptismCandidateData && baptismCandidateData.counts.total_qualified > 0 && (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-cyan-600/15 via-sky-500/10 to-teal-500/10 border border-cyan-300/80 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm backdrop-blur-xs">
+        <div className="relative overflow-hidden rounded-3xl bg-cyan-50 border border-cyan-300/80 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm backdrop-blur-xs">
           <div className="flex items-start gap-4">
-            <div className="p-3 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-2xl shrink-0 mt-0.5 shadow-md shadow-cyan-500/20">
+            <div className="p-3 bg-cyan-600 text-white rounded-2xl shrink-0 mt-0.5 shadow-md shadow-cyan-500/20">
               <Droplets className="w-5 h-5 animate-pulse" />
             </div>
             <div>
@@ -357,7 +356,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <span>🌊 Water Baptism Ceremony Candidates</span>
                 </h3>
                 {baptismCandidateData.counts.pending_nomination > 0 ? (
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-2.5 py-0.5 rounded-full shadow-xs animate-pulse">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-cyan-600 text-white px-2.5 py-0.5 rounded-full shadow-xs animate-pulse">
                     {baptismCandidateData.counts.pending_nomination} Disciples Ready for Nomination
                   </span>
                 ) : (
@@ -396,7 +395,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               <button
                 onClick={handleNominateAllCandidates}
                 disabled={isBulkNominating}
-                className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white text-xs font-black rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
+                className="px-4 py-2.5 bg-cyan-600  text-white text-xs font-black rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
               >
                 <CheckCircle2 className="w-4 h-4 text-cyan-200" />
                 <span>{isBulkNominating ? "Nominating..." : `Nominate All (${baptismCandidateData.counts.pending_nomination})`}</span>
@@ -415,7 +414,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
       {/* Floating Nomination Toast Banner */}
       {nominationToast && (
-        <div className="fixed bottom-6 right-6 z-[120] bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-cyan-300/40 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-6 right-6 z-[120] bg-cyan-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-cyan-300/40 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
             <CheckCircle className="w-5 h-5 text-white" />
           </div>
@@ -729,7 +728,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
               {/* 2-Column Content: Scripture & Discipleship Pathway + Action Toolkit */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-1">
-                <div className="lg:col-span-7 p-5 rounded-2xl bg-gradient-to-br from-indigo-950 via-indigo-900 to-indigo-800 text-white space-y-3.5 shadow-md border border-indigo-700/60 flex flex-col justify-between">
+                <div className="lg:col-span-7 p-5 rounded-2xl bg-indigo-950 text-white space-y-3.5 shadow-md border border-indigo-700/60 flex flex-col justify-between">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] uppercase font-black tracking-widest text-amber-300">
@@ -746,7 +745,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
                   <div className="pt-2.5 border-t border-indigo-700/60 flex items-center justify-between text-xs text-indigo-200">
                     <span className="flex items-center gap-1.5 font-medium">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <BookOpen className="w-3.5 h-3.5 text-amber-400" />
                       <span>LifeGroup Discipleship & Biblical Stewardship</span>
                     </span>
                     <button
@@ -836,7 +835,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <div className="relative h-[115px]">
                     <div
                       onClick={() => onNavigate("members")}
-                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-gradient-to-br hover:from-amber-500 hover:via-amber-500 hover:to-orange-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
+                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-amber-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -870,7 +869,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <div className="relative h-[115px]">
                     <div
                       onClick={() => onNavigate("members")}
-                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-gradient-to-br hover:from-amber-500 hover:via-amber-500 hover:to-orange-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
+                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-amber-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -904,7 +903,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <div className="relative h-[115px]">
                     <div
                       onClick={() => onNavigate("members")}
-                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-gradient-to-br hover:from-amber-500 hover:via-amber-500 hover:to-orange-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
+                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-amber-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -938,7 +937,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <div className="relative h-[115px]">
                     <div
                       onClick={() => onNavigate("members")}
-                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-gradient-to-br hover:from-amber-500 hover:via-amber-500 hover:to-orange-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
+                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-amber-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -978,7 +977,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <div className="relative h-[115px]">
                     <div
                       onClick={() => onNavigate("members")}
-                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-gradient-to-br hover:from-amber-500 hover:via-amber-500 hover:to-orange-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
+                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-amber-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -1012,7 +1011,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <div className="relative h-[115px]">
                     <div
                       onClick={() => onNavigate("members")}
-                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-gradient-to-br hover:from-amber-500 hover:via-amber-500 hover:to-orange-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
+                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-amber-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -1046,7 +1045,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   <div className="relative h-[115px]">
                     <div
                       onClick={() => onNavigate("members")}
-                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-gradient-to-br hover:from-amber-500 hover:via-amber-500 hover:to-orange-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
+                      className="absolute top-0 inset-x-0 group bg-slate-50/70 hover:bg-amber-500 rounded-2xl p-3.5 border border-slate-200/80 hover:border-amber-400 shadow-2xs hover:shadow-2xl hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 cursor-pointer flex flex-col justify-between z-10 hover:z-30 text-slate-900 hover:text-white overflow-hidden"
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -1295,7 +1294,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                      {c.first_name[0]}{c.last_name[0]}
+                      {c.first_name?.[0] || ""}{c.last_name?.[0] || ""}
                     </div>
                     <div className="min-w-0">
                       <h5 className="font-bold text-xs text-slate-900 truncate">{c.first_name} {c.last_name}</h5>
@@ -1470,7 +1469,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                     type="button"
                     onClick={handleSendGreeting}
                     disabled={sendingGreeting || !greetingMessage.trim()}
-                    className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50"
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{sendingGreeting ? "Posting..." : "Publish Blessing"}</span>
@@ -1489,7 +1488,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <div className="bg-white rounded-3xl max-w-3xl w-full my-auto shadow-2xl border border-cyan-100 animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col max-h-[90vh]">
             
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 bg-gradient-to-r from-cyan-900 via-sky-900 to-indigo-950 text-white flex items-start justify-between gap-4 shrink-0 relative overflow-hidden">
+            <div className="p-5 sm:p-6 bg-cyan-950 text-white flex items-start justify-between gap-4 shrink-0 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
               <div className="flex items-start gap-3.5 relative z-10">
                 <div className="p-3 rounded-2xl bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 shadow-inner shrink-0">
@@ -1524,7 +1523,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   onClick={() => setCandidateFilterTab("all")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     candidateFilterTab === "all"
-                      ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-xs"
+                      ? "bg-cyan-600 text-white shadow-xs"
                       : "text-charcoal/70 hover:text-charcoal hover:bg-cyan-50/50"
                   }`}
                 >
@@ -1535,7 +1534,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   onClick={() => setCandidateFilterTab("pending")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     candidateFilterTab === "pending"
-                      ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-xs"
+                      ? "bg-cyan-600 text-white shadow-xs"
                       : "text-charcoal/70 hover:text-charcoal hover:bg-cyan-50/50"
                   }`}
                 >
@@ -1546,7 +1545,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                   onClick={() => setCandidateFilterTab("nominated")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     candidateFilterTab === "nominated"
-                      ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-xs"
+                      ? "bg-cyan-600 text-white shadow-xs"
                       : "text-charcoal/70 hover:text-charcoal hover:bg-cyan-50/50"
                   }`}
                 >
@@ -1568,7 +1567,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                     type="button"
                     onClick={handleNominateAllCandidates}
                     disabled={isBulkNominating}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
+                    className="px-3.5 py-2 rounded-xl bg-cyan-600  text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>{isBulkNominating ? "Nominating..." : "Nominate All"}</span>
@@ -1621,7 +1620,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                           key={candidate.id}
                           className={`p-4 rounded-2xl border transition-all duration-200 bg-white shadow-2xs flex flex-col justify-between space-y-3 hover:shadow-md ${
                             candidate.is_candidate
-                              ? "border-emerald-200 bg-gradient-to-br from-emerald-50/20 via-white to-teal-50/10"
+                              ? "border-emerald-200 bg-emerald-50/30"
                               : "border-cyan-200 hover:border-cyan-400"
                           }`}
                         >
@@ -1633,7 +1632,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                                   className="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs text-white shrink-0 shadow-2xs ring-2 ring-white"
                                   style={{ backgroundColor: candidate.ministry_color || "#0284c7" }}
                                 >
-                                  {candidate.first_name[0]}{candidate.last_name[0]}
+                                  {candidate.first_name?.[0] || ""}{candidate.last_name?.[0] || ""}
                                 </div>
                                 <div className="min-w-0">
                                   <h4 className="font-black text-sm text-indigo-950 truncate leading-snug">
@@ -1651,8 +1650,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                                   <span>Candidate</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black text-cyan-800 bg-cyan-100/80 px-2.5 py-1 rounded-xl border border-cyan-300 shadow-2xs shrink-0 animate-pulse">
-                                  <Sparkles className="w-3 h-3 text-cyan-600" />
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black text-cyan-800 bg-cyan-100/80 px-2.5 py-1 rounded-xl border border-cyan-300 shadow-2xs shrink-0">
+                                  <CheckCircle2 className="w-3 h-3 text-cyan-600" />
                                   <span>Ready</span>
                                 </span>
                               )}
@@ -1672,14 +1671,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                                   <span>{candidate.total_present} Services Present</span>
                                 </span>
                                 <span className={candidate.total_absent === 0 ? "text-emerald-700 font-extrabold" : "text-charcoal/60"}>
-                                  {candidate.total_absent === 0 ? "🌟 0 Absences" : `${candidate.total_absent} Absences`}
+                                  {candidate.total_absent === 0 ? "0 Absences (Perfect)" : `${candidate.total_absent} Absences`}
                                 </span>
                               </div>
 
                               {/* Progress bar */}
                               <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-gray-200">
                                 <div
-                                  className="bg-gradient-to-r from-cyan-500 to-blue-600 h-2 rounded-full transition-all duration-500"
+                                  className="bg-cyan-600 h-2 rounded-full transition-all duration-500"
                                   style={{ width: `${Math.min(100, Math.max(10, candidate.consistency_rate))}%` }}
                                 />
                               </div>
@@ -1709,7 +1708,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                                 type="button"
                                 onClick={() => handleNominateCandidate(candidate.id)}
                                 disabled={isNominating}
-                                className="px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-xl text-xs font-black shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
+                                className="px-3 py-1.5 bg-cyan-600  text-white rounded-xl text-xs font-black shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
                               >
                                 <UserPlus className="w-3.5 h-3.5" />
                                 <span>{isNominating ? "Nominating..." : "Nominate Candidate"}</span>
@@ -1754,7 +1753,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                     type="button"
                     onClick={handleNominateAllCandidates}
                     disabled={isBulkNominating}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl bg-cyan-600  text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>{isBulkNominating ? "Nominating..." : `Nominate All (${baptismCandidateData.counts.pending_nomination})`}</span>

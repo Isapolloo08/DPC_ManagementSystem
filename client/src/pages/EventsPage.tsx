@@ -9,10 +9,10 @@ import {
 import {
   Calendar as CalendarIcon, Plus, MapPin, Clock, Users,
   CheckCircle2, ChevronLeft, ChevronRight, Filter, Search,
-  Layers, LayoutGrid, List, X, Sparkles, AlertCircle,
+  Layers, LayoutGrid, List, X, AlertCircle,
   Cake, Gift, PartyPopper, Send, Check, Utensils, CalendarCheck,
   BookOpen, ShieldCheck, Droplets, ChevronRight as ChevronRightIcon,
-  Crown, Phone, ExternalLink, Sparkle, Tag, ChevronDown, ChevronUp, Sun, UserCheck
+  Crown, Phone, ExternalLink, Tag, ChevronDown, ChevronUp, Sun, UserCheck
 } from "lucide-react";
 import { DateTimePickerInput } from "../components/common/DateTimePickerInput";
 import { useSocketEvent } from "../socket";
@@ -846,7 +846,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       {/* ========================================================================= */}
       {/* 1. PAGE HERO HEADER */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-white/10 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-white/10 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -920,7 +920,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   handleOpenCreateModal();
                 }
               }}
-              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 hover:brightness-105 text-slate-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-lg hover:shadow-amber-400/20 transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-amber-400 hover:brightness-105 text-slate-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-lg hover:shadow-amber-400/20 transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4 text-slate-950" />
               <span>Add Event / Celebration</span>
@@ -943,7 +943,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Layers className="w-3.5 h-3.5" />
             <span>All Activities ({counts.all})</span>
           </button>
 
@@ -1056,7 +1056,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
           {viewMode === "calendar" ? (
             <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
               {/* Calendar Month Navigation Header */}
-              <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between">
+              <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 rounded-2xl bg-white/10 text-amber-300 shadow-inner">
                     <CalendarIcon className="w-5 h-5" />
@@ -1408,8 +1408,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
           <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-5">
             <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <span className="p-2.5 rounded-2xl bg-gradient-to-br from-indigo-900 to-slate-900 text-amber-300 shadow-sm">
-                  <Sparkles className="w-4 h-4" />
+                <span className="p-2.5 rounded-2xl bg-indigo-950 text-amber-300 shadow-sm">
+                  <CalendarIcon className="w-4 h-4" />
                 </span>
                 <div>
                   <h3 className="font-black text-sm text-slate-900">Activity Inspector</h3>
@@ -1527,14 +1527,14 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                     <>
                       <button
                         onClick={() => setAttendanceModalEvent(activeInspectorItem.raw_data)}
-                        className="w-full bg-gradient-to-r from-purple-800 to-indigo-900 hover:from-purple-700 hover:to-indigo-800 text-white font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className="w-full bg-purple-900  text-white font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
                       >
                         <UserCheck className="w-4 h-4 text-purple-300" />
                         <span>Event Attendance & Check-In</span>
                       </button>
                       <button
                         onClick={() => handleRsvp(activeInspectorItem.raw_data.id)}
-                        className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-105 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className="w-full bg-amber-400 hover:brightness-105 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>RSVP ({activeInspectorItem.rsvp_count || 0})</span>

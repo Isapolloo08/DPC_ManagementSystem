@@ -4,7 +4,7 @@ import { api } from "../../api";
 import { UserActivityStats } from "../../types";
 import {
   User as UserIcon, Lock, Shield, BarChart3, CheckCircle2, AlertCircle,
-  Eye, EyeOff, Save, KeyRound, Sparkles, Building, Phone, Mail,
+  Eye, EyeOff, Save, KeyRound, Building, Phone, Mail,
   Calendar, MapPin, Briefcase, GraduationCap, Users, Heart,
   X, Check, HelpCircle, ShieldCheck, Clock, BookOpen, Utensils
 } from "lucide-react";
@@ -135,7 +135,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const roleMetadata: Record<string, { badge: string; color: string; desc: string; permissions: string[] }> = {
     Admin: {
       badge: "Master Administrator",
-      color: "bg-gradient-to-r from-rose-600 to-amber-600 text-white",
+      color: "bg-rose-600 text-white",
       desc: "Full system administration, access management, master lookups, audit logs, and church oversight.",
       permissions: [
         "Create, update, and manage all user accounts & permissions",
@@ -149,7 +149,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     },
     Coordinator: {
       badge: "Ministry Coordinator",
-      color: "bg-gradient-to-r from-teal-600 to-emerald-600 text-white",
+      color: "bg-emerald-600 text-white",
       desc: "Departmental leadership for assigned age-bracket ministries, events, curriculum, and volunteer assignments.",
       permissions: [
         "Manage designated age-bracket ministry rosters & member profiles",
@@ -160,7 +160,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     },
     Leader: {
       badge: "Life Group Leader",
-      color: "bg-gradient-to-r from-sky-600 to-indigo-600 text-white",
+      color: "bg-sky-600 text-white",
       desc: "Small group & Bible study leadership, member spiritual care, discipleship tracking, and fellowship.",
       permissions: [
         "Manage assigned Life Group members and discipleship roster",
@@ -171,7 +171,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     },
     Volunteer: {
       badge: "Ministry Volunteer",
-      color: "bg-gradient-to-r from-purple-600 to-indigo-600 text-white",
+      color: "bg-purple-600 text-white",
       desc: "Assists with Sunday divine service check-ins, event logistics, and member reception.",
       permissions: [
         "Operate Sunday divine worship check-in kiosks",
@@ -181,7 +181,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     },
     Member: {
       badge: "Church Member",
-      color: "bg-gradient-to-r from-indigo-700 to-slate-800 text-white",
+      color: "bg-indigo-800 text-white",
       desc: "Covenant member and active fellowship participant in Daet Presbyterian Church.",
       permissions: [
         "Maintain personal membership card & family household profile",
@@ -265,7 +265,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
       <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden my-auto flex flex-col max-h-[92vh]">
         {/* HEADER HERO SECTION */}
-        <div className="relative bg-gradient-to-br from-indigo-950 via-indigo-900 to-indigo-800 text-white p-5 sm:p-7 shrink-0 overflow-hidden">
+        <div className="relative bg-indigo-950 text-white p-5 sm:p-7 shrink-0 overflow-hidden">
           {/* Subtle decorative glow */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-amber-400/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
           <div className="absolute bottom-0 left-1/3 w-60 h-60 bg-emerald-400/10 rounded-full blur-2xl pointer-events-none" />
@@ -283,7 +283,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
             <div className="flex items-center gap-4 min-w-0">
               {/* Avatar Pill with gradient ring */}
               <div className="relative shrink-0">
-                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-gradient-to-tr from-amber-400 via-amber-300 to-amber-200 text-indigo-950 font-black text-xl sm:text-2xl flex items-center justify-center shadow-lg ring-4 ring-white/10">
+                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-amber-400 text-indigo-950 font-black text-xl sm:text-2xl flex items-center justify-center shadow-lg ring-4 ring-white/10">
                   {initials}
                 </div>
                 <span className="absolute -bottom-1 -right-1 p-1 rounded-lg bg-emerald-500 text-white shadow-xs" title="Active session">
@@ -570,7 +570,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 <button
                   type="submit"
                   disabled={savingProfile}
-                  className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-6 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs px-6 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
                 >
                   <Save className="w-4 h-4 text-indigo-950" />
                   <span>{savingProfile ? "Saving Changes..." : "Save Profile Changes"}</span>
@@ -729,7 +729,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                   <button
                     type="submit"
                     disabled={savingPassword}
-                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-indigo-800 hover:to-indigo-700 text-white font-black text-xs py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2 bg-indigo-900 hover:bg-indigo-800 text-white font-black text-xs py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer disabled:opacity-50"
                   >
                     <KeyRound className="w-4 h-4 text-amber-400" />
                     <span>{savingPassword ? "Updating Password..." : "Update Account Password"}</span>

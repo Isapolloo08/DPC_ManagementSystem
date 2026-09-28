@@ -1,6 +1,6 @@
 import {
   Ministry, User, Role, Member, Household, AttendanceRecord, AttendanceRosterItem,
-  EventItem, Announcement, Fund, Donation,
+  EventItem, Announcement,
   DashboardMetrics, AuditLog, BibleStudyGroup, SystemLookup, SystemSetting,
   BirthdayCelebrant, BirthdaySummary, StudyTopic, StudyTopicsSummary,
   DutyTeam, DutyTeamMember, SaturdayDutyScheduleResponse, DishwashingDutyItem, DishwashingCyclePayload, DishwashingResponse,
@@ -14,45 +14,54 @@ import {
   GrowthInsightsData, GroupAttendanceResponse,
   AttendanceLogResponse, AttendanceLogFilters,
   ServicesResponse, ServiceItem, CreateServicePayload, UpdateServicePayload,
-  MemberComprehensiveAttendanceSummary, EventAttendanceRosterResponse
+  MemberComprehensiveAttendanceSummary, EventAttendanceRosterResponse,
+  AppNotification, NotificationsResponse, NotificationRule, NotificationEmailSettings, NotificationEventType,
+  BibleStudyGroupTransition, BibleStudyGroupHistoryResponse, MergeGroupsPayload
 } from "./types";
 
 export const normalizeServerUrl = (rawInput?: string | null): string => {
   if (!rawInput || !rawInput.trim()) return "";
   const input = rawInput.trim();
 
-  // If already starts with http:// or https://
+  // 1. If already starts with http:// or https://
   if (/^https?:\/\//i.test(input)) {
     return input.replace(/\/+$/, "");
   }
 
-  // If contains a custom port (e.g., 192.168.1.5:4000 or localhost:4000)
+  // 2. If contains a custom port (e.g., 192.168.1.5:4000, LAPTOP-NAME:4000, or LAPTOP-NAME.local:4000)
   if (input.includes(":")) {
     return `http://${input}`.replace(/\/+$/, "");
   }
 
-  // If it's a domain name (e.g., onrender.com, vercel.app, church.org)
-  if (input.includes(".") && !/^(\d{1,3}\.){3}\d{1,3}$/.test(input)) {
+  // 3. If it's a local mDNS or LAN domain (.local, .lan, .home, etc.)
+  if (/\.(local|lan|home|internal|corp)$/i.test(input)) {
+    return `http://${input}:4000`.replace(/\/+$/, "");
+  }
+
+  // 4. If it's a standard public cloud web domain (e.g., onrender.com, vercel.app, church.org)
+  if (/\.(com|org|net|app|io|dev|cloud|page|site)$/i.test(input) || input.includes("onrender.com")) {
     return `https://${input}`.replace(/\/+$/, "");
   }
 
-  // Default LAN IP or local hostname -> assume HTTP :4000
+  // 5. Default: Computer Name / Hostname (e.g. LAPTOP-ABC123, MARK-PC) or IPv4 -> HTTP :4000
   return `http://${input}:4000`.replace(/\/+$/, "");
 };
 
 export const getApiBase = () => {
   if (typeof window !== "undefined") {
-    const configuredIp = localStorage.getItem("dpc_server_ip");
-    if (configuredIp && configuredIp.trim()) {
-      const normalized = normalizeServerUrl(configuredIp);
-      return `${normalized}/api`;
-    }
+    try {
+      const configuredIp = localStorage.getItem("dpc_server_ip");
+      if (configuredIp && configuredIp.trim()) {
+        const normalized = normalizeServerUrl(configuredIp);
+        return `${normalized}/api`;
+      }
+    } catch (_) {}
   }
   const envUrl = (import.meta as any).env?.VITE_API_URL;
   if (envUrl) return `${normalizeServerUrl(envUrl)}/api`;
   if (typeof window === "undefined") return "http://127.0.0.1:4000/api";
   const { hostname, protocol } = window.location;
-  if (!hostname || hostname === "localhost" || hostname === "127.0.0.1" || protocol === "file:") {
+  if (!hostname || hostname === "localhost" || hostname === "127.0.0.1" || protocol === "file:" || protocol === "app:") {
     return "http://127.0.0.1:4000/api";
   }
   return `${protocol}//${hostname}:4000/api`;
@@ -117,6 +126,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}, maxRetrie
   let attempt = 0;
   while (true) {
     attempt++;
+    let receivedHttpResponse = false;
     try {
       const res = await fetch(`${apiBase}${endpoint}`, {
         ...options,
@@ -125,6 +135,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}, maxRetrie
           ...options.headers
         }
       });
+      receivedHttpResponse = true;
 
       let data: any = null;
       try {
@@ -141,7 +152,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}, maxRetrie
             currentToken &&
             !endpoint.includes("/auth/login") &&
             !endpoint.includes("/auth/register") &&
-            !endpoint.includes("/auth/setup-status")
+            !endpoint.includes("/auth/setup-status") &&
+            !endpoint.includes("/reveal-password") &&
+            !endpoint.includes("/verify-password") &&
+            !endpoint.includes("/reset-password") &&
+            !endpoint.includes("/backup")
           ) {
             window.dispatchEvent(
               new CustomEvent("auth:session-expired", {
@@ -171,6 +186,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}, maxRetrie
         throw err;
       }
 
+      // Status-code retries are handled before throwing above. Do not treat a
+      // completed 4xx/5xx HTTP response as a transport failure and retry it.
+      if (receivedHttpResponse) {
+        throw err;
+      }
+
       // Retry on network errors for idempotent requests
       if (isIdempotent && attempt <= maxRetries) {
         const backoff = Math.pow(2, attempt) * 200;
@@ -186,8 +207,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}, maxRetrie
 
 export const api = {
   // Auth
-  getSetupStatus: () => request<{ hasUsers: boolean; totalUsers: number; hasAdmin: boolean; totalAdmins: number; isFirstUser: boolean }>("/auth/setup-status"),
-  register: (data: { name: string; username?: string; email: string; password: string; role_id?: number }) => request<{ token: string; user: User; isFirstUser: boolean }>("/auth/register", {
+  getSetupStatus: () => request<{ hasUsers: boolean; totalUsers: number; hasAdmin: boolean; totalAdmins: number; isFirstUser: boolean; demoModeEnabled: boolean }>("/auth/setup-status"),
+  register: (data: { name: string; username?: string; email: string; password: string }) => request<{ token: string; user: User; isFirstUser: boolean }>("/auth/register", {
     method: "POST",
     body: JSON.stringify(data)
   }),
@@ -208,6 +229,35 @@ export const api = {
   changePassword: (data: ChangePasswordPayload) => request<{ message: string }>("/auth/change-password", {
     method: "PUT",
     body: JSON.stringify(data)
+  }),
+
+  // User notifications and Admin delivery configuration
+  getNotifications: (params: { unread?: boolean; type?: NotificationEventType | ""; page?: number; page_size?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.unread) query.set("unread", "true");
+    if (params.type) query.set("type", params.type);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    return request<NotificationsResponse>(`/notifications?${query.toString()}`);
+  },
+  getUnreadNotificationCount: () => request<{ count: number }>("/notifications/unread-count"),
+  markNotificationRead: (id: number) => request<{ message: string }>(`/notifications/${id}/read`, { method: "PATCH" }),
+  markNotificationUnread: (id: number) => request<{ message: string }>(`/notifications/${id}/unread`, { method: "PATCH" }),
+  markAllNotificationsRead: () => request<{ updated: number }>("/notifications/read-all", { method: "PATCH" }),
+  deleteNotification: (id: number) => request<{ message: string }>(`/notifications/${id}`, { method: "DELETE" }),
+  getNotificationRules: () => request<NotificationRule[]>("/notifications/rules"),
+  updateNotificationRule: (id: number, data: Partial<NotificationRule>) => request<{ message: string }>(`/notifications/rules/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data)
+  }),
+  getNotificationEmailSettings: () => request<NotificationEmailSettings>("/notifications/email-settings"),
+  updateNotificationEmailSettings: (data: Partial<NotificationEmailSettings> & { smtpPassword?: string }) => request<{ message: string; settings: NotificationEmailSettings }>("/notifications/email-settings", {
+    method: "PUT",
+    body: JSON.stringify(data)
+  }),
+  sendTestNotificationEmail: (to_email?: string) => request<{ id: number; message: string }>("/notifications/test-email", {
+    method: "POST",
+    body: JSON.stringify({ to_email })
   }),
   getProfileActivity: () => request<UserActivityStats>("/auth/profile-activity"),
 
@@ -244,6 +294,32 @@ export const api = {
   }),
   deleteUser: (id: number) => request<{ message: string }>(`/users/${id}`, {
     method: "DELETE"
+  }),
+  revealUserPassword: (id: number, admin_password: string) => request<{
+    success: boolean;
+    user_id: number;
+    name: string;
+    username?: string;
+    email: string;
+    role_name: string;
+    hasPlainPassword?: boolean;
+    password: string | null;
+    message: string;
+  }>(`/users/${id}/reveal-password`, {
+    method: "POST",
+    body: JSON.stringify({ admin_password })
+  }),
+  resetUserPassword: (id: number, data: { admin_password: string; new_password: string }) => request<{
+    success: boolean;
+    message: string;
+    new_password: string;
+  }>(`/users/${id}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  }),
+  verifyPassword: (password: string) => request<{ valid: boolean; message: string }>("/auth/verify-password", {
+    method: "POST",
+    body: JSON.stringify({ password })
   }),
 
   // Ministries (Cached reference data)
@@ -479,22 +555,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data)
     }),
+  deleteAnnouncement: (id: number) =>
+    request<{ message: string }>(`/communications/announcements/${id}`, {
+      method: "DELETE"
+    }),
 
   // Bible Study & Small Groups
-  getGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string }) => {
+  getGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string; status?: string }) => {
     const q = new URLSearchParams();
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.category) q.set("category", params.category);
     if (params?.meeting_day) q.set("meeting_day", params.meeting_day);
     if (params?.search) q.set("search", params.search);
+    if (params?.status) q.set("status", params.status);
     return request<BibleStudyGroup[]>(`/groups?${q.toString()}`);
   },
-  getBibleStudyGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string }) => {
+  getBibleStudyGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string; status?: string }) => {
     const q = new URLSearchParams();
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.category) q.set("category", params.category);
     if (params?.meeting_day) q.set("meeting_day", params.meeting_day);
     if (params?.search) q.set("search", params.search);
+    if (params?.status) q.set("status", params.status);
     return request<BibleStudyGroup[]>(`/groups?${q.toString()}`);
   },
   createGroup: (data: Partial<BibleStudyGroup>) => request<{ id: number; message: string }>("/groups", {
@@ -520,6 +602,18 @@ export const api = {
     method: "POST",
     body: JSON.stringify(data || {})
   }),
+  mergeGroups: (data: MergeGroupsPayload) => request<{
+    success: boolean;
+    message: string;
+    group_id: number;
+    transition_id: number;
+    migrated_members: number;
+  }>("/groups/transitions/merge", {
+    method: "POST",
+    body: JSON.stringify(data)
+  }),
+  getGroupTransitions: () => request<BibleStudyGroupTransition[]>("/groups/transitions"),
+  getGroupHistory: (groupId: number) => request<BibleStudyGroupHistoryResponse>(`/groups/${groupId}/history`),
   getGroupAttendance: (groupId: number) => request<GroupAttendanceResponse>(`/groups/${groupId}/attendance`),
   saveGroupAttendance: (groupId: number, data: {
     session_date: string;
@@ -559,57 +653,6 @@ export const api = {
   deleteStudyTopic: (id: number) => request<{ message: string }>(`/study-topics/${id}`, {
     method: "DELETE"
   }),
-
-  // Finance & Giving (Cached reference data for funds)
-  getFunds: async (forceRefresh = false) => {
-    if (!forceRefresh) {
-      const cached = getCached<Fund[]>("ref:funds");
-      if (cached) return cached;
-    }
-    const data = await request<Fund[]>("/finance/funds");
-    setCached("ref:funds", data, 10 * 60 * 1000); // 10 mins
-    return data;
-  },
-  createFund: async (data: Partial<Fund>) => {
-    const res = await request<{ id: number; message: string }>("/finance/funds", {
-      method: "POST",
-      body: JSON.stringify(data)
-    });
-    invalidateCache("ref:funds");
-    return res;
-  },
-  updateFund: async (id: number, data: Partial<Fund>) => {
-    const res = await request<{ message: string }>(`/finance/funds/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data)
-    });
-    invalidateCache("ref:funds");
-    return res;
-  },
-  deleteFund: async (id: number) => {
-    const res = await request<{ message: string }>(`/finance/funds/${id}`, {
-      method: "DELETE"
-    });
-    invalidateCache("ref:funds");
-    return res;
-  },
-  getDonations: (fund_id?: number, params?: { page?: number; limit?: number }) => {
-    const q = new URLSearchParams();
-    if (fund_id) q.set("fund_id", String(fund_id));
-    if (params?.page !== undefined) q.set("page", String(params.page));
-    if (params?.limit !== undefined) q.set("limit", String(params.limit));
-    const queryStr = q.toString() ? `?${q.toString()}` : "";
-    return request<any>(`/finance/donations${queryStr}`);
-  },
-  recordDonation: (data: { member_id?: number; fund_id: number; amount: number; method?: string; notes?: string }) =>
-    request<{ id: number; message: string }>("/finance/donations", {
-      method: "POST",
-      body: JSON.stringify(data)
-    }),
-  getGivingStatement: (memberId: number, year?: number) => {
-    const q = year ? `?year=${year}` : "";
-    return request<any>(`/finance/statement/${memberId}${q}`);
-  },
 
   // Master Lookups & System Settings (Cached reference data)
   getLookups: async (paramsOrType?: { type?: string; active_only?: boolean } | string, activeOnly = true, forceRefresh = false) => {
@@ -1004,7 +1047,3 @@ export const api = {
       body: JSON.stringify(data)
     })
 };
-
-
-
-

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Ministry } from "../types";
 import { api } from "../api";
-import { useSocketEvent } from "../socket";
+import { setSocketAuthToken, useSocketEvent } from "../socket";
 import { SessionExpiredModal } from "../components/common/SessionExpiredModal";
 
 export function isJwtExpired(token: string | null): boolean {
@@ -39,7 +39,7 @@ interface AuthContextType {
   selectedMinistryId: number | null; // null = Church-Wide
   setSelectedMinistryId: (id: number | null) => void;
   login: (emailOrUsername: string, password?: string) => Promise<void>;
-  register: (data: { name: string; username?: string; email: string; password: string; role_id?: number }) => Promise<{ isFirstUser: boolean }>;
+  register: (data: { name: string; username?: string; email: string; password: string }) => Promise<{ isFirstUser: boolean }>;
   switchDemoUser: (userId: number) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -73,11 +73,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchInitial = async () => {
     try {
       setLoading(true);
-      const [demoList, minList, status] = await Promise.all([
-        api.getDemoUsers().catch(() => []),
+      const [minList, status] = await Promise.all([
         api.getMinistries().catch(() => []),
-        api.getSetupStatus().catch(() => ({ hasUsers: true, totalUsers: 1, hasAdmin: false, totalAdmins: 0, isFirstUser: false }))
+        api.getSetupStatus().catch(() => ({ hasUsers: true, totalUsers: 1, hasAdmin: false, totalAdmins: 0, isFirstUser: false, demoModeEnabled: false }))
       ]);
+      const demoList = status.demoModeEnabled ? await api.getDemoUsers().catch(() => []) : [];
       setDemoUsers(demoList);
       setMinistries(minList);
       setHasUsers(status.hasUsers);
@@ -113,6 +113,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     fetchInitial();
   }, []);
+
+  useEffect(() => {
+    setSocketAuthToken(token);
+    return () => {
+      if (!token) setSocketAuthToken(null);
+    };
+  }, [token]);
 
   // Listen for session expiration events & periodic expiration checks
   useEffect(() => {
@@ -164,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (data: { name: string; username?: string; email: string; password: string; role_id?: number }) => {
+  const register = async (data: { name: string; username?: string; email: string; password: string }) => {
     const res = await api.register(data);
     localStorage.setItem("chms_token", res.token);
     setToken(res.token);
@@ -176,8 +183,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setSelectedMinistryId(null);
     }
-    // Refresh demo list in background
-    api.getDemoUsers().then(setDemoUsers).catch(() => {});
     return { isFirstUser: res.isFirstUser };
   };
 
@@ -214,10 +219,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshAuthStatus = async () => {
     try {
-      const [demoList, status] = await Promise.all([
-        api.getDemoUsers().catch(() => []),
-        api.getSetupStatus().catch(() => ({ hasUsers: true, totalUsers: 1, hasAdmin: false, totalAdmins: 0, isFirstUser: false }))
-      ]);
+      const status = await api.getSetupStatus().catch(() => ({ hasUsers: true, totalUsers: 1, hasAdmin: false, totalAdmins: 0, isFirstUser: false, demoModeEnabled: false }));
+      const demoList = status.demoModeEnabled ? await api.getDemoUsers().catch(() => []) : [];
       setDemoUsers(demoList);
       setHasUsers(status.hasUsers);
       setHasAdmin(status.hasAdmin ?? false);

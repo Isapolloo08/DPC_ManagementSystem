@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X, ShieldAlert, AlertTriangle, Trash2, CheckCircle2,
-  Calendar, Clock, DollarSign, Users, MessageSquare, Database, RefreshCw, Eye,
+  Calendar, Clock, Users, MessageSquare, Database, RefreshCw, Eye,
   ChevronLeft, ChevronRight
 } from "lucide-react";
 import { api } from "../../api";
@@ -140,7 +140,6 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
   const getTableIcon = (name: string) => {
     switch (name) {
       case "attendance": return <Clock className="w-3.5 h-3.5 text-emerald-600" />;
-      case "donations": return <DollarSign className="w-3.5 h-3.5 text-amber-600" />;
       case "events": return <Calendar className="w-3.5 h-3.5 text-indigo-600" />;
       case "duty_schedules":
       case "dishwashing_roster": return <Users className="w-3.5 h-3.5 text-blue-600" />;
@@ -162,7 +161,7 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
       <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-rose-200 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="p-6 border-b border-rose-100 flex items-center justify-between gap-4 bg-gradient-to-r from-rose-50 to-white">
+        <div className="p-6 border-b border-rose-100 flex items-center justify-between gap-4 bg-rose-50">
           <div className="flex items-center gap-3">
             <span className="p-3 rounded-2xl bg-rose-100 text-rose-700 border border-rose-200">
               <ShieldAlert className="w-6 h-6" />
@@ -199,7 +198,7 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
               <span>Warning: Irreversible Deletion</span>
             </div>
             <p className="text-[11px] text-rose-900/90 leading-relaxed font-medium">
-              This will permanently delete all attendance logs, donation records, events, duty schedules, and announcements for <strong>Year {year}</strong>.
+              This will permanently delete all attendance logs, events, duty schedules, and announcements for <strong>Year {year}</strong>.
             </p>
           </div>
 

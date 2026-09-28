@@ -44,23 +44,18 @@ const DEFAULT_LOOKUPS = [
   { type: "member_status", name: "Visitor / Guest", description: "First-time or occasional visitor", color: "#D97706", sort_order: 3 },
   { type: "member_status", name: "Inactive", description: "Has not attended in past 6 months", color: "#64748B", sort_order: 4 },
 
-  // Payment methods
-  { type: "payment_method", name: "Cash", description: "Physical envelope or donation box", color: "#10B981", sort_order: 1 },
-  { type: "payment_method", name: "GCash", description: "Philippine mobile wallet QR scan", color: "#007DFE", sort_order: 2 },
-  { type: "payment_method", name: "Bank Transfer", description: "Direct BDO / BPI bank deposit", color: "#6366F1", sort_order: 3 },
-  { type: "payment_method", name: "Online / Card", description: "Credit/Debit card payment", color: "#8B5CF6", sort_order: 4 }
 ];
 
 // Default fallback settings
 const DEFAULT_SETTINGS: Record<string, { value: string; category: string }> = {
   church_name: { value: "Daet Presbyterian Church", category: "general" },
   church_tagline: { value: "Knowing Christ and Making Him Known", category: "general" },
+  pastor_name: { value: "", category: "general" },
   contact_email: { value: "contact@daetpresbyterian.org", category: "general" },
   contact_phone: { value: "+63 (54) 440-1234", category: "general" },
   address: { value: "Vinzon Avenue, Daet, Camarines Norte", category: "general" },
   sunday_service_time: { value: "9:30 AM", category: "general" },
-  currency_symbol: { value: "₱", category: "finance" },
-  tax_exempt_id: { value: "TIN-009-876-543-000", category: "finance" }
+  security_code_prefix: { value: "DPC", category: "general" }
 };
 
 // ----------------------------------------------------
@@ -72,7 +67,7 @@ router.get("/lookups", cacheMiddleware("lookups", 600), async (req: Request, res
   try {
     const { type, active_only } = req.query;
 
-    let query = "SELECT * FROM system_lookups WHERE 1=1";
+    let query = "SELECT * FROM system_lookups WHERE type <> 'payment_method'";
     const params: any[] = [];
 
     if (type) {
@@ -110,7 +105,7 @@ router.get("/lookups", cacheMiddleware("lookups", 600), async (req: Request, res
 router.get("/lookups/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const lookup = await db.get("SELECT * FROM system_lookups WHERE id = $1", [id]);
+    const lookup = await db.get("SELECT * FROM system_lookups WHERE id = $1 AND type <> 'payment_method'", [id]);
     if (!lookup) return res.status(404).json({ error: "Lookup not found" });
     res.json(lookup);
   } catch (err: any) {
@@ -125,6 +120,9 @@ router.post("/lookups", authMiddleware, requireRoles("Admin"), async (req: AuthR
 
     if (!type || !name) {
       return res.status(400).json({ error: "Lookup type and name are required" });
+    }
+    if (type === "payment_method") {
+      return res.status(400).json({ error: "Payment-method settings are no longer supported" });
     }
 
     const existing = await db.get("SELECT id FROM system_lookups WHERE type = $1 AND LOWER(name) = LOWER($2)", [type.trim(), name.trim()]);
@@ -165,6 +163,9 @@ router.put("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req: Au
 
     const current = await db.get("SELECT * FROM system_lookups WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Lookup not found" });
+    if (current.type === "payment_method") {
+      return res.status(400).json({ error: "Payment-method settings are no longer supported" });
+    }
 
     const updatedName = name !== undefined ? name.trim() : current.name;
 
@@ -248,7 +249,7 @@ router.post("/lookups/reset", authMiddleware, requireRoles("Admin"), async (req:
 // ----------------------------------------------------
 
 // Get general settings (auto-populates defaults if empty)
-router.get("/general", cacheMiddleware("general_settings", 600), async (req: Request, res: Response) => {
+router.get("/general", authMiddleware, cacheMiddleware("general_settings", 600), async (req: Request, res: Response) => {
   try {
     let list = await db.all("SELECT * FROM system_settings ORDER BY category ASC, key ASC");
 
@@ -263,12 +264,18 @@ router.get("/general", cacheMiddleware("general_settings", 600), async (req: Req
       list = await db.all("SELECT * FROM system_settings ORDER BY category ASC, key ASC");
     }
 
+    const safeList = (list || []).filter(item =>
+      item.category !== "cloud_sync" &&
+      item.category !== "notification_email" &&
+      item.category !== "finance" &&
+      item.key !== "cloud_database_url"
+    );
     const settingsMap: Record<string, string> = {};
-    (list || []).forEach(item => {
+    safeList.forEach(item => {
       settingsMap[item.key] = item.value;
     });
 
-    res.json({ settings: settingsMap, list: list || [] });
+    res.json({ settings: settingsMap, list: safeList });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -279,7 +286,9 @@ router.put("/general", authMiddleware, requireRoles("Admin"), async (req: AuthRe
   try {
     const settingsData = req.body.settings || req.body;
 
+    const allowedKeys = new Set(Object.keys(DEFAULT_SETTINGS));
     for (const [k, v] of Object.entries(settingsData)) {
+      if (!allowedKeys.has(k)) continue;
       if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
         await db.run(`
           INSERT INTO system_settings (key, value, category, updated_at)

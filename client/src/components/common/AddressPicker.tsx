@@ -13,7 +13,6 @@ import {
   Compass,
   WifiOff,
   Wifi,
-  Sparkles,
   Info
 } from "lucide-react";
 
@@ -989,7 +988,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
 
       {isManualMode ? (
         /* Manual Freeform Input Card */
-        <div className="p-3.5 bg-gradient-to-br from-amber-50/40 via-white to-ivory-light rounded-2xl border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
+        <div className="p-3.5 bg-amber-50/40 rounded-2xl border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
           <div className="flex items-center justify-between text-[11px]">
             <span className="font-bold text-amber-950 flex items-center gap-1.5">
               <Edit3 className="w-3.5 h-3.5 text-amber-600" />
@@ -1043,7 +1042,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
         </div>
       ) : (
         /* Standardized Cascading Philippine Address Dropdown Selector with Search */
-        <div className="p-3 bg-gradient-to-br from-indigo-50/40 via-ivory-light to-amber-50/30 rounded-2xl border border-indigo-100/90 shadow-2xs space-y-2.5">
+        <div className="p-3 bg-indigo-50/40 rounded-2xl border border-indigo-100/90 shadow-2xs space-y-2.5">
           {/* Row 1: Searchable Province & City/Municipality */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             {/* 1. Searchable Province Dropdown with Luzon / Visayas / Mindanao tabs */}

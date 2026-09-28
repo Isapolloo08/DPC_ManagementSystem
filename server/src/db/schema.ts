@@ -4,12 +4,15 @@ import path from "path";
 import dotenv from "dotenv";
 
 const envCandidates = [
+  (process as any).resourcesPath ? path.resolve((process as any).resourcesPath, ".env") : null,
+  (process as any).resourcesPath ? path.resolve((process as any).resourcesPath, "server", ".env") : null,
+  path.resolve(path.dirname(process.execPath), ".env"),
   path.resolve(process.cwd(), ".env"),
   path.resolve(process.cwd(), "server", ".env"),
   path.resolve(__dirname, "../.env"),
   path.resolve(__dirname, "../../.env"),
   path.resolve(__dirname, "../../server/.env")
-];
+].filter(Boolean) as string[];
 
 for (const envPath of envCandidates) {
   if (fs.existsSync(envPath)) {
@@ -28,7 +31,7 @@ export function cleanDbConnectionString(raw?: string): string {
 }
 
 const connectionString = cleanDbConnectionString(process.env.DATABASE_URL);
-const isSupabaseOrRemote = connectionString.includes("supabase") || connectionString.includes("render") || connectionString.includes("sslmode=require") || process.env.NODE_ENV === "production";
+const isSupabaseOrRemote = connectionString.includes("supabase") || connectionString.includes("render") || connectionString.includes("sslmode=require") || process.env.DB_SSL === "true";
 
 /**
  * Shared PostgreSQL connection pool (Single instance across all requests)
@@ -191,14 +194,19 @@ sql.begin = async (callback: (tx: any) => Promise<any>) => {
  * Robust helper to locate migration SQL files across development (src/) and production (dist/) paths
  */
 export function getMigrationFilePath(filename: string): string | null {
+  const resourcesPath = (process as any).resourcesPath;
   const candidates = [
     path.resolve(__dirname, "migrations", filename),
     path.resolve(__dirname, "../../src/db/migrations", filename),
     path.resolve(__dirname, "../src/db/migrations", filename),
     path.resolve(process.cwd(), "src/db/migrations", filename),
     path.resolve(process.cwd(), "server/src/db/migrations", filename),
-    path.resolve(__dirname, "../../server/src/db/migrations", filename)
-  ];
+    path.resolve(__dirname, "../../server/src/db/migrations", filename),
+    path.resolve(process.cwd(), "dist/db/migrations", filename),
+    path.resolve(process.cwd(), "server/dist/db/migrations", filename),
+    resourcesPath ? path.resolve(resourcesPath, "server/dist/db/migrations", filename) : null,
+    resourcesPath ? path.resolve(resourcesPath, "app.asar.unpacked/server/dist/db/migrations", filename) : null
+  ].filter(Boolean) as string[];
 
   for (const c of candidates) {
     if (fs.existsSync(c)) {
@@ -235,8 +243,6 @@ export async function initSchema() {
         CREATE TABLE IF NOT EXISTS event_rsvps (id SERIAL PRIMARY KEY, event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE, member_id INT REFERENCES members(id) ON DELETE CASCADE, user_id INT REFERENCES users(id) ON DELETE CASCADE, guests_count INT DEFAULT 0, status VARCHAR(20) DEFAULT 'attending', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, UNIQUE(event_id, member_id));
         CREATE TABLE IF NOT EXISTS attendance (id SERIAL PRIMARY KEY, member_id INT NOT NULL REFERENCES members(id) ON DELETE CASCADE, ministry_id INT NOT NULL REFERENCES ministries(id) ON DELETE CASCADE, event_id INT REFERENCES events(id) ON DELETE SET NULL, checked_in_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, checked_in_by INT REFERENCES users(id) ON DELETE SET NULL, security_tag VARCHAR(50), checked_out_at TIMESTAMP WITH TIME ZONE, checked_out_by INT REFERENCES users(id) ON DELETE SET NULL, notes TEXT);
         CREATE TABLE IF NOT EXISTS announcements (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, body TEXT NOT NULL, ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL, created_by INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, is_pinned INT DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS funds (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, description TEXT, target_amount DECIMAL(12, 2) DEFAULT 0, is_active INT DEFAULT 1, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS donations (id SERIAL PRIMARY KEY, member_id INT REFERENCES members(id) ON DELETE SET NULL, fund_id INT NOT NULL REFERENCES funds(id) ON DELETE RESTRICT, amount DECIMAL(12, 2) NOT NULL, donated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, payment_method VARCHAR(50) DEFAULT 'Cash', notes TEXT, recorded_by INT REFERENCES users(id) ON DELETE SET NULL);
         CREATE TABLE IF NOT EXISTS audit_logs (id SERIAL PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE SET NULL, action VARCHAR(50) NOT NULL, target_table VARCHAR(50) NOT NULL, target_id INT, details TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS bible_study_groups (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, curriculum VARCHAR(255), ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL, leader_name VARCHAR(255) NOT NULL, leader_contact VARCHAR(100), meeting_day VARCHAR(50) NOT NULL, meeting_time VARCHAR(50) NOT NULL, location VARCHAR(255) NOT NULL, category VARCHAR(50) NOT NULL DEFAULT 'General', max_capacity INT DEFAULT 12, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS bible_study_topics (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, total_chapters INT DEFAULT 1, summary_notes TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
@@ -262,9 +268,10 @@ export async function initSchema() {
       `);
     } catch { }
 
-    // 2. Ensure username column exists
+    // 2. Ensure username and temp_password columns exist
     try {
       await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100) UNIQUE`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS temp_password VARCHAR(255)`;
     } catch { }
 
     // 3. Ensure all 5 roles exist (Admin, Coordinator, Leader, Volunteer, Member)
@@ -607,8 +614,6 @@ export async function initSchema() {
         CREATE INDEX IF NOT EXISTS idx_dishwashing_team_members_team_id ON dishwashing_team_members(team_id);
         CREATE INDEX IF NOT EXISTS idx_dishwashing_team_members_member_id ON dishwashing_team_members(member_id);
         CREATE INDEX IF NOT EXISTS idx_bible_study_members_group_id ON bible_study_members(group_id);
-        CREATE INDEX IF NOT EXISTS idx_donations_fund_id ON donations(fund_id);
-        CREATE INDEX IF NOT EXISTS idx_donations_member_id ON donations(member_id);
         CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
       `);
       } catch (idxErr: any) {
@@ -722,6 +727,34 @@ export async function initSchema() {
         }
       } catch (perfErr: any) {
         console.warn("Performance indexes note:", perfErr.message);
+      }
+
+      // 15. Ensure local notification, rule, and email outbox tables exist
+      try {
+        const notificationsMigrationPath = getMigrationFilePath("007_notifications.sql");
+        if (notificationsMigrationPath && fs.existsSync(notificationsMigrationPath)) {
+          const notificationsSql = fs.readFileSync(notificationsMigrationPath, "utf-8");
+          await sql.unsafe(notificationsSql);
+          console.log("🔔 Applied notification and email outbox schema (Migration 007).");
+        } else {
+          console.warn("Notification migration note: 007_notifications.sql was not found.");
+        }
+      } catch (notificationErr: any) {
+        console.warn("Notification migration note:", notificationErr.message);
+      }
+
+      // 16. Ensure Bible Study Group Transitions schema exists
+      try {
+        const transitionsMigrationPath = getMigrationFilePath("008_group_transitions.sql");
+        if (transitionsMigrationPath && fs.existsSync(transitionsMigrationPath)) {
+          const transitionsSql = fs.readFileSync(transitionsMigrationPath, "utf-8");
+          await sql.unsafe(transitionsSql);
+          console.log("🔄 Applied group transitions and leadership schema (Migration 008).");
+        } else {
+          console.warn("Transitions migration note: 008_group_transitions.sql was not found.");
+        }
+      } catch (transErr: any) {
+        console.warn("Group transitions migration note:", transErr.message);
       }
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {

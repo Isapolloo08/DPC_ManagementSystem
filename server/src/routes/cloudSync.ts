@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
 import {
   getCloudSyncStatus,
   testCloudConnection,
@@ -13,7 +13,7 @@ import { emitRealtimeEvent } from "../socket";
 const router = Router();
 
 // Require login for all cloud sync operations
-router.use(authMiddleware);
+router.use(authMiddleware, requireRoles("Admin"));
 
 /**
  * 1. GET /api/cloud-sync/status

@@ -4,11 +4,12 @@ import {
   BibleStudyMemberAttendance, BibleStudySessionDetail
 } from "../../types";
 import { api } from "../../api";
+import { useToast } from "../../context/ToastContext";
 import { useSocketEvent } from "../../socket";
 import {
   Users, CheckCircle2, AlertCircle, Calendar,
   Search, Filter, ChevronDown, ChevronUp, UserX,
-  Phone, Mail, Check, X, ShieldAlert, Sparkles,
+  Phone, Mail, Check, X, ShieldAlert,
   Printer, ArrowUpDown, Clock, BookOpen, RefreshCw,
   UserCheck, AlertTriangle, MessageSquare, Trash2,
   ChevronLeft, ChevronRight, CalendarClock
@@ -48,7 +49,6 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
 
   // Delete session modal state
   const [deleteSessionDate, setDeleteSessionDate] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadAttendanceData = async () => {
     if (!activeGroup) return;
@@ -146,19 +146,32 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
     return filteredSessions.slice(start, start + SESSIONS_PER_PAGE);
   }, [filteredSessions, sessionPage]);
 
-  const handleDeleteSession = async () => {
+  const { deleteWithUndo } = useToast();
+
+  const handleDeleteSession = () => {
     if (!activeGroup || !deleteSessionDate) return;
-    try {
-      setIsDeleting(true);
-      await api.deleteGroupAttendanceSession(activeGroup.id, deleteSessionDate);
-      onToast(`✓ Attendance records for ${deleteSessionDate} removed`, "success");
-      setDeleteSessionDate(null);
-      loadAttendanceData();
-    } catch (err: any) {
-      onToast(err.message || "Failed to delete session", "error");
-    } finally {
-      setIsDeleting(false);
-    }
+    const sessionDate = deleteSessionDate;
+    const previousData = data;
+    setDeleteSessionDate(null);
+
+    deleteWithUndo({
+      itemName: `Session attendance for ${sessionDate}`,
+      onOptimisticDelete: () => {
+        if (data) {
+          setData({
+            ...data,
+            sessions: data.sessions.filter(s => s.session_date !== sessionDate)
+          });
+        }
+      },
+      onRestore: () => {
+        setData(previousData);
+      },
+      onCommitDelete: async () => {
+        await api.deleteGroupAttendanceSession(activeGroup.id, sessionDate);
+        loadAttendanceData();
+      }
+    });
   };
 
   const handlePrint = () => {
@@ -259,7 +272,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         {/* At-Risk Disciples Requiring Follow-Up */}
         <div className={`rounded-3xl border shadow-xs p-5 flex flex-col justify-between relative overflow-hidden ${
           summary.at_risk_count > 0
-            ? "bg-gradient-to-br from-rose-50 to-orange-50/50 border-rose-200"
+            ? "bg-rose-50 border-rose-200"
             : "bg-white border-gray-200"
         }`}>
           <div className="flex items-center justify-between">
@@ -903,10 +916,9 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         title="Delete Session Attendance Log?"
         description={`Are you sure you want to delete the attendance records for ${deleteSessionDate}? Disciples' absentee counts will be recalculated automatically.`}
         type="danger"
-        confirmText={isDeleting ? "Deleting..." : "Delete Log"}
+        confirmText="Delete Log"
         onConfirm={handleDeleteSession}
         onClose={() => setDeleteSessionDate(null)}
-        isLoading={isDeleting}
       />
     </div>
   );

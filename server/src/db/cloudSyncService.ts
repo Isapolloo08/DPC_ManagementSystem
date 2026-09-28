@@ -68,8 +68,6 @@ export const SYNC_TABLES: TableSyncConfig[] = [
   { name: "bible_study_groups", label: "Bible Study Groups", conflictTarget: "id", updateCols: ["name", "description", "curriculum", "ministry_id", "leader_name", "leader_contact", "meeting_day", "meeting_time", "location", "category", "max_capacity"], isSerial: true },
   { name: "bible_study_topics", label: "Curriculum Topics", conflictTarget: "id", updateCols: ["title", "total_chapters", "summary_notes"], isSerial: true },
   { name: "bible_study_members", label: "Group Roster", conflictTarget: "id", updateCols: ["group_id", "member_id", "role"], isSerial: true },
-  { name: "funds", label: "Church Funds", conflictTarget: "name", updateCols: ["description", "target_amount", "is_active"], isSerial: true },
-  { name: "donations", label: "Donations & Tithes", conflictTarget: "id", updateCols: ["member_id", "fund_id", "amount", "donated_at", "payment_method", "notes", "recorded_by"], isSerial: true },
   { name: "events", label: "Events", conflictTarget: "id", updateCols: ["ministry_id", "title", "description", "start_time", "end_time", "location", "created_by"], isSerial: true },
   { name: "event_registrations", label: "Event RSVPs", conflictTarget: "event_id, member_id", updateCols: ["user_id", "guests_count", "status"], isSerial: true },
   { name: "announcements", label: "Announcements", conflictTarget: "id", updateCols: ["title", "body", "ministry_id", "created_by", "is_pinned"], isSerial: true },
@@ -202,7 +200,7 @@ export async function getCloudSyncStatus(): Promise<CloudSyncStatusResponse> {
   const comparison: SyncCountComparison[] = [];
 
   try {
-    const keyTables = ["members", "attendance", "households", "users", "events", "donations", "duty_schedules", "bible_study_groups"];
+    const keyTables = ["members", "attendance", "households", "users", "events", "duty_schedules", "bible_study_groups"];
     
     const multiCountQuery = `
       SELECT
@@ -211,7 +209,6 @@ export async function getCloudSyncStatus(): Promise<CloudSyncStatusResponse> {
         (SELECT COUNT(*) FROM households) as households,
         (SELECT COUNT(*) FROM users) as users,
         (SELECT COUNT(*) FROM events) as events,
-        (SELECT COUNT(*) FROM donations) as donations,
         (SELECT COUNT(*) FROM duty_schedules) as duty_schedules,
         (SELECT COUNT(*) FROM bible_study_groups) as bible_study_groups
     `;

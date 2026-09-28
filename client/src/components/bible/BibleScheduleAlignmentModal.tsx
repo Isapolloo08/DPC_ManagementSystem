@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
-  X, Sliders, Sparkles, Check, RotateCcw,
+  X, Sliders, BookmarkCheck, Check, RotateCcw,
   BookOpen, Calendar, HelpCircle, ArrowRight
 } from "lucide-react";
 import {
@@ -74,7 +74,7 @@ export const BibleScheduleAlignmentModal: React.FC<BibleScheduleAlignmentModalPr
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-5 text-white flex items-center justify-between">
+        <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-400/30 flex items-center justify-center shadow-inner">
               <Sliders className="w-5 h-5" />
@@ -137,11 +137,11 @@ export const BibleScheduleAlignmentModal: React.FC<BibleScheduleAlignmentModalPr
             <button
               type="button"
               onClick={handleAlignToEzekiel29}
-              className="w-full p-4 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white shadow-md shadow-sky-600/20 text-left transition-all flex items-center justify-between group active:scale-98"
+              className="w-full p-4 rounded-2xl bg-sky-600  text-white shadow-md shadow-sky-600/20 text-left transition-all flex items-center justify-between group active:scale-98"
             >
               <div className="space-y-0.5">
                 <div className="flex items-center gap-1.5 text-xs font-black uppercase text-sky-200">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" /> D.P.C. Church Schedule
+                  <BookmarkCheck className="w-3.5 h-3.5 text-amber-300" /> D.P.C. Church Schedule
                 </div>
                 <div className="text-base font-black">
                   Calibrate to Church Benchmark (Ezekiel 29)

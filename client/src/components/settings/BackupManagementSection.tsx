@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Database, Download, UploadCloud, RotateCcw, Trash2, Eye,
   Calendar, Clock, DollarSign, Users, AlertTriangle, ShieldCheck,
-  CheckCircle2, RefreshCw, FileText, Sparkles, Layers, ShieldAlert,
+  CheckCircle2, RefreshCw, FileText, Layers, ShieldAlert,
   ArrowRight, Lock
 } from "lucide-react";
 import { api } from "../../api";
@@ -146,8 +146,8 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
     <div className="space-y-8">
       
       {/* 1. Header Overview Banner */}
-      <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 rounded-3xl p-6 lg:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-gradient-to-br from-amber-400/10 via-indigo-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-indigo-950 rounded-3xl p-6 lg:p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-amber-50/60 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2 max-w-2xl">
@@ -188,7 +188,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
 
         {/* Global DB Stats Cards */}
         {summary?.totalStats && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mt-6 pt-6 border-t border-white/10 relative z-10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 pt-6 border-t border-white/10 relative z-10">
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
               <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Members</div>
               <div className="text-lg font-black text-white">{summary.totalStats.members?.toLocaleString()}</div>
@@ -200,10 +200,6 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
               <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Events & RSVPs</div>
               <div className="text-lg font-black text-white">{summary.totalStats.events?.toLocaleString()}</div>
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-              <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Donations Logged</div>
-              <div className="text-lg font-black text-white">{summary.totalStats.donations?.toLocaleString()}</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
               <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Duty Schedules</div>
@@ -218,7 +214,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
       </div>
 
       {/* 2. SUPABASE CLOUD SYNC & OFFSITE REPLICATION HUB */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 border-2 border-indigo-500/30 rounded-3xl p-6 lg:p-7 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="bg-slate-900 border-2 border-indigo-500/30 rounded-3xl p-6 lg:p-7 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
             <Cloud className="w-6 h-6 text-indigo-300 animate-pulse" />
@@ -242,7 +238,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               )}
             </div>
             <p className="text-xs text-indigo-200/80 leading-relaxed max-w-xl">
-              Use LAN locally during Sunday services with zero lag. When ready, push all new members, attendance, and donations to Supabase Cloud with one click.
+              Use LAN locally during Sunday services with zero lag. When ready, push members, attendance, events, and schedules to Supabase Cloud with one click.
             </p>
             {cloudSyncStatus?.lastSyncedAt && (
               <div className="text-[11px] text-indigo-300/70 font-medium pt-0.5">
@@ -257,7 +253,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
           <button
             type="button"
             onClick={() => setIsCloudSyncModalOpen(true)}
-            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 hover:from-indigo-400 hover:to-indigo-600 text-white font-black text-xs shadow-lg shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer border border-indigo-300/30"
+            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-indigo-600  text-white font-black text-xs shadow-lg shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer border border-indigo-300/30"
           >
             <ArrowUpCircle className="w-4 h-4 text-indigo-200" />
             <span>Open Cloud Sync Manager</span>
@@ -306,7 +302,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
 
           <button
             onClick={() => handleOpenBackupModal(containerBackupYear === "all" ? "all" : Number(containerBackupYear))}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>Generate Backup</span>
@@ -364,7 +360,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
             <div>
               <h3 className="text-base font-black text-rose-950">3. Delete Records by Year</h3>
               <p className="text-xs text-charcoal/60 leading-relaxed mt-1">
-                Permanently purge transactional data for an entire year (attendance, giving logs, events, rosters) with double password authorization.
+                Permanently purge transactional data for an entire year (attendance, events, and rosters) with double password authorization.
               </p>
             </div>
 
@@ -426,7 +422,6 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
                 <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Year</th>
                 <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Attendance</th>
                 <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Events</th>
-                <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Donations & Tithes</th>
                 <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Duty Rosters</th>
                 <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Total Activity</th>
                 <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70 text-right">Actions</th>
@@ -463,18 +458,6 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
                       <div className="flex items-center gap-1.5 font-bold">
                         <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                         <span>{row.events.toLocaleString()} events</span>
-                      </div>
-                    </td>
-
-                    {/* Donations */}
-                    <td className="px-5 py-4 text-charcoal/80">
-                      <div>
-                        <div className="font-black text-emerald-700">
-                          ₱{row.donationsTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                        <div className="text-[10px] text-charcoal/50">
-                          {row.donationsCount} gifts recorded
-                        </div>
                       </div>
                     </td>
 

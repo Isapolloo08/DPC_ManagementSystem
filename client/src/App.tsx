@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
+import { ToastContainer } from "./components/common/ToastContainer";
 import { Navbar } from "./components/layout/Navbar";
 import { Sidebar, NavTab } from "./components/layout/Sidebar";
 
@@ -23,6 +25,7 @@ import { ServiceCalendarPage } from "./pages/ServiceCalendarPage";
 import { DishwashingPage } from "./pages/DishwashingPage";
 import { LeaderPortalPage } from "./pages/leader";
 import { ProfilePage } from "./pages/ProfilePage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { ProfileModal } from "./components/profile/ProfileModal";
 import { SystemConfigurationModal } from "./components/common/SystemConfigurationModal";
 
@@ -34,10 +37,17 @@ const MainLayout: React.FC = () => {
   );
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [navigationRefId, setNavigationRefId] = useState<number | null>(null);
+
+  const navigateToTab = (tab: string, refId?: number | null) => {
+    const target = user?.role_name === "Leader" && tab === "biblestudy" ? "leaderportal" : tab;
+    setNavigationRefId(refId ?? null);
+    setCurrentTab(target as NavTab);
+  };
 
   useEffect(() => {
     if (user?.role_name === "Leader") {
-      if (!["leader-dashboard", "leader-members", "leader-biblestudy", "biblereading", "profile"].includes(currentTab)) {
+      if (!["leader-dashboard", "leader-members", "leader-biblestudy", "biblereading", "profile", "notifications"].includes(currentTab)) {
         setCurrentTab("leader-dashboard");
       }
     }
@@ -52,6 +62,10 @@ const MainLayout: React.FC = () => {
     // Direct Bible reading page access for all roles including leaders
     if (currentTab === "biblereading") {
       return <BibleReadingPage />;
+    }
+
+    if (currentTab === "notifications") {
+      return <NotificationsPage onNavigate={navigateToTab} />;
     }
 
     // Role Authorization: When logged in as Leader, support all leader tabs
@@ -109,7 +123,7 @@ const MainLayout: React.FC = () => {
       case "members":
         return <MembersPage />;
       case "biblestudy":
-        return <BibleStudyPage />;
+        return <BibleStudyPage initialGroupId={navigationRefId} />;
       case "curriculum":
         return <CurriculumPage />;
       case "duty":
@@ -140,7 +154,7 @@ const MainLayout: React.FC = () => {
       {/* Sidebar in the front (full-height left column) */}
       <Sidebar
         currentTab={currentTab}
-        onSelectTab={setCurrentTab}
+        onSelectTab={(tab) => navigateToTab(tab)}
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
         onOpenProfile={() => setCurrentTab("profile")}
@@ -155,6 +169,7 @@ const MainLayout: React.FC = () => {
             currentTab={currentTab}
             onToggleSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
             onOpenProfile={() => setCurrentTab("profile")}
+            onNavigate={navigateToTab}
           />
         </div>
 
@@ -224,9 +239,12 @@ const AppContent: React.FC = () => {
 
 export function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppContent />
+        <ToastContainer />
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

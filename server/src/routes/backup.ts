@@ -1,13 +1,13 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { db, sql } from "../db/schema";
-import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
 // Require authenticated user
-router.use(authMiddleware);
+router.use(authMiddleware, requireRoles("Admin"));
 
 /**
  * Helper to verify current user's password
@@ -16,7 +16,10 @@ async function verifyUserPassword(userId: number, passwordInput?: string): Promi
   if (!passwordInput || !passwordInput.trim()) return false;
   const user = await db.get<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = $1", [userId]);
   if (!user || !user.password_hash) return false;
-  return await bcrypt.compare(passwordInput, user.password_hash);
+  if (user.password_hash.startsWith("$2")) {
+    return await bcrypt.compare(passwordInput.trim(), user.password_hash);
+  }
+  return passwordInput.trim() === user.password_hash;
 }
 
 /**
@@ -32,26 +35,24 @@ router.get("/summary", async (req: Request, res: Response) => {
       householdsCount,
       eventsCount,
       attendanceCount,
-      donationsCount,
-      fundsCount,
       groupsCount,
       dutySchedulesCount,
       dishwashingCount,
       announcementsCount,
-      auditCount
+      auditCount,
+      notificationsCount
     ] = await Promise.all([
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM users"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM members"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM households"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM events"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM attendance"),
-      db.get<{ count: string }>("SELECT COUNT(*) as count FROM donations"),
-      db.get<{ count: string }>("SELECT COUNT(*) as count FROM funds"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM bible_study_groups"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM duty_schedules"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM dishwashing_roster"),
       db.get<{ count: string }>("SELECT COUNT(*) as count FROM announcements"),
-      db.get<{ count: string }>("SELECT COUNT(*) as count FROM audit_logs")
+      db.get<{ count: string }>("SELECT COUNT(*) as count FROM audit_logs"),
+      db.get<{ count: string }>("SELECT COUNT(*) as count FROM notifications")
     ]);
 
     const totalStats = {
@@ -60,21 +61,18 @@ router.get("/summary", async (req: Request, res: Response) => {
       households: parseInt(householdsCount?.count || "0", 10),
       events: parseInt(eventsCount?.count || "0", 10),
       attendance: parseInt(attendanceCount?.count || "0", 10),
-      donations: parseInt(donationsCount?.count || "0", 10),
-      funds: parseInt(fundsCount?.count || "0", 10),
       bible_study_groups: parseInt(groupsCount?.count || "0", 10),
       duty_schedules: parseInt(dutySchedulesCount?.count || "0", 10),
       dishwashing_roster: parseInt(dishwashingCount?.count || "0", 10),
       announcements: parseInt(announcementsCount?.count || "0", 10),
-      audit_logs: parseInt(auditCount?.count || "0", 10)
+      audit_logs: parseInt(auditCount?.count || "0", 10),
+      notifications: parseInt(notificationsCount?.count || "0", 10)
     };
 
     // 2. Discover all distinct years across date-bearing tables
     const yearsRows = await db.all<{ year: number }>(`
       SELECT DISTINCT year FROM (
         SELECT EXTRACT(YEAR FROM checked_in_at)::INT as year FROM attendance WHERE checked_in_at IS NOT NULL
-        UNION
-        SELECT EXTRACT(YEAR FROM donated_at)::INT as year FROM donations WHERE donated_at IS NOT NULL
         UNION
         SELECT EXTRACT(YEAR FROM start_time)::INT as year FROM events WHERE start_time IS NOT NULL
         UNION
@@ -85,6 +83,8 @@ router.get("/summary", async (req: Request, res: Response) => {
         SELECT EXTRACT(YEAR FROM created_at)::INT as year FROM announcements WHERE created_at IS NOT NULL
         UNION
         SELECT EXTRACT(YEAR FROM created_at)::INT as year FROM members WHERE created_at IS NOT NULL
+        UNION
+        SELECT EXTRACT(YEAR FROM created_at)::INT as year FROM notifications WHERE created_at IS NOT NULL
       ) all_years
       WHERE year IS NOT NULL AND year > 1900 AND year < 2100
       ORDER BY year DESC
@@ -99,59 +99,56 @@ router.get("/summary", async (req: Request, res: Response) => {
     // 3. Consolidated yearly breakdown metrics in single grouped batch queries
     const [
       attRows,
-      donRows,
       evtRows,
       dutyRows,
       dishRows,
       annRows,
-      memRows
+      memRows,
+      notificationRows
     ] = await Promise.all([
       db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM checked_in_at)::int as year, COUNT(*) as count FROM attendance WHERE checked_in_at IS NOT NULL GROUP BY year"),
-      db.all<{ year: number; count: string; total_amount: string }>("SELECT EXTRACT(YEAR FROM donated_at)::int as year, COUNT(*) as count, COALESCE(SUM(amount), 0) as total_amount FROM donations WHERE donated_at IS NOT NULL GROUP BY year"),
       db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM start_time)::int as year, COUNT(*) as count FROM events WHERE start_time IS NOT NULL GROUP BY year"),
       db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM duty_date)::int as year, COUNT(*) as count FROM duty_schedules WHERE duty_date IS NOT NULL GROUP BY year"),
       db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM duty_date)::int as year, COUNT(*) as count FROM dishwashing_roster WHERE duty_date IS NOT NULL GROUP BY year"),
       db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM created_at)::int as year, COUNT(*) as count FROM announcements WHERE created_at IS NOT NULL GROUP BY year"),
-      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM created_at)::int as year, COUNT(*) as count FROM members WHERE created_at IS NOT NULL GROUP BY year")
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM created_at)::int as year, COUNT(*) as count FROM members WHERE created_at IS NOT NULL GROUP BY year"),
+      db.all<{ year: number; count: string }>("SELECT EXTRACT(YEAR FROM created_at)::int as year, COUNT(*) as count FROM notifications WHERE created_at IS NOT NULL GROUP BY year")
     ]);
 
     const attMap = new Map(attRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
-    const donCountMap = new Map(donRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
-    const donTotalMap = new Map(donRows.map(r => [r.year, parseFloat(r.total_amount || "0")]));
     const evtMap = new Map(evtRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
     const dutyMap = new Map(dutyRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
     const dishMap = new Map(dishRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
     const annMap = new Map(annRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
     const memMap = new Map(memRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
+    const notificationMap = new Map(notificationRows.map(r => [r.year, parseInt(r.count || "0", 10)]));
 
     const yearlyBreakdown = yearsList.map((year) => {
       const attendance = attMap.get(year) || 0;
-      const donationsCount = donCountMap.get(year) || 0;
-      const donationsTotal = donTotalMap.get(year) || 0;
       const events = evtMap.get(year) || 0;
       const dutySchedules = dutyMap.get(year) || 0;
       const dishwashingRoster = dishMap.get(year) || 0;
       const announcements = annMap.get(year) || 0;
       const membersCreated = memMap.get(year) || 0;
+      const notifications = notificationMap.get(year) || 0;
 
         const totalRecords =
           attendance +
-          donationsCount +
           events +
           dutySchedules +
           dishwashingRoster +
-          announcements;
+          announcements +
+          notifications;
 
         return {
           year,
           totalRecords,
           attendance,
-          donationsCount,
-          donationsTotal,
           events,
           dutySchedules,
           dishwashingRoster,
           announcements,
+          notifications,
           membersCreated
         };
     });
@@ -181,12 +178,12 @@ router.get("/year-details/:year", async (req: Request, res: Response) => {
 
     const [
       attendanceList,
-      donationsList,
       eventsList,
       dutyList,
       dishwashingList,
       announcementsList,
-      membersList
+      membersList,
+      notificationsList
     ] = await Promise.all([
       db.all(`
         SELECT a.id, a.member_id, m.first_name || ' ' || m.last_name as member_name, 
@@ -197,17 +194,6 @@ router.get("/year-details/:year", async (req: Request, res: Response) => {
         LEFT JOIN events e ON a.event_id = e.id
         WHERE EXTRACT(YEAR FROM a.checked_in_at) = $1
         ORDER BY a.checked_in_at DESC
-        LIMIT 100
-      `, [year]),
-      db.all(`
-        SELECT d.id, d.amount, d.method, d.donated_at, d.notes,
-               f.name as fund_name,
-               m.first_name || ' ' || m.last_name as member_name
-        FROM donations d
-        LEFT JOIN funds f ON d.fund_id = f.id
-        LEFT JOIN members m ON d.member_id = m.id
-        WHERE EXTRACT(YEAR FROM d.donated_at) = $1
-        ORDER BY d.donated_at DESC
         LIMIT 100
       `, [year]),
       db.all(`
@@ -251,6 +237,14 @@ router.get("/year-details/:year", async (req: Request, res: Response) => {
         WHERE EXTRACT(YEAR FROM m.created_at) = $1
         ORDER BY m.created_at DESC
         LIMIT 100
+      `, [year]),
+      db.all(`
+        SELECT n.id, n.type, n.title, n.message, n.is_read, n.created_at, u.name AS recipient_name
+        FROM notifications n
+        JOIN users u ON u.id = n.user_id
+        WHERE EXTRACT(YEAR FROM n.created_at) = $1
+        ORDER BY n.created_at DESC
+        LIMIT 100
       `, [year])
     ]);
 
@@ -259,12 +253,12 @@ router.get("/year-details/:year", async (req: Request, res: Response) => {
       year,
       tables: {
         attendance: attendanceList,
-        donations: donationsList,
         events: eventsList,
         duty_schedules: dutyList,
         dishwashing_roster: dishwashingList,
         announcements: announcementsList,
-        members_created: membersList
+        members_created: membersList,
+        notifications: notificationsList
       }
     });
   } catch (error: any) {
@@ -289,7 +283,7 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
     // Verify user password
     const isPasswordValid = await verifyUserPassword(userId, password);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: "Incorrect account password. Authorization failed." });
+      return res.status(400).json({ error: "Incorrect account password. Authorization failed." });
     }
 
     const isYearSpecific = year && year !== "all" && !isNaN(Number(year));
@@ -308,8 +302,6 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
         user_ministries,
         households,
         members,
-        funds,
-        donations,
         events,
         event_registrations,
         attendance,
@@ -331,8 +323,6 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
         db.all("SELECT * FROM user_ministries ORDER BY id ASC"),
         db.all("SELECT * FROM households ORDER BY id ASC"),
         db.all("SELECT * FROM members ORDER BY id ASC"),
-        db.all("SELECT * FROM funds ORDER BY id ASC"),
-        db.all("SELECT * FROM donations ORDER BY id ASC"),
         db.all("SELECT * FROM events ORDER BY id ASC"),
         db.all("SELECT * FROM event_registrations ORDER BY id ASC"),
         db.all("SELECT * FROM attendance ORDER BY id ASC"),
@@ -355,8 +345,6 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
       tables.user_ministries = user_ministries;
       tables.households = households;
       tables.members = members;
-      tables.funds = funds;
-      tables.donations = donations;
       tables.events = events;
       tables.event_registrations = event_registrations;
       tables.attendance = attendance;
@@ -375,7 +363,6 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
         events,
         event_registrations,
         attendance,
-        donations,
         duty_schedules,
         dishwashing_roster,
         announcements,
@@ -389,7 +376,6 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
           ORDER BY er.id ASC
         `, [targetYear]),
         db.all("SELECT * FROM attendance WHERE EXTRACT(YEAR FROM checked_in_at) = $1 ORDER BY id ASC", [targetYear]),
-        db.all("SELECT * FROM donations WHERE EXTRACT(YEAR FROM donated_at) = $1 ORDER BY id ASC", [targetYear]),
         db.all("SELECT * FROM duty_schedules WHERE EXTRACT(YEAR FROM duty_date) = $1 ORDER BY id ASC", [targetYear]),
         db.all("SELECT * FROM dishwashing_roster WHERE EXTRACT(YEAR FROM duty_date) = $1 ORDER BY id ASC", [targetYear]),
         db.all("SELECT * FROM announcements WHERE EXTRACT(YEAR FROM created_at) = $1 ORDER BY id ASC", [targetYear]),
@@ -399,7 +385,6 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
       tables.events = events;
       tables.event_registrations = event_registrations;
       tables.attendance = attendance;
-      tables.donations = donations;
       tables.duty_schedules = duty_schedules;
       tables.dishwashing_roster = dishwashing_roster;
       tables.announcements = announcements;
@@ -466,7 +451,7 @@ router.post("/preview", async (req: Request, res: Response) => {
 
     const knownTables = [
       "roles", "ministries", "system_lookups", "system_settings", "users",
-      "user_ministries", "households", "members", "funds", "donations",
+      "user_ministries", "households", "members",
       "events", "event_registrations", "attendance", "announcements",
       "bible_study_topics", "bible_study_groups",
       "bible_study_members", "duty_teams", "duty_team_members",
@@ -517,7 +502,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
     // Verify user password
     const isPasswordValid = await verifyUserPassword(userId, password);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: "Incorrect account password. Restore authorization failed." });
+      return res.status(400).json({ error: "Incorrect account password. Restore authorization failed." });
     }
 
     if (!data || typeof data !== "object") {
@@ -534,8 +519,6 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
         await tx.unsafe(`
           TRUNCATE TABLE 
             attendance,
-            donations,
-            funds,
             event_registrations,
             events,
             announcements,
@@ -621,8 +604,6 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
         "user_ministries",
         "households",
         "members",
-        "funds",
-        "donations",
         "events",
         "event_registrations",
         "attendance",
@@ -647,7 +628,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
       // Synchronize all sequence counters
       const sequenceTables = [
         "roles", "ministries", "system_lookups", "users", "user_ministries",
-        "households", "members", "funds", "donations", "events",
+        "households", "members", "events",
         "event_registrations", "attendance", "announcements",
         "bible_study_topics", "bible_study_groups", "bible_study_members",
         "duty_teams", "duty_team_members", "duty_schedules", "dishwashing_roster",
@@ -680,7 +661,6 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
     emitRealtimeEvent("settings:changed", { action: "restore" });
     emitRealtimeEvent("members:changed", { action: "restore" });
     emitRealtimeEvent("attendance:changed", { action: "restore" });
-    emitRealtimeEvent("finance:changed", { action: "restore" });
     emitRealtimeEvent("duty:changed", { action: "restore" });
     emitRealtimeEvent("dishwashing:changed", { action: "restore" });
 
@@ -711,7 +691,7 @@ router.post("/delete-by-year", async (req: AuthRequest, res: Response) => {
     // Verify user password
     const isPasswordValid = await verifyUserPassword(userId, password);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: "Incorrect account password. Deletion authorization failed." });
+      return res.status(400).json({ error: "Incorrect account password. Deletion authorization failed." });
     }
 
     const targetYear = parseInt(year, 10);
@@ -734,14 +714,7 @@ router.post("/delete-by-year", async (req: AuthRequest, res: Response) => {
       );
       deletedCounts.attendance = attResult.length;
 
-      // 2. Donations for year
-      const donResult = await tx.unsafe(
-        "DELETE FROM donations WHERE EXTRACT(YEAR FROM donated_at) = $1 RETURNING id",
-        [targetYear]
-      );
-      deletedCounts.donations = donResult.length;
-
-      // 3. Duty schedules for year
+      // 2. Duty schedules for year
       const dutyResult = await tx.unsafe(
         "DELETE FROM duty_schedules WHERE EXTRACT(YEAR FROM duty_date) = $1 RETURNING id",
         [targetYear]
@@ -785,6 +758,13 @@ router.post("/delete-by-year", async (req: AuthRequest, res: Response) => {
         [targetYear]
       );
       deletedCounts.audit_logs = auditResult.length;
+
+      // 9. User notifications created in the target year
+      const notificationResult = await tx.unsafe(
+        "DELETE FROM notifications WHERE EXTRACT(YEAR FROM created_at) = $1 RETURNING id",
+        [targetYear]
+      );
+      deletedCounts.notifications = notificationResult.length;
     });
 
     // Log deletion in audit trail
@@ -800,7 +780,6 @@ router.post("/delete-by-year", async (req: AuthRequest, res: Response) => {
     );
 
     emitRealtimeEvent("attendance:changed", { action: "purge_year", year: targetYear });
-    emitRealtimeEvent("finance:changed", { action: "purge_year", year: targetYear });
     emitRealtimeEvent("duty:changed", { action: "purge_year", year: targetYear });
     emitRealtimeEvent("dishwashing:changed", { action: "purge_year", year: targetYear });
     emitRealtimeEvent("communications:changed", { action: "purge_year", year: targetYear });

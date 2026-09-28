@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Download, ShieldCheck, Lock, Database, CheckCircle2,
-  AlertCircle, Calendar, Clock, DollarSign, Users, MessageSquare,
+  AlertCircle, Calendar, Clock, Users, MessageSquare,
   Eye, RefreshCw, Layers, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { api } from "../../api";
@@ -154,7 +154,6 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const getTableIcon = (name: string) => {
     switch (name) {
       case "attendance": return <Clock className="w-3.5 h-3.5 text-emerald-600" />;
-      case "donations": return <DollarSign className="w-3.5 h-3.5 text-amber-600" />;
       case "events": return <Calendar className="w-3.5 h-3.5 text-indigo-600" />;
       case "duty_schedules":
       case "dishwashing_roster": return <Users className="w-3.5 h-3.5 text-blue-600" />;
@@ -175,7 +174,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-gradient-to-r from-amber-50/60 via-white to-indigo-50/40">
+        <div className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-amber-50/60">
           <div className="flex items-center gap-3">
             <span className="p-3 rounded-2xl bg-amber-400 text-indigo-950 shadow-md">
               <Download className="w-6 h-6" />
@@ -381,7 +380,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
             type="submit"
             form="backup-auth-form"
             disabled={loading || !password.trim()}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-40 text-indigo-950 text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-indigo-950 text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
           >
             <Download className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             <span>{loading ? "Generating Backup..." : "Generate & Download Backup"}</span>

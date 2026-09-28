@@ -18,7 +18,6 @@ import eventsRouter from "./routes/events";
 import communicationsRouter from "./routes/communications";
 import groupsRouter from "./routes/groups";
 import studyTopicsRouter from "./routes/studyTopics";
-import financeRouter from "./routes/finance";
 import settingsRouter from "./routes/settings";
 import reportsRouter from "./routes/reports";
 import auditRouter from "./routes/audit";
@@ -29,6 +28,8 @@ import bibleReadingRouter from "./routes/bibleReading";
 import cloudSyncRouter from "./routes/cloudSync";
 import attendanceLogRouter from "./routes/attendanceLog";
 import servicesRouter from "./routes/services";
+import notificationsRouter from "./routes/notifications";
+import { startNotificationJobs } from "./services/emailOutboxWorker";
 
 import { logger, httpLogger } from "./utils/logger";
 import { initSentry, setupSentryErrorHandler } from "./utils/sentry";
@@ -42,7 +43,7 @@ const app = express();
 
 const httpServer = http.createServer(app);
 const rawPort = process.env.PORT;
-const PORT: number = rawPort && !isNaN(Number(rawPort)) ? Number(rawPort) : (process.env.NODE_ENV === "production" ? 10000 : 4000);
+const PORT: number = rawPort && !isNaN(Number(rawPort)) ? Number(rawPort) : 4000;
 
 // 1. Trust Reverse Proxy (Render / Nginx / Load Balancer) for accurate client IP rate limiting
 app.set("trust proxy", 1);
@@ -172,7 +173,6 @@ app.use("/api/events", eventsRouter);
 app.use("/api/communications", communicationsRouter);
 app.use("/api/groups", groupsRouter);
 app.use("/api/study-topics", studyTopicsRouter);
-app.use("/api/finance", financeRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/audit", auditRouter);
@@ -183,6 +183,7 @@ app.use("/api/bible-reading", bibleReadingRouter);
 app.use("/api/cloud-sync", cloudSyncRouter);
 app.use("/api/attendance-log", attendanceLogRouter);
 app.use("/api/services", servicesRouter);
+app.use("/api/notifications", notificationsRouter);
 
 // Sentry error handler (must be before any other error middleware)
 setupSentryErrorHandler(app);
@@ -195,11 +196,17 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 // Start Server
 async function start() {
-  await initSchema();
-
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`✨ ChMS Backend API & Socket.IO running on http://0.0.0.0:${PORT}`);
   });
+
+  try {
+    await initSchema();
+    startNotificationJobs();
+    console.log("✅ Database schema initialized successfully");
+  } catch (err: any) {
+    console.error("⚠️ Database schema initialization error (will retry or serve health endpoint):", err.message);
+  }
 }
 
 start().catch(err => {

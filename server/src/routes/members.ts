@@ -7,6 +7,9 @@ import { computeMemberAttendanceSummary } from "../utils/attendanceRules";
 
 const router = Router();
 
+// Member records contain personal, family, attendance, and pastoral data.
+router.use(authMiddleware);
+
 function calculateBirthdayDetails(birthdateStr: string) {
   if (!birthdateStr) return null;
   // Support Date objects or strings like "YYYY-MM-DD"
@@ -136,7 +139,7 @@ function computeAttendanceHealthAndStatus(member: any, attendanceRecords: any[] 
 }
 
 // Get list of members with search, filter, and pagination
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", requireRoles("Admin", "Coordinator", "Leader", "Volunteer"), async (req: Request, res: Response) => {
   try {
     const {
       ministry_id,
@@ -739,13 +742,13 @@ router.get("/baptism-candidates/qualified", async (req: Request, res: Response) 
         const groupName = bsInfo?.group_name ? `Active in ${bsInfo.group_name}` : "Enrolled in Discipleship";
 
         if (isCandidate) {
-          reason = `🔖 Official Candidate for Water Baptism Ceremony (${groupName})`;
+          reason = `Official Candidate for Water Baptism Ceremony (${groupName})`;
         } else if (absentCount === 0 && presentCount >= 4) {
-          reason = `🌟 100% Perfect Attendance (0 Absences across ${presentCount} Sundays + ${groupName})`;
+          reason = `100% Perfect Attendance (0 Absences across ${presentCount} Sundays + ${groupName})`;
         } else if (presentCount >= 10) {
-          reason = `🌊 Faithful ~1 Year Worship (${presentCount}/52 Sundays + ${groupName})`;
+          reason = `Faithful ~1 Year Worship (${presentCount}/52 Sundays + ${groupName})`;
         } else if (consistencyRate >= 70) {
-          reason = `✨ High Loyalty (${consistencyRate}% consistency across Sundays + ${groupName})`;
+          reason = `High Loyalty (${consistencyRate}% consistency across Sundays + ${groupName})`;
         }
 
         const birthdateStr = member.birthdate ? (typeof member.birthdate === "string" ? member.birthdate : new Date(member.birthdate).toISOString().split("T")[0]) : "";
@@ -850,7 +853,7 @@ router.post("/baptism-candidates/nominate", authMiddleware, requireRoles("Admin"
 });
 
 // Get specific member
-router.get("/:id", async (req: Request, res: Response) => {
+router.get("/:id", async (req: AuthRequest, res: Response) => {
   try {
     const member = await db.get(`
       SELECT m.*, 
@@ -869,6 +872,10 @@ router.get("/:id", async (req: Request, res: Response) => {
 
     if (!member) {
       return res.status(404).json({ error: "Member not found" });
+    }
+
+    if (req.user?.role_name === "Member" && member.user_id !== req.user.id) {
+      return res.status(403).json({ error: "Access denied" });
     }
 
     const birthdateStr = member.birthdate ? (typeof member.birthdate === "string" ? member.birthdate : new Date(member.birthdate).toISOString().split("T")[0]) : "";
@@ -898,15 +905,6 @@ router.get("/:id", async (req: Request, res: Response) => {
       LIMIT 10
     `, [member.id]);
 
-    // Fetch giving history
-    const donations = await db.all(`
-      SELECT d.*, f.name as fund_name
-      FROM donations d
-      JOIN funds f ON d.fund_id = f.id
-      WHERE d.member_id = $1
-      ORDER BY d.donated_at DESC
-    `, [member.id]);
-
     // Fetch Bible study group info
     const bsInfo = await db.get(`
       SELECT bsm.member_id, bsg.id as group_id, bsg.name as group_name, bsg.leader_name
@@ -921,8 +919,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       ...member,
       ...healthInfo,
       family_members: familyMembers,
-      attendance_history: attendanceHistory,
-      donations
+      attendance_history: attendanceHistory
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -4,7 +4,7 @@ import { api } from "../api";
 import { UserActivityStats } from "../types";
 import {
   User as UserIcon, Lock, Shield, BarChart3, CheckCircle2, AlertCircle,
-  Eye, EyeOff, Save, KeyRound, Sparkles, Building, Phone, Mail,
+  Eye, EyeOff, Save, KeyRound, Building, Phone, Mail,
   Calendar, MapPin, Briefcase, GraduationCap, Users, Heart,
   Check, ShieldCheck, Clock, BookOpen, Utensils, RefreshCw
 } from "lucide-react";
@@ -124,7 +124,7 @@ export const ProfilePage: React.FC = () => {
   const roleMetadata: Record<string, { badge: string; color: string; desc: string; permissions: string[] }> = {
     Admin: {
       badge: "Master Administrator",
-      color: "bg-gradient-to-r from-rose-600 to-amber-600 text-white",
+      color: "bg-rose-600 text-white",
       desc: "Full system administration, access management, master lookups, audit logs, and church oversight.",
       permissions: [
         "Create, update, and manage all user accounts & permissions",
@@ -138,7 +138,7 @@ export const ProfilePage: React.FC = () => {
     },
     Coordinator: {
       badge: "Ministry Coordinator",
-      color: "bg-gradient-to-r from-teal-600 to-emerald-600 text-white",
+      color: "bg-emerald-600 text-white",
       desc: "Departmental leadership for assigned age-bracket ministries, events, curriculum, and volunteer assignments.",
       permissions: [
         "Manage designated age-bracket ministry rosters & member profiles",
@@ -149,7 +149,7 @@ export const ProfilePage: React.FC = () => {
     },
     Leader: {
       badge: "Life Group Leader",
-      color: "bg-gradient-to-r from-sky-600 to-indigo-600 text-white",
+      color: "bg-sky-600 text-white",
       desc: "Small group & Bible study leadership, member spiritual care, discipleship tracking, and fellowship.",
       permissions: [
         "Manage assigned Life Group members and discipleship roster",
@@ -160,7 +160,7 @@ export const ProfilePage: React.FC = () => {
     },
     Volunteer: {
       badge: "Ministry Volunteer",
-      color: "bg-gradient-to-r from-purple-600 to-indigo-600 text-white",
+      color: "bg-purple-600 text-white",
       desc: "Assists with Sunday divine service check-ins, event logistics, and member reception.",
       permissions: [
         "Operate Sunday divine worship check-in kiosks",
@@ -170,7 +170,7 @@ export const ProfilePage: React.FC = () => {
     },
     Member: {
       badge: "Church Member",
-      color: "bg-gradient-to-r from-indigo-700 to-slate-800 text-white",
+      color: "bg-indigo-800 text-white",
       desc: "Covenant member and active fellowship participant in Daet Presbyterian Church.",
       permissions: [
         "Maintain personal membership card & family household profile",
@@ -253,7 +253,7 @@ export const ProfilePage: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* HERO BANNER */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -266,7 +266,7 @@ export const ProfilePage: React.FC = () => {
           <div className="flex items-center gap-4 sm:gap-5 min-w-0">
             {/* User Avatar with Ring */}
             <div className="relative shrink-0">
-              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-amber-400 via-amber-300 to-amber-200 text-indigo-950 font-black text-2xl sm:text-3xl flex items-center justify-center shadow-xl ring-4 ring-white/10">
+              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-amber-400 text-indigo-950 font-black text-2xl sm:text-3xl flex items-center justify-center shadow-xl ring-4 ring-white/10">
                 {initials}
               </div>
               <span className="absolute -bottom-1 -right-1 p-1.5 rounded-xl bg-emerald-500 text-white shadow-md" title="Active session">
@@ -554,7 +554,7 @@ export const ProfilePage: React.FC = () => {
               <button
                 type="submit"
                 disabled={savingProfile}
-                className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-8 py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs px-8 py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
               >
                 <Save className="w-4 h-4 text-indigo-950" />
                 <span>{savingProfile ? "Saving Changes..." : "Save Profile Changes"}</span>
@@ -707,7 +707,7 @@ export const ProfilePage: React.FC = () => {
               <button
                 type="submit"
                 disabled={savingPassword}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-indigo-800 hover:to-indigo-700 text-white font-black text-xs py-3.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 bg-indigo-900 hover:bg-indigo-800 text-white font-black text-xs py-3.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer disabled:opacity-50"
               >
                 <KeyRound className="w-4 h-4 text-amber-400" />
                 <span>{savingPassword ? "Updating Password..." : "Update Account Password"}</span>

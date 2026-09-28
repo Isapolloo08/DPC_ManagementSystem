@@ -26,7 +26,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   AlertCircle,
-  Sparkles,
   Info,
   Loader2,
   UserCheck,
@@ -751,7 +750,7 @@ export const AttendanceLogPage: React.FC = () => {
                       <td className="py-3 px-4 whitespace-nowrap">
                         {isSunday && (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo rounded-lg text-[11px] font-bold border border-indigo-100">
-                            <Sparkles className="w-3 h-3 text-amber-500" />
+                            <Calendar className="w-3 h-3 text-amber-500" />
                             <span>Sunday Service</span>
                           </span>
                         )}

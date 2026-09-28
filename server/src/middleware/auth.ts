@@ -2,7 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { sql, db } from "../db/schema";
 
-export const JWT_SECRET = process.env.JWT_SECRET || "chms_super_secure_jwt_secret_key_2026";
+const configuredJwtSecret = process.env.JWT_SECRET?.trim();
+
+if (process.env.NODE_ENV === "production" && !configuredJwtSecret) {
+  throw new Error("JWT_SECRET must be configured in production");
+}
+
+export const JWT_SECRET = configuredJwtSecret || "development-only-change-me";
 
 export interface AuthenticatedUser {
   id: number;

@@ -11,7 +11,6 @@ import {
   Loader2,
   AlertCircle,
   Users,
-  Sparkles,
   PartyPopper,
   Calendar,
   MapPin,
@@ -106,7 +105,7 @@ export const EventAttendanceModal: React.FC<EventAttendanceModalProps> = ({
       <div className="bg-white rounded-3xl shadow-2xl border border-stone-200/90 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp">
         
         {/* Header */}
-        <div className="p-5 sm:p-6 bg-gradient-to-r from-purple-950 via-indigo-950 to-stone-900 text-white flex items-center justify-between relative overflow-hidden">
+        <div className="p-5 sm:p-6 bg-purple-950 text-white flex items-center justify-between relative overflow-hidden">
           <div className="flex items-center gap-3.5 relative z-10">
             <div className="p-3 bg-purple-500/20 text-purple-300 rounded-2xl border border-purple-400/30">
               <PartyPopper className="w-6 h-6" />
@@ -247,7 +246,7 @@ export const EventAttendanceModal: React.FC<EventAttendanceModalProps> = ({
                         : "bg-stone-100 text-stone-600 border border-stone-200"
                     }`}
                   >
-                    {isAttended ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : `${att.first_name[0]}${att.last_name[0]}`}
+                    {isAttended ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : `${att.first_name?.[0] || ""}${att.last_name?.[0] || ""}`}
                   </div>
 
                   <div className="min-w-0">

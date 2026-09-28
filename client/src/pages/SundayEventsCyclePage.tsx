@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
 import { RecurringSundayEvent, RecurringSundayEventsResponse, EventItem, Ministry } from "../types";
 import { useSocketEvent } from "../socket";
 import {
-  Calendar, Sparkles, Plus, Search, Filter, Clock, MapPin,
+  Calendar, Plus, Search, Filter, Clock, MapPin,
   CheckCircle2, ArrowRight, X, Edit2, Trash2, Heart, Award,
   Users, Sun, Droplets, Gift, BookOpen, Crown, Smile, Globe,
   ShieldCheck, Flame, RefreshCw, Layers, Check, ChevronRight,
@@ -32,6 +33,7 @@ interface FormState {
 
 export const SundayEventsCyclePage: React.FC = () => {
   const { user, ministries } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [cycleData, setCycleData] = useState<RecurringSundayEventsResponse | null>(null);
@@ -61,7 +63,7 @@ export const SundayEventsCyclePage: React.FC = () => {
     week_pattern: "1st_sunday",
     program_highlights: "",
     color: "#2C3968",
-    icon: "Sparkles",
+    icon: "Award",
     event_date: new Date().toISOString().split("T")[0],
     start_time: "09:00",
     end_time: "11:30",
@@ -79,7 +81,6 @@ export const SundayEventsCyclePage: React.FC = () => {
   const [syncEndTime, setSyncEndTime] = useState<string>("12:00");
   const [syncLocation, setSyncLocation] = useState<string>("Main Sanctuary");
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Coordinator";
 
@@ -138,10 +139,6 @@ export const SundayEventsCyclePage: React.FC = () => {
     }
   };
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
 
   const MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
@@ -172,7 +169,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       case "Globe": return <Globe className="w-5 h-5" />;
       case "ShieldCheck": return <ShieldCheck className="w-5 h-5" />;
       case "Flame": return <Flame className="w-5 h-5" />;
-      default: return <Sparkles className="w-5 h-5" />;
+      default: return <Award className="w-5 h-5" />;
     }
   };
 
@@ -190,7 +187,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       week_pattern: "1st_sunday",
       program_highlights: "",
       color: "#2C3968",
-      icon: "Sparkles",
+      icon: "Award",
       event_date: new Date().toISOString().split("T")[0],
       start_time: "09:00",
       end_time: "11:30",
@@ -212,7 +209,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       target_ministry_id: evt.target_ministry_id || null,
       target_ministry_name: evt.target_ministry_name || evt.db_ministry_name || "Church-wide / All Ministries",
       color: evt.color || "#2C3968",
-      icon: evt.icon || "Sparkles",
+      icon: evt.icon || "Award",
       program_highlights: evt.program_highlights || "",
       event_date: evt.projected_date || new Date().toISOString().split("T")[0],
       start_time: "09:00",
@@ -224,7 +221,7 @@ export const SundayEventsCyclePage: React.FC = () => {
 
   const handleOpenEditOneTime = (evt: EventItem) => {
     setEditingItem({ type: "one_time", id: evt.id, rawOneTime: evt });
-    
+
     // Extract date and time strings
     let dateStr = new Date().toISOString().split("T")[0];
     let startTimeStr = "09:00";
@@ -259,7 +256,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       week_pattern: "1st_sunday",
       program_highlights: "",
       color: evt.ministry_color || "#2C3968",
-      icon: "Sparkles",
+      icon: "Award",
       event_date: dateStr,
       start_time: startTimeStr,
       end_time: endTimeStr,
@@ -349,28 +346,46 @@ export const SundayEventsCyclePage: React.FC = () => {
     }
   };
 
-  const handleDeleteRecurring = async (id: number, title: string) => {
-    if (!window.confirm(`Are you sure you want to delete '${title}' from the annual Sunday cycle?`)) return;
-    try {
-      await api.deleteRecurringSundayEvent(id);
-      showToast(`Deleted '${title}' from Sunday cycle.`);
-      loadAllEvents();
-    } catch (err: any) {
-      console.error("Failed to delete recurring event:", err);
-      alert(err.message || "Failed to delete event");
-    }
+  const handleDeleteRecurring = (id: number, title: string) => {
+    const originalCycle = cycleData;
+    deleteWithUndo({
+      itemName: title,
+      itemType: "Sunday celebration",
+      onOptimisticDelete: () => {
+        if (cycleData) {
+          setCycleData({
+            ...cycleData,
+            events: cycleData.events.filter((e) => e.id !== id),
+            total_annual_events: Math.max(0, cycleData.total_annual_events - 1)
+          });
+        }
+      },
+      onRestore: () => {
+        if (originalCycle) {
+          setCycleData(originalCycle);
+        }
+      },
+      onCommitDelete: async () => {
+        await api.deleteRecurringSundayEvent(id);
+      }
+    });
   };
 
-  const handleDeleteOneTime = async (id: number, title: string) => {
-    if (!window.confirm(`Are you sure you want to delete the scheduled event '${title}'?`)) return;
-    try {
-      await api.deleteEvent(id);
-      showToast(`Deleted scheduled event '${title}'.`);
-      loadAllEvents();
-    } catch (err: any) {
-      console.error("Failed to delete event:", err);
-      alert(err.message || "Failed to delete event");
-    }
+  const handleDeleteOneTime = (id: number, title: string) => {
+    const originalEvents = regularEvents;
+    deleteWithUndo({
+      itemName: title,
+      itemType: "Scheduled event",
+      onOptimisticDelete: () => {
+        setRegularEvents((prev) => prev.filter((e) => e.id !== id));
+      },
+      onRestore: () => {
+        setRegularEvents(originalEvents);
+      },
+      onCommitDelete: async () => {
+        await api.deleteEvent(id);
+      }
+    });
   };
 
   const handleScheduleToCalendar = async () => {
@@ -415,16 +430,16 @@ export const SundayEventsCyclePage: React.FC = () => {
 
     if (selectedMinistryFilter !== "all") {
       const minMatch = evt.target_ministry_name?.toLowerCase().includes(selectedMinistryFilter.toLowerCase()) ||
-                       evt.db_ministry_name?.toLowerCase().includes(selectedMinistryFilter.toLowerCase());
+        evt.db_ministry_name?.toLowerCase().includes(selectedMinistryFilter.toLowerCase());
       if (!minMatch) return false;
     }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const match = evt.title.toLowerCase().includes(q) ||
-                    (evt.description || "").toLowerCase().includes(q) ||
-                    (evt.target_ministry_name || "").toLowerCase().includes(q) ||
-                    MONTH_NAMES[evt.month - 1].toLowerCase().includes(q);
+        (evt.description || "").toLowerCase().includes(q) ||
+        (evt.target_ministry_name || "").toLowerCase().includes(q) ||
+        MONTH_NAMES[evt.month - 1].toLowerCase().includes(q);
       if (!match) return false;
     }
 
@@ -450,9 +465,9 @@ export const SundayEventsCyclePage: React.FC = () => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const match = evt.title.toLowerCase().includes(q) ||
-                    (evt.description || "").toLowerCase().includes(q) ||
-                    (evt.location || "").toLowerCase().includes(q) ||
-                    (evt.ministry_name || "").toLowerCase().includes(q);
+        (evt.description || "").toLowerCase().includes(q) ||
+        (evt.location || "").toLowerCase().includes(q) ||
+        (evt.ministry_name || "").toLowerCase().includes(q);
       if (!match) return false;
     }
 
@@ -464,11 +479,11 @@ export const SundayEventsCyclePage: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
-      
+
       {/* ==================================================== */}
       {/* TOP HERO BANNER & YEAR SELECTOR */}
       {/* ==================================================== */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -498,11 +513,10 @@ export const SundayEventsCyclePage: React.FC = () => {
                 <button
                   key={yr}
                   onClick={() => setSelectedYear(yr)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                    selectedYear === yr
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${selectedYear === yr
                       ? "bg-amber-400 text-indigo-950 shadow-md scale-105"
                       : "text-white/80 hover:text-white hover:bg-white/10"
-                  }`}
+                    }`}
                 >
                   {yr}
                 </button>
@@ -512,7 +526,7 @@ export const SundayEventsCyclePage: React.FC = () => {
             {isAdminOrCoordinator && (
               <button
                 onClick={handleOpenAdd}
-                className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-indigo-950 font-black px-4 py-2.5 rounded-2xl text-xs shadow-lg transition-all active:scale-95 cursor-pointer"
+                className="flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-500 text-indigo-950 font-black px-4 py-2.5 rounded-2xl text-xs shadow-lg transition-all active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Event / Celebration</span>
@@ -571,13 +585,12 @@ export const SundayEventsCyclePage: React.FC = () => {
             return (
               <div
                 key={mNum}
-                className={`p-3 rounded-2xl border transition-all flex flex-col justify-between space-y-2 ${
-                  isCurrentMonth
+                className={`p-3 rounded-2xl border transition-all flex flex-col justify-between space-y-2 ${isCurrentMonth
                     ? "bg-amber-50/50 border-amber-400 ring-2 ring-amber-400/20 shadow-xs"
                     : monthItemCount > 0
-                    ? "bg-ivory-light/60 border-indigo-100 hover:border-amber-300"
-                    : "bg-gray-50/50 border-gray-100 opacity-60"
-                }`}
+                      ? "bg-ivory-light/60 border-indigo-100 hover:border-amber-300"
+                      : "bg-gray-50/50 border-gray-100 opacity-60"
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <span className={`text-[11px] font-black uppercase tracking-wider ${isCurrentMonth ? "text-amber-800" : "text-indigo-950"}`}>
@@ -647,39 +660,36 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* FILTER & SEARCH CONTROLS */}
       {/* ==================================================== */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 bg-white/95 p-4 rounded-3xl border border-indigo-100/90 shadow-sm">
-        
+
         {/* Event Type & Quarter Filter Chips */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Type Filter */}
           <div className="flex items-center gap-1 bg-ivory-light p-1 rounded-2xl border border-indigo-100/80">
             <button
               onClick={() => setSelectedTypeFilter("all")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                selectedTypeFilter === "all"
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${selectedTypeFilter === "all"
                   ? "bg-indigo-950 text-white shadow-xs"
                   : "text-charcoal/70 hover:text-charcoal hover:bg-white"
-              }`}
+                }`}
             >
               All Types ({recurringEvents.length + yearRegularEvents.length})
             </button>
             <button
               onClick={() => setSelectedTypeFilter("recurring")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                selectedTypeFilter === "recurring"
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${selectedTypeFilter === "recurring"
                   ? "bg-amber-500 text-indigo-950 shadow-xs"
                   : "text-charcoal/70 hover:text-charcoal hover:bg-white"
-              }`}
+                }`}
             >
               <Repeat className="w-3.5 h-3.5 text-amber-700" />
               <span>Annual Celebrations ({recurringEvents.length})</span>
             </button>
             <button
               onClick={() => setSelectedTypeFilter("one_time")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                selectedTypeFilter === "one_time"
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${selectedTypeFilter === "one_time"
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "text-charcoal/70 hover:text-charcoal hover:bg-white"
-              }`}
+                }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />
               <span>One-Time Events ({yearRegularEvents.length})</span>
@@ -698,11 +708,10 @@ export const SundayEventsCyclePage: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setSelectedQuarter(tab.id as any)}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                  selectedQuarter === tab.id
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${selectedQuarter === tab.id
                     ? "bg-indigo-950 text-white shadow-xs"
                     : "text-charcoal/70 hover:text-charcoal hover:bg-white"
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
@@ -768,7 +777,7 @@ export const SundayEventsCyclePage: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          
+
           {/* 1. RECURRING ANNUAL SUNDAY CELEBRATIONS */}
           {filteredRecurring.map((evt) => (
             <div
@@ -782,7 +791,7 @@ export const SundayEventsCyclePage: React.FC = () => {
               />
 
               <div className="p-5 sm:p-6 space-y-4">
-                
+
                 {/* Event Header & Recurrence Badge */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -816,7 +825,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                 </div>
 
                 {/* Projected Sunday Date Card */}
-                <div className="p-3 bg-gradient-to-r from-amber-50/60 to-indigo-50/40 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
+                <div className="p-3 bg-amber-50/60 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 text-indigo-950 font-black">
                     <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>Target: <strong>{evt.projected_formatted}</strong></span>
@@ -837,7 +846,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                 <div className="space-y-2 pt-2 border-t border-indigo-50 text-xs">
                   {evt.program_highlights && (
                     <div className="flex items-start gap-2 text-charcoal/80">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <Award className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                       <span className="text-[11px] line-clamp-2">
                         <strong>Highlights:</strong> {evt.program_highlights}
                       </span>
@@ -861,11 +870,10 @@ export const SundayEventsCyclePage: React.FC = () => {
                     <button
                       onClick={() => handleOpenSyncModal(evt)}
                       disabled={evt.is_synced_to_calendar}
-                      className={`text-xs font-black px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
-                        evt.is_synced_to_calendar
+                      className={`text-xs font-black px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${evt.is_synced_to_calendar
                           ? "bg-emerald-100 text-emerald-800 border border-emerald-300 opacity-80 cursor-default"
                           : "bg-indigo-950 hover:bg-indigo-900 text-white shadow-xs"
-                      }`}
+                        }`}
                     >
                       {evt.is_synced_to_calendar ? (
                         <>
@@ -932,7 +940,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                 />
 
                 <div className="p-5 sm:p-6 space-y-4">
-                  
+
                   {/* Event Header & One-time Badge */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -962,7 +970,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                   </div>
 
                   {/* Scheduled Date & Time Card */}
-                  <div className="p-3 bg-gradient-to-r from-indigo-50/60 to-amber-50/30 rounded-2xl border border-indigo-50 space-y-1.5 text-xs">
+                  <div className="p-3 bg-indigo-50/40 rounded-2xl border border-indigo-50 space-y-1.5 text-xs">
                     <div className="flex items-center gap-2 text-indigo-950 font-black">
                       <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
                       <span>{dateFormatted}</span>
@@ -1049,9 +1057,9 @@ export const SundayEventsCyclePage: React.FC = () => {
       {isModalOpen && (
         <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-xl w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 overflow-hidden">
-            
+
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 bg-gradient-to-r from-amber-600 via-indigo-900 to-indigo-950 text-white flex items-start justify-between gap-4">
+            <div className="p-5 sm:p-6 bg-indigo-950 text-white flex items-start justify-between gap-4">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-amber-200 text-[10px] font-black uppercase tracking-wider mb-1">
                   {formData.is_annual_recurring ? "🔄 Annual Celebration" : "📅 One-Time Event"}
@@ -1072,7 +1080,7 @@ export const SundayEventsCyclePage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSave} className="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-              
+
               {/* ==================================================== */}
               {/* RECURRENCE TYPE SELECTOR (TOGGLE / RADIO) */}
               {/* ==================================================== */}
@@ -1085,11 +1093,10 @@ export const SundayEventsCyclePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, is_annual_recurring: true })}
-                    className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      formData.is_annual_recurring
+                    className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${formData.is_annual_recurring
                         ? "border-amber-500 bg-amber-50/70 shadow-sm ring-2 ring-amber-400/20"
                         : "border-gray-200 bg-white hover:border-gray-300 opacity-70"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="flex items-center gap-1.5 text-xs font-black text-amber-950">
@@ -1109,11 +1116,10 @@ export const SundayEventsCyclePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, is_annual_recurring: false })}
-                    className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      !formData.is_annual_recurring
+                    className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${!formData.is_annual_recurring
                         ? "border-indigo-600 bg-indigo-50/70 shadow-sm ring-2 ring-indigo-400/20"
                         : "border-gray-200 bg-white hover:border-gray-300 opacity-70"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="flex items-center gap-1.5 text-xs font-black text-indigo-950">
@@ -1423,7 +1429,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-indigo-950 hover:from-amber-600 hover:to-indigo-900 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                  className="px-5 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
                 >
                   {editingItem ? "Save Changes" : formData.is_annual_recurring ? "Create Annual Celebration" : "Create Scheduled Event"}
                 </button>
@@ -1440,7 +1446,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       {syncingEvent && (
         <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-md w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 p-6 space-y-4">
-            
+
             <div className="flex items-start justify-between gap-3 pb-3 border-b border-indigo-50">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
@@ -1554,7 +1560,7 @@ export const SundayEventsCyclePage: React.FC = () => {
               <button
                 onClick={handleScheduleToCalendar}
                 disabled={isSyncing}
-                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
               >
                 {isSyncing ? "Scheduling..." : "Confirm & Schedule"}
               </button>
@@ -1564,16 +1570,7 @@ export const SundayEventsCyclePage: React.FC = () => {
         </div>
       )}
 
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-[120] bg-gradient-to-r from-amber-500 to-amber-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-amber-300/40 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <CheckCircle2 className="w-5 h-5 text-white" />
-          <span className="font-bold text-xs">{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="p-1 hover:bg-white/20 rounded-lg text-white/80 ml-2 cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+
 
     </div>
   );

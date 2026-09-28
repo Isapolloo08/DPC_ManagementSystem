@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, BookOpen, ChevronLeft, ChevronRight, ExternalLink, Check, ZoomIn, ZoomOut, Loader2, Sparkles } from "lucide-react";
+import { X, BookOpen, ChevronLeft, ChevronRight, ExternalLink, Check, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
 import { BibleChapterReference, DayReading } from "../../utils/bibleReadingPlan";
 
 interface ScripturePassageModalProps {
@@ -79,7 +79,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
       <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-sky-50 via-indigo-50/50 to-white flex items-center justify-between shrink-0">
+        <div className="px-6 py-4 border-b border-slate-100 bg-sky-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/20">
               <BookOpen className="w-5 h-5" />

@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Clock,
   RefreshCw,
-  Sparkles,
+  Award,
+  Info,
   HelpCircle,
   Pencil,
   ChevronLeft,
@@ -347,7 +348,7 @@ export const ServiceCalendarPage: React.FC = () => {
 
       {/* Explanatory Policy Banner */}
       <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-indigo-950 font-medium">
-        <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
         <div>
           <span>
             <strong>Attendance Recording Rule:</strong> A Sunday service only counts as recorded when marked <em>Held</em> AND at least 1 check-in was scanned.
@@ -436,7 +437,7 @@ export const ServiceCalendarPage: React.FC = () => {
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-bold text-[11px] border border-amber-200">
-                              <Sparkles className="w-3 h-3 text-amber-600" />
+                              <Award className="w-3 h-3 text-amber-600" />
                               <span>Special Service</span>
                             </span>
                           )}

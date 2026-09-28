@@ -117,19 +117,6 @@ case ( Service Rosters & Duty Schedules )
         endsplit
     }
 
-case ( Stewardship & Financials )
-    partition "Giving, Funds & Stewardship" {
-        split
-            :Define Stewardship Campaigns / Funds & Goals;
-        split again
-            :Record Donations, Tithes, Offerings & Pledges;
-            :Select Payment Method (Cash, Online, Bank Transfer);
-        split again
-            :Track Budget Allocations vs Actuals;
-            :Generate Financial Summary Statements;
-        endsplit
-    }
-
 case ( Document Workflow & Approvals )
     partition "Document Creation & Governance" {
         :Officer drafts Proposal / Budget / Resolution;

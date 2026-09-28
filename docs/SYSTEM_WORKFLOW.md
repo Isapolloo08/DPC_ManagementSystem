@@ -2,7 +2,7 @@
 
 ## 1. System Overview
 
-The **Daet Presbyterian Church Management System (DPC ChMS)** is a comprehensive church management platform engineered to automate administrative operations, discipleship tracking, service management, financial stewardship, and rotating ministry duties.
+The **Daet Presbyterian Church Management System (DPC ChMS)** is an enterprise-grade church management platform engineered to automate administrative operations, discipleship tracking, worship service management, financial stewardship, rotating ministry duties, and member spiritual growth.
 
 The system is designed with a **hybrid local-first and cloud-ready architecture**, running as a responsive web application as well as a packaged **Electron desktop application** with support for multi-workstation local area network (LAN) synchronization and remote Supabase cloud backups.
 
@@ -16,6 +16,7 @@ The system is designed with a **hybrid local-first and cloud-ready architecture*
 |  • React 18 (Vite, TypeScript)            • Tailwind CSS (Indigo/Amber UI)  |
 |  • Lucide React Icons                     • Responsive Sidebar + Navbar     |
 |  • Electron Desktop Shell (Optional)      • Real-time Socket.io Client      |
+|  • Reactive Toast & Undo Notification     • Interactive Calendar & Modals   |
 +-----------------------------------------------------------------------------+
                                        │ HTTP REST / WebSocket
                                        ▼
@@ -23,21 +24,22 @@ The system is designed with a **hybrid local-first and cloud-ready architecture*
 |                             Application Layer (API)                         |
 |  • Node.js & Express (TypeScript)         • Role-Based Access Control (RBAC)|
 |  • JWT Authentication Middleware          • Socket.io Event Broadcaster     |
-|  • Automated Cycle Scheduling Engines     • Backup & Cloud Sync Service     |
+|  • Automated Cycle Scheduling Engines     • Attendance Intelligence Engine  |
+|  • Backup, Restore & Cloud Sync Service   • Parallel DB Query Optimizations |
 +-----------------------------------------------------------------------------+
                                        │ SQL Queries / Pooling
                                        ▼
 +-----------------------------------------------------------------------------+
 |                              Persistence Layer                              |
-|  • PostgreSQL Database                    • 23 Core Relational Tables       |
-|  • Indexed Search & Foreign Keys          • Supabase Remote Replication     |
+|  • PostgreSQL Database (Indexed)          • 24+ Core Relational Tables      |
+|  • Service Calendar & Session Authority   • Supabase Remote Replication     |
 +-----------------------------------------------------------------------------+
 ```
 
 ### Key Technologies
 - **Frontend:** React 18, TypeScript, Tailwind CSS, Vite, Lucide Icons, Socket.io Client
 - **Backend:** Node.js, Express, TypeScript, Socket.io, Postgres client (`postgres` npm driver)
-- **Database:** PostgreSQL (with transaction pooling, connection retry, and migration scripts)
+- **Database:** PostgreSQL (with transaction pooling, connection retry, performance indexing, and migration scripts)
 - **Desktop Runtime:** Electron with native system tray and LAN server auto-detection
 - **Synchronization:** Bidirectional Cloud Sync with Supabase / Remote Postgres
 
@@ -49,11 +51,11 @@ The system enforces granular Role-Based Access Control (RBAC) across 5 core user
 
 | Role | Scope & Permissions | Target Users |
 |---|---|---|
-| **Admin** | Unrestricted access across all ministries, users, audit logs, financial data, settings, database backup/restore, and cloud sync. | Senior Pastor, Head Administrator, IT Coordinator |
-| **Coordinator** | Management access over assigned ministries (Members, Attendance, Groups, Events, Communications, Reports). | Ministry Directors, Department Heads |
-| **Leader** | Dedicated **Leader Portal** to manage assigned Bible Study groups, record group attendance, track curriculum progress, and view member profiles. | Bible Study Leaders, Cell Group Facilitators |
-| **Volunteer** | Operational check-in/check-out kiosk execution, Sunday duty tasks, and event assistance. | Service Ushers, Check-in Desk Volunteers |
-| **Member** | Read-only personal profile access, personal Bible reading plan tracker, event registration, and church announcements. | Church Members, Regular Attendees |
+| **Admin** | Unrestricted access across all ministries, users, audit logs, financial data, service calendars, settings, database backup/restore, year purging, and cloud sync. | Senior Pastor, Head Administrator, IT Coordinator |
+| **Coordinator** | Management access over assigned ministries (Members, Attendance, Groups, Events, Communications, Sunday Cycles, Reports). | Ministry Directors, Department Heads |
+| **Leader** | Dedicated **Leader Portal** to manage assigned Bible Study groups, record session roll-call, monitor at-risk disciples, schedule meetings, track curriculum progress, and view member profiles. | Bible Study Leaders, Cell Group Facilitators |
+| **Volunteer** | Operational check-in/check-out kiosk execution, Sunday duty tasks, event attendance check-in, and service assistance. | Service Ushers, Check-in Desk Volunteers |
+| **Member** | Read-only personal profile access, personal 365-day Bible reading plan tracker, scripture alignment, event registration, and church announcements. | Church Members, Regular Attendees |
 
 ---
 
@@ -79,27 +81,31 @@ flowchart TD
     
     C -->|Admin| D[Full Church Administration Dashboard]
     C -->|Coordinator| E[Ministry Scoped Management]
-    C -->|Leader| F[Leader Portal & Cell Groups]
+    C -->|Leader| F[Leader Portal & Discipleship Intelligence]
     C -->|Volunteer| G[Check-In Kiosk & Service Duty]
-    C -->|Member| H[Member Profile & Bible Reading]
+    C -->|Member| H[Member Profile & Bible Reading Guide]
 
-    subgraph SundayCycle [Sunday Service Operational Cycle]
-        I[Sunday Check-In / QR Security Tag] --> J[Live Attendance Roster]
-        J --> K[Sunday Events Cycle]
-        K --> L[Dishwashing Fellowship Rotation]
+    subgraph SundayCycle [Sunday Worship & Operational Cycle]
+        I1[Service Calendar & Authority] --> I2[Sunday Check-In / Security Tag]
+        I2 --> J[Live Attendance Roster]
+        J --> K1[Sunday Events Master Cycle]
+        K1 --> K2[Event Attendance Live Check-In]
+        K2 --> L[Dishwashing Fellowship Rotation]
     end
 
     subgraph WeeklyDiscipleship [Weekly Discipleship & Ministry Cycle]
         M[Saturday Cleaning & Duty Teams]
-        N[Bible Study / Small Groups & Curriculum]
-        O[Daily Bible Reading Tracker]
+        N1[Bible Study / Small Groups & Curriculum]
+        N1 --> N2[Leader Attendance & At-Risk Monitor]
+        N2 --> N3[Session Rescheduling & Notes]
+        O1[Daily Bible Reading Tracker]
+        O1 --> O2[Plan Catch-Up Alignment & Scripture Reader]
     end
 
     subgraph AdministrationStewardship [Administration & Stewardship]
         P[Member & Household Management]
-        Q[Tithe & Fund Management]
         R[Audit Trail & System Reporting]
-        S[Local Backup & Cloud Sync]
+        S[Local Backup, Year Purge & Cloud Sync]
     end
 
     D --> SundayCycle
@@ -109,7 +115,7 @@ flowchart TD
 
 ---
 
-### Workflow 5.1: Authentication & Server Configuration
+### Workflow 5.1: Authentication & Dynamic Server Configuration
 
 ```mermaid
 sequenceDiagram
@@ -135,42 +141,74 @@ sequenceDiagram
     AuthAPI->>AuthAPI: Verify bcrypt password hash
     AuthAPI-->>Client: Return JWT Token + User Profile & Scopes
     Client->>Client: Store token in LocalStorage / AuthContext
-    Client->>Client: Route to role dashboard (Admin/Coordinator/Leader)
+    Client->>Client: Route to role dashboard (Admin/Coordinator/Leader/Volunteer/Member)
 ```
 
 ---
 
-### Workflow 5.2: Member Management & Household Linking
+### Workflow 5.2: Service Calendar & Sunday Worship Management
+
+The Service Calendar provides the authoritative schedule of all regular Sunday Worship and Special Services (Good Friday, Thanksgiving, Watchnight, etc.).
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Admin as Admin / Coordinator
-    participant Client as Members Page
-    participant MemberAPI as /api/members
+    participant UI as Service Calendar Page
+    participant API as /api/services
     participant DB as PostgreSQL
 
-    Admin->>Client: Fill Member Registration Form (Birthdate, Contact, Civil Status, Baptism)
-    Client->>Client: Auto-calculate Age and Suggest Ministry (e.g. Age 8 -> Elementary)
-    Admin->>Client: Select Household or Create New Household Unit
-    Client->>MemberAPI: POST /api/members
-    MemberAPI->>DB: INSERT into households (if new)
-    MemberAPI->>DB: INSERT into members (with household_id, ministry_id)
-    MemberAPI->>DB: Log action in audit_logs
-    DB-->>MemberAPI: Created Member Record
-    MemberAPI-->>Client: Success Response
-    Client->>Client: Real-time update Member Directory list & Statistics
-```
+    Admin->>UI: Open Service Calendar (Month / List View)
+    UI->>API: GET /api/services?from=...&to=...
+    API->>DB: Fetch recorded & scheduled services with attendance counts
+    API-->>UI: Return services array
 
-#### Key Automation in Member Workflow:
-- **Auto-Ministry Suggestion:** Dynamic mapping of birthdate to ministry bracket.
-- **Aging-Out Alerts:** Identifies members who have aged out of their current ministry (e.g., Kinder entering Elementary).
-- **Baptism Tracking:** Full lifecycle tracking (`not_baptized`, `candidate`, `baptized`) with baptism dates and notes.
-- **Household Tree:** Linking parents, spouses, and children in unified family records.
+    alt Auto-Generate Annual Sundays
+        Admin->>UI: Click "Generate Sunday Services"
+        UI->>API: POST /api/services/generate-sundays (Year)
+        API->>DB: Bulk INSERT Sunday dates (skipping existing)
+        API-->>UI: Return generated count & refreshed calendar
+    end
+
+    alt Service Status Change / Cancellation
+        Admin->>UI: Mark Service as Cancelled (e.g. Typhoon / Emergency)
+        UI->>API: PATCH /api/services/:id (status: 'cancelled', notes: 'Typhoon Signal #3')
+        API->>DB: UPDATE services SET status = 'cancelled', notes = ...
+        API-->>UI: Confirmation Toast & Live UI update
+    end
+```
 
 ---
 
-### Workflow 5.3: Sunday Service & Check-In Workflow
+### Workflow 5.3: Sunday Events Master Cycle & Church Calendar Synchronization
+
+The Sunday Events Cycle manages recurring liturgical events (e.g., 1st Sunday Holy Communion, Youth Sunday, Missions Sunday) and synchronizes them into the active Church Events calendar.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Admin / Coordinator
+    participant UI as Sunday Events Cycle Page
+    participant EventsAPI as /api/events & /api/recurring-events
+    participant DB as PostgreSQL
+    participant Socket as Socket.io Broadcaster
+
+    Admin->>UI: View Master Cycle (Quarterly / Monthly / Ministry filter)
+    UI->>EventsAPI: GET /api/events/recurring-cycle/:year
+    EventsAPI-->>UI: Return 12-month recurring events with scheduled dates
+
+    Admin->>UI: Select Recurring Event -> Click "Schedule Event"
+    UI->>UI: Open Sync Modal (Confirm Time, Sanctuary/Room Location)
+    Admin->>UI: Confirm "Add to Church Calendar"
+    UI->>EventsAPI: POST /api/events (Title, Description, Date, Time, Location, Ministry)
+    EventsAPI->>DB: INSERT into events & event_registrations index
+    EventsAPI->>Socket: Emit 'events:changed'
+    Socket-->>UI: Global real-time refresh
+```
+
+---
+
+### Workflow 5.4: Sunday Check-In, Pickup Security Codes & Live Roster
 
 ```mermaid
 sequenceDiagram
@@ -206,39 +244,102 @@ sequenceDiagram
 
 ---
 
-### Workflow 5.4: Discipleship & Bible Study Group Lifecycle
+### Workflow 5.5: Leader Portal & Discipleship Attendance Intelligence
+
+The Leader Portal provides small group facilitators with actionable intelligence on disciple consistency, at-risk alerts, and roll-call tools.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Coordinator as Coordinator / Leader
-    participant Portal as Bible Study / Leader Portal
-    participant GroupAPI as /api/groups & /api/study-topics
+    actor Leader as Cell Group Leader
+    actor Disciple as Group Member
+    participant Portal as Leader Portal / Attendance Monitor
+    participant API as /api/groups & /api/attendance
     participant DB as PostgreSQL
 
-    Coordinator->>Portal: Create Bible Study / Cell Group (Name, Schedule, Location, Curriculum)
-    Portal->>GroupAPI: POST /api/groups
-    GroupAPI->>DB: INSERT into bible_study_groups
-    
-    Coordinator->>Portal: Enroll Church Members into Group
-    Portal->>GroupAPI: POST /api/groups/:id/members
-    GroupAPI->>DB: INSERT into bible_study_members
+    Leader->>Portal: Open Leader Attendance Monitor
+    Portal->>API: GET /api/groups/:id/attendance-monitor
+    API->>DB: Aggregate session history, attendance rate %, streak, and consecutive absences
+    API-->>Portal: Return Disciples Roster + Health Badges (At-Risk / Inactive / Consistent)
 
-    Note over Coordinator,Portal: Weekly Session Tracking & Progression
-    Coordinator->>Portal: Update Chapter Progress (e.g. Topic: Romans -> Chapter 4)
-    Coordinator->>Portal: Log Attendance for session & add notes
-    alt Schedule Postponement / Emergency
-        Coordinator->>Portal: Toggle Reschedule (Set new Date, Time, Reason)
-        Portal->>GroupAPI: PUT /api/groups/:id/reschedule
-        GroupAPI->>DB: UPDATE bible_study_groups (is_rescheduled = true)
+    alt Session Roll-Call
+        Leader->>Portal: Click "Log Session Roll-Call"
+        Leader->>Portal: Select Session Date, Study Topic & Mark Present/Absent
+        Portal->>API: POST /api/groups/:id/attendance-session
+        API->>DB: INSERT into bible_study_attendance records
+        API-->>Portal: Success Toast & Updated Attendance Intelligence Metrics
+    end
+
+    alt Session Rescheduling
+        Leader->>Portal: Click "Reschedule Session"
+        Portal->>API: PUT /api/groups/:id/reschedule (New Date, Time, Reason)
+        API->>DB: UPDATE bible_study_groups (is_rescheduled = true, reschedule_reason = ...)
+        API-->>Portal: Updated session badge & notification status
     end
 ```
 
 ---
 
-### Workflow 5.5: Sunday Dishwashing Fellowship Roster Workflow
+### Workflow 5.6: Event Attendance & Live Kiosk Check-In
 
-To maintain order and fellowship harmony, after-service meal cleanup follows an automated rotational roster.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attendee as Event Participant
+    actor Coordinator as Event Volunteer / Coordinator
+    participant Modal as EventAttendanceModal
+    participant API as /api/events/:id/attendance
+    participant DB as PostgreSQL
+
+    Coordinator->>Modal: Open Event Attendance Kiosk for specific event
+    Modal->>API: GET /api/events/:id/attendees
+    API->>DB: Fetch pre-registered RSVPs and walk-in check-in records
+    API-->>Modal: Return live attendee roster with check-in timestamp
+
+    Attendee->>Coordinator: Check-in at Event Entrance
+    Coordinator->>Modal: Search attendee name or click "Check-In"
+    Modal->>API: POST /api/events/:id/check-in (member_id / guest_name)
+    API->>DB: INSERT/UPDATE event attendance record
+    API-->>Modal: Real-time roster update with badge
+```
+
+---
+
+### Workflow 5.7: Bible Reading Plan, Alignment & Scripture Guide
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Member as Church Member
+    participant UI as Bible Reading Page
+    participant Modal as BibleScheduleAlignmentModal / ScripturePassageModal
+    participant API as /api/bible-reading
+    participant DB as PostgreSQL
+
+    Member->>UI: Open 365-Day Bible Reading Plan
+    UI->>API: GET /api/bible-reading/progress
+    API->>DB: Fetch completed chapters, current streak, and day's assigned readings
+    API-->>UI: Render interactive 365-day grid & today's reading checklist
+
+    alt Plan Catch-Up / Re-Alignment
+        Member->>UI: Click "Re-align Schedule"
+        UI->>Modal: Open Alignment Modal
+        Member->>Modal: Select target starting date or fast-forward catchup
+        Modal->>API: POST /api/bible-reading/align-schedule
+        API->>DB: Update member reading offsets
+        API-->>UI: Recalculate daily milestones & success toast
+    end
+
+    alt Read Passage In-App
+        Member->>UI: Click chapter tag (e.g. "Romans 8")
+        UI->>Modal: Open Scripture Passage Reader
+        Modal-->>Member: Display chapter text with typography and translation options
+    end
+```
+
+---
+
+### Workflow 5.8: Sunday Dishwashing Fellowship Roster Workflow
 
 ```mermaid
 sequenceDiagram
@@ -264,7 +365,7 @@ sequenceDiagram
 
 ---
 
-### Workflow 5.6: Saturday Duty & Cleaning Cycle Workflow
+### Workflow 5.9: Saturday Duty & Cleaning Cycle Workflow
 
 ```mermaid
 sequenceDiagram
@@ -291,76 +392,45 @@ sequenceDiagram
 
 ---
 
-### Workflow 5.7: Giving & Financial Stewardship Workflow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Donor as Member / Giver
-    actor Admin as Church Treasurer / Admin
-    participant UI as Giving / Finance Page
-    participant API as /api/finance
-    participant DB as PostgreSQL
-
-    Admin->>UI: Create or Manage Funds (General Fund, Building Fund, Missions, Youth Camp)
-    Donor->>Admin: Offer Tithe / Donation (Cash, Bank Transfer, Online)
-    Admin->>UI: Record Donation (Member Name, Fund ID, Amount, Payment Method, Notes)
-    UI->>API: POST /api/finance/donations
-    API->>DB: INSERT into donations
-    API->>DB: Record Audit Log entry
-    API-->>UI: Return transaction confirmation
-    Admin->>UI: Generate Giving Statement / Financial Stewardship Report
-    UI->>API: GET /api/finance/reports/summary
-    API-->>UI: Aggregated breakdown per Fund, Payment Method, and Date Range
-```
-
----
-
-### Workflow 5.8: Church Communications & Announcements
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Staff as Pastor / Coordinator
-    participant UI as Communications Page
-    participant API as /api/communications
-    participant DB as PostgreSQL
-    participant Socket as Socket.io
-
-    Staff->>UI: Compose Announcement (Title, Body, Target Ministry or Church-wide, Pin Status)
-    UI->>API: POST /api/communications/announcements
-    API->>DB: INSERT into announcements
-    API->>Socket: Broadcast 'announcement:new'
-    Socket-->>UI: Live banner update on Member & Dashboard views
-```
-
----
-
-### Workflow 5.9: Database Backup, Recovery & Cloud Sync
+### Workflow 5.10: Cloud Synchronization, Year Purge & Disaster Recovery
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Admin as System Administrator
-    participant UI as Settings / Backup Page
+    participant UI as Settings / Cloud Sync / Backup Page
+    participant Modal as CloudSyncModal / PurgeYearModal
     participant BackupAPI as /api/backup & /api/cloud-sync
     participant LocalDB as Local PostgreSQL
     participant CloudDB as Supabase / Remote Postgres
 
-    alt Local Database Backup
-        Admin->>UI: Click "Create Database Backup"
-        UI->>BackupAPI: POST /api/backup/export
-        BackupAPI->>LocalDB: Generate SQL dump / table data snapshots
-        BackupAPI-->>UI: Downloadable `.sql` / `.json` backup file
-    end
-
     alt Cloud Synchronization
-        Admin->>UI: Click "Sync with Cloud" or Auto-Sync Trigger
-        UI->>BackupAPI: POST /api/cloud-sync/sync
+        Admin->>UI: Open Cloud Sync Modal
+        Modal->>BackupAPI: GET /api/cloud-sync/status
+        BackupAPI-->>Modal: Return last sync timestamp, connection status, table record counts
+        Admin->>Modal: Click "Start Cloud Synchronization"
+        Modal->>BackupAPI: POST /api/cloud-sync/sync
         BackupAPI->>LocalDB: Fetch unsynced local mutations
         BackupAPI->>CloudDB: UPSERT changes to remote tables
         BackupAPI->>CloudDB: Pull remote updates to local database
-        BackupAPI-->>UI: Return Sync Summary (Tables synced, Records updated)
+        BackupAPI-->>Modal: Detailed sync breakdown per table (Members, Attendance, Events, Schedules, etc.)
+    end
+
+    alt Database Backup & Data Inspection
+        Admin->>UI: Click "Create Local Backup"
+        UI->>BackupAPI: POST /api/backup/export
+        BackupAPI->>LocalDB: Generate structured SQL/JSON dump
+        BackupAPI-->>UI: Downloadable backup file + verification hash
+    end
+
+    alt Year End Data Purge (With Safety Backup)
+        Admin->>UI: Open "Purge Historical Year Data"
+        UI->>Modal: Open PurgeYearModal
+        Admin->>Modal: Select Year (e.g. 2024) & Confirm Master Password
+        Modal->>BackupAPI: POST /api/settings/purge-year
+        BackupAPI->>LocalDB: Create automatic pre-purge safety backup
+        BackupAPI->>LocalDB: Purge attendance, events, and duty records for specified year (preserving members)
+        BackupAPI-->>Modal: Purge summary confirmation & audit entry
     end
 ```
 
@@ -371,22 +441,25 @@ sequenceDiagram
 | Tab Identifier | Component Page | Primary Roles | Key Features |
 |---|---|---|---|
 | `dashboard` | `DashboardPage.tsx` | Admin, Coordinator | High-level metrics, attendance charts, upcoming duties, recent activity |
-| `leaderportal` / `leader-dashboard` | `LeaderPortalPage.tsx` | Leader, Coordinator | Focused view of leader's Bible Study groups, members, attendance logging |
+| `servicecalendar` | `ServiceCalendarPage.tsx` | Admin, Coordinator | Sunday & special service calendar, status tracking (held/cancelled), auto-generator |
+| `sundaycycle` | `SundayEventsCyclePage.tsx` | Admin, Coordinator | 12-month master cycle, liturgical pattern scheduling, one-click church calendar sync |
+| `leaderportal` / `leader-dashboard` | `LeaderPortalPage.tsx`, `LeaderDashboard.tsx` | Leader, Coordinator | Focused view of leader's Bible Study groups, roll-call, at-risk disciples monitoring |
+| `leader-attendance` | `LeaderAttendanceMonitor.tsx` | Leader, Coordinator | Deep attendance intelligence, absence streaks, disciple health badges, session history |
 | `attendance` | `CheckInPage.tsx` | Admin, Coordinator, Volunteer | Live Sunday check-in, search, security code generator, live roster |
 | `attendancelog` | `AttendanceLogPage.tsx` | Admin, Coordinator, Leader | Unified audit history of Sunday check-ins and Bible Study attendance with CSV/PDF exports |
-| `members` | `MembersPage.tsx` | Admin, Coordinator | Directory grid/list, member profile modal, family tree, status filters |
+| `members` | `MembersPage.tsx` | Admin, Coordinator | Directory grid/list, member profile modal, family tree, status filters, individual attendance summary |
 | `biblestudy` | `BibleStudyPage.tsx` | Admin, Coordinator, Leader | Cell group management, curriculum tracker, reschedule manager |
 | `curriculum` | `CurriculumPage.tsx` | Admin, Coordinator, Leader | Study topics, chapter outlines, teaching notes and study guides |
-| `biblereading` | `BibleReadingPage.tsx` | All Users, Members | 365-day Bible reading plan, progress streaks, chapter bookmarks |
+| `biblereading` | `BibleReadingPage.tsx` | All Users, Members | 365-day Bible reading plan, progress streaks, schedule alignment modal, in-app scripture reader |
 | `duty` | `DutyPage.tsx` | Admin, Coordinator, Leader | Saturday cleaning duty teams, rotation generator, checklist verification |
 | `dishwashing` | `DishwashingPage.tsx` | Admin, Coordinator, Leader | Sunday fellowship lunch cleanup roster, joint group assignment |
-| `events` | `EventsPage.tsx` | Admin, Coordinator | Church calendar, event registrations/RSVP, location scheduling |
-| `sundaycycle` | `SundayEventsCyclePage.tsx` | Admin, Coordinator | Comprehensive master dashboard for all Sunday service logistics |
+| `events` | `EventsPage.tsx` | Admin, Coordinator | Church calendar, event registrations/RSVP, live event check-in kiosk modal |
 | `communications` | `CommunicationsPage.tsx` | Admin, Coordinator, Member | Church announcements, bulletins, prayer request management |
+| `notifications` | `NotificationsPage.tsx` | All Users | User-scoped alerts, unread filters, deep links, read/unread controls, deletion and pagination |
 | `reports` | `ReportsPage.tsx` | Admin, Coordinator | Attendance trends, demographic charts, export to CSV/PDF |
 | `users` | `UsersPage.tsx` | Admin | System user accounts, role assignments, ministry scopes |
 | `audit` | `AuditPage.tsx` | Admin | Complete immutable security trail of database modifications |
-| `settings` | `SettingsPage.tsx` | Admin | Church profile, system lookups, backup/restore, cloud sync setup |
+| `settings` | `SettingsPage.tsx` | Admin | Church profile, system lookups, notification/email rules, encrypted SMTP settings, backup/restore, year purge, cloud sync modal |
 | `profile` | `ProfilePage.tsx` | All Users | Personal account settings, password update, assigned scopes |
 
 ---
@@ -405,14 +478,13 @@ sequenceDiagram
          |                      |
          | 1:N                  | 1:N
          ▼                      ▼
-+--------+---------+     +------+------+
-|     members      |◀──1:N──| households  |
-+--------+---------+     +-------------+
-         │
-         ├─── 1:N ──▶ attendance (Check-in/Check-out, Security Code)
-         ├─── 1:N ──▶ event_registrations
-         ├─── 1:N ──▶ donations (Tithes/Offerings -> funds)
-         ├─── M:N ──▶ bible_study_members (-> bible_study_groups)
++--------+---------+     +------+------+     +------------------+
+|     members      |◀──1:N──| households  |     |     services     |
++--------+---------+     +-------------+     +--------+---------+
+         │                                            │ (Authority)
+         ├─── 1:N ──▶ attendance (Check-in/Check-out) ◀
+         ├─── 1:N ──▶ event_registrations (-> events)
+         ├─── M:N ──▶ bible_study_members (-> bible_study_groups -> bible_study_attendance)
          └─── M:N ──▶ duty_team_members (-> duty_teams -> duty_schedules)
 ```
 
@@ -420,14 +492,15 @@ sequenceDiagram
 
 ## 8. Operational Quick Guide
 
-### System Shortcuts
+### System Shortcuts & Notification Feedback
 - **`Ctrl + P` (or `Cmd + P`):** Open **System Configuration Modal** to change Database Server IP/Host without modifying environment files.
+- **Toast Notifications with Undo:** Critical delete operations (such as deleting recurring events or sessions) display an instant toast with a reversible "Undo" action.
 
 ### Standard Weekly Church Operating Cycle
-1. **Monday–Friday:** Member updates, Bible Study sessions logging via Leader Portal, Daily Bible Reading Plan check-ins.
+1. **Monday–Friday:** Member updates, Bible Study roll-call and at-risk disciple follow-up via Leader Portal, Daily Bible Reading Plan check-ins and scripture reading.
 2. **Friday Afternoon:** Automated check on Saturday Duty Team assignment & checklist distribution.
 3. **Saturday Morning:** Saturday Cleaning Duty execution & completion confirmation.
-4. **Sunday Morning (Pre-Service):** Check-In Kiosk startup, Sunday Events Cycle overview verification.
+4. **Sunday Morning (Pre-Service):** Check-In Kiosk startup, Service Calendar status verification, Sunday Events Cycle overview.
 5. **Sunday Morning (During Service):** Attendance logging with pickup security codes for Kinder & Elementary.
 6. **Sunday Noon (Post-Service):** Sunday Fellowship Lunch Dishwashing Roster execution & sign-off.
-7. **Sunday Evening:** Auto-sync attendance data to Supabase Cloud & trigger weekly database backup.
+7. **Sunday Afternoon / Evening:** Synchronize operational data to Supabase Cloud and create the weekly database backup.

@@ -3,10 +3,10 @@ import { BibleStudyGroup, BibleStudyMember, StudyTopic, SundayDutyScheduleItem }
 import {
   Users, Clock, BookmarkCheck, MessageSquare, MapPin,
   UserCheck, Plus, BookOpen, ArrowRight,
-  CalendarCheck, CalendarClock, Utensils, AlertCircle, Sparkles,
+  CalendarCheck, CalendarClock, Utensils, AlertCircle,
   ChevronRight, Calendar, ShieldCheck, ClipboardCheck,
   TrendingUp, Send, Download, MoreVertical, Phone,
-  Sparkle, CheckCircle2, ArrowLeftRight, Check, X
+  CheckCircle2, ArrowLeftRight, Check, X
 } from "lucide-react";
 import { NavTab } from "../../components/layout/Sidebar";
 import { getBookTotalChapters } from "../../utils/curriculumHelper";
@@ -136,7 +136,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
 
   if (!activeGroup) {
     return (
-      <div className="p-8 bg-gradient-to-r from-sky-50 via-indigo-50 to-sky-50 rounded-3xl border border-sky-200 text-slate-800 space-y-3 text-center">
+      <div className="p-8 bg-sky-50 rounded-3xl border border-sky-200 text-slate-800 space-y-3 text-center">
         <Users className="w-10 h-10 mx-auto text-sky-600" />
         <h3 className="font-black text-lg text-slate-900">No Life Group Selected</h3>
         <p className="text-xs text-slate-600 max-w-md mx-auto">
@@ -149,7 +149,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* 1. Hero Group Banner (Matching Mockup) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -173,7 +173,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400/20 to-indigo-500/30 border border-white/20 flex items-center justify-center font-black text-amber-300 shadow-inner">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-white/20 flex items-center justify-center font-black text-amber-300 shadow-inner">
               <Users className="w-6 h-6" />
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
@@ -248,7 +248,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               if (onOpenRollCall) onOpenRollCall();
               else onNavigateTab("biblestudy");
             }}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-5 py-3 rounded-2xl text-xs shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-3 rounded-2xl text-xs shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer"
           >
             <ClipboardCheck className="w-4 h-4 text-indigo-950" />
             <span>Take Weekly Roll-Call</span>
@@ -418,7 +418,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           >
             <div className="flex items-center justify-between">
               <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Sparkles className="w-5 h-5" />
+                <Users className="w-5 h-5" />
               </div>
               <ChevronRight className="w-4 h-4 text-teal-600 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -522,7 +522,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         </div>
 
         {/* Upcoming Assignment Banner */}
-        <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/10 border border-amber-300/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0">
               <ShieldCheck className="w-6 h-6" />
@@ -684,7 +684,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                 return (
                   <div key={idx} className="py-3 flex items-center justify-between gap-3 group hover:bg-gray-50/50 rounded-xl px-2 transition-colors">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-900 to-slate-900 text-amber-300 font-bold flex items-center justify-center text-xs shrink-0 shadow-inner">
+                      <div className="w-10 h-10 rounded-full bg-indigo-950 text-amber-300 font-bold flex items-center justify-center text-xs shrink-0 shadow-inner">
                         {initials}
                       </div>
                       <div className="min-w-0">
@@ -791,7 +791,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
 
             <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-black text-amber-950">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <BookOpen className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>Leader Discussion Starter ({activeGroup.meeting_day})</span>
               </div>
               <p className="text-[11px] text-amber-900 leading-relaxed italic">
@@ -834,7 +834,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             <div className="p-3.5 bg-gray-50/80 rounded-2xl border border-gray-100 text-xs space-y-2">
               <div className="flex items-center justify-between text-[11px] font-bold text-charcoal">
                 <span className="flex items-center gap-1.5 text-indigo-900 font-extrabold">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <BookmarkCheck className="w-3.5 h-3.5 text-indigo-700" />
                   Fellowship Objective
                 </span>
                 <span className="text-charcoal/50">Next: {activeGroup.meeting_day}</span>

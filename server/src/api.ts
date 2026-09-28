@@ -1,4 +1,4 @@
-import { db } from "./db/schema";
+import { db } from "../src/db/schema";
 
 export interface UserSession {
   id: number;

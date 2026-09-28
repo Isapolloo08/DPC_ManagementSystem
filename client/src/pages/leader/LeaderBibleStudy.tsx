@@ -10,7 +10,7 @@ import { getBookTotalChapters, generateChapterOptions } from "../../utils/curric
 import { getScheduleDates, isDateMatchingSchedule } from "../../utils/scheduleHelper";
 import {
   UserCheck, Calendar, Check, CheckCircle2, BookOpen,
-  Edit, Bookmark, BookmarkCheck, Sparkles, MapPin,
+  Edit, Bookmark, BookmarkCheck, MapPin,
   Clock, ShieldCheck, X, ChevronDown, Layers,
   CalendarClock, Users
 } from "lucide-react";
@@ -318,7 +318,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
     <div className="space-y-6">
       {/* Reschedule Alert Banner for Leader */}
       {activeGroup.is_rescheduled && (
-        <div className="p-4 bg-gradient-to-r from-amber-50 via-orange-50/80 to-amber-50 rounded-3xl border border-amber-300 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+        <div className="p-4 bg-amber-50 rounded-3xl border border-amber-300 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0 mt-0.5">
               <CalendarClock className="w-5 h-5 text-amber-700" />
@@ -519,7 +519,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               </div>
 
               {/* UNIFIED STUDY TRACK & PACING HUB */}
-              <div className="p-3.5 bg-gradient-to-br from-indigo-50/70 via-ivory to-amber-50/40 rounded-2xl border border-indigo-100 space-y-2.5">
+              <div className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-2.5">
                 <div className="flex items-center justify-between gap-1.5 flex-wrap">
                   <div className="flex items-center gap-1.5 min-w-0 pr-1">
                     <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
@@ -541,7 +541,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
                 {activeGroup?.progress_notes ? (
                   <div className="bg-white/95 p-2 rounded-xl border border-indigo-100 text-[11px] text-charcoal/80 flex items-start gap-1.5 mt-1">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                    <BookmarkCheck className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                     <div className="leading-tight">
                       <span className="font-bold text-indigo-950 text-[10px] uppercase tracking-wider block">Current Notice:</span>
                       <span>{activeGroup.progress_notes}</span>
@@ -717,7 +717,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 const chapterOptions = generateChapterOptions(bookTotalChapters);
 
                 return (
-                  <div className="p-3.5 bg-gradient-to-br from-indigo-50/70 to-ivory rounded-2xl border border-indigo-100 space-y-3">
+                  <div className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
                         <Bookmark className="w-3.5 h-3.5 text-indigo-700" />

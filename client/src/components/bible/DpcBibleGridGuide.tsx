@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
-  Printer, Sparkles, BookOpen, BookmarkCheck, Calendar, Eye, Sliders
+  Printer, BookOpen, BookmarkCheck, Calendar, Eye, Sliders
 } from "lucide-react";
 import {
   getDpcGuideStructure, TOTAL_BIBLE_CHAPTERS,
@@ -84,7 +84,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
     <div className="space-y-6">
       
       {/* 1. Top Schedule Monitor Banner */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-indigo-800/40 space-y-5 print:hidden">
+      <div className="bg-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-indigo-800/40 space-y-5 print:hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">

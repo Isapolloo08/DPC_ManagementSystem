@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Clock, ChevronDown, Check, Sun, Moon, Sparkles, X } from "lucide-react";
+import { Clock, ChevronDown, Check, Sun, Moon, X } from "lucide-react";
 
 interface TimePickerInputProps {
   label?: string;
@@ -168,7 +168,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
             className="w-72 bg-white rounded-2xl shadow-2xl border border-indigo-100 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150"
           >
             {/* Header Display & AM/PM Toggle */}
-            <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-indigo-900 via-indigo to-indigo-800 text-white rounded-xl shadow-xs">
+            <div className="flex items-center justify-between p-2.5 bg-indigo-900 text-white rounded-xl shadow-xs">
               <div className="flex items-baseline gap-1">
                 <span className="text-xl font-black tracking-tight">{selectedHour}</span>
                 <span className="text-xl font-bold text-indigo-200 animate-pulse">:</span>
@@ -262,7 +262,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
             {/* Quick Preset Chips */}
             <div>
               <div className="text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-500" />
+                <Clock className="w-3 h-3 text-amber-500" />
                 <span>Quick Presets</span>
               </div>
               <div className="flex flex-wrap gap-1">

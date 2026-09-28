@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
 import { Member, Household, Ministry } from "../types";
 import {
   Users, Home, Search, Plus, Filter, AlertCircle, AlertTriangle,
-  Heart, Sparkles, Phone, Mail, Calendar, ShieldCheck, ArrowRight, X, Check,
+  Heart, Phone, Mail, Calendar, ShieldCheck, ArrowRight, X, Check,
   Cake, Gift, PartyPopper, Send, FileText, MapPin, Briefcase, GraduationCap, Clock,
   Layers, Shield, Info, ArrowLeft, School, BookOpen, Pencil, Trash2, RefreshCw,
   Upload, Image as ImageIcon, FileUp, Scan, Clipboard, Loader2, CheckCircle2,
@@ -66,6 +67,7 @@ export const sanitizePhoneInput = (val: string): string => {
 
 export const MembersPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const [activeTab, setActiveTab] = useState<"members" | "households">("members");
   const [members, setMembers] = useState<Member[]>([]);
   const isCoordinator = user?.role_name === "Coordinator";
@@ -1027,41 +1029,33 @@ export const MembersPage: React.FC = () => {
     }
   };
 
-  const handleDeleteMember = async () => {
-    if (!deleteConfirmMember) return;
-    const target = deleteConfirmMember;
-    setConfirmModalConfig({
-      isOpen: true,
-      title: "Delete Member Record",
-      type: "delete",
-      confirmText: "Yes, Delete Member",
-      cancelText: "Cancel",
-      description: (
-        <p className="text-xs text-charcoal/80 text-center">
-          Are you sure you want to permanently delete the profile of <strong>"{target.first_name} {target.last_name}"</strong>? This action cannot be undone.
-        </p>
-      ),
-      onConfirm: async () => {
-        try {
-          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
-          await api.deleteMember(target.id);
-          if (selectedMember && selectedMember.id === target.id) {
-            setSelectedMember(null);
-          }
-          setDeleteConfirmMember(null);
-          loadData();
-          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
-          setConfirmModalConfig({
-            isOpen: true,
-            title: "Deletion Failed",
-            type: "danger",
-            confirmText: "Close",
-            cancelText: null,
-            description: err.message || "Failed to delete member.",
-            onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
-          });
+  const handleDeleteMember = (memberToDelete?: Member) => {
+    const target = memberToDelete || deleteConfirmMember;
+    if (!target) return;
+    setDeleteConfirmMember(null);
+    setConfirmModalConfig((prev) => ({ ...prev, isOpen: false }));
+
+    const previousSelected = selectedMember;
+    deleteWithUndo({
+      itemName: `${target.first_name} ${target.last_name}`,
+      itemType: "Member",
+      onOptimisticDelete: () => {
+        setMembers((prev) => prev.filter((m) => m.id !== target.id));
+        if (selectedMember && selectedMember.id === target.id) {
+          setSelectedMember(null);
         }
+      },
+      onRestore: () => {
+        setMembers((prev) => {
+          if (prev.some((m) => m.id === target.id)) return prev;
+          return [...prev, target];
+        });
+        if (previousSelected && previousSelected.id === target.id) {
+          setSelectedMember(previousSelected);
+        }
+      },
+      onCommitDelete: async () => {
+        await api.deleteMember(target.id);
       }
     });
   };
@@ -1129,8 +1123,8 @@ export const MembersPage: React.FC = () => {
           <p className="text-xs text-charcoal/80">
             Promote <strong>{member.first_name} {member.last_name}</strong> (Age {member.age}) from <strong>{member.ministry_name}</strong> to <strong>{nextMinistry?.name} Ministry</strong>?
           </p>
-          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-950">
-            ✨ Once promoted, the aging-out notification will be automatically cleared.
+          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-950 font-medium">
+            Once promoted, the aging-out notification will be automatically cleared.
           </div>
         </div>
       ),
@@ -1217,67 +1211,78 @@ export const MembersPage: React.FC = () => {
   // Autocomplete suggestions for "Who Invites You in DPC?"
   const memberSuggestions = React.useMemo(() => {
     return [...members]
-      .sort((a, b) => {
-        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
-        return nameA.localeCompare(nameB);
-      })
-      .map((m) => ({
-        title: `${m.first_name} ${m.last_name}`,
-        category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
-        subtitle: m.contact_phone || m.contact_email || `${m.age} yrs old`,
-        aliases: [
-          m.first_name,
-          m.last_name,
-          `${m.last_name}, ${m.first_name}`,
-          `${m.first_name[0]}. ${m.last_name}`
-        ]
-      }));
-  }, [members]);
-
-  // Autocomplete suggestions for Spouse / Partner Search
-  const spouseMemberSuggestions = React.useMemo(() => {
-    return members
-      .filter((m) => !editingMember || m.id !== editingMember.id)
-      .sort((a, b) => {
-        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
-        return nameA.localeCompare(nameB);
-      })
-      .map((m) => ({
-        title: `${m.first_name} ${m.last_name}`,
-        category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
-        subtitle: `${m.gender || "Member"} • ${m.age || 0} yrs old${m.contact_phone ? ` • ${m.contact_phone}` : ""}`,
-        aliases: [
-          m.first_name,
-          m.last_name,
-          `${m.last_name}, ${m.first_name}`,
-          `${m.first_name[0]}. ${m.last_name}`
-        ]
-      }));
-  }, [members, editingMember]);
-
-  // Autocomplete suggestions for Parents / Family Linking
-  const parentMemberSuggestions = React.useMemo(() => {
-    return members
-      .filter((m) => !editingMember || m.id !== editingMember.id)
+      .filter((m) => m && (m.first_name || m.last_name))
       .sort((a, b) => {
         const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
         const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
         return nameA.localeCompare(nameB);
       })
       .map((m) => {
+        const fn = m.first_name || "";
+        const ln = m.last_name || "";
+        return {
+          title: `${fn} ${ln}`.trim(),
+          category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
+          subtitle: m.contact_phone || m.contact_email || (m.age ? `${m.age} yrs old` : ""),
+          aliases: [
+            fn,
+            ln,
+            `${ln}, ${fn}`.trim(),
+            fn ? `${fn[0]}. ${ln}`.trim() : ln
+          ].filter(Boolean)
+        };
+      });
+  }, [members]);
+
+  // Autocomplete suggestions for Spouse / Partner Search
+  const spouseMemberSuggestions = React.useMemo(() => {
+    return members
+      .filter((m) => m && (!editingMember || m.id !== editingMember.id) && (m.first_name || m.last_name))
+      .sort((a, b) => {
+        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      })
+      .map((m) => {
+        const fn = m.first_name || "";
+        const ln = m.last_name || "";
+        return {
+          title: `${fn} ${ln}`.trim(),
+          category: m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member",
+          subtitle: `${m.gender || "Member"} • ${m.age || 0} yrs old${m.contact_phone ? ` • ${m.contact_phone}` : ""}`,
+          aliases: [
+            fn,
+            ln,
+            `${ln}, ${fn}`.trim(),
+            fn ? `${fn[0]}. ${ln}`.trim() : ln
+          ].filter(Boolean)
+        };
+      });
+  }, [members, editingMember]);
+
+  // Autocomplete suggestions for Parents / Family Linking
+  const parentMemberSuggestions = React.useMemo(() => {
+    return members
+      .filter((m) => m && (!editingMember || m.id !== editingMember.id) && (m.first_name || m.last_name))
+      .sort((a, b) => {
+        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      })
+      .map((m) => {
+        const fn = m.first_name || "";
+        const ln = m.last_name || "";
         const household = households.find(h => h.id === m.household_id);
         return {
-          title: `${m.first_name} ${m.last_name}`,
+          title: `${fn} ${ln}`.trim(),
           category: household ? `🏡 ${household.name}` : (m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member"),
           subtitle: `${m.gender || "Member"} • ${m.age ? `${m.age} yrs old` : 'Adult'}${m.address ? ` • ${m.address}` : ''}`,
           aliases: [
-            m.first_name,
-            m.last_name,
-            `${m.last_name}, ${m.first_name}`,
-            `${m.first_name[0]}. ${m.last_name}`
-          ]
+            fn,
+            ln,
+            `${ln}, ${fn}`.trim(),
+            fn ? `${fn[0]}. ${ln}`.trim() : ln
+          ].filter(Boolean)
         };
       });
   }, [members, editingMember, households]);
@@ -1329,7 +1334,7 @@ export const MembersPage: React.FC = () => {
             Are you sure you want to automatically transition all <strong>{agingOutCount} aging-out disciples</strong> to their age-appropriate ministries?
           </p>
           <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3 text-[11px] text-amber-950 text-left space-y-1">
-            <span className="font-black block text-amber-900">✨ Example Automatic Transition:</span>
+            <span className="font-black block text-amber-900">Example Automatic Transition:</span>
             <p>Disciples aged 17–18 currently registered in <strong>Highschool (13–16)</strong> will be promoted to <strong>Youth Ministry (17–26 yrs)</strong>.</p>
           </div>
         </div>
@@ -1372,7 +1377,7 @@ export const MembersPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header & Controls Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -1420,7 +1425,7 @@ export const MembersPage: React.FC = () => {
             </button>
             <button
               onClick={handleOpenAdd}
-              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4 text-indigo-950" />
               <span>Add Member</span>
@@ -1431,10 +1436,10 @@ export const MembersPage: React.FC = () => {
 
       {/* Aging-Out Quick Promotion Banner */}
       {agingOutCount > 0 && canEdit && (
-        <div className="bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-amber-500/10 border border-rose-300 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div className="bg-rose-50 border border-rose-300 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
             <span className="p-2.5 rounded-2xl bg-rose-600 text-white shadow-xs">
-              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              <TrendingUp className="w-4 h-4 text-white" />
             </span>
             <div>
               <div className="flex items-center gap-2">
@@ -1452,9 +1457,9 @@ export const MembersPage: React.FC = () => {
           </div>
           <button
             onClick={handleAutoTransition}
-            className="px-4 py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-black text-xs rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2"
+            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <TrendingUp className="w-3.5 h-3.5 text-amber-300" />
             <span>Auto-Promote All ({agingOutCount}) to Next Ministry</span>
           </button>
         </div>
@@ -1542,7 +1547,7 @@ export const MembersPage: React.FC = () => {
                   key={pill.id}
                   onClick={() => setMembershipFilter(pill.id)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${membershipFilter === pill.id
-                    ? "bg-gradient-to-r from-indigo-900 to-indigo-950 text-white shadow-xs border border-indigo-800 scale-[1.02]"
+                    ? "bg-indigo-900 text-white shadow-xs border border-indigo-800 scale-[1.02]"
                     : "bg-white text-charcoal/70 hover:bg-indigo-50/60 border border-indigo-100"
                     }`}
                 >
@@ -1569,7 +1574,7 @@ export const MembersPage: React.FC = () => {
               </span>
               {[
                 { id: "all", label: "All Milestones", icon: <Users className="w-3.5 h-3.5 text-indigo-700" /> },
-                { id: "today", label: "Birthday Today", icon: <Sparkles className="w-3.5 h-3.5 text-amber-500" /> },
+                { id: "today", label: "Birthday Today", icon: <Cake className="w-3.5 h-3.5 text-rose-500" /> },
                 { id: "this_week", label: "This Week", icon: <Calendar className="w-3.5 h-3.5 text-rose-500" /> },
                 { id: "this_month", label: "This Month", icon: <Cake className="w-3.5 h-3.5 text-emerald-600" /> },
               ].map(pill => (
@@ -1577,7 +1582,7 @@ export const MembersPage: React.FC = () => {
                   key={pill.id}
                   onClick={() => setBirthdayFilter(pill.id)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${birthdayFilter === pill.id
-                    ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 shadow-xs border border-amber-300"
+                    ? "bg-amber-400 text-indigo-950 shadow-xs border border-amber-300"
                     : "bg-white text-charcoal/70 hover:bg-gray-100 border border-indigo-100"
                     }`}
                 >
@@ -1623,7 +1628,7 @@ export const MembersPage: React.FC = () => {
           <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-gradient-to-r from-indigo-50/80 via-ivory-light to-amber-50/40 text-indigo-950 uppercase text-[10px] font-black tracking-wider border-b border-indigo-100">
+                <thead className="bg-indigo-50/70 text-indigo-950 uppercase text-[10px] font-black tracking-wider border-b border-indigo-100">
                   <tr>
                     <th className="p-4">Member Name</th>
                     <th className="p-4">Ministry</th>
@@ -1642,8 +1647,8 @@ export const MembersPage: React.FC = () => {
                       className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
                     >
                       <td className="p-4 font-bold text-indigo-950 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-900 text-white font-black flex items-center justify-center text-xs shadow-2xs ring-2 ring-white shrink-0">
-                          {m.first_name[0]}{m.last_name[0]}
+                        <div className="w-8 h-8 rounded-full bg-indigo-800 text-white font-black flex items-center justify-center text-xs shadow-2xs ring-2 ring-white shrink-0">
+                          {m.first_name?.[0] || ""}{m.last_name?.[0] || ""}
                         </div>
                         <div>
                           <div className="text-xs font-black text-indigo-950 group-hover:text-amber-600 transition-colors flex items-center gap-1.5 flex-wrap">
@@ -1689,7 +1694,7 @@ export const MembersPage: React.FC = () => {
                           <span>{m.birth_month_name ? `${m.birth_month_name} ${m.birth_day}` : m.birthdate}</span>
                           {m.is_birthday_today ? (
                             <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-bounce shadow-2xs">
-                              <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                              <Cake className="w-2.5 h-2.5 text-amber-300" />
                               <span>TODAY!</span>
                             </span>
                           ) : m.is_birthday_this_week ? (
@@ -1920,7 +1925,7 @@ export const MembersPage: React.FC = () => {
                               type="button"
                               onClick={() => handlePageChange(pageNumber)}
                               className={`w-8 h-8 rounded-xl font-black text-xs transition-all cursor-pointer ${currentPage === pageNumber
-                                ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 shadow-xs border border-amber-300 scale-105"
+                                ? "bg-amber-400 text-indigo-950 shadow-xs border border-amber-300 scale-105"
                                 : "bg-white text-charcoal/70 hover:bg-indigo-50/70 border border-indigo-100"
                                 }`}
                             >
@@ -2010,8 +2015,8 @@ export const MembersPage: React.FC = () => {
           <div className="w-full max-w-2xl lg:max-w-3xl bg-white rounded-3xl shadow-2xl p-6 sm:p-8 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between pb-4 border-b border-indigo-50">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-900 to-indigo-700 text-white font-black text-xl flex items-center justify-center shadow-md ring-4 ring-indigo-50 shrink-0">
-                  {selectedMember.first_name[0]}{selectedMember.last_name[0]}
+                <div className="w-14 h-14 rounded-2xl bg-indigo-900 text-white font-black text-xl flex items-center justify-center shadow-md ring-4 ring-indigo-50 shrink-0">
+                  {selectedMember.first_name?.[0] || ""}{selectedMember.last_name?.[0] || ""}
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -2055,7 +2060,7 @@ export const MembersPage: React.FC = () => {
 
             {/* Aging Out Promo Alert Banner if applicable */}
             {selectedMember.is_aging_out && (
-              <div className="bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent border border-rose-300 rounded-2xl p-4 text-xs space-y-2">
+              <div className="bg-rose-50/70 border border-rose-300 rounded-2xl p-4 text-xs space-y-2">
                 <div className="flex items-center gap-2 font-black text-rose-950">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>Member is Aging Out of Current Ministry</span>
@@ -2072,7 +2077,7 @@ export const MembersPage: React.FC = () => {
                         onClick={() => handlePromoteMinistry(selectedMember, nextM.id)}
                         className="bg-rose-600 hover:bg-rose-700 text-white font-black px-3.5 py-1.5 rounded-xl text-xs shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <TrendingUp className="w-3.5 h-3.5 text-white" />
                         <span>Promote to {nextM.name} Ministry</span>
                       </button>
                     ))}
@@ -2081,7 +2086,7 @@ export const MembersPage: React.FC = () => {
             )}
 
             {/* Telemetry Card: Membership Classification & Attendance Health */}
-            <div className="p-4 bg-gradient-to-br from-indigo-900/5 via-sky-500/5 to-amber-500/5 rounded-2xl border border-indigo-200/90 shadow-2xs space-y-3 text-xs">
+            <div className="p-4 bg-indigo-50/30 rounded-2xl border border-indigo-200/90 shadow-2xs space-y-3 text-xs">
               <div className="flex items-center justify-between pb-2 border-b border-indigo-100/80">
                 <div className="flex items-center gap-2 font-black text-indigo-950 text-xs">
                   <ShieldCheck className="w-4 h-4 text-indigo-700" />
@@ -2230,7 +2235,7 @@ export const MembersPage: React.FC = () => {
 
             {/* Dedicated Marriage & Spouse Card */}
             {(selectedMember.civil_status === "Married" || selectedMember.spouse_name || selectedMember.spouse_id) && (
-              <div className="p-4 bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 rounded-2xl border border-amber-300/80 shadow-2xs space-y-2.5 text-xs">
+              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-300/80 shadow-2xs space-y-2.5 text-xs">
                 <div className="flex items-center justify-between pb-2 border-b border-amber-200/80">
                   <span className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
                     <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
@@ -2243,7 +2248,7 @@ export const MembersPage: React.FC = () => {
 
                 <div className="flex items-center justify-between gap-3 bg-white/90 p-3 rounded-xl border border-amber-200 shadow-2xs flex-wrap">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 to-amber-700 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                    <div className="w-9 h-9 rounded-full bg-amber-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
                       💍
                     </div>
                     <div>
@@ -2283,7 +2288,7 @@ export const MembersPage: React.FC = () => {
             )}
 
             {/* Card 3: Birthday & Milestone Celebration */}
-            <div className="p-4 bg-gradient-to-br from-amber-500/10 via-rose-500/5 to-indigo-500/10 rounded-2xl border border-amber-200/80 space-y-3">
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200/80 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-black text-indigo-950 flex items-center gap-1.5 text-xs">
                   <Cake className="w-4 h-4 text-rose-500" />
@@ -2291,7 +2296,7 @@ export const MembersPage: React.FC = () => {
                 </span>
                 {selectedMember.is_birthday_today ? (
                   <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full animate-bounce shadow-2xs">
-                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    <Cake className="w-3 h-3 text-amber-300" />
                     <span>TODAY!</span>
                   </span>
                 ) : selectedMember.is_birthday_this_week ? (
@@ -2326,7 +2331,7 @@ export const MembersPage: React.FC = () => {
                     {selectedMember.days_until_birthday !== undefined ? (
                       selectedMember.days_until_birthday === 0 ? (
                         <>
-                          <Sparkles className="w-3 h-3 text-amber-600" />
+                          <Cake className="w-3 h-3 text-amber-600" />
                           <span>Today!</span>
                         </>
                       ) : `${selectedMember.days_until_birthday} days`
@@ -2338,7 +2343,7 @@ export const MembersPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleOpenGreeting(selectedMember)}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs py-2.5 px-4 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs py-2.5 px-4 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
               >
                 <Gift className="w-4 h-4 text-indigo-950" />
                 <span>Send Birthday Blessing / Announcement</span>
@@ -2346,7 +2351,7 @@ export const MembersPage: React.FC = () => {
             </div>
 
             {/* Card: Annual Attendance & Water Baptism Ceremony Tracker */}
-            <div className="p-4 bg-gradient-to-br from-cyan-500/10 via-indigo-500/5 to-cyan-500/10 rounded-2xl border border-cyan-200/90 shadow-2xs space-y-3">
+            <div className="p-4 bg-cyan-50 rounded-2xl border border-cyan-200/90 shadow-2xs space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-xl bg-cyan-100 text-cyan-800">
@@ -2371,7 +2376,7 @@ export const MembersPage: React.FC = () => {
                       setAttendanceSummaryInitialTab("overview");
                       setAttendanceSummaryMember(target);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-900 hover:from-indigo-600 hover:to-indigo-800 text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                    className="px-3.5 py-1.5 rounded-xl bg-indigo-800  text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
                   >
                     <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
                     <span>Attendance Rates & Streaks</span>
@@ -2384,7 +2389,7 @@ export const MembersPage: React.FC = () => {
                       setAttendanceSummaryInitialTab("monthly");
                       setAttendanceSummaryMember(target);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-700 hover:from-cyan-500 hover:to-indigo-600 text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                    className="px-3.5 py-1.5 rounded-xl bg-cyan-700  text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
                   >
                     <Calendar className="w-3.5 h-3.5 text-cyan-200" />
                     <span>Open Full-Year Attendance</span>
@@ -2549,7 +2554,7 @@ export const MembersPage: React.FC = () => {
             )}
 
             {/* Outreach & Discipleship Tree: People Invited by this Member */}
-            <div className="p-4 bg-gradient-to-br from-indigo-50/70 via-white to-amber-50/40 rounded-2xl border border-indigo-100 shadow-2xs space-y-3">
+            <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-2xs space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-indigo-50">
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-700">
@@ -2578,8 +2583,8 @@ export const MembersPage: React.FC = () => {
                       className="p-3 bg-white rounded-xl border border-indigo-100/90 hover:border-indigo-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-900 text-white text-xs font-black flex items-center justify-center shrink-0 shadow-2xs">
-                          {invited.first_name[0]}{invited.last_name[0]}
+                        <div className="w-8 h-8 rounded-full bg-indigo-800 text-white text-xs font-black flex items-center justify-center shrink-0 shadow-2xs">
+                          {invited.first_name?.[0] || ""}{invited.last_name?.[0] || ""}
                         </div>
                         <div className="min-w-0">
                           <div className="font-bold text-xs text-indigo-950 truncate group-hover:text-amber-600 transition-colors">
@@ -2696,7 +2701,7 @@ export const MembersPage: React.FC = () => {
               <button
                 type="button"
                 disabled={isDeleting}
-                onClick={handleDeleteMember}
+                onClick={() => handleDeleteMember(null)}
                 className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isDeleting ? (
@@ -2757,7 +2762,7 @@ export const MembersPage: React.FC = () => {
                 </div>
 
                 {/* DPC Physical Form Synchronized Header */}
-                <div className="bg-gradient-to-r from-indigo-950 via-indigo-900 to-indigo-950 p-3.5 rounded-2xl text-white shadow-xs border border-indigo-800 flex items-center justify-between">
+                <div className="bg-indigo-950 p-3.5 rounded-2xl text-white shadow-xs border border-indigo-800 flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 block">
                       Daet Presbyterian Church
@@ -2801,10 +2806,10 @@ export const MembersPage: React.FC = () => {
                       }}
                       className="w-full bg-white p-2.5 rounded-xl border border-indigo-200 focus:outline-none focus:border-indigo font-bold text-indigo-950 shadow-2xs cursor-pointer text-xs"
                     >
-                      <option value="">🌟 Auto-Detect by Birthday (Default & Recommended)</option>
+                      <option value="">Auto-Detect by Birthday (Default & Recommended)</option>
                       {effectiveMinistries.map((m) => (
                         <option key={m.id} value={m.id}>
-                          📋 {m.name} Application Form ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All Ages'})
+                          {m.name} Application Form ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All Ages'})
                         </option>
                       ))}
                     </select>
@@ -2812,7 +2817,7 @@ export const MembersPage: React.FC = () => {
 
                   {/* Active Form Type & Requirement Summary Banner */}
                   <div className="p-2.5 rounded-xl bg-white/90 border border-indigo-100 flex items-start gap-2 text-[11px] text-indigo-950 font-medium shadow-2xs">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                    <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
                     <div>
                       {currentModalMinistry ? (
                         <span>
@@ -2831,7 +2836,7 @@ export const MembersPage: React.FC = () => {
 
                 <form onSubmit={handleSubmitMember} className="space-y-4 text-xs">
                   {/* Membership Classification & Water Baptism Settings */}
-                  <div className="p-3.5 bg-gradient-to-r from-indigo-50/80 via-ivory-light to-amber-50/60 rounded-2xl border border-indigo-200/90 space-y-3">
+                  <div className="p-3.5 bg-indigo-50/70 rounded-2xl border border-indigo-200/90 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="font-black text-xs text-indigo-950 flex items-center gap-1.5">
                         <ShieldCheck className="w-4 h-4 text-indigo-700" />
@@ -2985,7 +2990,7 @@ export const MembersPage: React.FC = () => {
                       {suggestedMinistryInfo && (
                         <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-1.5 text-xs">
                           <span className="font-bold text-emerald-950 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Age: {suggestedMinistryInfo.age} yrs</span>
                           </span>
                           <span className="font-black text-indigo-950 bg-white px-2 py-0.5 rounded-md shadow-2xs border border-indigo-200 text-[11px]">
@@ -3023,7 +3028,7 @@ export const MembersPage: React.FC = () => {
 
                   {/* Civil Status / Marital Status Selector (Visible for Adult Ministries or when Married) */}
                   {(isJuniorAdult || isOldAdult || isYoungAdult || formData.civil_status === "Married") && (
-                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50/70 via-white to-indigo-50/70 border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
+                    <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
                           <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
@@ -3031,7 +3036,7 @@ export const MembersPage: React.FC = () => {
                         </label>
                         {formData.civil_status === "Married" && (
                           <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-amber-200" />
+                            <Heart className="w-3 h-3 text-white" />
                             <span>Auto-routed to Junior Adult Ministry</span>
                           </span>
                         )}
@@ -3050,7 +3055,7 @@ export const MembersPage: React.FC = () => {
                             onClick={() => handleCivilStatusChange(item.id)}
                             className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${formData.civil_status === item.id
                               ? item.isSpecial
-                                ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-xs scale-[1.02]"
+                                ? "bg-amber-500 text-white border-amber-600 shadow-xs scale-[1.02]"
                                 : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
                               : "bg-white text-charcoal/80 border-gray-200 hover:bg-amber-50/40 hover:border-amber-300"
                               }`}
@@ -3138,7 +3143,7 @@ export const MembersPage: React.FC = () => {
 
                           {/* Inline Partner Registration Card (if not in member directory) */}
                           {createNewSpouseRecord && (
-                            <div className="p-3.5 bg-gradient-to-br from-indigo-50/60 to-amber-50/60 rounded-xl border border-indigo-200 space-y-3 animate-in fade-in duration-150">
+                            <div className="p-3.5 bg-indigo-50/40 rounded-xl border border-indigo-200 space-y-3 animate-in fade-in duration-150">
                               <div className="flex items-center justify-between pb-1.5 border-b border-indigo-100">
                                 <span className="font-black text-xs text-indigo-950 flex items-center gap-1.5">
                                   <span>📝 Register Partner as New Member</span>
@@ -3367,7 +3372,7 @@ export const MembersPage: React.FC = () => {
                               </div>
 
                               <div className="p-2 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-950 flex items-center gap-1.5 font-medium">
-                                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <Info className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                                 <span>
                                   Both member records will be automatically created in the <strong>Junior Adult Ministry</strong> and linked as husband & wife / spouses.
                                 </span>
@@ -3415,7 +3420,7 @@ export const MembersPage: React.FC = () => {
                   </div>
 
                   {/* Enhanced Household & Family Linkage Section */}
-                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-white to-amber-50/50 border border-indigo-200 shadow-2xs space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200 shadow-2xs space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div>
                         <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
@@ -3457,7 +3462,7 @@ export const MembersPage: React.FC = () => {
                           }}
                           className={`py-2 px-2 rounded-xl font-bold text-[11px] transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${householdMode === item.id
                             ? item.isHighlighted
-                              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white border-amber-600 shadow-xs scale-[1.02]"
+                              ? "bg-amber-500 text-white border-amber-600 shadow-xs scale-[1.02]"
                               : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
                             : item.isHighlighted
                               ? "bg-amber-50/80 text-amber-950 border-amber-300 hover:bg-amber-100"
@@ -3492,7 +3497,7 @@ export const MembersPage: React.FC = () => {
                         </div>
 
                         {selectedParentMember ? (
-                          <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50 to-indigo-50 border border-emerald-200 flex items-start justify-between gap-2">
+                          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2.5">
                               <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shadow-2xs">
                                 👨‍👩‍👧
@@ -3507,9 +3512,9 @@ export const MembersPage: React.FC = () => {
                                 </h4>
                                 <p className="text-[11px] text-charcoal/70 mt-0.5">
                                   {selectedParentMember.household_name ? (
-                                    <span>🏡 Household: <strong>{selectedParentMember.household_name}</strong></span>
+                                    <span>Household: <strong>{selectedParentMember.household_name}</strong></span>
                                   ) : (
-                                    <span className="text-amber-800 font-medium">✨ Will auto-create <strong>{selectedParentMember.last_name} Household</strong> for family</span>
+                                    <span className="text-amber-800 font-medium">Will auto-create <strong>{selectedParentMember.last_name} Household</strong> for family</span>
                                   )}
                                 </p>
                               </div>
@@ -3566,7 +3571,7 @@ export const MembersPage: React.FC = () => {
                         </div>
 
                         <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-950 flex items-start gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                          <Home className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
                           <span>
                             Upon saving, a new household <strong>"{newHouseholdName || `${formData.last_name || 'New'} Household`}"</strong> will be created at the address above. Both this member and spouse (if married) will be automatically assigned to it.
                           </span>
@@ -4452,7 +4457,7 @@ export const MembersPage: React.FC = () => {
                     type="button"
                     onClick={handleSendGreeting}
                     disabled={sendingGreeting || !greetingMessage.trim()}
-                    className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{sendingGreeting ? "Posting..." : "Publish Blessing"}</span>

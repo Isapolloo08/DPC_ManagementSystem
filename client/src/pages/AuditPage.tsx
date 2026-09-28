@@ -5,9 +5,9 @@ import { AuditPageSkeleton, TableSkeleton } from "../components/common/SkeletonL
 import { useSocketEvent } from "../socket";
 import {
   ShieldAlert, ShieldCheck, Clock, User, CheckCircle2, RefreshCw,
-  Search, Filter, Download, ArrowUpDown, Eye, Calendar, Sparkles,
+  Search, Filter, Download, ArrowUpDown, Eye, Calendar,
   Layers, Activity, FileSpreadsheet, ChevronLeft, ChevronRight, X,
-  PlusCircle, Edit3, Trash2, UserCheck, LogOut, DollarSign, Database,
+  PlusCircle, Edit3, Trash2, UserCheck, LogOut, Database,
   ArrowRight, Shield
 } from "lucide-react";
 
@@ -238,14 +238,6 @@ export const AuditPage: React.FC = () => {
         </span>
       );
     }
-    if (act.includes("DONATION") || act.includes("FUND")) {
-      return (
-        <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-950 border border-teal-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
-          <DollarSign className="w-3 h-3 text-teal-600" />
-          <span>DONATION</span>
-        </span>
-      );
-    }
     return (
       <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 border border-slate-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
         <Activity className="w-3 h-3 text-slate-600" />
@@ -299,7 +291,7 @@ export const AuditPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* 1. HERO COMMAND BAR & STATS HEADER */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -343,7 +335,7 @@ export const AuditPage: React.FC = () => {
             <button
               onClick={() => loadAudit(false)}
               disabled={refreshing}
-              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-98 disabled:opacity-50"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-98 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-indigo-950 ${refreshing ? "animate-spin" : ""}`} />
               <span>{refreshing ? "Syncing..." : "Refresh Ledger"}</span>
@@ -354,7 +346,7 @@ export const AuditPage: React.FC = () => {
         {/* 2. STATS KPI GRID */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 pt-6 border-t border-indigo-50/80 mt-6">
           {/* Total Events */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/60 to-white border border-indigo-100/80 shadow-2xs space-y-1">
+          <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-indigo-900">
               <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Total Audit Events</span>
               <Activity className="w-4 h-4 text-indigo" />
@@ -364,7 +356,7 @@ export const AuditPage: React.FC = () => {
           </div>
 
           {/* Operations Breakdown */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50/60 to-white border border-emerald-100/80 shadow-2xs space-y-1">
+          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-emerald-950">
               <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Create / Insert</span>
               <PlusCircle className="w-4 h-4 text-emerald-600" />
@@ -374,7 +366,7 @@ export const AuditPage: React.FC = () => {
           </div>
 
           {/* Record Modifications */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/60 to-white border border-amber-100/80 shadow-2xs space-y-1">
+          <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-amber-950">
               <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Updates & Edits</span>
               <Edit3 className="w-4 h-4 text-amber-600" />
@@ -384,7 +376,7 @@ export const AuditPage: React.FC = () => {
           </div>
 
           {/* Active Operators */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/60 to-white border border-purple-100/80 shadow-2xs space-y-1">
+          <div className="p-4 rounded-2xl bg-purple-50 border border-purple-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-purple-950">
               <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Active Operators</span>
               <User className="w-4 h-4 text-purple-600" />
@@ -461,7 +453,7 @@ export const AuditPage: React.FC = () => {
               <Filter className="w-3 h-3" />
               Action:
             </span>
-            {["ALL", "CREATE", "UPDATE", "DELETE", "CHECK_IN", "DONATION"].map((act) => (
+            {["ALL", "CREATE", "UPDATE", "DELETE", "CHECK_IN"].map((act) => (
               <button
                 key={act}
                 onClick={() => setSelectedAction(act)}

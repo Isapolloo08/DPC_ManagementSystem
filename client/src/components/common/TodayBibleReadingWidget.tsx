@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BookOpen, ArrowRight, Sparkles, Calendar, BookMarked, BookmarkCheck } from "lucide-react";
+import { BookOpen, ArrowRight, Calendar, BookMarked, BookmarkCheck } from "lucide-react";
 import { getTodaysReading, DayReading, TOTAL_BIBLE_CHAPTERS, getScheduledTargetUpToDate } from "../../utils/bibleReadingPlan";
 import { ScripturePassageModal } from "./ScripturePassageModal";
 
@@ -32,7 +32,7 @@ export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = (
 
   if (compact) {
     return (
-      <div className="bg-gradient-to-br from-white to-sky-50/40 rounded-2xl border border-sky-100 p-4 shadow-2xs space-y-3">
+      <div className="bg-sky-50/30 rounded-2xl border border-sky-100 p-4 shadow-2xs space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
@@ -93,7 +93,7 @@ export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = (
   }
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-white/10">
+    <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-white/10">
       <img
         src="/container_bg.jpg"
         alt=""
@@ -131,7 +131,7 @@ export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = (
             </div>
             <div className="w-44 bg-white/15 rounded-full h-2 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-teal-400 via-cyan-400 to-sky-400 h-full rounded-full transition-all duration-500 shadow-sm"
+                className="bg-teal-400 h-full rounded-full transition-all duration-500 shadow-sm"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>

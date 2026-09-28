@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Cloud, CloudRain, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2,
   AlertCircle, ShieldCheck, Database, Server, Clock, Lock, Key, ExternalLink,
-  ChevronDown, ChevronUp, Check, X, Sparkles, Layers, FileText
+  ChevronDown, ChevronUp, Check, X, Layers, FileText
 } from "lucide-react";
 import { api } from "../../api";
 import { socket } from "../../socket";
@@ -187,7 +187,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
         
         {/* Header */}
-        <div className="p-6 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white flex items-center justify-between relative overflow-hidden shrink-0">
+        <div className="p-6 bg-indigo-950 text-white flex items-center justify-between relative overflow-hidden shrink-0">
           <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
           
           <div className="flex items-center gap-3.5 z-10">
@@ -247,7 +247,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
               {/* Progress Bar */}
               <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden p-0.5">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-400 via-indigo-300 to-emerald-400 rounded-full transition-all duration-300 shadow-sm"
+                  className="h-full bg-indigo-500 rounded-full transition-all duration-300 shadow-sm"
                   style={{ width: `${Math.max(syncProgress.percentage, 5)}%` }}
                 />
               </div>
@@ -368,7 +368,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
             {/* Push to Cloud Card */}
-            <div className="border-2 border-indigo-200/80 hover:border-indigo-400 bg-gradient-to-b from-indigo-50/40 to-white rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-2xs">
+            <div className="border-2 border-indigo-200/80 hover:border-indigo-400 bg-indigo-50/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-2xs">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-indigo-900 font-black text-sm">
                   <ArrowUpCircle className="w-5 h-5 text-indigo-600" />
@@ -519,7 +519,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
 
             <p className="text-xs text-charcoal/70 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200">
               {confirmAction === "push"
-                ? "This will safely upload and update all Members, Attendance records, Donations, and Events to your Supabase Cloud Database. No existing data will be lost."
+                ? "This will safely upload and update members, attendance records, events, and schedules to your Supabase Cloud Database. No existing data will be lost."
                 : "This will import records from Supabase Cloud into your local computer database. Are you sure you want to proceed?"}
             </p>
 

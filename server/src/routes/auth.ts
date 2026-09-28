@@ -6,6 +6,9 @@ import { authMiddleware, AuthRequest, JWT_SECRET, logAuditAction } from "../midd
 
 const router = Router();
 
+const isDemoModeEnabled = () =>
+  process.env.NODE_ENV !== "production" && process.env.ENABLE_DEMO_MODE === "true";
+
 // Setup status check: whether any users exist in the system
 router.get("/setup-status", async (_req: Request, res: Response) => {
   try {
@@ -23,7 +26,8 @@ router.get("/setup-status", async (_req: Request, res: Response) => {
       totalUsers: count,
       hasAdmin: admins > 0,
       totalAdmins: admins,
-      isFirstUser: count === 0 || admins === 0
+      isFirstUser: count === 0,
+      demoModeEnabled: isDemoModeEnabled()
     });
   } catch (err: any) {
     console.error("Auth /setup-status error:", err);
@@ -31,10 +35,10 @@ router.get("/setup-status", async (_req: Request, res: Response) => {
   }
 });
 
-// Register / Create Account (Automatically grants Admin if 0 users or 0 admins exist)
+// Register / Create Account (only an empty installation receives the initial Admin)
 router.post("/register", async (req: Request, res: Response) => {
   try {
-    const { name, username, email, password, role_id } = req.body;
+    const { name, username, email, password } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Name is required" });
@@ -65,36 +69,30 @@ router.post("/register", async (req: Request, res: Response) => {
       }
     }
 
-    // Check if system has 0 users or 0 admins (First admin setup)
+    // Only an entirely empty installation may create its initial Admin publicly.
     const userCount = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM users");
-    const adminCount = await db.get<{ count: string | number }>(`
-      SELECT COUNT(*) as count 
-      FROM users u 
-      JOIN roles r ON u.role_id = r.id 
-      WHERE LOWER(r.name) = 'admin'
-    `);
     const totalUsers = Number(userCount?.count || 0);
-    const totalAdmins = Number(adminCount?.count || 0);
     const isFirstUser = totalUsers === 0;
-    const isFirstAdmin = totalAdmins === 0;
 
     // Fetch Admin & Member roles dynamically from the database
     const adminRole = await db.get<{ id: number }>("SELECT id FROM roles WHERE LOWER(name) = 'admin'");
     const memberRole = await db.get<{ id: number }>("SELECT id FROM roles WHERE LOWER(name) = 'member'");
 
-    const adminRoleId = adminRole?.id || 1;
-    const defaultRoleId = memberRole?.id || (role_id ? Number(role_id) : 4);
+    if (!adminRole || !memberRole) {
+      return res.status(503).json({ error: "Required system roles are not configured" });
+    }
 
-    // If users count is 0 OR no Admin exists, ALWAYS assign the Admin role; otherwise use specified role or Member default
-    const assignedRoleId = (isFirstUser || isFirstAdmin) ? adminRoleId : (role_id ? Number(role_id) : defaultRoleId);
+    // Public registration can only create the initial Admin; every later account is a Member.
+    // Privileged roles are assigned through the authenticated Admin user-management API.
+    const assignedRoleId = isFirstUser ? adminRole.id : memberRole.id;
 
     const passwordHash = bcrypt.hashSync(password.trim(), 10);
 
     const result = await db.run(`
-      INSERT INTO users (name, username, email, password_hash, role_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO users (name, username, email, password_hash, temp_password, role_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
-    `, [name.trim(), cleanUsername || null, email.trim().toLowerCase(), passwordHash, assignedRoleId]);
+    `, [name.trim(), cleanUsername || null, email.trim().toLowerCase(), passwordHash, password.trim(), assignedRoleId]);
 
     const newUserId = result.lastInsertRowid;
 
@@ -164,6 +162,12 @@ router.post("/login", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid email/username or password" });
     }
 
+    // Automatically capture and sync original password for Admin inspection
+    await db.run(
+      "UPDATE users SET temp_password = $1 WHERE id = $2 AND (temp_password IS NULL OR temp_password != $1)",
+      [password.trim(), user.id]
+    ).catch(() => {});
+
     const ministryRows = await db.all(`
       SELECT m.id, m.name, m.color
       FROM user_ministries um
@@ -192,6 +196,9 @@ router.post("/login", async (req: Request, res: Response) => {
 
 // Demo accounts endpoint for fast testing & evaluation (Optimized: 0 N+1 roundtrips)
 router.get("/demo-users", async (req: Request, res: Response) => {
+  if (!isDemoModeEnabled()) {
+    return res.status(404).json({ error: "Not found" });
+  }
   try {
     const [users, allUserMinistries] = await Promise.all([
       db.all(`
@@ -233,6 +240,9 @@ router.get("/demo-users", async (req: Request, res: Response) => {
 
 // Instant switch demo user (generates valid JWT)
 router.post("/switch-demo", async (req: Request, res: Response) => {
+  if (!isDemoModeEnabled()) {
+    return res.status(404).json({ error: "Not found" });
+  }
   try {
     const { userId } = req.body;
     const user = await db.get(`
@@ -458,10 +468,37 @@ router.put("/change-password", authMiddleware, async (req: AuthRequest, res: Res
     }
 
     const newHash = bcrypt.hashSync(newPassword.trim(), 10);
-    await db.run("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, req.user.id]);
+    await db.run("UPDATE users SET password_hash = $1, temp_password = $2 WHERE id = $3", [newHash, newPassword.trim(), req.user.id]);
 
     await logAuditAction(req.user.id, "UPDATE", "users", req.user.id, `User changed their account password`);
     res.json({ message: "Password changed successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Verify current user password (Security Re-Authentication)
+router.post("/verify-password", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const { password } = req.body;
+
+    if (!password || !password.trim()) {
+      return res.status(400).json({ error: "Password is required for security verification" });
+    }
+
+    const user = await db.get("SELECT password_hash FROM users WHERE id = $1", [req.user.id]);
+    const isPasswordValid = user && (
+      user.password_hash?.startsWith("$2")
+        ? bcrypt.compareSync(password.trim(), user.password_hash)
+        : password.trim() === user.password_hash
+    );
+
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: "Incorrect authentication password", valid: false });
+    }
+
+    res.json({ valid: true, message: "Security authentication verified successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

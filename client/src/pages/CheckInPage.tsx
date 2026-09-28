@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { ChurchLogo } from "../components/common/ChurchLogo";
 import { api } from "../api";
 import { Member, AttendanceRecord, Ministry, AttendanceRosterItem } from "../types";
 import {
   UserCheck, ShieldCheck, Tag, AlertCircle,
   Search, CheckCircle2, Clock, Printer, KeyRound, QrCode, X,
-  Users, Sparkles, Heart, Check, Calendar, Plus, RefreshCw,
+  Users, Heart, Check, Calendar, Plus, RefreshCw,
   Home, Phone, UserPlus, Filter, ArrowRight, ShieldAlert, Award,
   UserX, HelpCircle, XCircle, RotateCcw, FileText, CheckSquare,
   ListChecks, SlidersHorizontal, ChevronLeft, ChevronRight, ChevronDown
@@ -18,6 +19,7 @@ import { EventAttendanceCheckInView } from "../components/attendance/EventAttend
 
 export const CheckInPage: React.FC = () => {
   const { user, ministries, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
+  const { deleteWithUndo } = useToast();
   const [activeAttendanceTab, setActiveAttendanceTab] = useState<"sunday" | "event">("sunday");
   const coordinatorMinistryId = isRestricted && allowedMinistries.length > 0
     ? allowedMinistries[0].id
@@ -497,23 +499,38 @@ export const CheckInPage: React.FC = () => {
     }
   };
 
-  // Undo / Unmark attendance
-  const handleUndoAttendance = async (item: AttendanceRosterItem) => {
+  // Undo / Unmark attendance with universal Undo toast
+  const handleUndoAttendance = (item: AttendanceRosterItem) => {
     if (isUpcomingFuture) {
       showToast("Attendance cannot be modified for upcoming future dates.", "error");
       return;
     }
     if (!item.attendance_id) return;
-    try {
-      setActionLoading(item.member_id);
-      await api.undoCheckIn(item.attendance_id);
-      showToast(`Removed attendance mark for ${item.first_name}`);
-      loadAttendanceData();
-    } catch (err: any) {
-      showToast(err.message || "Failed to undo attendance", "error");
-    } finally {
-      setActionLoading(null);
-    }
+    const attId = item.attendance_id;
+    const prevRoster = [...roster];
+    const prevCheckins = [...activeCheckins];
+
+    deleteWithUndo({
+      itemName: `attendance for ${item.first_name} ${item.last_name}`,
+      onOptimisticDelete: () => {
+        setRoster((prev) =>
+          prev.map((r) =>
+            r.member_id === item.member_id
+              ? { ...r, attendance_id: null, is_checked_in: false, attendance_status: null, checked_in_at: null }
+              : r
+          )
+        );
+        setActiveCheckins((prev) => prev.filter((c) => c.id !== attId));
+      },
+      onRestore: () => {
+        setRoster(prevRoster);
+        setActiveCheckins(prevCheckins);
+      },
+      onCommitDelete: async () => {
+        await api.undoCheckIn(attId);
+        loadAttendanceData(false);
+      }
+    });
   };
 
   // Check in entire household at once
@@ -753,7 +770,7 @@ export const CheckInPage: React.FC = () => {
                 : "text-charcoal/70 hover:text-charcoal hover:bg-white/60"
             }`}
           >
-            <Sparkles className="w-4 h-4 text-amber" />
+            <Calendar className="w-4 h-4 text-amber" />
             <span>Special Event Check-In</span>
           </button>
         </div>
@@ -770,7 +787,7 @@ export const CheckInPage: React.FC = () => {
       ) : (
         <>
       {/* TOP HERO: Sunday Service & Attendance Overview */}
-      <div className="relative z-30 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
+      <div className="relative z-30 rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
         {/* Background decorative elements isolated with overflow-hidden */}
         <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
           <img
@@ -971,7 +988,7 @@ export const CheckInPage: React.FC = () => {
               disabled={isUpcomingFuture}
               className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 ${isUpcomingFuture
                 ? "bg-white/10 text-white/40 cursor-not-allowed border border-white/10"
-                : "bg-gradient-to-r from-amber to-amber-500 hover:from-amber-500 hover:to-amber-600 text-charcoal active:scale-95 cursor-pointer"
+                : "bg-amber-500 hover:bg-amber-500 text-charcoal active:scale-95 cursor-pointer"
                 }`}
               title={isUpcomingFuture ? "Check-in disabled for upcoming Sunday" : "Check In Guest"}
             >
@@ -1265,7 +1282,7 @@ export const CheckInPage: React.FC = () => {
 
       {/* Upcoming Service Notice Banner */}
       {isUpcomingFuture && (
-        <div className="bg-gradient-to-r from-indigo-950 via-purple-950 to-indigo-900 border border-purple-500/30 text-white p-4 rounded-3xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1">
+        <div className="bg-indigo-950 border border-purple-500/30 text-white p-4 rounded-3xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-400/30 flex items-center justify-center shrink-0">
               <Clock className="w-5 h-5" />
@@ -1300,7 +1317,7 @@ export const CheckInPage: React.FC = () => {
         <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
 
           {/* Top Directory Header */}
-          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gradient-to-r from-gray-50/50 via-white to-gray-50/50">
+          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gray-50/50">
             <div className="flex items-center gap-2.5">
               <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shadow-xs transition-colors ${isFastMode ? "bg-slate-900 text-amber-300" : "bg-indigo-50 text-indigo"
                 }`}>
@@ -1369,7 +1386,7 @@ export const CheckInPage: React.FC = () => {
 
           {/* BATCH ROLL CALL TOOLBAR (Rendered when isFastMode is active) */}
           {isFastMode && (
-            <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 p-4 sm:p-5 text-white border-b border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="bg-slate-950 p-4 sm:p-5 text-white border-b border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
               
               {/* Row 1: Mode Selection (Full-Width 3-Column Grid) */}
               <div className="space-y-2">
@@ -1553,7 +1570,7 @@ export const CheckInPage: React.FC = () => {
                   type="button"
                   onClick={() => handleApplyBatchAttendance(batchScopeList)}
                   disabled={batchSubmitting || batchScopeList.length === 0}
-                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
                 >
                   {batchSubmitting ? (
                     <>
@@ -1686,7 +1703,7 @@ export const CheckInPage: React.FC = () => {
                                     ? "bg-amber-100 text-amber-900 border-amber-300"
                                     : "bg-gray-100 text-charcoal/70 border-gray-200"
                               }`}>
-                              {item.first_name[0]}{item.last_name[0]}
+                              {item.first_name?.[0] || ""}{item.last_name?.[0] || ""}
                             </div>
                             <div>
                               <div className="font-bold text-charcoal flex items-center gap-1.5">
@@ -1864,7 +1881,7 @@ export const CheckInPage: React.FC = () => {
                                       onClick={() => {
                                         setCheckoutRecord(item);
                                       }}
-                                      className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white text-xs font-black shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                                      className="px-2.5 py-1.5 rounded-xl bg-sky-600  text-white text-xs font-black shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95"
                                       title="Perform safe child release / check out"
                                     >
                                       <KeyRound className="w-3.5 h-3.5" />
@@ -2013,7 +2030,7 @@ export const CheckInPage: React.FC = () => {
               type="button"
               onClick={() => handleApplyBatchAttendance(batchScopeList)}
               disabled={batchSubmitting || batchScopeList.length === 0}
-              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
+              className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
             >
               {batchSubmitting ? (
                 <>

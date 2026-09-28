@@ -3,7 +3,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useSocketConnection, } from "../../socket";
 import { ChurchLogo } from "../common/ChurchLogo";
 import { WindowControls } from "./WindowControls";
-import { Bell, UserCog } from "lucide-react";
+import { UserCog } from "lucide-react";
+import { NotificationBell } from "../notifications/NotificationBell";
 
 
 
@@ -25,16 +26,18 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "users": { title: "User Management", subtitle: "System access & role permissions" },
   "settings": { title: "Settings & Lookups", subtitle: "System lookup configurations" },
   "audit": { title: "System Audit Logs", subtitle: "Administrative activity history" },
-  "profile": { title: "My Profile & Account", subtitle: "Personal details, security & church engagement" }
+  "profile": { title: "My Profile & Account", subtitle: "Personal details, security & church engagement" },
+  "notifications": { title: "Notifications", subtitle: "Church alerts, schedule updates & follow-ups" }
 };
 
 interface NavbarProps {
   currentTab?: string;
   onToggleSidebar?: () => void;
   onOpenProfile?: () => void;
+  onNavigate?: (tab: string, refId?: number | null) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onToggleSidebar, onOpenProfile }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onToggleSidebar, onOpenProfile, onNavigate }) => {
   const { user } = useAuth();
   const isConnected = useSocketConnection();
   const isElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.isElectron || (window as any).__electron__);
@@ -84,7 +87,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
 
             {/* Mobile-only compact logo & brand title */}
             <div className="flex items-center gap-2 min-w-0 md:hidden">
-              <ChurchLogo variant="badge" className="w-7 h-7 shrink-0" />
+              <ChurchLogo className="w-7 h-7 shrink-0 rounded-lg drop-shadow-xs" />
               <div className="min-w-0 truncate font-bold text-xs text-white">
                 Daet Presbyterian <span className="text-amber-400 font-serif italic text-[10px]">ChMS</span>
               </div>
@@ -118,11 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
               <span className="hidden lg:inline">{isConnected ? "Live Sync" : "Syncing..."}</span>
             </div>
 
-            {/* Notification Indicator */}
-            <div className="relative p-2 rounded-full hover:bg-indigo-700/60 text-indigo-200 hover:text-white cursor-pointer transition-colors">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose rounded-full"></span>
-            </div>
+            {onNavigate && <NotificationBell onNavigate={onNavigate} />}
 
             {/* User Pill (Interactive -> Opens Profile Management) */}
             {user && (
@@ -132,7 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
                 title="Manage Account Profile & Security Settings"
                 className="group flex items-center gap-2 pl-2.5 pr-2.5 py-1 rounded-2xl border border-indigo-700/80 bg-indigo-900/40 hover:bg-indigo-800/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs text-left active:scale-98"
               >
-                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 to-amber-300 text-indigo-950 font-black flex items-center justify-center text-xs shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-full bg-amber-500 text-indigo-950 font-black flex items-center justify-center text-xs shadow-inner shrink-0 group-hover:scale-105 transition-transform">
                   {user.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
                 </div>
                 <div className="hidden sm:block text-left min-w-0">

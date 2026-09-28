@@ -18,7 +18,6 @@ router.get("/dashboard", authMiddleware, async (req: AuthRequest, res: Response)
         (SELECT COUNT(*) FROM members WHERE status = 'active' ${scopedMinistryId ? "AND ministry_id = $1" : ""}) as total_active_members,
         (SELECT COUNT(*) FROM households) as total_households,
         (SELECT COUNT(*) FROM attendance WHERE checked_in_at::date = CURRENT_DATE ${scopedMinistryId ? "AND ministry_id = $1" : ""}) as today_checkins,
-        (SELECT COALESCE(SUM(amount), 0) FROM donations WHERE EXTRACT(YEAR FROM donated_at) = EXTRACT(YEAR FROM CURRENT_DATE)) as ytd_giving_amount,
         (SELECT COUNT(*) FROM announcements) as active_announcements,
         (SELECT COUNT(*) FROM events WHERE start_time >= CURRENT_TIMESTAMP ${scopedMinistryId ? "AND (ministry_id = $1 OR ministry_id IS NULL)" : ""}) as upcoming_events_count
     `;
@@ -75,7 +74,6 @@ router.get("/dashboard", authMiddleware, async (req: AuthRequest, res: Response)
         total_active_members: Number(metricsRow?.total_active_members || 0),
         total_households: Number(metricsRow?.total_households || 0),
         today_checkins: Number(metricsRow?.today_checkins || 0),
-        ytd_giving_amount: Number(metricsRow?.ytd_giving_amount || 0),
         active_announcements: Number(metricsRow?.active_announcements || 0),
         upcoming_events_count: Number(metricsRow?.upcoming_events_count || 0),
         aging_out_alerts_count: agingOutAlertsCount

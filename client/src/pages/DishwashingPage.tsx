@@ -1,17 +1,18 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
 import { useSocketEvent } from "../socket";
 import { DishwashingPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import { DishwashingTeam, SundayDutyScheduleItem, Member, BibleStudyGroup, Ministry } from "../types";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
 import {
-  Utensils, Sparkles, Calendar, CalendarCheck, Users, CheckCircle2, Clock, Plus,
+  Utensils, Calendar, CalendarCheck, Users, CheckCircle2, Clock, Plus,
   Trash2, Edit, RefreshCw, ArrowLeftRight, Check, X,
   AlertCircle, ChevronRight, Phone, CheckSquare, Crown, UserPlus,
   BookOpen, Building2, Layers, ShieldCheck, ArrowRight,
-  Droplets, Flame, Search, Filter, Sparkle, CalendarDays, Award,
+  Droplets, Flame, Search, Filter, CalendarDays, Award,
   ListOrdered, HeartHandshake, Eye
 } from "lucide-react";
 
@@ -149,6 +150,7 @@ const getProtocolTheme = (color: string) => {
 
 export const DishwashingPage: React.FC = () => {
   const { user } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Coordinator";
 
   const [activeTab, setActiveTab] = useState<"teams" | "schedule" | "tasks">("teams");
@@ -760,26 +762,18 @@ export const DishwashingPage: React.FC = () => {
   };
 
   const handleDeleteTeam = (teamId: number, name: string) => {
-    setConfirmModalConfig({
-      isOpen: true,
-      title: "Remove Dishwashing Unit",
-      type: "delete",
-      confirmText: "Yes, Remove Unit",
-      cancelText: "Cancel",
-      description: (
-        <p className="text-xs text-slate-600 text-center">
-          Are you sure you want to remove <strong>"{name}"</strong> from the Sunday rotation cycle?
-        </p>
-      ),
-      onConfirm: async () => {
-        try {
-          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
-          await api.deleteDishwashingTeam(teamId);
-          loadDishwashingData();
-          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
-          showAlert("Delete Failed", err.message || "Failed to delete team", "danger");
-        }
+    const originalTeams = teams;
+    deleteWithUndo({
+      itemName: name,
+      itemType: "Dishwashing unit",
+      onOptimisticDelete: () => {
+        setTeams((prev) => prev.filter((t) => t.id !== teamId));
+      },
+      onRestore: () => {
+        setTeams(originalTeams);
+      },
+      onCommitDelete: async () => {
+        await api.deleteDishwashingTeam(teamId);
       }
     });
   };
@@ -835,26 +829,28 @@ export const DishwashingPage: React.FC = () => {
   };
 
   const handleRemoveMember = (teamId: number, memberId: number, memberName: string) => {
-    setConfirmModalConfig({
-      isOpen: true,
-      title: "Remove Roster Member",
-      type: "warning",
-      confirmText: "Remove",
-      cancelText: "Cancel",
-      description: (
-        <p className="text-xs text-slate-600 text-center">
-          Remove <strong>"{memberName}"</strong> from this dishwashing team?
-        </p>
-      ),
-      onConfirm: async () => {
-        try {
-          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
-          await api.removeDishwashingTeamMember(teamId, memberId);
-          loadDishwashingData();
-          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
-          showAlert("Remove Failed", err.message || "Failed to remove member", "danger");
-        }
+    const targetTeam = teams.find((t) => t.id === teamId);
+    const originalMembers = targetTeam?.members || [];
+
+    deleteWithUndo({
+      itemName: memberName,
+      itemType: "Dishwashing roster member",
+      onOptimisticDelete: () => {
+        setTeams((prev) =>
+          prev.map((t) =>
+            t.id === teamId
+              ? { ...t, members: (t.members || []).filter((m) => m.member_id !== memberId) }
+              : t
+          )
+        );
+      },
+      onRestore: () => {
+        setTeams((prev) =>
+          prev.map((t) => (t.id === teamId ? { ...t, members: originalMembers } : t))
+        );
+      },
+      onCommitDelete: async () => {
+        await api.removeDishwashingTeamMember(teamId, memberId);
       }
     });
   };
@@ -921,7 +917,7 @@ export const DishwashingPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* TOP HEADER: Culinary Fellowship Command */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -959,7 +955,7 @@ export const DishwashingPage: React.FC = () => {
           {isAdminOrCoordinator && (
             <button
               onClick={handleOpenCreateTeam}
-              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4 text-indigo-950" />
               <span>Add Team to Cycle</span>
@@ -1002,7 +998,7 @@ export const DishwashingPage: React.FC = () => {
 
         <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
           <div className="p-3 rounded-xl bg-amber-50 text-amber-600 border border-amber-100">
-            <Sparkles className="w-5 h-5" />
+            <CalendarCheck className="w-5 h-5" />
           </div>
           <div>
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">This Sunday</span>
@@ -1016,7 +1012,7 @@ export const DishwashingPage: React.FC = () => {
       {/* DUAL SHOWCASE HERO: [THIS SUNDAY SPOTLIGHT (7 cols)] + [UPCOMING ROTATION FORECAST CONTAINER (5 cols)] */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* LEFT CONTAINER: THIS SUNDAY SPOTLIGHT */}
-        <div className="lg:col-span-7 relative overflow-hidden bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-teal-800/40 flex flex-col justify-between space-y-5">
+        <div className="lg:col-span-7 relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-teal-800/40 flex flex-col justify-between space-y-5">
           {/* Subtle Ambient Glow */}
           <div className="absolute -top-12 -right-12 w-64 h-64 bg-teal-500/15 pointer-events-none rounded-full blur-3xl"></div>
           <div className="absolute -bottom-10 -left-10 w-52 h-52 bg-emerald-500/10 pointer-events-none rounded-full blur-2xl"></div>
@@ -1025,7 +1021,7 @@ export const DishwashingPage: React.FC = () => {
             {/* Header Badge Row */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
+                <span className="bg-emerald-500 text-slate-950 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
                   <Droplets className="w-3.5 h-3.5 text-slate-950" />
                   <span>THIS SUNDAY ON DISHWASHING</span>
                 </span>
@@ -1114,7 +1110,7 @@ export const DishwashingPage: React.FC = () => {
             <div className="relative z-10 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="text-xs text-teal-200 font-bold bg-white/10 border border-white/20 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs backdrop-blur-xs">
-                  <Sparkles className="w-4 h-4 text-teal-300" />
+                  <CheckCircle2 className="w-4 h-4 text-teal-300" />
                   <span>Active Live Cycle • {thisSunday.date_formatted}</span>
                 </div>
 
@@ -1150,7 +1146,7 @@ export const DishwashingPage: React.FC = () => {
         </div>
 
         {/* RIGHT CONTAINER: UPCOMING ROTATION FORECAST CONTAINER */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-slate-50 via-teal-50/40 to-emerald-50/30 rounded-3xl p-6 border border-teal-200/70 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-5 bg-slate-50 rounded-3xl p-6 border border-teal-200/70 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-teal-100">
               <div className="flex items-center gap-2">
@@ -1228,7 +1224,7 @@ export const DishwashingPage: React.FC = () => {
           {/* Quick Rotation Indicator */}
           <div className="pt-3 border-t border-teal-100 flex items-center justify-between text-xs font-bold text-slate-600">
             <span className="flex items-center gap-1.5 text-teal-800">
-              <Sparkle className="w-3.5 h-3.5 text-teal-600" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
               <span>Full 16-Week Schedule is Active</span>
             </span>
             <button
@@ -1548,7 +1544,7 @@ export const DishwashingPage: React.FC = () => {
               <div
                 key={idx}
                 className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${item.is_this_sunday
-                  ? "bg-gradient-to-r from-teal-50/90 via-white to-emerald-50/40 border-teal-400 shadow-sm ring-2 ring-teal-400/20"
+                  ? "bg-teal-50 border-teal-400 shadow-sm ring-2 ring-teal-400/20"
                   : item.status === "completed"
                     ? "bg-emerald-50/40 border-emerald-200/80"
                     : item.status === "swapped"
@@ -1566,7 +1562,7 @@ export const DishwashingPage: React.FC = () => {
                       {item.date_formatted}
                     </span>
                     {item.is_this_sunday && (
-                      <span className="text-[9px] bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-black px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
+                      <span className="text-[9px] bg-emerald-600 text-white font-black px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
                         This Sunday
                       </span>
                     )}
@@ -1621,7 +1617,7 @@ export const DishwashingPage: React.FC = () => {
                 <div className="flex items-center gap-2 self-end md:self-center">
                   {item.is_this_sunday ? (
                     <span className="bg-teal-100 text-teal-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-teal-300 shadow-2xs">
-                      <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
                       <span>On Duty This Sunday</span>
                     </span>
                   ) : item.is_next_sunday ? (
@@ -1693,7 +1689,7 @@ export const DishwashingPage: React.FC = () => {
                 </button>
                 <button
                   onClick={handleOpenAddProtocol}
-                  className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600  rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Protocol Card</span>
@@ -1787,11 +1783,10 @@ export const DishwashingPage: React.FC = () => {
                   {closeoutChecklist.map((item) => (
                     <div
                       key={item.id}
-                      className={`flex items-center justify-between gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer group ${
-                        item.completed
-                          ? "bg-emerald-50/60 border-emerald-200/80 text-emerald-900"
-                          : "bg-slate-50 hover:bg-slate-100/80 border-slate-100 text-slate-700"
-                      }`}
+                      className={`flex items-center justify-between gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer group ${item.completed
+                        ? "bg-emerald-50/60 border-emerald-200/80 text-emerald-900"
+                        : "bg-slate-50 hover:bg-slate-100/80 border-slate-100 text-slate-700"
+                        }`}
                       onClick={() => handleToggleChecklistItem(item.id)}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -1801,9 +1796,8 @@ export const DishwashingPage: React.FC = () => {
                           <CheckSquare className="w-4 h-4 text-teal-600 shrink-0" />
                         )}
                         <span
-                          className={`font-medium truncate ${
-                            item.completed ? "line-through text-slate-400" : "text-slate-700"
-                          }`}
+                          className={`font-medium truncate ${item.completed ? "line-through text-slate-400" : "text-slate-700"
+                            }`}
                         >
                           {item.task}
                         </span>
@@ -1835,7 +1829,7 @@ export const DishwashingPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-900 to-slate-900 text-white space-y-1.5 mt-4">
+              <div className="p-4 rounded-2xl bg-teal-950 text-white space-y-1.5 mt-4">
                 <div className="flex items-center gap-2 text-teal-300 text-xs font-black">
                   <Award className="w-4 h-4" />
                   <span>Kitchen Stewards Fellowship</span>
@@ -2202,9 +2196,9 @@ export const DishwashingPage: React.FC = () => {
 
         const coveredMembersList: { id: number; first_name: string; last_name: string; ministry_name?: string }[] = targetGroup
           ? (targetGroup?.members || []).map(m => {
-              const cm = m.member_id ? churchMembers.find(c => c.id === m.member_id) : null;
-              return cm || { id: (m.member_id || m.id) as number, first_name: m.display_name || m.member_name || "Member", last_name: "", ministry_name: targetGroup?.name || "BS Group" };
-            })
+            const cm = m.member_id ? churchMembers.find(c => c.id === m.member_id) : null;
+            return cm || { id: (m.member_id || m.id) as number, first_name: m.display_name || m.member_name || "Member", last_name: "", ministry_name: targetGroup?.name || "BS Group" };
+          })
           : targetMinistry
             ? getMinistryMembers(targetMinistry).map(cm => ({ id: cm.id, first_name: cm.first_name, last_name: cm.last_name, ministry_name: targetMinistry.name }))
             : [];
@@ -2274,7 +2268,7 @@ export const DishwashingPage: React.FC = () => {
                       placeholder="Filter members by name..."
                       value={memberSearchQuery}
                       onChange={(e) => setMemberSearchQuery(e.target.value)}
-                      className="w-full bg-slate-50 pl-7 pr-1 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium text-xs"
+                      className="w-full bg-slate-50 pl-9 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium text-xs"
                     />
                   </div>
 
@@ -2542,9 +2536,8 @@ export const DishwashingPage: React.FC = () => {
                       key={theme.key}
                       type="button"
                       onClick={() => setProtocolForm({ ...protocolForm, color: theme.key as any })}
-                      className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${theme.bg} ${
-                        protocolForm.color === theme.key ? "ring-2 ring-slate-800 scale-102 shadow-xs" : "opacity-60 hover:opacity-100"
-                      }`}
+                      className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${theme.bg} ${protocolForm.color === theme.key ? "ring-2 ring-slate-800 scale-102 shadow-xs" : "opacity-60 hover:opacity-100"
+                        }`}
                     >
                       {theme.label}
                     </button>

@@ -9,7 +9,6 @@ import {
   X,
   Plus,
   Trash2,
-  Sparkles,
   Sun,
   Sunset,
   Moon,
@@ -268,7 +267,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
 
       {isManualMode ? (
         /* Option 2: Freeform Manual Input */
-        <div className="p-3.5 bg-gradient-to-br from-amber-50/40 via-white to-ivory-light rounded-2xl border border-amber-200 shadow-2xs space-y-2 animate-in fade-in duration-150">
+        <div className="p-3.5 bg-amber-50/40 rounded-2xl border border-amber-200 shadow-2xs space-y-2 animate-in fade-in duration-150">
           <div className="flex items-center justify-between text-[11px]">
             <span className="font-bold text-amber-950 flex items-center gap-1.5">
               <Edit3 className="w-3.5 h-3.5 text-amber-600" />
@@ -300,7 +299,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
         </div>
       ) : (
         /* Option 1: Interactive Day & Time Schedule Builder */
-        <div className="p-3 sm:p-4 bg-gradient-to-br from-indigo-50/40 via-white to-amber-50/20 rounded-2xl border border-indigo-100 shadow-xs space-y-3">
+        <div className="p-3 sm:p-4 bg-indigo-50/40 rounded-2xl border border-indigo-100 shadow-xs space-y-3">
           {slots.map((slot, index) => {
             const daysDisplay = formatDaysAbbr(slot.days) || "No days selected";
             const timeDisplay = slot.timePreset === "Custom"
@@ -408,7 +407,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
                           onClick={() => handleSetTimePreset(slot.id, preset)}
                           className={`p-2 rounded-xl text-left text-xs font-bold transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                             isSelected
-                              ? "bg-gradient-to-br from-amber-50 to-amber-100/80 text-amber-950 border-2 border-amber-400 shadow-xs ring-1 ring-amber-300"
+                              ? "bg-amber-50 text-amber-950 border-2 border-amber-400 shadow-xs ring-1 ring-amber-300"
                               : "bg-gray-50/80 hover:bg-gray-100/90 text-charcoal/80 border border-gray-200/60"
                           }`}
                         >
@@ -432,7 +431,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
                       onClick={() => handleSetTimePreset(slot.id, "Custom")}
                       className={`p-2 rounded-xl text-left text-xs font-bold transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                         slot.timePreset === "Custom"
-                          ? "bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-950 border-2 border-indigo-500 shadow-xs ring-1 ring-indigo-300"
+                          ? "bg-indigo-50 text-indigo-950 border-2 border-indigo-500 shadow-xs ring-1 ring-indigo-300"
                           : "bg-gray-50/80 hover:bg-gray-100/90 text-charcoal/80 border border-gray-200/60"
                       }`}
                     >

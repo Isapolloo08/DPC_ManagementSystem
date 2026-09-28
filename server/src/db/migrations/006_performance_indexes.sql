@@ -46,15 +46,7 @@ CREATE TABLE IF NOT EXISTS event_registrations (
 CREATE INDEX IF NOT EXISTS idx_event_registrations_event_member ON event_registrations (event_id, member_id);
 CREATE INDEX IF NOT EXISTS idx_event_registrations_member_id ON event_registrations (member_id);
 
--- 5. Donations & Finance Indexes
--- Speeds up member giving history and annual statements
-CREATE INDEX IF NOT EXISTS idx_donations_member_donated ON donations (member_id, donated_at DESC);
--- Speeds up fund-specific breakdown reports
-CREATE INDEX IF NOT EXISTS idx_donations_fund_donated ON donations (fund_id, donated_at DESC);
--- Speeds up date range financial filtering
-CREATE INDEX IF NOT EXISTS idx_donations_donated_at ON donations (donated_at DESC);
-
--- 6. Bible Study Groups & Attendance Indexes
+-- 5. Bible Study Groups & Attendance Indexes
 -- Speeds up ministry-scoped small group listings
 CREATE INDEX IF NOT EXISTS idx_bs_groups_ministry ON bible_study_groups (ministry_id);
 -- Optimizes small group roster membership JOINs

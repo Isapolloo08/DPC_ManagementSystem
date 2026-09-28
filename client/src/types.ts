@@ -34,6 +34,60 @@ export interface User {
   linked_member_name?: string | null;
 }
 
+export type NotificationEventType =
+  | "absence_alert"
+  | "session_rescheduled"
+  | "at_risk_member"
+  | "sunday_absence_streak"
+  | "duty_incomplete"
+  | "dishwashing_unresolved";
+
+export interface AppNotification {
+  id: number;
+  user_id: number;
+  type: NotificationEventType;
+  title: string;
+  message: string;
+  link_tab: string | null;
+  link_ref_id: number | null;
+  is_read: boolean;
+  created_at: string;
+  recipient_name?: string;
+  recipient_email?: string;
+}
+
+export interface NotificationsResponse {
+  items: AppNotification[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface NotificationRule {
+  id: number;
+  event_type: NotificationEventType;
+  recipient_type: "user" | "role" | "email";
+  recipient_value: string;
+  ministry_id: number | null;
+  ministry_name?: string | null;
+  threshold: number | null;
+  email_enabled: boolean;
+  in_app_enabled: boolean;
+  enabled: boolean;
+}
+
+export interface NotificationEmailSettings {
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  fromName: string;
+  fromEmail: string;
+  pastorEmail: string;
+  hasSmtpPassword: boolean;
+}
+
 export interface UpdateProfilePayload {
   name?: string;
   username?: string;
@@ -136,7 +190,6 @@ export interface Member {
   next_birthday_date?: string;
   family_members?: { id: number; first_name: string; last_name: string; birthdate: string; ministry_id: number }[];
   attendance_history?: AttendanceRecord[];
-  donations?: Donation[];
   membership_type?: "baptized_regular" | "unbaptized_regular" | "guest" | "inactive";
   attendance_health?: "healthy" | "warning" | "action_required" | "inactive";
   consecutive_absences?: number;
@@ -353,35 +406,11 @@ export interface Announcement {
   created_at: string;
 }
 
-export interface Fund {
-  id: number;
-  name: string;
-  description: string;
-  target_amount: number;
-  raised_amount?: number;
-  donor_count?: number;
-  progress_percentage?: number;
-}
-
-export interface Donation {
-  id: number;
-  member_id: number | null;
-  first_name?: string;
-  last_name?: string;
-  fund_id: number;
-  fund_name?: string;
-  amount: number;
-  method: string;
-  notes: string | null;
-  donated_at: string;
-}
-
 export interface DashboardMetrics {
   metrics: {
     total_active_members: number;
     total_households: number;
     today_checkins: number;
-    ytd_giving_amount: number;
     active_announcements?: number;
     upcoming_events_count: number;
     aging_out_alerts_count: number;
@@ -411,6 +440,73 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface BibleStudyGroupTransitionSource {
+  id: number;
+  name: string;
+  leader_name: string;
+  leader_contact?: string | null;
+  category?: string;
+  status?: string;
+  member_count?: number;
+}
+
+export interface BibleStudyGroupTransition {
+  id: number;
+  transition_type: "MERGE" | "SPLIT" | "MOVE_MEMBERS" | "LEADER_CHANGE" | "MINISTRY_TRANSITION" | string;
+  new_group_id: number | null;
+  new_group_name?: string | null;
+  effective_date: string;
+  reason?: string | null;
+  notes?: string | null;
+  metadata?: any;
+  created_by?: number | null;
+  created_by_name?: string | null;
+  created_at: string;
+  source_groups?: BibleStudyGroupTransitionSource[];
+}
+
+export interface BibleStudyGroupLeader {
+  id: number;
+  group_id: number;
+  user_id?: number | null;
+  member_id?: number | null;
+  leader_name: string;
+  leader_contact?: string | null;
+  role: "primary" | "assistant" | "former" | string;
+  started_at: string;
+  ended_at?: string | null;
+  status: "active" | "inactive" | string;
+}
+
+export interface BibleStudyGroupHistoryResponse {
+  group: BibleStudyGroup;
+  created_transition: (BibleStudyGroupTransition & { source_groups: BibleStudyGroupTransitionSource[] }) | null;
+  merged_into_group: Partial<BibleStudyGroup> | null;
+  leaders: BibleStudyGroupLeader[];
+}
+
+export interface MergeGroupsPayload {
+  source_group_ids: number[];
+  new_group_name: string;
+  description?: string;
+  curriculum?: string;
+  category?: string;
+  meeting_day?: string;
+  meeting_time?: string;
+  location?: string;
+  ministry_id?: number | null;
+  max_capacity?: number;
+  primary_leader_name: string;
+  primary_leader_contact?: string;
+  primary_leader_id?: number | null;
+  assistant_leader_name?: string;
+  assistant_leader_contact?: string;
+  assistant_leader_id?: number | null;
+  effective_date: string;
+  reason?: string;
+  notes?: string;
+}
+
 export interface BibleStudyMember {
   id: number;
   group_id: number;
@@ -421,7 +517,10 @@ export interface BibleStudyMember {
   last_name?: string;
   contact_email?: string;
   contact_phone?: string;
+  status?: "active" | "transferred" | "inactive" | string;
   joined_at: string;
+  left_at?: string | null;
+  transition_id?: number | null;
 }
 
 export interface BibleStudyGroup {
@@ -435,6 +534,9 @@ export interface BibleStudyGroup {
   leader_id?: number | null;
   leader_name: string;
   leader_contact: string | null;
+  assistant_leader_name?: string | null;
+  assistant_leader_contact?: string | null;
+  assistant_leader_id?: number | null;
   meeting_day: string;
   meeting_time: string;
   location: string;
@@ -450,6 +552,16 @@ export interface BibleStudyGroup {
   rescheduled_date?: string | null;
   rescheduled_time?: string | null;
   reschedule_reason?: string | null;
+  status?: "active" | "merged" | "split" | "inactive" | "archived" | string;
+  merged_into_group_id?: number | null;
+  merged_into_group_name?: string | null;
+  closed_at?: string | null;
+  effective_date?: string | null;
+  created_transition_id?: number | null;
+  created_transition_type?: string | null;
+  source_group_names?: string | null;
+  created_transition?: BibleStudyGroupTransition | null;
+  merged_into_group?: Partial<BibleStudyGroup> | null;
   created_at?: string;
 }
 
@@ -529,7 +641,6 @@ export type LookupType =
   | "event_category"
   | "event_location"
   | "announcement_category"
-  | "payment_method"
   | "member_status";
 
 export interface SystemLookup {
@@ -752,12 +863,11 @@ export interface BackupYearStats {
   year: number;
   totalRecords: number;
   attendance: number;
-  donationsCount: number;
-  donationsTotal: number;
   events: number;
   dutySchedules: number;
   dishwashingRoster: number;
   announcements: number;
+  notifications: number;
   membersCreated: number;
 }
 
@@ -773,11 +883,11 @@ export interface BackupYearDetailsResponse {
   year: number;
   tables: {
     attendance: any[];
-    donations: any[];
     events: any[];
     duty_schedules: any[];
     dishwashing_roster: any[];
     announcements: any[];
+    notifications: Record<string, unknown>[];
     members_created: any[];
   };
 }
@@ -1128,6 +1238,3 @@ export interface EventAttendanceRosterResponse {
   };
   attendees: EventAttendeeItem[];
 }
-
-
-

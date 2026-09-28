@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
-import { SystemLookup, SystemSetting, Ministry, Fund, LookupType } from "../types";
+import { SystemLookup, SystemSetting, Ministry, LookupType, NotificationEmailSettings, NotificationEventType, NotificationRule } from "../types";
 import { SettingsPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import {
   Sliders, BookOpen, Users, Heart, Calendar, MessageSquare,
   Settings as SettingsIcon, Plus, Edit2, Trash2, CheckCircle2,
-  AlertCircle, Search, RefreshCw, Layers, MapPin, DollarSign,
-  Tag, Shield, Check, X, Info, Sparkles, Building2, Phone, Mail, Clock,
-  FileText, UserCog, ChevronLeft, ChevronRight, Database
+  AlertCircle, Search, RefreshCw, Layers, MapPin,
+  Tag, Shield, Check, X, Info, Building2, Phone, Mail, Clock,
+  FileText, UserCog, ChevronLeft, ChevronRight, Database, Bell, Send, LockKeyhole
 } from "lucide-react";
 import { useSocketEvent } from "../socket";
 import { BackupManagementSection } from "../components/settings/BackupManagementSection";
@@ -22,6 +23,7 @@ type SettingsTab =
   | "communications"
   | "membership"
   | "backup_restore"
+  | "notifications_email"
   | "general";
 
 const COLOR_PRESETS = [
@@ -36,6 +38,7 @@ interface SettingsPageProps {
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers }) => {
   const { user } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const [activeTab, setActiveTab] = useState<SettingsTab>("ministries");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -104,11 +107,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
   // Data states
 
-  const [funds, setFunds] = useState<Fund[]>([]);
   const [generalSettings, setGeneralSettings] = useState<Record<string, string>>({});
 
-  // Feedback toast state
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
 
   // Modal states
   const [isLookupModalOpen, setIsLookupModalOpen] = useState(false);
@@ -140,18 +141,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
     color: "#2C3968"
   });
 
-  // Fund Modal state
-  const [isFundModalOpen, setIsFundModalOpen] = useState(false);
-  const [editingFund, setEditingFund] = useState<Fund | null>(null);
-  const [fundFormData, setFundFormData] = useState({
-    name: "",
-    description: "",
-    target_amount: 0
-  });
-
   // Delete Confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{
-    type: "lookup" | "ministry" | "fund" | "study_topic";
+    type: "lookup" | "ministry" | "study_topic";
     id: number;
     name: string;
     usageCount?: number;
@@ -160,36 +152,90 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
   // General Settings Form state
   const [generalForm, setGeneralForm] = useState<Record<string, string>>({});
   const [savingGeneral, setSavingGeneral] = useState(false);
+  const [notificationRules, setNotificationRules] = useState<NotificationRule[]>([]);
+  const [emailSettings, setEmailSettings] = useState<NotificationEmailSettings & { smtpPassword: string }>({
+    smtpHost: "", smtpPort: 587, smtpSecure: false, smtpUser: "", smtpPassword: "",
+    fromName: "Daet Presbyterian Church", fromEmail: "", pastorEmail: "", hasSmtpPassword: false
+  });
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
   useEffect(() => {
     loadAllData();
   }, []);
 
+  useEffect(() => {
+    if (user?.role_name === "Admin") void loadNotificationSettings();
+  }, [user?.role_name]);
+
+  const loadNotificationSettings = async () => {
+    try {
+      const [rules, settings] = await Promise.all([
+        api.getNotificationRules(),
+        api.getNotificationEmailSettings()
+      ]);
+      setNotificationRules(rules);
+      setEmailSettings({ ...settings, smtpPassword: "" });
+    } catch (error) {
+      console.error("Failed to load notification settings", error);
+    }
+  };
+
+  const saveEmailSettings = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSavingNotifications(true);
+    try {
+      const response = await api.updateNotificationEmailSettings(emailSettings);
+      setEmailSettings({ ...response.settings, smtpPassword: "" });
+      showToast("Notification and email settings saved", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Failed to save email settings", "error");
+    } finally {
+      setSavingNotifications(false);
+    }
+  };
+
+  const updateEventRules = async (eventType: NotificationEventType, update: Partial<NotificationRule>) => {
+    const matching = notificationRules.filter(rule => rule.event_type === eventType);
+    try {
+      await Promise.all(matching.map(rule => api.updateNotificationRule(rule.id, update)));
+      setNotificationRules(previous => previous.map(rule => rule.event_type === eventType ? { ...rule, ...update } : rule));
+      showToast("Notification rule updated", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Failed to update notification rule", "error");
+    }
+  };
+
+  const sendTestEmail = async () => {
+    setSendingTestEmail(true);
+    try {
+      const saved = await api.updateNotificationEmailSettings(emailSettings);
+      setEmailSettings({ ...saved.settings, smtpPassword: "" });
+      const response = await api.sendTestNotificationEmail(emailSettings.pastorEmail || emailSettings.fromEmail);
+      showToast(response.message, "info", 6000);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Failed to queue test email", "error");
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
   // Real-time synchronization
   useSocketEvent("settings:changed", () => loadAllData());
   useSocketEvent("ministries:changed", () => loadAllData());
   useSocketEvent("lookups:changed", () => loadAllData());
-  useSocketEvent("finance:changed", () => loadAllData());
 
-  const showToast = (text: string, type: "success" | "error" = "success") => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
-  };
 
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [lookupsRes, ministriesRes, fundsRes, generalRes] = await Promise.all([
+      const [lookupsRes, ministriesRes, generalRes] = await Promise.all([
         api.getLookups().catch(err => {
           console.warn("Could not load lookups:", err);
           return [];
         }),
         api.getMinistries().catch(err => {
           console.warn("Could not load ministries:", err);
-          return [];
-        }),
-        api.getFunds().catch(err => {
-          console.warn("Could not load funds:", err);
           return [];
         }),
         api.getGeneralSettings().catch(err => {
@@ -200,7 +246,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
       setLookups(Array.isArray(lookupsRes) ? lookupsRes : []);
       setMinistries(Array.isArray(ministriesRes) ? ministriesRes : []);
-      setFunds(Array.isArray(fundsRes) ? fundsRes : []);
       const settingsMap = generalRes?.settings || {};
       setGeneralSettings(settingsMap);
       setGeneralForm(settingsMap);
@@ -279,25 +324,45 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
     }
   };
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = () => {
     if (!deleteConfirm) return;
-    try {
-      if (deleteConfirm.type === "lookup") {
-        await api.deleteLookup(deleteConfirm.id);
-        setLookups(prev => prev.filter(l => l.id !== deleteConfirm.id));
-        showToast(`'${deleteConfirm.name}' deleted successfully!`);
-      } else if (deleteConfirm.type === "ministry") {
-        await api.deleteMinistry(deleteConfirm.id);
-        setMinistries(prev => prev.filter(m => m.id !== deleteConfirm.id));
-        showToast(`Ministry '${deleteConfirm.name}' deleted successfully!`);
-      } else if (deleteConfirm.type === "fund") {
-        await api.deleteFund(deleteConfirm.id);
-        setFunds(prev => prev.filter(f => f.id !== deleteConfirm.id));
-        showToast(`Fund '${deleteConfirm.name}' deleted successfully!`);
-      }
-      setDeleteConfirm(null);
-    } catch (err: any) {
-      showToast(err.message || "Failed to delete item", "error");
+    const item = deleteConfirm;
+    setDeleteConfirm(null);
+
+    if (item.type === "lookup") {
+      const removedLookup = lookups.find((l) => l.id === item.id);
+      deleteWithUndo({
+        itemName: item.name,
+        itemType: "Item",
+        onOptimisticDelete: () => {
+          setLookups((prev) => prev.filter((l) => l.id !== item.id));
+        },
+        onRestore: () => {
+          if (removedLookup) {
+            setLookups((prev) => (prev.some((l) => l.id === item.id) ? prev : [...prev, removedLookup]));
+          }
+        },
+        onCommitDelete: async () => {
+          await api.deleteLookup(item.id);
+        }
+      });
+    } else if (item.type === "ministry") {
+      const removedMinistry = ministries.find((m) => m.id === item.id);
+      deleteWithUndo({
+        itemName: item.name,
+        itemType: "Ministry",
+        onOptimisticDelete: () => {
+          setMinistries((prev) => prev.filter((m) => m.id !== item.id));
+        },
+        onRestore: () => {
+          if (removedMinistry) {
+            setMinistries((prev) => (prev.some((m) => m.id === item.id) ? prev : [...prev, removedMinistry]));
+          }
+        },
+        onCommitDelete: async () => {
+          await api.deleteMinistry(item.id);
+        }
+      });
     }
   };
 
@@ -372,71 +437,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       setMinistries(updated);
     } catch (err: any) {
       showToast(err.message || "Failed to save ministry", "error");
-    }
-  };
-
-  // ----------------------------------------------------
-  // Fund Handlers
-  // ----------------------------------------------------
-  const handleOpenFundModal = (fund?: Fund) => {
-    if (fund) {
-      setEditingFund(fund);
-      setFundFormData({
-        name: fund.name,
-        description: fund.description || "",
-        target_amount: fund.target_amount || 0
-      });
-    } else {
-      setEditingFund(null);
-      setFundFormData({
-        name: "",
-        description: "",
-        target_amount: 50000
-      });
-    }
-    setIsFundModalOpen(true);
-  };
-
-  const handleSaveFund = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fundFormData.name.trim()) {
-      showToast("Fund name is required", "error");
-      return;
-    }
-
-    const dupFund = funds.find(f =>
-      f.name.toLowerCase().trim() === fundFormData.name.toLowerCase().trim() &&
-      f.id !== editingFund?.id
-    );
-    if (dupFund) {
-      showToast("A fund with this name already exists", "error");
-      return;
-    }
-
-    if (Number(fundFormData.target_amount) < 0) {
-      showToast("Target amount cannot be negative", "error");
-      return;
-    }
-
-    try {
-      const payload = {
-        name: fundFormData.name.trim(),
-        description: fundFormData.description ? fundFormData.description.trim() : "",
-        target_amount: Number(fundFormData.target_amount) || 0
-      };
-
-      if (editingFund) {
-        await api.updateFund(editingFund.id, payload);
-        showToast(`Fund '${fundFormData.name.trim()}' updated successfully!`);
-      } else {
-        await api.createFund(payload);
-        showToast(`Fund '${fundFormData.name.trim()}' created successfully!`);
-      }
-      setIsFundModalOpen(false);
-      const updated = await api.getFunds();
-      setFunds(updated);
-    } catch (err: any) {
-      showToast(err.message || "Failed to save fund", "error");
     }
   };
 
@@ -516,6 +516,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       icon: <Database className="w-4 h-4" />
     },
     {
+      id: "notifications_email",
+      label: "Notifications & Email",
+      icon: <Bell className="w-4 h-4" />,
+      count: notificationRules.filter(rule => rule.enabled).length
+    },
+    {
       id: "general",
       label: "Church Profile & Config",
       icon: <SettingsIcon className="w-4 h-4" />
@@ -528,26 +534,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
   return (
     <div className="space-y-6">
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${toastMessage.type === "success"
-          ? "bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20"
-          : "bg-rose-900 text-white border-rose-700 shadow-rose-950/20"
-          }`}>
-          {toastMessage.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-300 shrink-0" />
-          )}
-          <span>{toastMessage.text}</span>
-          <button onClick={() => setToastMessage(null)} className="p-1 hover:bg-white/10 rounded-lg text-white/70 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+
 
       {/* Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -567,7 +557,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
             System Settings & Lookups
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
-            Configure church profile, ministry master lookups, member statuses, rooms & sanctuaries, relationships, and financial funds.
+            Configure church profile, ministry master lookups, member statuses, rooms, sanctuaries, and relationships.
           </p>
         </div>
       </div>
@@ -655,11 +645,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
       {/* Header Banner */}
       <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-80 h-80 bg-gradient-to-br from-indigo-500/5 via-amber-500/5 to-transparent rounded-full blur-2xl pointer-events-none"></div>
+        <div className="absolute right-0 top-0 w-80 h-80 bg-transparent rounded-full blur-2xl pointer-events-none"></div>
 
         <div className="space-y-2 relative z-10">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-sm ring-4 ring-amber-100/50">
+            <span className="p-2.5 rounded-2xl bg-amber-500 text-white shadow-sm ring-4 ring-amber-100/50">
               <Sliders className="w-5 h-5" />
             </span>
             <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
@@ -670,7 +660,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
             </span>
           </div>
           <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed font-medium">
-            Configure dynamic categories, ministry brackets, stewardship funds, payment methods, event rooms, and church preferences across the entire platform.
+            Configure dynamic categories, ministry brackets, event rooms, and church preferences across the entire platform.
           </p>
         </div>
 
@@ -678,7 +668,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           {onNavigateToUsers && (
             <button
               onClick={onNavigateToUsers}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
             >
               <UserCog className="w-4 h-4 text-indigo-950" />
               <span>User Management (5 Roles)</span>
@@ -1159,7 +1149,68 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
         )}
 
         {/* ==================================================== */}
-        {/* 7. BACKUP, RESTORE & DATA MANAGEMENT TAB */}
+        {/* 7. NOTIFICATIONS & EMAIL */}
+        {/* ==================================================== */}
+        {activeTab === "notifications_email" && user?.role_name === "Admin" && (
+          <div className="space-y-6">
+            <form onSubmit={saveEmailSettings} className="bg-white rounded-2xl p-5 sm:p-7 border border-indigo-100 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-black text-indigo-950 flex items-center gap-2"><Mail className="w-5 h-5 text-amber-500" /> SMTP email delivery</h2>
+                  <p className="text-xs text-slate-500 mt-1">Messages are queued locally and retried up to five times when internet access returns.</p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-black"><LockKeyhole className="w-3.5 h-3.5" /> App password encrypted</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">SMTP host</span><input value={emailSettings.smtpHost} onChange={event => setEmailSettings(value => ({ ...value, smtpHost: event.target.value }))} placeholder="smtp.gmail.com" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">SMTP port</span><input type="number" min={1} max={65535} value={emailSettings.smtpPort} onChange={event => setEmailSettings(value => ({ ...value, smtpPort: Number(event.target.value) }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">SMTP username</span><input value={emailSettings.smtpUser} onChange={event => setEmailSettings(value => ({ ...value, smtpUser: event.target.value }))} autoComplete="off" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">App password</span><input type="password" value={emailSettings.smtpPassword} onChange={event => setEmailSettings(value => ({ ...value, smtpPassword: event.target.value }))} autoComplete="new-password" placeholder={emailSettings.hasSmtpPassword ? "Saved — enter to replace" : "Enter app password"} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">From name</span><input value={emailSettings.fromName} onChange={event => setEmailSettings(value => ({ ...value, fromName: event.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">From email</span><input type="email" value={emailSettings.fromEmail} onChange={event => setEmailSettings(value => ({ ...value, fromEmail: event.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5 md:col-span-2"><span className="text-xs font-black text-slate-700">Pastor notification email</span><input type="email" value={emailSettings.pastorEmail} onChange={event => setEmailSettings(value => ({ ...value, pastorEmail: event.target.value }))} placeholder="pastor@example.org" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 self-end"><input type="checkbox" checked={emailSettings.smtpSecure} onChange={event => setEmailSettings(value => ({ ...value, smtpSecure: event.target.checked }))} className="w-4 h-4 accent-indigo-700" /><span><strong className="block text-xs text-slate-700">Use secure SMTP</strong><small className="text-[10px] text-slate-500">Usually enabled for port 465</small></span></label>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex gap-3"><Info className="w-5 h-5 text-amber-600 shrink-0" /><p><strong>Privacy:</strong> Absence emails contain member names. They are sent only to recipients configured in the rules below. Review recipient addresses before enabling email delivery.</p></div>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-3">
+                <button type="button" onClick={() => void sendTestEmail()} disabled={sendingTestEmail || (!emailSettings.pastorEmail && !emailSettings.fromEmail)} className="px-4 py-2.5 rounded-xl border border-indigo-200 text-indigo-700 text-xs font-black flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-indigo-50"><Send className="w-4 h-4" />{sendingTestEmail ? "Queuing…" : "Send test email"}</button>
+                <button type="submit" disabled={savingNotifications} className="px-5 py-2.5 rounded-xl bg-indigo-700 text-white text-xs font-black disabled:opacity-50 hover:bg-indigo-800">{savingNotifications ? "Saving…" : "Save email settings"}</button>
+              </div>
+            </form>
+
+            <div className="bg-white rounded-2xl p-5 sm:p-7 border border-indigo-100 shadow-sm space-y-4">
+              <div><h2 className="text-lg font-black text-indigo-950 flex items-center gap-2"><Bell className="w-5 h-5 text-amber-500" /> Event delivery rules</h2><p className="text-xs text-slate-500 mt-1">Role and ministry recipient scopes are resolved automatically for each event.</p></div>
+              <div className="space-y-3">
+                {Array.from(new Set(notificationRules.map(rule => rule.event_type))).map(eventType => {
+                  const rules = notificationRules.filter(rule => rule.event_type === eventType);
+                  const enabled = rules.some(rule => rule.enabled);
+                  const inApp = rules.some(rule => rule.in_app_enabled);
+                  const email = rules.some(rule => rule.email_enabled);
+                  const threshold = rules.find(rule => rule.threshold !== null)?.threshold || 3;
+                  const label = eventType.replace(/_/g, " ").replace(/\b\w/g, char => char.toUpperCase());
+                  return (
+                    <div key={eventType} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-col lg:flex-row lg:items-center gap-4">
+                      <div className="flex-1 min-w-0"><h3 className="text-sm font-black text-indigo-950">{label}</h3><p className="text-[10px] text-slate-500 mt-1">Recipients: {rules.map(rule => rule.recipient_value === "pastor" ? "Pastor email" : rule.recipient_value).join(", ")}</p></div>
+                      <div className="flex flex-wrap items-center gap-4">
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={enabled} onChange={event => void updateEventRules(eventType, { enabled: event.target.checked })} className="accent-indigo-700" /> Enabled</label>
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={inApp} onChange={event => void updateEventRules(eventType, { in_app_enabled: event.target.checked })} className="accent-indigo-700" /> In-app</label>
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={email} onChange={event => void updateEventRules(eventType, { email_enabled: event.target.checked })} className="accent-indigo-700" /> Email</label>
+                        {(eventType === "absence_alert" || eventType === "sunday_absence_streak" || eventType === "at_risk_member") && <label className="flex items-center gap-2 text-xs font-bold text-slate-700">Threshold <input type="number" min={1} max={12} value={threshold} onChange={event => void updateEventRules(eventType, { threshold: Number(event.target.value) })} className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 bg-white" /></label>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-slate-400">At-risk, Sunday streak, duty, and dishwashing rules are ready for their later event hooks. Absence and reschedule events are active now.</p>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================== */}
+        {/* 8. BACKUP, RESTORE & DATA MANAGEMENT TAB */}
         {/* ==================================================== */}
         {activeTab === "backup_restore" && (
           <BackupManagementSection onShowToast={showToast} />
@@ -1243,8 +1294,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </label>
                 <input
                   type="text"
-                  value={generalForm.church_address || ""}
-                  onChange={(e) => setGeneralForm({ ...generalForm, church_address: e.target.value })}
+                  value={generalForm.address || ""}
+                  onChange={(e) => setGeneralForm({ ...generalForm, address: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
                   placeholder="Street address, City, Province"
                 />
@@ -1258,8 +1309,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </label>
                 <input
                   type="text"
-                  value={generalForm.church_phone || ""}
-                  onChange={(e) => setGeneralForm({ ...generalForm, church_phone: e.target.value })}
+                  value={generalForm.contact_phone || ""}
+                  onChange={(e) => setGeneralForm({ ...generalForm, contact_phone: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
                   placeholder="+63 (54) 440-1984"
                 />
@@ -1273,8 +1324,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </label>
                 <input
                   type="email"
-                  value={generalForm.church_email || ""}
-                  onChange={(e) => setGeneralForm({ ...generalForm, church_email: e.target.value })}
+                  value={generalForm.contact_email || ""}
+                  onChange={(e) => setGeneralForm({ ...generalForm, contact_email: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
                   placeholder="office@daetpresbyterian.org"
                 />
@@ -1288,25 +1339,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </label>
                 <input
                   type="text"
-                  value={generalForm.sunday_service_times || ""}
-                  onChange={(e) => setGeneralForm({ ...generalForm, sunday_service_times: e.target.value })}
+                  value={generalForm.sunday_service_time || ""}
+                  onChange={(e) => setGeneralForm({ ...generalForm, sunday_service_time: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
                   placeholder="09:30 AM (Morning Worship), 04:30 PM (Vesper Fellowship)"
-                />
-              </div>
-
-              {/* Currency Symbol */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-indigo" />
-                  <span>Currency Symbol</span>
-                </label>
-                <input
-                  type="text"
-                  value={generalForm.currency_symbol || "₱"}
-                  onChange={(e) => setGeneralForm({ ...generalForm, currency_symbol: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
-                  placeholder="₱ or $"
                 />
               </div>
 
@@ -1582,86 +1618,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                   className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs"
                 >
                   {editingMinistry ? "Save Ministry" : "Create Ministry"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* ==================================================== */}
-      {/* MODAL: Add / Edit Fund */}
-      {/* ==================================================== */}
-      {isFundModalOpen && createPortal(
-        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo flex items-center justify-center text-xs font-bold">
-                  <Heart className="w-3.5 h-3.5" />
-                </div>
-                <h3 className="font-black text-base text-charcoal">
-                  {editingFund ? "Edit Stewardship Fund" : "Create Stewardship Fund"}
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsFundModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/50 hover:text-charcoal transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveFund} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-charcoal">Fund Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Missions & Outreach, Sanctuary Building..."
-                  value={fundFormData.name}
-                  onChange={(e) => setFundFormData({ ...fundFormData, name: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-charcoal">Target Campaign Goal ({generalSettings.currency_symbol || "₱"})</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={fundFormData.target_amount}
-                  onChange={(e) => setFundFormData({ ...fundFormData, target_amount: Number(e.target.value) || 0 })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-charcoal">Description / Purpose</label>
-                <textarea
-                  rows={2}
-                  placeholder="Explain what donations to this fund will support..."
-                  value={fundFormData.description}
-                  onChange={(e) => setFundFormData({ ...fundFormData, description: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setIsFundModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs"
-                >
-                  {editingFund ? "Save Fund" : "Create Fund"}
                 </button>
               </div>
             </form>

@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { EventItem, EventAttendeeItem, Ministry, Member } from "../../types";
 import {
   CheckCircle2, Clock, MapPin, Search, Users,
-  UserCheck, UserPlus, Sparkles, ChevronDown, Check,
+  UserCheck, UserPlus, Calendar, ChevronDown, Check,
   RefreshCw, X, Undo2, Loader2, Layers, Tag,
   ListChecks, SlidersHorizontal, CheckSquare, AlertCircle, UserX,
   HelpCircle
@@ -443,7 +443,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
       )}
 
       {/* TOP HERO: Special Event Attendance Overview (Matched to DPC ChMS Design System) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -455,7 +455,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <Calendar className="w-3.5 h-3.5 text-amber-400" />
               <span>Special Event Attendance Kiosk</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
@@ -720,7 +720,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
         <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
 
           {/* Top Directory Header with Batch Roll Call Toggle */}
-          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gradient-to-r from-gray-50/50 via-white to-gray-50/50">
+          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gray-50/50">
             <div className="flex items-center gap-2.5">
               <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shadow-xs transition-colors ${
                 isFastMode ? "bg-slate-900 text-amber-300" : "bg-indigo-50 text-indigo"
@@ -786,7 +786,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
 
           {/* BATCH ROLL CALL TOOLBAR (Rendered when isFastMode is active) */}
           {isFastMode && (
-            <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 p-4 sm:p-5 text-white border-b border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="bg-slate-950 p-4 sm:p-5 text-white border-b border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
               
               {/* Row 1: Mode Selection (Full-Width 3-Column Grid) */}
               <div className="space-y-2">
@@ -962,7 +962,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
                   type="button"
                   onClick={() => handleApplyBatchAttendance(batchScopeList)}
                   disabled={batchSubmitting || batchScopeList.length === 0}
-                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
                 >
                   {batchSubmitting ? (
                     <>
@@ -1104,7 +1104,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
                                       ? "bg-amber-100 text-amber-900 border-amber-300"
                                       : "bg-indigo/10 text-indigo border border-indigo/20"
                             }`}>
-                              {item.first_name[0]}{item.last_name[0]}
+                              {item.first_name?.[0] || ""}{item.last_name?.[0] || ""}
                             </div>
                             <div>
                               <span className="font-bold text-charcoal text-xs sm:text-sm block">
@@ -1356,7 +1356,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
               type="button"
               onClick={() => handleApplyBatchAttendance(batchScopeList)}
               disabled={batchSubmitting || batchScopeList.length === 0}
-              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
+              className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
             >
               {batchSubmitting ? (
                 <>
@@ -1549,7 +1549,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl bg-indigo/10 text-indigo font-bold text-xs flex items-center justify-center">
-                        {m.first_name[0]}{m.last_name[0]}
+                        {m.first_name?.[0] || ""}{m.last_name?.[0] || ""}
                       </div>
                       <div>
                         <span className="font-bold text-charcoal text-xs block">

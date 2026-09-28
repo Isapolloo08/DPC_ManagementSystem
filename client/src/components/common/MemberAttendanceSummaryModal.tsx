@@ -5,7 +5,6 @@ import { Member, MemberComprehensiveAttendanceSummary, AttendanceLogItem } from 
 import {
   X,
   Calendar,
-  Sparkles,
   Flame,
   Award,
   CheckCircle2,
@@ -295,7 +294,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
       <div className="bg-white rounded-3xl shadow-2xl border border-stone-200/90 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp">
         
         {/* Modal Header */}
-        <div className="p-5 sm:p-6 bg-gradient-to-r from-stone-900 via-indigo-950 to-stone-900 text-white flex items-center justify-between relative overflow-hidden shrink-0">
+        <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-center justify-between relative overflow-hidden shrink-0">
           <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
           
           <div className="flex items-center gap-3.5 relative z-10">
@@ -303,7 +302,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
               {member.photo_url ? (
                 <img src={member.photo_url} alt={member.first_name} className="w-full h-full object-cover" />
               ) : (
-                <span>{member.first_name[0]}{member.last_name[0]}</span>
+                <span>{member.first_name?.[0] || ""}{member.last_name?.[0] || ""}</span>
               )}
             </div>
             <div>
@@ -518,7 +517,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
             <div className="space-y-6 animate-fadeIn">
               
               {/* Overall Rate Banner */}
-              <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-stone-900 text-white p-5 rounded-2xl border border-indigo-800 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="bg-indigo-950 text-white p-5 rounded-2xl border border-indigo-800 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-amber-400 font-black text-2xl shadow-inner shrink-0">
                     {summaryData.consistency_score !== null ? `${summaryData.consistency_score}%` : "N/A"}
@@ -531,11 +530,11 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       </span>
                     </div>
                     <h3 className="text-lg font-black text-white">
-                      {summaryData.consistency_tier === "Consistent Regular" && "🌟 Consistent Regular"}
-                      {summaryData.consistency_tier === "Regular Attendee" && "✨ Regular Attendee"}
-                      {summaryData.consistency_tier === "Developing Habit" && "🌱 Developing Habit"}
-                      {summaryData.consistency_tier === "Needs Encouragement" && "⚠️ Needs Encouragement"}
-                      {summaryData.consistency_tier === "Inactive / Disengaged" && "⚪ Inactive / Disengaged"}
+                      {summaryData.consistency_tier === "Consistent Regular" && "Consistent Regular"}
+                      {summaryData.consistency_tier === "Regular Attendee" && "Regular Attendee"}
+                      {summaryData.consistency_tier === "Developing Habit" && "Developing Habit"}
+                      {summaryData.consistency_tier === "Needs Encouragement" && "Needs Encouragement"}
+                      {summaryData.consistency_tier === "Inactive / Disengaged" && "Inactive / Disengaged"}
                       {summaryData.consistency_tier === "No Data" && "No Sessions in Window"}
                     </h3>
                     <p className="text-xs text-stone-300">
@@ -563,7 +562,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="p-2 bg-indigo-100 text-indigo rounded-xl">
-                        <Sparkles className="w-4 h-4 text-indigo" />
+                        <Calendar className="w-4 h-4 text-indigo" />
                       </div>
                       <h4 className="text-sm font-extrabold text-charcoal">Sunday Services</h4>
                     </div>
@@ -854,7 +853,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
               
               {/* Candidate Alert Banner */}
               {summaryData.baptism_tracker.should_alert && (
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-500/20 via-amber-500/15 to-cyan-500/20 border-2 border-cyan-400/80 shadow-md space-y-2">
+                <div className="p-4 rounded-2xl bg-cyan-50 border-2 border-cyan-400/80 shadow-md space-y-2">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2.5">
                       <span className="p-2 rounded-xl bg-cyan-600 text-white shadow-xs animate-bounce">
@@ -874,7 +873,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                     </div>
 
                     <div className="flex items-center gap-1 bg-white/90 px-3 py-1.5 rounded-xl border border-cyan-300 text-xs font-black text-cyan-950 shadow-2xs">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <Award className="w-4 h-4 text-amber-500" />
                       <span>Eligible for Ceremony</span>
                     </div>
                   </div>
@@ -882,7 +881,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
               )}
 
               {/* Water Baptism Milestone Studio Card */}
-              <div className="p-5 bg-gradient-to-br from-indigo-950 via-indigo-900 to-indigo-950 text-white rounded-2xl border border-indigo-800 shadow-md space-y-4 text-xs">
+              <div className="p-5 bg-indigo-950 text-white rounded-2xl border border-indigo-800 shadow-md space-y-4 text-xs">
                 <div className="flex items-center justify-between pb-3 border-b border-indigo-800 flex-wrap gap-2">
                   <div className="flex items-center gap-2.5">
                     <span className="p-2 rounded-xl bg-cyan-500/20 border border-cyan-400 text-cyan-300">
@@ -983,9 +982,9 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                             className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
                               baptismForm.baptism_status === item.id
                                 ? item.isAlert
-                                  ? "bg-gradient-to-r from-cyan-500 to-cyan-600 text-white border-cyan-300 shadow-md scale-[1.02]"
+                                  ? "bg-cyan-600 text-white border-cyan-300 shadow-md scale-[1.02]"
                                   : item.isBaptized
-                                    ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white border-emerald-400 shadow-md scale-[1.02]"
+                                    ? "bg-emerald-600 text-white border-emerald-400 shadow-md scale-[1.02]"
                                     : "bg-indigo-700 text-white border-indigo-400 shadow-xs"
                                 : "bg-indigo-900/60 text-indigo-200 border-indigo-700/60 hover:bg-indigo-800/80"
                             }`}
@@ -1022,7 +1021,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         type="button"
                         disabled={isSavingBaptism}
                         onClick={handleSaveBaptism}
-                        className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         {isSavingBaptism ? (
                           <>
@@ -1081,7 +1080,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                             <td className="py-2.5 px-4">
                               {log.logType === "sunday_service" && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo border border-indigo-100">
-                                  <Sparkles className="w-2.5 h-2.5 text-amber-500" />
+                                  <Calendar className="w-2.5 h-2.5 text-amber-500" />
                                   <span>Sunday</span>
                                 </span>
                               )}

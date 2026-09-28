@@ -39,6 +39,15 @@ export async function runPostgresMigrations() {
       console.log(`✅ Seed data applied successfully.`);
     }
 
+    // 3. Run local notification and email outbox migration
+    const notificationsSqlPath = getMigrationFilePath("007_notifications.sql");
+    if (notificationsSqlPath) {
+      console.log(`🔔 Executing: ${notificationsSqlPath}...`);
+      const notificationsSql = fs.readFileSync(notificationsSqlPath, "utf-8");
+      await sql.unsafe(notificationsSql);
+      console.log(`✅ Notification schema and default rules applied successfully.`);
+    }
+
     // Verify
     const count = await sql`SELECT count(*) FROM ministries`;
     console.log(`✨ Verification: ${count[0].count} ministries active in PostgreSQL database.`);

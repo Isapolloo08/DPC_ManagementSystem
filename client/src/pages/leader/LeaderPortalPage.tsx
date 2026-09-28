@@ -9,8 +9,8 @@ import {
 } from "../../types";
 import {
   BookOpen, Users, RefreshCw, X, Check, UserPlus, Send,
-  CheckCircle2, AlertCircle, Plus, Sparkles, ShieldCheck, Heart,
-  Sparkle, ChevronDown, ChevronRight, BookmarkCheck, ClipboardCheck,
+  CheckCircle2, AlertCircle, Plus, ShieldCheck, Heart,
+  ChevronDown, ChevronRight, BookmarkCheck, ClipboardCheck,
   ArrowLeftRight, CalendarClock, Clock, Utensils, Search, Filter, Mail, Phone
 } from "lucide-react";
 
@@ -214,6 +214,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     const userLinkedName = ((user as any)?.linked_member_name || "").trim().toLowerCase();
 
     const matched = allGroups.filter(g => {
+      // Primary Leader check
       const cleanLeader = (g.leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
       if (cleanLeader) {
         if (cleanUser === cleanLeader || cleanUser.includes(cleanLeader) || cleanLeader.includes(cleanUser)) return true;
@@ -223,6 +224,18 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       if (cleanContact && (cleanContact === userEmail || cleanContact === userUsername)) return true;
       if (user?.id && (g as any).leader_id === user.id) return true;
       if (userMemberId && (g as any).leader_id === userMemberId) return true;
+
+      // Assistant Leader check
+      const cleanAssistant = (g.assistant_leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
+      if (cleanAssistant) {
+        if (cleanUser === cleanAssistant || cleanUser.includes(cleanAssistant) || cleanAssistant.includes(cleanUser)) return true;
+        if (userLinkedName && (userLinkedName === cleanAssistant || userLinkedName.includes(cleanAssistant) || cleanAssistant.includes(userLinkedName))) return true;
+      }
+      const cleanAssistantContact = (g.assistant_leader_contact || "").trim().toLowerCase();
+      if (cleanAssistantContact && (cleanAssistantContact === userEmail || cleanAssistantContact === userUsername)) return true;
+      if (user?.id && (g as any).assistant_leader_id === user.id) return true;
+      if (userMemberId && (g as any).assistant_leader_id === userMemberId) return true;
+
       return false;
     });
 
@@ -585,7 +598,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           <span className="text-indigo font-bold">My Bible Study Group</span>
         </div>
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-extrabold shadow-2xs">
-          <Sparkle className="w-3.5 h-3.5 text-amber-600" />
+          <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
           <span>Facilitator / Leader Active</span>
         </div>
       </div>
@@ -947,7 +960,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                       <button
                         type="submit"
                         disabled={isSavingRollCall}
-                        className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-indigo-950 font-black shadow-md cursor-pointer disabled:opacity-50 transition-all"
+                        className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-indigo-950 font-black shadow-md cursor-pointer disabled:opacity-50 transition-all"
                       >
                         {isSavingRollCall ? "Saving..." : isEditMode ? "Update Verified Attendance" : "Log Verified Attendance"}
                       </button>

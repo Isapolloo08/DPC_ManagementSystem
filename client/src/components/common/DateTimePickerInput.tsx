@@ -8,8 +8,7 @@ import {
   ChevronDown,
   Check,
   Sun,
-  Moon,
-  Sparkles
+  Moon
 } from "lucide-react";
 
 interface DateTimePickerInputProps {
@@ -276,7 +275,7 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
             className="w-[320px] sm:w-[480px] bg-white rounded-2xl shadow-2xl border border-indigo-100 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150"
           >
             {/* Header Display */}
-            <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-indigo-950 via-indigo-900 to-teal-900 text-white rounded-xl shadow-xs flex-wrap gap-2">
+            <div className="flex items-center justify-between p-2.5 bg-indigo-950 text-white rounded-xl shadow-xs flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="w-4 h-4 text-amber-300" />
                 <span className="font-extrabold text-xs text-indigo-100">

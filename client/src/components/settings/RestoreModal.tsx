@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import {
   X, UploadCloud, FileText, CheckCircle2, AlertTriangle,
-  RotateCcw, Sparkles, Layers, Database, ShieldAlert
+  RotateCcw, Layers, Database, ShieldAlert
 } from "lucide-react";
 import { api } from "../../api";
 import { BackupPreviewResponse } from "../../types";
@@ -84,7 +84,7 @@ export const RestoreModal: React.FC<RestoreModalProps> = ({
       <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-gradient-to-r from-indigo-50/70 to-white">
+        <div className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-indigo-50/50">
           <div className="flex items-center gap-3">
             <span className="p-3 rounded-2xl bg-indigo text-white shadow-md shadow-indigo-950/20">
               <RotateCcw className="w-6 h-6" />

@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { 
-  AlertTriangle, Trash2, Sparkles, CheckCircle2, 
+  AlertTriangle, Trash2, Award, CheckCircle2, 
   Info, X, ArrowRight, Users, AlertCircle, ArrowLeftRight, Loader2
 } from "lucide-react";
 
@@ -43,7 +43,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <Trash2 className="w-6 h-6 text-rose-600" />,
           iconBg: "bg-rose-100 ring-8 ring-rose-50",
           badgeColor: "bg-rose-100 text-rose-800 border-rose-200",
-          btnColor: "bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white shadow-rose-200",
+          btnColor: "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-200",
           accentBorder: "border-rose-100"
         };
       case "warning":
@@ -51,15 +51,15 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <AlertTriangle className="w-6 h-6 text-amber-600" />,
           iconBg: "bg-amber-100 ring-8 ring-amber-50",
           badgeColor: "bg-amber-100 text-amber-900 border-amber-200",
-          btnColor: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-indigo-950 font-black shadow-amber-200",
+          btnColor: "bg-amber-500  text-indigo-950 font-black shadow-amber-200",
           accentBorder: "border-amber-100"
         };
       case "promotion":
         return {
-          icon: <Sparkles className="w-6 h-6 text-amber-400" />,
-          iconBg: "bg-gradient-to-br from-indigo-900 to-indigo-950 ring-8 ring-indigo-50",
+          icon: <Award className="w-6 h-6 text-amber-400" />,
+          iconBg: "bg-indigo-950 ring-8 ring-indigo-50",
           badgeColor: "bg-amber-100 text-amber-950 border-amber-300",
-          btnColor: "bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black shadow-amber-200",
+          btnColor: "bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black shadow-amber-200",
           accentBorder: "border-amber-200/80"
         };
       case "success":
@@ -67,7 +67,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <CheckCircle2 className="w-6 h-6 text-emerald-600" />,
           iconBg: "bg-emerald-100 ring-8 ring-emerald-50",
           badgeColor: "bg-emerald-100 text-emerald-900 border-emerald-200",
-          btnColor: "bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white shadow-emerald-200",
+          btnColor: "bg-emerald-600  text-white shadow-emerald-200",
           accentBorder: "border-emerald-100"
         };
       case "swap":
@@ -75,7 +75,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <ArrowLeftRight className="w-6 h-6 text-indigo-600" />,
           iconBg: "bg-indigo-100 ring-8 ring-indigo-50",
           badgeColor: "bg-indigo-100 text-indigo-900 border-indigo-200",
-          btnColor: "bg-gradient-to-r from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-white shadow-indigo-200",
+          btnColor: "bg-indigo-900  text-white shadow-indigo-200",
           accentBorder: "border-indigo-100"
         };
       case "info":
@@ -84,7 +84,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <Info className="w-6 h-6 text-indigo-600" />,
           iconBg: "bg-indigo-100 ring-8 ring-indigo-50",
           badgeColor: "bg-indigo-50 text-indigo-900 border-indigo-100",
-          btnColor: "bg-gradient-to-r from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-white shadow-indigo-200",
+          btnColor: "bg-indigo-900  text-white shadow-indigo-200",
           accentBorder: "border-indigo-100"
         };
     }

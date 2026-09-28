@@ -8,7 +8,7 @@ import {
   BarChart3, TrendingUp, Users, Heart, UserCheck, Calendar,
   Cake, Gift, PartyPopper, BookOpen, Droplets, ArrowUpRight,
   ShieldCheck, CheckCircle2, Clock, MapPin, Printer, RefreshCw,
-  Sparkles, Layers, Activity, ChevronRight, Award, Compass, HelpCircle
+  Layers, Activity, ChevronRight, Award, Compass, HelpCircle
 } from "lucide-react";
 
 export const ReportsPage: React.FC = () => {
@@ -41,7 +41,6 @@ export const ReportsPage: React.FC = () => {
   useSocketEvent("members:changed", () => loadReports(true));
   useSocketEvent("ministries:changed", () => loadReports(true));
   useSocketEvent("groups:changed", () => loadReports(true));
-  useSocketEvent("finance:changed", () => loadReports(true));
 
   const loadReports = async (isSilent = false) => {
     try {
@@ -95,7 +94,7 @@ export const ReportsPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 print:p-0 print:space-y-4">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -354,7 +353,7 @@ export const ReportsPage: React.FC = () => {
                         {/* Bar Graphic */}
                         <div className="h-28 w-full bg-gray-100 rounded-xl flex items-end justify-center p-1 relative overflow-hidden">
                           <div
-                            className="w-full bg-gradient-to-t from-sky-600 to-sky-400 rounded-lg transition-all duration-500 group-hover:from-sky-500 group-hover:to-teal-400 shadow-2xs"
+                            className="w-full bg-sky-500 rounded-lg transition-all duration-500 group-hover:bg-sky-400 shadow-2xs"
                             style={{ height: `${heightPercent}%` }}
                           ></div>
                         </div>
@@ -418,7 +417,7 @@ export const ReportsPage: React.FC = () => {
                           {/* Bar */}
                           <div className="w-full bg-gray-100 rounded-t-xl h-32 flex items-end p-0.5 overflow-hidden">
                             <div
-                              className="w-full bg-gradient-to-t from-indigo-700 via-indigo-600 to-indigo-400 rounded-t-lg transition-all duration-500 group-hover:from-indigo-800 group-hover:to-amber-400 shadow-2xs"
+                              className="w-full bg-indigo-600 rounded-t-lg transition-all duration-500 group-hover:bg-indigo-700 shadow-2xs"
                               style={{ height: `${barHeight}%` }}
                             ></div>
                           </div>
@@ -728,7 +727,7 @@ export const ReportsPage: React.FC = () => {
                     onClick={() => setSelectedMonth(isSelected ? null : m.month)}
                     className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
                       isSelected
-                        ? "bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 border-amber-500 shadow-md ring-2 ring-amber-400/40"
+                        ? "bg-amber-400 text-indigo-950 border-amber-500 shadow-md ring-2 ring-amber-400/40"
                         : isCurrentMonth
                         ? "bg-amber-50/80 border-amber-200 hover:border-amber-300 shadow-2xs"
                         : "bg-indigo-50/30 border-indigo-100/70 hover:border-indigo-200 hover:bg-indigo-50/60"
@@ -810,4 +809,3 @@ export const ReportsPage: React.FC = () => {
     </div>
   );
 };
-

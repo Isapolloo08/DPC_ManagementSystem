@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
 import { StudyTopic, StudyTopicsSummary, StudyTopicDetailResponse, BibleStudyGroup } from "../types";
 import {
@@ -15,6 +16,7 @@ import { CurriculumPageSkeleton, CardGridSkeleton } from "../components/common/S
 
 export const CurriculumPage: React.FC = () => {
   const { user } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const [loading, setLoading] = useState(true);
   const [studyTopicsSummary, setStudyTopicsSummary] = useState<StudyTopicsSummary | null>(null);
   const [studyTopics, setStudyTopics] = useState<StudyTopic[]>([]);
@@ -32,7 +34,6 @@ export const CurriculumPage: React.FC = () => {
   const [isStudyTopicModalOpen, setIsStudyTopicModalOpen] = useState(false);
   const [editingStudyTopic, setEditingStudyTopic] = useState<StudyTopic | null>(null);
   const [deleteConfirmTopic, setDeleteConfirmTopic] = useState<StudyTopic | null>(null);
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   // Clean, focused Form State (Book Title, Total Chapters, Summary Notes)
   const [formData, setFormData] = useState({
@@ -40,11 +41,6 @@ export const CurriculumPage: React.FC = () => {
     total_chapters: 1,
     summary_notes: ""
   });
-
-  const showToast = (text: string, type: "success" | "error" = "success") => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
-  };
 
   useEffect(() => {
     loadData();
@@ -191,19 +187,33 @@ export const CurriculumPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!deleteConfirmTopic) return;
-    try {
-      await api.deleteStudyTopic(deleteConfirmTopic.id);
-      showToast(`'${deleteConfirmTopic.title}' removed from curriculum.`);
-      if (selectedDetailTopic?.id === deleteConfirmTopic.id) {
-        setSelectedDetailTopic(null);
+    const topicToDelete = deleteConfirmTopic;
+    setDeleteConfirmTopic(null);
+
+    const originalTopics = studyTopics;
+    const originalDetail = selectedDetailTopic;
+
+    deleteWithUndo({
+      itemName: topicToDelete.title,
+      itemType: "Book Study",
+      onOptimisticDelete: () => {
+        setStudyTopics((prev) => prev.filter((t) => t.id !== topicToDelete.id));
+        if (selectedDetailTopic?.id === topicToDelete.id) {
+          setSelectedDetailTopic(null);
+        }
+      },
+      onRestore: () => {
+        setStudyTopics(originalTopics);
+        if (originalDetail?.id === topicToDelete.id) {
+          setSelectedDetailTopic(originalDetail);
+        }
+      },
+      onCommitDelete: async () => {
+        await api.deleteStudyTopic(topicToDelete.id);
       }
-      setDeleteConfirmTopic(null);
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || "Failed to delete topic", "error");
-    }
+    });
   };
 
   // Filtered Topics
@@ -240,26 +250,9 @@ export const CurriculumPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Toast Feedback */}
-      {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${toastMessage.type === "success"
-          ? "bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20"
-          : "bg-rose-900 text-white border-rose-700 shadow-rose-950/20"
-          }`}>
-          {toastMessage.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-300 shrink-0" />
-          )}
-          <span>{toastMessage.text}</span>
-          <button onClick={() => setToastMessage(null)} className="p-1 hover:bg-white/10 rounded-lg text-white/70 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -286,7 +279,7 @@ export const CurriculumPage: React.FC = () => {
         <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-indigo-950" />
             <span>Add Book / Topic Study</span>
@@ -429,7 +422,7 @@ export const CurriculumPage: React.FC = () => {
               </div>
               <button
                 onClick={() => handleOpenModal()}
-                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 text-indigo-950 text-xs font-black shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+                className="px-5 py-2.5 rounded-2xl bg-amber-400 text-indigo-950 text-xs font-black shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
               >
                 + Add New Book Study
               </button>
@@ -451,7 +444,7 @@ export const CurriculumPage: React.FC = () => {
                       setIsInspectorOpen(true);
                     }}
                     className={`group relative rounded-3xl border p-5 sm:p-6 transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-4 ${isSelected
-                      ? "bg-gradient-to-b from-indigo-50/60 via-white to-white border-indigo-500 ring-2 ring-indigo-500/20 shadow-md scale-[1.01]"
+                      ? "bg-indigo-50/50 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md scale-[1.01]"
                       : "bg-white/95 border-indigo-100/90 hover:border-indigo-300 hover:shadow-md"
                       }`}
                   >
@@ -555,7 +548,19 @@ export const CurriculumPage: React.FC = () => {
                       {/* Select & View Action Tag */}
                       <div className={`flex items-center justify-between pt-1 text-xs font-black transition-colors ${isSelected ? "text-indigo-700" : "text-indigo-900/80 group-hover:text-indigo-900"
                         }`}>
-                        <span>{isSelected ? "✨ Inspecting Groups & Details" : "🔍 Click to View Groups Status"}</span>
+                        <span className="flex items-center gap-1.5">
+                          {isSelected ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700" />
+                              <span>Inspecting Groups & Details</span>
+                            </>
+                          ) : (
+                            <>
+                              <Search className="w-3.5 h-3.5 text-indigo-900/60" />
+                              <span>Click to View Groups Status</span>
+                            </>
+                          )}
+                        </span>
                         <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? "translate-x-1" : "group-hover:translate-x-1"}`} />
                       </div>
                     </div>

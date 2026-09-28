@@ -4,16 +4,18 @@ import { normalizeServerUrl } from "./api";
 
 export const getSocketUrl = () => {
   if (typeof window !== "undefined") {
-    const configuredIp = localStorage.getItem("dpc_server_ip");
-    if (configuredIp && configuredIp.trim()) {
-      return normalizeServerUrl(configuredIp);
-    }
+    try {
+      const configuredIp = localStorage.getItem("dpc_server_ip");
+      if (configuredIp && configuredIp.trim()) {
+        return normalizeServerUrl(configuredIp);
+      }
+    } catch (_) {}
   }
   const envUrl = (import.meta as any).env?.VITE_API_URL;
   if (envUrl) return normalizeServerUrl(envUrl);
   if (typeof window === "undefined") return "http://127.0.0.1:4000";
   const { hostname, protocol } = window.location;
-  if (!hostname || hostname === "localhost" || hostname === "127.0.0.1" || protocol === "file:") {
+  if (!hostname || hostname === "localhost" || hostname === "127.0.0.1" || protocol === "file:" || protocol === "app:") {
     return "http://127.0.0.1:4000";
   }
   return `${protocol}//${hostname}:4000`;
@@ -23,12 +25,24 @@ const SOCKET_URL = getSocketUrl();
 
 export const socket: Socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
-  autoConnect: true,
+  autoConnect: false,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000
 });
+
+export function setSocketAuthToken(token: string | null): void {
+  if (!token) {
+    socket.disconnect();
+    socket.auth = {};
+    return;
+  }
+  const currentToken = (socket.auth as { token?: string } | undefined)?.token;
+  socket.auth = { token };
+  if (socket.connected && currentToken !== token) socket.disconnect();
+  if (!socket.connected) socket.connect();
+}
 
 socket.on("connect", () => {
   console.log("⚡ [Socket.IO Client] Connected to real-time server:", socket.id);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
 import { useSocketEvent } from "../socket";
 import { DutyPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
@@ -8,9 +9,9 @@ import { DutyTeam, SaturdayDutyScheduleItem, Member, Ministry } from "../types";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
 import {
   CalendarCheck, Users, ShieldCheck, CheckCircle2, Clock, Plus,
-  Trash2, Edit, RefreshCw, ArrowLeftRight, Sparkles, Check, X,
-  AlertCircle, ChevronRight, Phone, CheckSquare, Sparkle, Calendar,
-  Crown, UserPlus, Search, Filter
+  Trash2, Edit, RefreshCw, ArrowLeftRight, Check, X,
+  AlertCircle, ChevronRight, Phone, CheckSquare, Calendar,
+  Crown, UserPlus, Search, Filter, Award
 } from "lucide-react";
 
 export interface DutyChecklistItem {
@@ -51,7 +52,7 @@ const DEFAULT_DUTY_GUIDELINES: DutyGuidelineCard[] = [
   },
   {
     id: "guide-3",
-    title: "✨ Automatic Weekly Rota",
+    title: "Automatic Weekly Rota",
     desc: "The system automatically cycles to the next scheduled team every week according to the turn order.",
     color: "emerald"
   }
@@ -79,6 +80,7 @@ const getDutyGuidelineTheme = (color: string) => {
 
 export const DutyPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const isCoordinator = user?.role_name === "Coordinator";
   const canManage = user?.role_name === "Admin" || user?.role_name === "Coordinator";
   const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
@@ -450,24 +452,18 @@ export const DutyPage: React.FC = () => {
   };
 
   const handleDeleteTeam = (teamId: number, name: string) => {
-    setConfirmModalConfig({
-      isOpen: true,
-      title: "Delete Duty Team",
-      type: "danger",
-      confirmText: "Delete",
-      description: (
-        <p className="text-xs text-charcoal/80 text-center">
-          Are you sure you want to delete <strong>"{name}"</strong>? Any assigned schedules will be unlinked.
-        </p>
-      ),
-      onConfirm: async () => {
-        try {
-          await api.deleteDutyTeam(teamId);
-          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
-          loadDutyData();
-        } catch (err: any) {
-          showAlert("Delete Failed", err.message || "Failed to delete team.", "danger");
-        }
+    const originalTeams = teams;
+    deleteWithUndo({
+      itemName: name,
+      itemType: "Saturday duty team",
+      onOptimisticDelete: () => {
+        setTeams((prev) => prev.filter((t) => t.id !== teamId));
+      },
+      onRestore: () => {
+        setTeams(originalTeams);
+      },
+      onCommitDelete: async () => {
+        await api.deleteDutyTeam(teamId);
       }
     });
   };
@@ -587,34 +583,30 @@ export const DutyPage: React.FC = () => {
   };
 
   const handleRemoveMember = (teamId: number, memberId: number, memberName: string) => {
-    setConfirmModalConfig({
-      isOpen: true,
-      title: "Remove Team Member",
-      type: "warning",
-      confirmText: "Remove Disciple",
-      cancelText: "Cancel",
-      description: (
-        <p className="text-xs text-charcoal/80 text-center">
-          Remove <strong>"{memberName}"</strong> from this Saturday duty team?
-        </p>
-      ),
-      onConfirm: async () => {
-        try {
-          setConfirmModalConfig(prev => ({ ...prev, isLoading: true }));
-          await api.removeDutyTeamMember(teamId, memberId);
-          loadDutyData();
-          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
-          setConfirmModalConfig({
-            isOpen: true,
-            title: "Action Failed",
-            type: "danger",
-            confirmText: "Close",
-            cancelText: null,
-            description: err.message || "Failed to remove member.",
-            onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
-          });
-        }
+    const targetTeam = teams.find((t) => t.id === teamId);
+    const originalMembers = targetTeam?.members || [];
+
+    deleteWithUndo({
+      itemName: memberName,
+      itemType: "Team member",
+      onOptimisticDelete: () => {
+        setTeams((prev) =>
+          prev.map((t) =>
+            t.id === teamId
+              ? { ...t, members: (t.members || []).filter((m) => m.member_id !== memberId) }
+              : t
+          )
+        );
+      },
+      onRestore: () => {
+        setTeams((prev) =>
+          prev.map((t) =>
+            t.id === teamId ? { ...t, members: originalMembers } : t
+          )
+        );
+      },
+      onCommitDelete: async () => {
+        await api.removeDutyTeamMember(teamId, memberId);
       }
     });
   };
@@ -660,7 +652,7 @@ export const DutyPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -695,7 +687,7 @@ export const DutyPage: React.FC = () => {
           {canManage && (
             <button
               onClick={handleOpenCreateTeam}
-              className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4 text-indigo-950" />
               <span>Create Team</span>
@@ -706,7 +698,7 @@ export const DutyPage: React.FC = () => {
 
       {/* Hero Card: THIS SATURDAY'S ON-DUTY TEAM */}
       {thisSaturday && thisSaturday.team && (
-        <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-7 sm:p-8 text-white shadow-xl border border-white/10">
+        <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-7 sm:p-8 text-white shadow-xl border border-white/10">
           <img
             src="/container_bg.jpg"
             alt=""
@@ -770,7 +762,7 @@ export const DutyPage: React.FC = () => {
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0">
               <div className="text-xs text-amber-200 font-bold bg-white/10 border border-white/20 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs backdrop-blur-xs">
-                <Sparkles className="w-4 h-4 text-amber-300" />
+                <CheckCircle2 className="w-4 h-4 text-amber-300" />
                 <span>Active Rotation • {thisSaturday.date_formatted}</span>
               </div>
 
@@ -1016,7 +1008,7 @@ export const DutyPage: React.FC = () => {
               <div
                 key={idx}
                 className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${item.is_this_saturday
-                  ? "bg-gradient-to-r from-indigo-50 via-white to-amber-50/30 border-amber-300 shadow-xs ring-2 ring-amber-300/30"
+                  ? "bg-indigo-50/40 border-amber-300 shadow-xs ring-2 ring-amber-300/30"
                   : item.status === "completed"
                     ? "bg-emerald-50/40 border-emerald-200/80"
                     : "bg-white border-indigo-100/70 hover:border-indigo-200"
@@ -1066,7 +1058,7 @@ export const DutyPage: React.FC = () => {
                 <div className="flex items-center gap-2 self-end md:self-center">
                   {item.is_this_saturday ? (
                     <span className="bg-indigo-100 text-indigo-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-300 shadow-2xs">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-700" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700" />
                       <span>Active This Saturday</span>
                     </span>
                   ) : item.is_next_saturday ? (
@@ -1128,7 +1120,7 @@ export const DutyPage: React.FC = () => {
                 </button>
                 <button
                   onClick={handleOpenAddDutyTask}
-                  className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-900 to-indigo-700 hover:from-indigo-950 hover:to-indigo-800 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
+                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-900  rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Checklist Task</span>
@@ -1240,7 +1232,7 @@ export const DutyPage: React.FC = () => {
                 <div className="flex items-center justify-between pb-3 border-b border-indigo-50">
                   <div className="flex items-center gap-2.5">
                     <span className="p-2 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100">
-                      <Sparkles className="w-4 h-4" />
+                      <ShieldCheck className="w-4 h-4" />
                     </span>
                     <div>
                       <h3 className="font-black text-sm text-indigo-950">Duty Team Best Practices</h3>
@@ -1296,9 +1288,9 @@ export const DutyPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950 to-slate-900 text-white space-y-1.5 mt-4">
+              <div className="p-4 rounded-2xl bg-indigo-950 text-white space-y-1.5 mt-4">
                 <div className="flex items-center gap-2 text-amber-300 text-xs font-black">
-                  <Sparkles className="w-4 h-4" />
+                  <Award className="w-4 h-4" />
                   <span>Excellence in God's House</span>
                 </div>
                 <p className="text-[11px] text-indigo-100/80 leading-relaxed">
@@ -1576,8 +1568,8 @@ export const DutyPage: React.FC = () => {
                           onChange={() => { }} // handled by parent onClick
                           className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-800 to-indigo-950 text-amber-300 font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                          {member.first_name[0]}{member.last_name[0]}
+                        <div className="w-8 h-8 rounded-full bg-indigo-900 text-amber-300 font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                          {member.first_name?.[0] || ""}{member.last_name?.[0] || ""}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1639,7 +1631,7 @@ export const DutyPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleConfirmSelector}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>Confirm & Add ({selectorSelectedIds.size}) Disciples</span>

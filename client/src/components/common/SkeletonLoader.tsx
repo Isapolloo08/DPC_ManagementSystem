@@ -66,7 +66,7 @@ export const TableSkeleton: React.FC<{ rows?: number; columns?: number }> = ({
   return (
     <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
       {/* Table Head */}
-      <div className="bg-gradient-to-r from-indigo-50/80 via-ivory-light to-amber-50/40 px-6 py-4 border-b border-indigo-100 flex items-center justify-between gap-4">
+      <div className="bg-indigo-50/70 px-6 py-4 border-b border-indigo-100 flex items-center justify-between gap-4">
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={i} className="h-4 flex-1 max-w-[140px]" />
         ))}
@@ -735,55 +735,6 @@ export const DishwashingPageSkeleton: React.FC = () => {
 
       {/* Table */}
       <TableSkeleton rows={6} columns={6} />
-    </div>
-  );
-};
-
-// =========================================================================
-// 9. GIVING & STEWARDSHIP SHADOW SKELETON (Exact 1:1 Mirror)
-// =========================================================================
-export const GivingPageSkeleton: React.FC = () => {
-  return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-60" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
-
-      {/* 4 Fund Goal Meter Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <Skeleton className="w-9 h-9 rounded-2xl" />
-              <Skeleton className="h-5 w-20 rounded-full" />
-            </div>
-            <Skeleton className="h-5 w-36" />
-            <Skeleton className="h-3.5 w-full" />
-            <div className="space-y-2 pt-2">
-              <div className="flex justify-between">
-                <Skeleton className="h-3.5 w-16" />
-                <Skeleton className="h-3.5 w-20" />
-              </div>
-              <Skeleton className="h-3 w-full rounded-full" />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Recent Donations Table */}
-      <TableSkeleton rows={5} columns={6} />
     </div>
   );
 };

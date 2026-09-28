@@ -10,7 +10,7 @@ import { useSocketEvent } from "../../socket";
 import { TodayBibleReadingWidget } from "../../components/common/TodayBibleReadingWidget";
 import { NavTab } from "../../components/layout/Sidebar";
 import {
-  Sparkles, Users, Calendar, Clock, MapPin,
+  Users, Calendar, Clock, MapPin,
   BookmarkCheck, UserCheck, ArrowRight, CalendarCheck,
   Utensils, MessageSquare, BookOpen, ChevronRight,
   ShieldCheck, AlertCircle, CheckCircle2, TrendingUp,
@@ -110,7 +110,7 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 shadow-xl border border-white/10">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-6 sm:p-8 shadow-xl border border-white/10">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -122,7 +122,7 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-200 text-xs font-black tracking-wide uppercase">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <BookmarkCheck className="w-3.5 h-3.5 text-amber-400" />
               <span>Small Group Discipleship Leader Hub</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">

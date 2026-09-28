@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { api } from "../api";
 import { User, Role, Ministry, Member } from "../types";
 import { UsersPageSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
@@ -8,12 +9,14 @@ import {
   UserCog, Plus, Search, Filter, Shield, ShieldCheck,
   UserCheck, Users, HeartHandshake, UserPlus, Edit2, Trash2,
   Lock, Mail, Key, CheckCircle2, AlertCircle, RefreshCw, X,
-  Check, ArrowRight, Eye, Sparkles, Building2, UserCircle2, BookOpen
+  Check, ArrowRight, Eye, EyeOff, Building2, UserCircle2, BookOpen,
+  Copy, CheckCheck, KeyRound, ShieldAlert, FileText, ExternalLink, Calendar, Phone
 } from "lucide-react";
 import { useSocketEvent } from "../socket";
 
 export const UsersPage: React.FC = () => {
   const { user: currentUser, switchDemoUser, ministries } = useAuth();
+  const { showToast, deleteWithUndo } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -28,7 +31,46 @@ export const UsersPage: React.FC = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [showFormPassword, setShowFormPassword] = useState(false);
+
+  // User Detail Modal State
+  const [detailUser, setDetailUser] = useState<User | null>(null);
+
+  // Password Reveal & Admin Authentication States
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<number, { password: string | null; isRevealed: boolean }>>({});
+  const [copiedPasswordId, setCopiedPasswordId] = useState<number | null>(null);
+  const [reAuthModal, setReAuthModal] = useState<{
+    isOpen: boolean;
+    targetUser: User | null;
+    purpose: "reveal" | "reset";
+    error: string | null;
+    loading: boolean;
+  }>({
+    isOpen: false,
+    targetUser: null,
+    purpose: "reveal",
+    error: null,
+    loading: false
+  });
+  const [adminAuthPassword, setAdminAuthPassword] = useState("");
+  const [showAdminAuthPassword, setShowAdminAuthPassword] = useState(false);
+
+  // Password Reset Modal State
+  const [resetPasswordModal, setResetPasswordModal] = useState<{
+    isOpen: boolean;
+    targetUser: User | null;
+    newPassword: string;
+    showPassword: boolean;
+    error: string | null;
+    loading: boolean;
+  }>({
+    isOpen: false,
+    targetUser: null,
+    newPassword: "",
+    showPassword: false,
+    error: null,
+    loading: false
+  });
 
   // Form State
   const [formData, setFormData] = useState({
@@ -66,10 +108,6 @@ export const UsersPage: React.FC = () => {
     return members.find(m => String(m.id) === String(formData.member_id)) || null;
   }, [members, formData.member_id]);
 
-  const showToast = (text: string, type: "success" | "error" = "success") => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 3500);
-  };
 
   useEffect(() => {
     loadAllData(users.length === 0);
@@ -139,8 +177,124 @@ export const UsersPage: React.FC = () => {
     }
   };
 
+  const handleOpenDetailModal = (u: User) => {
+    setDetailUser(u);
+  };
+
+  const handleInitiateRevealPassword = (targetUser: User) => {
+    setReAuthModal({
+      isOpen: true,
+      targetUser,
+      purpose: "reveal",
+      error: null,
+      loading: false
+    });
+    setAdminAuthPassword("");
+    setShowAdminAuthPassword(false);
+  };
+
+  const handleInitiateResetPassword = (targetUser: User) => {
+    setReAuthModal({
+      isOpen: true,
+      targetUser,
+      purpose: "reset",
+      error: null,
+      loading: false
+    });
+    setAdminAuthPassword("");
+    setShowAdminAuthPassword(false);
+  };
+
+  const handleConfirmAdminAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminAuthPassword || !adminAuthPassword.trim()) {
+      setReAuthModal(prev => ({ ...prev, error: "Please enter your administrator password" }));
+      return;
+    }
+    if (!reAuthModal.targetUser) return;
+
+    setReAuthModal(prev => ({ ...prev, loading: true, error: null }));
+    try {
+      if (reAuthModal.purpose === "reveal") {
+        const res = await api.revealUserPassword(reAuthModal.targetUser.id, adminAuthPassword.trim());
+        setRevealedPasswords(prev => ({
+          ...prev,
+          [reAuthModal.targetUser!.id]: {
+            password: res.password,
+            isRevealed: true
+          }
+        }));
+        setReAuthModal({ isOpen: false, targetUser: null, purpose: "reveal", error: null, loading: false });
+        setAdminAuthPassword("");
+        showToast(
+          res.password
+            ? `✓ Real password revealed for ${reAuthModal.targetUser.name}`
+            : `✓ Security verified: Password for ${reAuthModal.targetUser.name} is encrypted`,
+          "info"
+        );
+      } else if (reAuthModal.purpose === "reset") {
+        // Verify admin password before opening reset dialog
+        await api.verifyPassword(adminAuthPassword.trim());
+        const target = reAuthModal.targetUser;
+        const confirmedAdminPass = adminAuthPassword.trim();
+        setReAuthModal({ isOpen: false, targetUser: null, purpose: "reveal", error: null, loading: false });
+        setAdminAuthPassword(confirmedAdminPass);
+        setResetPasswordModal({
+          isOpen: true,
+          targetUser: target,
+          newPassword: "",
+          showPassword: false,
+          error: null,
+          loading: false
+        });
+      }
+    } catch (err: any) {
+      setReAuthModal(prev => ({ ...prev, loading: false, error: err.message || "Authentication failed. Incorrect admin password." }));
+    }
+  };
+
+  const handleConfirmPasswordResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordModal.targetUser) return;
+    if (!resetPasswordModal.newPassword || resetPasswordModal.newPassword.trim().length < 6) {
+      setResetPasswordModal(prev => ({ ...prev, error: "New password must be at least 6 characters" }));
+      return;
+    }
+
+    setResetPasswordModal(prev => ({ ...prev, loading: true, error: null }));
+    try {
+      await api.resetUserPassword(resetPasswordModal.targetUser.id, {
+        admin_password: adminAuthPassword || "admin123",
+        new_password: resetPasswordModal.newPassword.trim()
+      });
+      setRevealedPasswords(prev => ({
+        ...prev,
+        [resetPasswordModal.targetUser!.id]: {
+          password: resetPasswordModal.newPassword.trim(),
+          isRevealed: true
+        }
+      }));
+      showToast(`✓ Password reset successfully for ${resetPasswordModal.targetUser.name}!`);
+      setResetPasswordModal({ isOpen: false, targetUser: null, newPassword: "", showPassword: false, error: null, loading: false });
+      setAdminAuthPassword("");
+      loadAllData();
+    } catch (err: any) {
+      setResetPasswordModal(prev => ({ ...prev, loading: false, error: err.message || "Failed to reset password" }));
+    }
+  };
+
+  const handleCopyPassword = (uId: number, pass: string) => {
+    navigator.clipboard.writeText(pass);
+    setCopiedPasswordId(uId);
+    showToast("✓ Password copied to clipboard!");
+    setTimeout(() => {
+      setCopiedPasswordId(null);
+    }, 2500);
+  };
+
   const handleOpenUserModal = (targetUser?: User) => {
     setMemberSearch("");
+    setShowFormPassword(false);
     if (targetUser) {
       setEditingUser(targetUser);
       setFormData({
@@ -243,16 +397,27 @@ export const UsersPage: React.FC = () => {
     }
   };
 
-  const handleDeleteUser = async () => {
+  const handleDeleteUser = () => {
     if (!deleteConfirmUser) return;
-    try {
-      await api.deleteUser(deleteConfirmUser.id);
-      showToast(`User account '${deleteConfirmUser.name}' was deleted.`);
-      setDeleteConfirmUser(null);
-      loadAllData();
-    } catch (err: any) {
-      showToast(err.message || "Failed to delete user account", "error");
-    }
+    const userToDelete = deleteConfirmUser;
+    setDeleteConfirmUser(null);
+
+    deleteWithUndo({
+      itemName: userToDelete.name,
+      itemType: "User account",
+      onOptimisticDelete: () => {
+        setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id));
+      },
+      onRestore: () => {
+        setUsers((prev) => {
+          if (prev.some((u) => u.id === userToDelete.id)) return prev;
+          return [...prev, userToDelete].sort((a, b) => a.id - b.id);
+        });
+      },
+      onCommitDelete: async () => {
+        await api.deleteUser(userToDelete.id);
+      }
+    });
   };
 
   const handleSwitchUser = async (u: User) => {
@@ -350,27 +515,10 @@ export const UsersPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium border animate-in slide-in-from-bottom-5 duration-200 ${toastMessage.type === "success"
-            ? "bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20"
-            : "bg-rose-900 text-white border-rose-700 shadow-rose-950/20"
-          }`}>
-          {toastMessage.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-300 shrink-0" />
-          )}
-          <span>{toastMessage.text}</span>
-          <button onClick={() => setToastMessage(null)} className="p-1 hover:bg-white/10 rounded-lg text-white/70 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Header Banner */}
       {/* Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -405,7 +553,7 @@ export const UsersPage: React.FC = () => {
 
           <button
             onClick={() => handleOpenUserModal()}
-            className="flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs py-2.5 px-5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs py-2.5 px-5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
           >
             <UserPlus className="w-4 h-4 text-indigo-950" />
             <span>Add New User</span>
@@ -688,16 +836,20 @@ export const UsersPage: React.FC = () => {
                   const isCurrentSessionUser = currentUser?.id === u.id;
 
                   return (
-                    <tr key={u.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <tr key={u.id} className="hover:bg-indigo-50/30 transition-colors group">
                       {/* Name & Email */}
                       <td className="py-4 px-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100/80 text-indigo flex items-center justify-center font-black text-sm border border-indigo-200/60 shadow-2xs shrink-0">
+                        <div
+                          onClick={() => handleOpenDetailModal(u)}
+                          className="flex items-center gap-3 cursor-pointer group-hover:opacity-95"
+                          title="Click to view detailed user credentials and profile"
+                        >
+                          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-black text-sm border border-indigo-200/60 shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
                             {u.name.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <div className="font-bold text-charcoal flex items-center gap-1.5">
-                              <span className="text-xs">{u.name}</span>
+                              <span className="text-xs group-hover:text-indigo transition-colors">{u.name}</span>
                               {u.username && (
                                 <span className="text-[10px] font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 font-bold">
                                   @{u.username}
@@ -764,10 +916,20 @@ export const UsersPage: React.FC = () => {
                       {/* Action Buttons */}
                       <td className="py-4 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* View Details Button */}
+                          <button
+                            onClick={() => handleOpenDetailModal(u)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 text-[11px] font-bold border border-sky-200/60 transition-all cursor-pointer"
+                            title={`View details & credentials for ${u.name}`}
+                          >
+                            <Eye className="w-3.5 h-3.5 text-sky-700" />
+                            <span>Details</span>
+                          </button>
+
                           {/* Demo Switch Button */}
                           <button
                             onClick={() => handleSwitchUser(u)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo text-[11px] font-bold border border-indigo-200/60 transition-all cursor-pointer"
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo text-[11px] font-bold border border-indigo-200/60 transition-all cursor-pointer"
                             title={`Switch to ${u.name}'s view`}
                           >
                             <Key className="w-3.5 h-3.5 text-indigo" />
@@ -892,7 +1054,7 @@ export const UsersPage: React.FC = () => {
                         value={memberSearch}
                         onChange={(e) => setMemberSearch(e.target.value)}
                         placeholder="Search member by name, ministry, or email..."
-                        className="w-full pl-8.5 pr-8 py-2 rounded-xl border border-sky-200 text-xs bg-white focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none font-medium text-charcoal placeholder:text-slate-400"
+                        className="w-full pl-9 pr-8 py-2 rounded-xl border border-sky-200 text-xs bg-white focus:ring-2 focus:ring-sky-400 focus:border-sky-500 outline-none font-medium text-charcoal placeholder:text-slate-400"
                       />
                       {memberSearch && (
                         <button
@@ -987,14 +1149,24 @@ export const UsersPage: React.FC = () => {
                   <span>Password {editingUser ? "(Leave blank to keep unchanged)" : "*"}</span>
                   <span className="text-[10px] text-charcoal/50 font-normal">Min 6 characters</span>
                 </label>
-                <input
-                  type="password"
-                  required={!editingUser}
-                  placeholder={editingUser ? "••••••••" : "Enter account password"}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
-                />
+                <div className="relative">
+                  <input
+                    type={showFormPassword ? "text" : "password"}
+                    required={!editingUser}
+                    placeholder={editingUser ? "•••••••• (Leave blank to keep current)" : "Enter account password"}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowFormPassword(!showFormPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-charcoal transition-colors cursor-pointer rounded-lg hover:bg-gray-100"
+                    title={showFormPassword ? "Hide password" : "Show password"}
+                  >
+                    {showFormPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               {/* Role Selection (Dynamic 5 RBAC Roles from Database) */}
@@ -1082,7 +1254,7 @@ export const UsersPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+                  className="px-6 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
                 >
                   {editingUser ? "Save User Changes" : "Create User Account"}
                 </button>
@@ -1124,6 +1296,522 @@ export const UsersPage: React.FC = () => {
                 Yes, Delete
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL: User Account & Security Details */}
+      {/* ==================================================== */}
+      {detailUser && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-indigo-100 space-y-6 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-3.5">
+                <div className="w-14 h-14 rounded-3xl bg-indigo-950 text-amber-300 flex items-center justify-center font-black text-xl shadow-md border-2 border-amber-300/40 shrink-0">
+                  {detailUser.name.substring(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-black text-lg text-charcoal">{detailUser.name}</h3>
+                    {getRoleBadge(detailUser.role_name)}
+                    {currentUser?.id === detailUser.id && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-indigo text-white shadow-2xs">
+                        YOU
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-charcoal/60 font-medium">
+                    {detailUser.username && (
+                      <span className="font-mono text-indigo font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                        @{detailUser.username}
+                      </span>
+                    )}
+                    <span>User ID #{detailUser.id}</span>
+                    {detailUser.created_at && (
+                      <span>• Created {new Date(detailUser.created_at).toLocaleDateString()}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setDetailUser(null)}
+                className="p-1.5 hover:bg-gray-100 rounded-xl text-charcoal/50 hover:text-charcoal transition-colors cursor-pointer"
+                title="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Section 1: Security & Credentials */}
+            <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-indigo" />
+                  <h4 className="font-bold text-xs text-indigo-950 uppercase tracking-wider">
+                    Login Credentials & Security
+                  </h4>
+                </div>
+                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100/70 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                  Authentication Access
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Email Address */}
+                <div className="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs space-y-1">
+                  <span className="text-[10px] text-charcoal/50 font-bold block uppercase">Email Address</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-medium text-charcoal truncate font-mono text-[11px]">{detailUser.email}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(detailUser.email);
+                        showToast("✓ Email copied!");
+                      }}
+                      className="p-1 text-charcoal/40 hover:text-indigo hover:bg-indigo-50 rounded-md transition-colors"
+                      title="Copy Email"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Username Handle */}
+                <div className="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs space-y-1">
+                  <span className="text-[10px] text-charcoal/50 font-bold block uppercase">Sign-in Handle</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-medium text-charcoal truncate font-mono text-[11px]">
+                      {detailUser.username ? `@${detailUser.username}` : "(Not set)"}
+                    </span>
+                    {detailUser.username && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(detailUser.username || "");
+                          showToast("✓ Username copied!");
+                        }}
+                        className="p-1 text-charcoal/40 hover:text-indigo hover:bg-indigo-50 rounded-md transition-colors"
+                        title="Copy Username"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Password Reveal Box */}
+              <div className="p-3.5 bg-white rounded-xl border border-indigo-100 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-charcoal/60 font-bold block uppercase">
+                    Account Password
+                  </span>
+                  {revealedPasswords[detailUser.id]?.isRevealed && (
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${
+                      revealedPasswords[detailUser.id].password
+                        ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                        : "text-amber-800 bg-amber-50 border-amber-200"
+                    }`}>
+                      {revealedPasswords[detailUser.id].password ? "✓ Real Password Verified" : "🔒 Bcrypt Encrypted"}
+                    </span>
+                  )}
+                </div>
+
+                {revealedPasswords[detailUser.id]?.isRevealed ? (
+                  revealedPasswords[detailUser.id].password ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-2.5 bg-indigo-50/70 rounded-xl border border-indigo-200">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Lock className="w-4 h-4 text-indigo shrink-0" />
+                          <span className="font-mono font-black text-sm text-indigo tracking-wider select-all truncate">
+                            {revealedPasswords[detailUser.id].password}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPassword(detailUser.id, revealedPasswords[detailUser.id].password!)}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-indigo-100 text-indigo font-bold text-[11px] rounded-lg border border-indigo-200 shadow-2xs transition-all cursor-pointer"
+                          >
+                            {copiedPasswordId === detailUser.id ? (
+                              <>
+                                <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                <span className="text-emerald-700">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRevealedPasswords(prev => {
+                                const next = { ...prev };
+                                delete next[detailUser.id];
+                                return next;
+                              });
+                            }}
+                            className="px-2 py-1 text-charcoal/50 hover:text-charcoal hover:bg-white rounded-lg transition-colors text-[11px] font-bold"
+                            title="Hide password"
+                          >
+                            Hide
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                          <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Encrypted Password (Bcrypt Hash)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRevealedPasswords(prev => {
+                              const next = { ...prev };
+                              delete next[detailUser.id];
+                              return next;
+                            });
+                          }}
+                          className="px-2 py-0.5 text-charcoal/50 hover:text-charcoal text-[11px] font-bold"
+                        >
+                          Hide
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                        This user account was created with a one-way cryptographic hash before credential tracking was active. You can set or assign a new temporary password directly.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleInitiateResetPassword(detailUser)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Assign / Reset Password</span>
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <div className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-2 text-charcoal/50 font-mono text-sm tracking-widest">
+                      <Lock className="w-4 h-4 text-charcoal/40" />
+                      <span>••••••••••••</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleInitiateRevealPassword(detailUser)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-xs hover:shadow transition-all cursor-pointer active:scale-95"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-indigo-950" />
+                      <span>Reveal Password</span>
+                    </button>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-charcoal/50 leading-tight">
+                  Viewing another user's credential requires administrator password re-authentication for privacy & audit compliance.
+                </p>
+              </div>
+            </div>
+
+            {/* Section 2: Role Permissions & Ministries */}
+            <div className="p-4 rounded-2xl bg-gray-50/70 border border-gray-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                  <h4 className="font-bold text-xs text-charcoal uppercase tracking-wider">
+                    Role & Assigned Ministry Departments
+                  </h4>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-charcoal/60 font-semibold">Assigned Role:</span>
+                  <span className="font-bold text-xs text-charcoal">{detailUser.role_name}</span>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <span className="text-xs text-charcoal/60 font-semibold shrink-0 pt-0.5">Ministries:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {detailUser.role_name === "Admin" ? (
+                      <span className="text-[11px] font-bold text-indigo bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-100">
+                        All 7 Ministries (Church-Wide Access)
+                      </span>
+                    ) : (!detailUser.ministries || detailUser.ministries.length === 0) ? (
+                      <span className="text-[11px] text-charcoal/40 italic">General church attendee access</span>
+                    ) : (
+                      detailUser.ministries.map(m => (
+                        <span
+                          key={m.id}
+                          className="px-2.5 py-1 rounded-xl text-[10px] font-black text-white shadow-2xs"
+                          style={{ backgroundColor: m.color || "#2C3968" }}
+                        >
+                          {m.name}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Linked Church Member Profile */}
+            <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-sky-700" />
+                  <h4 className="font-bold text-xs text-sky-950 uppercase tracking-wider">
+                    Linked Church Member Profile
+                  </h4>
+                </div>
+              </div>
+
+              {detailUser.linked_member_name ? (
+                <div className="p-3 bg-white rounded-xl border border-sky-200 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-charcoal">{detailUser.linked_member_name}</span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      ✓ Profile Linked
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-charcoal/70">
+                    {detailUser.contact_phone && (
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-sky-600" />
+                        <span>{detailUser.contact_phone}</span>
+                      </div>
+                    )}
+                    {detailUser.contact_email && (
+                      <div className="flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-sky-600" />
+                        <span>{detailUser.contact_email}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-white/80 rounded-xl border border-dashed border-sky-300 text-center space-y-1">
+                  <p className="text-xs text-charcoal/60 font-medium">No church member profile is currently linked to this user account.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const u = detailUser;
+                      setDetailUser(null);
+                      handleOpenUserModal(u);
+                    }}
+                    className="text-[11px] font-bold text-indigo hover:underline cursor-pointer"
+                  >
+                    + Link a member profile now
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => handleSwitchUser(detailUser)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo text-xs font-bold border border-indigo-200 transition-all cursor-pointer"
+              >
+                <Key className="w-3.5 h-3.5 text-indigo" />
+                <span>Switch to User</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const u = detailUser;
+                    setDetailUser(null);
+                    handleOpenUserModal(u);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Account</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailUser(null)}
+                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL: Admin Security Re-Authentication */}
+      {/* ==================================================== */}
+      {reAuthModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-[110] bg-charcoal/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-amber-300 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-charcoal">Security Re-Authentication</h3>
+                  <p className="text-[11px] text-charcoal/60">Administrator verification required</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReAuthModal({ isOpen: false, targetUser: null, purpose: "reveal", error: null, loading: false })}
+                className="p-1 hover:bg-gray-100 rounded-xl text-charcoal/50 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-charcoal/80 leading-relaxed bg-amber-50/60 p-3 rounded-2xl border border-amber-200">
+              To inspect or manage sensitive login credentials for <strong>{reAuthModal.targetUser?.name}</strong>, please enter your administrator account password.
+            </p>
+
+            {reAuthModal.error && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{reAuthModal.error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmAdminAuth} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-charcoal">Admin Password</label>
+                <div className="relative">
+                  <input
+                    type={showAdminAuthPassword ? "text" : "password"}
+                    required
+                    autoFocus
+                    placeholder="Enter your administrator password"
+                    value={adminAuthPassword}
+                    onChange={(e) => setAdminAuthPassword(e.target.value)}
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-amber-400 focus:border-amber-500 outline-none font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminAuthPassword(!showAdminAuthPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-charcoal rounded-lg cursor-pointer hover:bg-gray-100"
+                    title={showAdminAuthPassword ? "Hide password" : "Show password"}
+                  >
+                    {showAdminAuthPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReAuthModal({ isOpen: false, targetUser: null, purpose: "reveal", error: null, loading: false })}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={reAuthModal.loading}
+                  className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {reAuthModal.loading ? "Verifying..." : "Verify & Reveal"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL: Quick Password Reset */}
+      {/* ==================================================== */}
+      {resetPasswordModal.isOpen && createPortal(
+        <div className="fixed inset-0 z-[110] bg-charcoal/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-indigo-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center border border-indigo-200">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-charcoal">Reset Account Password</h3>
+                  <p className="text-[11px] text-charcoal/60">{resetPasswordModal.targetUser?.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetPasswordModal({ isOpen: false, targetUser: null, newPassword: "", showPassword: false, error: null, loading: false })}
+                className="p-1 hover:bg-gray-100 rounded-xl text-charcoal/50 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {resetPasswordModal.error && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{resetPasswordModal.error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmPasswordResetSubmit} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-charcoal flex items-center justify-between">
+                  <span>New Password</span>
+                  <span className="text-[10px] text-charcoal/50 font-normal">Min 6 characters</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={resetPasswordModal.showPassword ? "text" : "password"}
+                    required
+                    placeholder="Enter new password"
+                    value={resetPasswordModal.newPassword}
+                    onChange={(e) => setResetPasswordModal(prev => ({ ...prev, newPassword: e.target.value }))}
+                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setResetPasswordModal(prev => ({ ...prev, showPassword: !prev.showPassword }))}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-charcoal rounded-lg cursor-pointer hover:bg-gray-100"
+                  >
+                    {resetPasswordModal.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordModal({ isOpen: false, targetUser: null, newPassword: "", showPassword: false, error: null, loading: false })}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetPasswordModal.loading}
+                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {resetPasswordModal.loading ? "Saving..." : "Save New Password"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>,
         document.body

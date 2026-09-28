@@ -5,7 +5,7 @@ import { api } from "../../api";
 import { DatePickerInput } from "../common/DatePickerInput";
 import { TimePickerInput } from "../common/TimePickerInput";
 import {
-  CalendarClock, X, Check, AlertCircle, Sparkles,
+  CalendarClock, X, Check, AlertCircle,
   MapPin, Users, Clock, Building2, CheckCircle2,
   ChevronRight, Calendar, AlertTriangle, Info, HelpCircle
 } from "lucide-react";
@@ -328,7 +328,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400/20 to-amber-500/30 text-amber-900 border border-amber-300/50 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-900 border border-amber-300/50 flex items-center justify-center font-bold shadow-2xs">
               <CalendarClock className="w-6 h-6 text-amber-700" />
             </div>
             <div>
@@ -356,7 +356,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
         </div>
 
         {/* Regular Schedule Reference Banner */}
-        <div className="p-3.5 bg-gradient-to-r from-amber-50/70 via-ivory to-indigo-50/50 rounded-2xl border border-amber-200/70 text-xs flex items-center justify-between gap-3 flex-wrap">
+        <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/70 text-xs flex items-center justify-between gap-3 flex-wrap">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-amber-900/60 uppercase tracking-wider block">
               Regular Schedule
@@ -717,7 +717,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
             <button
               type="submit"
               disabled={isSaving}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              className="px-6 py-2.5 rounded-xl bg-amber-500  text-slate-950 font-black text-xs flex items-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50"
             >
               <Check className="w-4 h-4 text-slate-950" />
               <span>

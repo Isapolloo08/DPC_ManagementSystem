@@ -6,7 +6,6 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
-  Sparkles,
   RotateCcw,
   X
 } from "lucide-react";
@@ -295,7 +294,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
             className="w-80 bg-white rounded-2xl shadow-2xl border border-indigo-100 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150"
           >
             {/* Header: Month / Year Navigation */}
-            <div className="flex items-center justify-between p-2 bg-gradient-to-r from-indigo-900 via-indigo to-indigo-800 text-white rounded-xl shadow-xs">
+            <div className="flex items-center justify-between p-2 bg-indigo-900 text-white rounded-xl shadow-xs">
               <button
                 type="button"
                 onClick={prevMonth}

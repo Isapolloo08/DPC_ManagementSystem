@@ -133,27 +133,7 @@ CREATE TABLE IF NOT EXISTS announcements (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 12. Funds (Stewardship Goals)
-CREATE TABLE IF NOT EXISTS funds (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL UNIQUE,
-  description TEXT,
-  target_amount DECIMAL(12, 2) DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 13. Donations (Giving Records)
-CREATE TABLE IF NOT EXISTS donations (
-  id SERIAL PRIMARY KEY,
-  member_id INT REFERENCES members(id) ON DELETE SET NULL,
-  fund_id INT NOT NULL REFERENCES funds(id) ON DELETE CASCADE,
-  amount DECIMAL(12, 2) NOT NULL,
-  method VARCHAR(50) NOT NULL,
-  notes TEXT,
-  donated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 14. Audit Logs (Compliance & Security Trail)
+-- 12. Audit Logs (Compliance & Security Trail)
 CREATE TABLE IF NOT EXISTS audit_logs (
   id SERIAL PRIMARY KEY,
   user_id INT REFERENCES users(id) ON DELETE SET NULL,
@@ -270,8 +250,6 @@ CREATE INDEX IF NOT EXISTS idx_members_status ON members(status);
 CREATE INDEX IF NOT EXISTS idx_attendance_member_id ON attendance(member_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_ministry_id ON attendance(ministry_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(checked_in_at);
-CREATE INDEX IF NOT EXISTS idx_donations_fund_id ON donations(fund_id);
-CREATE INDEX IF NOT EXISTS idx_donations_member_id ON donations(member_id);
 CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
 CREATE INDEX IF NOT EXISTS idx_lookups_type ON system_lookups(type);
 CREATE INDEX IF NOT EXISTS idx_duty_teams_ministry ON duty_teams(ministry_id);
@@ -305,4 +283,3 @@ CREATE TABLE IF NOT EXISTS dishwashing_roster (
 
 CREATE INDEX IF NOT EXISTS idx_dishwashing_duty_date ON dishwashing_roster(duty_date);
 CREATE INDEX IF NOT EXISTS idx_dishwashing_status ON dishwashing_roster(status);
-

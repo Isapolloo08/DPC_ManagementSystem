@@ -11,7 +11,7 @@ import { NavTab } from "../../components/layout/Sidebar";
 import {
   HeartHandshake, CalendarCheck, Utensils, UserCheck,
   BookOpen, Calendar, MessageSquare, ArrowRight,
-  Clock, MapPin, Sparkles, CheckCircle2, AlertCircle,
+  Clock, MapPin, CheckCircle2, AlertCircle,
   Users, ChevronRight, ShieldCheck
 } from "lucide-react";
 
@@ -76,7 +76,7 @@ export const VolunteerDashboard: React.FC<VolunteerDashboardProps> = ({ onNaviga
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 shadow-xl border border-white/10">
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-6 sm:p-8 shadow-xl border border-white/10">
         <img
           src="/container_bg.jpg"
           alt=""
@@ -225,7 +225,7 @@ export const VolunteerDashboard: React.FC<VolunteerDashboardProps> = ({ onNaviga
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider">My Small Group</span>
               <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-indigo-700" />
+                <BookOpen className="w-4 h-4 text-indigo-700" />
               </div>
             </div>
             <div className="mt-2">
