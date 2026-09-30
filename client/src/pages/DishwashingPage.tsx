@@ -151,7 +151,7 @@ const getProtocolTheme = (color: string) => {
 export const DishwashingPage: React.FC = () => {
   const { user } = useAuth();
   const { showToast, deleteWithUndo } = useToast();
-  const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   const [activeTab, setActiveTab] = useState<"teams" | "schedule" | "tasks">("teams");
   const [teams, setTeams] = useState<DishwashingTeam[]>([]);
@@ -194,15 +194,19 @@ export const DishwashingPage: React.FC = () => {
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterMode, setFilterMode] = useState<"all" | "biblestudy_group" | "ministry" | "custom">("all");
+  const [filterMode, setFilterMode] = useState<"all" | "biblestudy_group" | "ministry" | "combined" | "custom">("all");
 
   // Team modal state (Add / Edit Rotating Unit)
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<DishwashingTeam | null>(null);
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [minSearchQuery, setMinSearchQuery] = useState("");
   const [teamForm, setTeamForm] = useState({
-    cycle_mode: "biblestudy_group" as "biblestudy_group" | "ministry" | "custom",
+    cycle_mode: "biblestudy_group" as "biblestudy_group" | "ministry" | "combined" | "custom",
     biblestudy_group_id: "",
+    biblestudy_group_ids: [] as number[],
     ministry_id: "",
+    ministry_ids: [] as number[],
     name: "",
     order_seq: 1,
     leader_id: "",
@@ -473,7 +477,20 @@ export const DishwashingPage: React.FC = () => {
     return teams.filter(t => {
       const matchSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (t.leader_name && t.leader_name.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchMode = filterMode === "all" || t.cycle_mode === filterMode;
+      const hasBS = Boolean(t.biblestudy_group_ids && t.biblestudy_group_ids.length > 0) || Boolean(t.biblestudy_group_id);
+      const hasMin = Boolean(t.ministry_ids && t.ministry_ids.length > 0) || Boolean(t.ministry_id);
+      
+      const isCombined = t.cycle_mode === "combined" || (hasBS && hasMin);
+      const isBS = (t.cycle_mode === "biblestudy_group" || (hasBS && !hasMin)) && !isCombined;
+      const isMin = (t.cycle_mode === "ministry" || (hasMin && !hasBS)) && !isCombined;
+      const isCustom = t.cycle_mode === "custom" || (!hasBS && !hasMin);
+
+      let matchMode = true;
+      if (filterMode === "biblestudy_group") matchMode = isBS;
+      else if (filterMode === "ministry") matchMode = isMin;
+      else if (filterMode === "combined") matchMode = isCombined;
+      else if (filterMode === "custom") matchMode = isCustom;
+
       return matchSearch && matchMode;
     });
   }, [teams, searchQuery, filterMode]);
@@ -526,17 +543,75 @@ export const DishwashingPage: React.FC = () => {
     });
   };
 
+  // Clean leader or group display name helper (e.g. "Jet", "Blanca", "Jessica", "Ptr. Hong")
+  const getCleanLeaderOrGroupName = (g: BibleStudyGroup) => {
+    if (g.leader_name && g.leader_name.trim()) {
+      return g.leader_name.trim();
+    }
+    const match = g.name.match(/BS\s+(?:ni\s+|ng\s+)?(.*?)(?:\s*&\s*ko|\s+Group)?$/i);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    return g.name;
+  };
+
+  // Helper: Auto-generate team display name across groups & ministries
+  const generateCombinedTeamName = (
+    groupIds: number[],
+    minIds: number[],
+    currentMode: "biblestudy_group" | "ministry" | "combined" | "custom"
+  ) => {
+    if (currentMode === "custom") return "";
+    const selectedGroups = bsGroups.filter(g => groupIds.includes(g.id));
+    const selectedMins = ministriesList.filter(m => minIds.includes(m.id));
+
+    const bsNames = selectedGroups.map(getCleanLeaderOrGroupName);
+    const bsPart = bsNames.length > 0 ? bsNames.join("/") : "";
+    const minNames = selectedMins.map(m => m.name.endsWith("Ministry") ? m.name : `${m.name} Ministry`);
+    const minPart = minNames.join(" / ");
+
+    if (selectedGroups.length > 0 && selectedMins.length > 0) {
+      return `${bsPart} + ${minPart}`;
+    }
+    if (selectedGroups.length > 1) {
+      return bsPart;
+    }
+    if (selectedGroups.length === 1) {
+      return selectedGroups[0].name;
+    }
+    if (selectedMins.length > 0) {
+      return minPart;
+    }
+    return "";
+  };
+
+  // Helper: Gather all unique member IDs across selected groups and ministries
+  const gatherCombinedMembers = (groupIds: number[], minIds: number[]) => {
+    const selectedGroups = bsGroups.filter(g => groupIds.includes(g.id));
+    const selectedMins = ministriesList.filter(m => minIds.includes(m.id));
+
+    const groupMemberIds = selectedGroups.flatMap(g => (g.members || []).map(m => m.member_id).filter(Boolean)) as number[];
+    const ministryMemberIds = selectedMins.flatMap(m => getMinistryMembers(m)).map(cm => cm.id);
+
+    return Array.from(new Set([...groupMemberIds, ...ministryMemberIds]));
+  };
+
   const handleOpenCreateTeam = () => {
     setEditingTeam(null);
+    setGroupSearchQuery("");
+    setMinSearchQuery("");
     const nextNum = teams.length + 1;
     const firstGroup = bsGroups[0];
+    const initialGroupIds = firstGroup ? [firstGroup.id] : [];
     const matchedLeader = firstGroup ? findMemberByLeaderName(firstGroup.leader_name, firstGroup.leader_id) : null;
-    const groupMemberIds = firstGroup?.members?.map(m => m.member_id).filter(Boolean) || [];
+    const groupMemberIds = (firstGroup?.members?.map(m => m.member_id).filter(Boolean) || []) as number[];
 
     setTeamForm({
       cycle_mode: "biblestudy_group",
       biblestudy_group_id: firstGroup ? String(firstGroup.id) : "",
+      biblestudy_group_ids: initialGroupIds,
       ministry_id: "",
+      ministry_ids: [],
       name: firstGroup ? firstGroup.name : `Kitchen Crew ${nextNum}`,
       order_seq: nextNum,
       leader_id: matchedLeader ? String(matchedLeader.id) : "",
@@ -554,26 +629,48 @@ export const DishwashingPage: React.FC = () => {
 
   const handleOpenEditTeam = (team: DishwashingTeam) => {
     setEditingTeam(team);
-    const linkedGroup = bsGroups.find(g => g.id === team.biblestudy_group_id || g.name === team.name);
-    const linkedMinistry = ministriesList.find(m => m.id === team.ministry_id || team.name.toLowerCase().includes(m.name.toLowerCase()));
-    const existingMemberIds = team.members?.map(m => m.member_id) || [];
-    const groupMemberIds = linkedGroup?.members?.map(m => m.member_id).filter(Boolean) || [];
-    const ministryMembers = getMinistryMembers(linkedMinistry);
+    setGroupSearchQuery("");
+    setMinSearchQuery("");
+    const savedGroupIds = (team.biblestudy_group_ids && team.biblestudy_group_ids.length > 0)
+      ? team.biblestudy_group_ids
+      : (team.biblestudy_group_id ? [team.biblestudy_group_id] : []);
+
+    const savedMinIds = (team.ministry_ids && team.ministry_ids.length > 0)
+      ? team.ministry_ids
+      : (team.ministry_id ? [team.ministry_id] : []);
+
+    const linkedGroups = bsGroups.filter(g => savedGroupIds.includes(g.id) || g.name === team.name);
+    const linkedMinistries = ministriesList.filter(m => savedMinIds.includes(m.id) || team.name.toLowerCase().includes(m.name.toLowerCase()));
+
+    const existingMemberIds = (team.members?.map(m => m.member_id) || []) as number[];
+    const groupMemberIds = linkedGroups.flatMap(g => (g.members || []).map(m => m.member_id).filter(Boolean)) as number[];
+    const ministryMembers = linkedMinistries.flatMap(m => getMinistryMembers(m));
     const ministryMemberIds = ministryMembers.map(cm => cm.id);
-    const coveredMemberIds = linkedGroup ? groupMemberIds : (linkedMinistry ? ministryMemberIds : []);
-    const combinedMemberIds = Array.from(new Set([...existingMemberIds, ...coveredMemberIds]));
+
+    const coveredMemberIds = [...groupMemberIds, ...ministryMemberIds];
+    const combinedMemberIds = Array.from(new Set([...existingMemberIds, ...coveredMemberIds])) as number[];
     const matchedLeader = findMemberByLeaderName(team.leader_name, team.leader_id);
 
+    let initialMode = team.cycle_mode;
+    if (!initialMode) {
+      if (savedGroupIds.length > 0 && savedMinIds.length > 0) initialMode = "combined";
+      else if (savedMinIds.length > 0) initialMode = "ministry";
+      else if (savedGroupIds.length > 0) initialMode = "biblestudy_group";
+      else initialMode = "custom";
+    }
+
     setTeamForm({
-      cycle_mode: team.cycle_mode || (linkedMinistry ? "ministry" : (linkedGroup ? "biblestudy_group" : "custom")),
-      biblestudy_group_id: team.biblestudy_group_id ? String(team.biblestudy_group_id) : (linkedGroup ? String(linkedGroup.id) : ""),
-      ministry_id: team.ministry_id ? String(team.ministry_id) : (linkedMinistry ? String(linkedMinistry.id) : ""),
+      cycle_mode: initialMode || "biblestudy_group",
+      biblestudy_group_id: team.biblestudy_group_id ? String(team.biblestudy_group_id) : (linkedGroups[0] ? String(linkedGroups[0].id) : ""),
+      biblestudy_group_ids: savedGroupIds.length > 0 ? savedGroupIds : (linkedGroups.map(g => g.id)),
+      ministry_id: team.ministry_id ? String(team.ministry_id) : (linkedMinistries[0] ? String(linkedMinistries[0].id) : ""),
+      ministry_ids: savedMinIds.length > 0 ? savedMinIds : (linkedMinistries.map(m => m.id)),
       name: team.name,
       order_seq: team.order_seq,
       leader_id: team.leader_id ? String(team.leader_id) : (matchedLeader ? String(matchedLeader.id) : ""),
       leader_name: team.leader_name || (matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : ""),
       leader_contact: team.leader_contact || team.leader_phone || (matchedLeader?.contact_phone || matchedLeader?.contact_email || ""),
-      color: team.color || linkedMinistry?.color || "#0D9488",
+      color: team.color || linkedMinistries[0]?.color || "#0D9488",
       volunteers_count: team.volunteers_count || Math.max(combinedMemberIds.length, 4),
       tasks_checklist: team.tasks_checklist || "Plates & Cutleries Pre-rinse, 3-Compartment Washing & Sanitization, Dish Drying & Storage, Kitchen Counter & Sink Deep Wipe, Trash Disposal & Clean Linens",
       selectedMemberIds: combinedMemberIds.length > 0 ? combinedMemberIds : existingMemberIds
@@ -581,18 +678,53 @@ export const DishwashingPage: React.FC = () => {
     setIsTeamModalOpen(true);
   };
 
-  const handleCycleModeChange = (mode: "biblestudy_group" | "ministry" | "custom") => {
-    if (mode === "biblestudy_group") {
-      const g = bsGroups[0];
+  const handleCycleModeChange = (mode: "biblestudy_group" | "ministry" | "combined" | "custom") => {
+    if (mode === "combined") {
+      const initialGIds = teamForm.biblestudy_group_ids.length > 0
+        ? teamForm.biblestudy_group_ids
+        : (bsGroups[0] ? [bsGroups[0].id] : []);
+      const initialMIds = teamForm.ministry_ids.length > 0
+        ? teamForm.ministry_ids
+        : (ministriesList[0] ? [ministriesList[0].id] : []);
+
+      const allMembers = gatherCombinedMembers(initialGIds, initialMIds);
+      const nextName = generateCombinedTeamName(initialGIds, initialMIds, "combined");
+      const firstGroup = bsGroups.find(g => initialGIds.includes(g.id));
+      const matchedLeader = firstGroup ? findMemberByLeaderName(firstGroup.leader_name, firstGroup.leader_id) : null;
+
+      setTeamForm(prev => ({
+        ...prev,
+        cycle_mode: "combined",
+        biblestudy_group_ids: initialGIds,
+        biblestudy_group_id: initialGIds[0] ? String(initialGIds[0]) : "",
+        ministry_ids: initialMIds,
+        ministry_id: initialMIds[0] ? String(initialMIds[0]) : "",
+        name: nextName || prev.name,
+        leader_id: matchedLeader ? String(matchedLeader.id) : prev.leader_id,
+        leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (firstGroup?.leader_name || prev.leader_name),
+        leader_contact: matchedLeader
+          ? (matchedLeader.contact_phone || matchedLeader.contact_email || firstGroup?.leader_contact || "")
+          : (firstGroup?.leader_contact || prev.leader_contact),
+        selectedMemberIds: allMembers,
+        volunteers_count: Math.max(allMembers.length, 4)
+      }));
+    } else if (mode === "biblestudy_group") {
+      const initialGIds = teamForm.biblestudy_group_ids.length > 0
+        ? teamForm.biblestudy_group_ids
+        : (bsGroups[0] ? [bsGroups[0].id] : []);
+      const g = bsGroups.find(x => initialGIds.includes(x.id)) || bsGroups[0];
       const matchedLeader = g ? findMemberByLeaderName(g.leader_name, g.leader_id) : null;
-      const groupMemberIds = g?.members?.map(m => m.member_id).filter(Boolean) || [];
+      const groupMemberIds = bsGroups.filter(x => initialGIds.includes(x.id)).flatMap(x => (x.members || []).map(m => m.member_id).filter(Boolean)) as number[];
+      const nextName = generateCombinedTeamName(initialGIds, [], "biblestudy_group");
 
       setTeamForm(prev => ({
         ...prev,
         cycle_mode: "biblestudy_group",
-        biblestudy_group_id: g ? String(g.id) : "",
+        biblestudy_group_id: initialGIds[0] ? String(initialGIds[0]) : "",
+        biblestudy_group_ids: initialGIds,
         ministry_id: "",
-        name: g ? g.name : prev.name,
+        ministry_ids: [],
+        name: nextName || (g ? g.name : prev.name),
         leader_id: matchedLeader ? String(matchedLeader.id) : "",
         leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (g?.leader_name || ""),
         leader_contact: matchedLeader
@@ -602,18 +734,24 @@ export const DishwashingPage: React.FC = () => {
         volunteers_count: Math.max(groupMemberIds.length, 4)
       }));
     } else if (mode === "ministry") {
-      const m = ministriesList[0];
+      const initialMIds = teamForm.ministry_ids.length > 0
+        ? teamForm.ministry_ids
+        : (ministriesList[0] ? [ministriesList[0].id] : []);
+      const m = ministriesList.find(x => initialMIds.includes(x.id)) || ministriesList[0];
       const coordName = m?.coordinators?.[0]?.name;
       const matchedLeader = coordName ? findMemberByLeaderName(coordName) : null;
-      const ministryMembers = getMinistryMembers(m);
+      const ministryMembers = ministriesList.filter(x => initialMIds.includes(x.id)).flatMap(x => getMinistryMembers(x));
       const ministryMemberIds = ministryMembers.map(cm => cm.id);
+      const nextName = generateCombinedTeamName([], initialMIds, "ministry");
 
       setTeamForm(prev => ({
         ...prev,
         cycle_mode: "ministry",
         biblestudy_group_id: "",
-        ministry_id: m ? String(m.id) : "",
-        name: m ? `${m.name} Ministry` : prev.name,
+        biblestudy_group_ids: [],
+        ministry_id: initialMIds[0] ? String(initialMIds[0]) : "",
+        ministry_ids: initialMIds,
+        name: nextName || (m ? `${m.name} Ministry` : prev.name),
         color: m?.color || prev.color,
         leader_id: matchedLeader ? String(matchedLeader.id) : "",
         leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (coordName || ""),
@@ -626,29 +764,73 @@ export const DishwashingPage: React.FC = () => {
         ...prev,
         cycle_mode: "custom",
         biblestudy_group_id: "",
+        biblestudy_group_ids: [],
         ministry_id: "",
+        ministry_ids: [],
         selectedMemberIds: []
       }));
     }
   };
 
-  const handleSelectGroup = (groupIdStr: string) => {
-    const g = bsGroups.find(x => String(x.id) === groupIdStr);
-    const matchedLeader = g ? findMemberByLeaderName(g.leader_name, g.leader_id) : null;
-    const groupMemberIds = g?.members?.map(m => m.member_id).filter(Boolean) || [];
+  // Toggle Bible Study Group in multi-group selection
+  const handleToggleBSGroup = (groupId: number) => {
+    setTeamForm(prev => {
+      const isSelected = prev.biblestudy_group_ids.includes(groupId);
+      const nextGroupIds = isSelected
+        ? prev.biblestudy_group_ids.filter(id => id !== groupId)
+        : [...prev.biblestudy_group_ids, groupId];
 
-    setTeamForm(prev => ({
-      ...prev,
-      biblestudy_group_id: groupIdStr,
-      name: g ? g.name : prev.name,
-      leader_id: matchedLeader ? String(matchedLeader.id) : (prev.leader_id || ""),
-      leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (g?.leader_name || prev.leader_name),
-      leader_contact: matchedLeader
-        ? (matchedLeader.contact_phone || matchedLeader.contact_email || g?.leader_contact || "")
-        : (g?.leader_contact || prev.leader_contact),
-      selectedMemberIds: groupMemberIds,
-      volunteers_count: Math.max(groupMemberIds.length, 4)
-    }));
+      const nextName = generateCombinedTeamName(nextGroupIds, prev.ministry_ids, prev.cycle_mode);
+      const allMembers = gatherCombinedMembers(nextGroupIds, prev.ministry_ids);
+
+      const selectedGroups = bsGroups.filter(g => nextGroupIds.includes(g.id));
+      const primaryGroup = selectedGroups[0];
+      const matchedLeader = primaryGroup ? findMemberByLeaderName(primaryGroup.leader_name, primaryGroup.leader_id) : null;
+
+      return {
+        ...prev,
+        biblestudy_group_ids: nextGroupIds,
+        biblestudy_group_id: nextGroupIds[0] ? String(nextGroupIds[0]) : "",
+        name: nextName || prev.name,
+        leader_id: matchedLeader ? String(matchedLeader.id) : prev.leader_id,
+        leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (primaryGroup?.leader_name || prev.leader_name),
+        leader_contact: matchedLeader
+          ? (matchedLeader.contact_phone || matchedLeader.contact_email || primaryGroup?.leader_contact || "")
+          : (primaryGroup?.leader_contact || prev.leader_contact),
+        selectedMemberIds: allMembers,
+        volunteers_count: Math.max(allMembers.length, 4)
+      };
+    });
+  };
+
+  // Toggle Ministry in multi-ministry selection
+  const handleToggleMinistry = (minId: number) => {
+    setTeamForm(prev => {
+      const isSelected = prev.ministry_ids.includes(minId);
+      const nextMinIds = isSelected
+        ? prev.ministry_ids.filter(id => id !== minId)
+        : [...prev.ministry_ids, minId];
+
+      const nextName = generateCombinedTeamName(prev.biblestudy_group_ids, nextMinIds, prev.cycle_mode);
+      const allMembers = gatherCombinedMembers(prev.biblestudy_group_ids, nextMinIds);
+
+      const selectedMins = ministriesList.filter(m => nextMinIds.includes(m.id));
+      const firstCoord = selectedMins[0]?.coordinators?.[0]?.name;
+      const matchedLeader = firstCoord ? findMemberByLeaderName(firstCoord) : null;
+
+      return {
+        ...prev,
+        ministry_ids: nextMinIds,
+        ministry_id: nextMinIds[0] ? String(nextMinIds[0]) : "",
+        name: nextName || prev.name,
+        color: selectedMins[0]?.color || prev.color,
+        leader_id: prev.leader_id || (matchedLeader ? String(matchedLeader.id) : ""),
+        leader_name: prev.leader_name || (matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (firstCoord || "")),
+        leader_contact: prev.leader_contact || (matchedLeader ? (matchedLeader.contact_phone || matchedLeader.contact_email || "") : ""),
+        selectedMemberIds: allMembers,
+        volunteers_count: Math.max(allMembers.length, 4)
+      };
+    });
   };
 
   const handleSelectPointPerson = (selId: string) => {
@@ -674,10 +856,10 @@ export const DishwashingPage: React.FC = () => {
       return cleanGLeader.includes(m.first_name.toLowerCase()) || memFullName.includes(cleanGLeader);
     });
 
-    const groupMemberIds = matchedGroup?.members?.map(gm => gm.member_id).filter(Boolean) || [];
+    const groupMemberIds = (matchedGroup?.members?.map(gm => gm.member_id).filter(Boolean) || []) as number[];
 
     setTeamForm(prev => {
-      const shouldUpdateGroup = prev.cycle_mode === "biblestudy_group" && matchedGroup;
+      const shouldUpdateGroup = prev.cycle_mode === "biblestudy_group" && matchedGroup && prev.biblestudy_group_ids.length <= 1;
       const newSelected = groupMemberIds.length > 0 ? groupMemberIds : prev.selectedMemberIds;
       return {
         ...prev,
@@ -685,31 +867,12 @@ export const DishwashingPage: React.FC = () => {
         leader_name: `${m.first_name} ${m.last_name}`,
         leader_contact: m.contact_phone || m.contact_email || matchedGroup?.leader_contact || prev.leader_contact,
         biblestudy_group_id: shouldUpdateGroup ? String(matchedGroup.id) : prev.biblestudy_group_id,
+        biblestudy_group_ids: shouldUpdateGroup ? [matchedGroup.id] : prev.biblestudy_group_ids,
         name: shouldUpdateGroup ? matchedGroup.name : prev.name,
         selectedMemberIds: newSelected,
         volunteers_count: groupMemberIds.length > 0 ? Math.max(groupMemberIds.length, 4) : prev.volunteers_count
       };
     });
-  };
-
-  const handleSelectMinistry = (minIdStr: string) => {
-    const m = ministriesList.find(x => String(x.id) === minIdStr);
-    const coordName = m?.coordinators?.[0]?.name;
-    const matchedLeader = coordName ? findMemberByLeaderName(coordName) : null;
-    const ministryMembers = getMinistryMembers(m);
-    const ministryMemberIds = ministryMembers.map(cm => cm.id);
-
-    setTeamForm(prev => ({
-      ...prev,
-      ministry_id: minIdStr,
-      name: m ? `${m.name} Ministry` : prev.name,
-      color: m?.color || prev.color,
-      leader_id: matchedLeader ? String(matchedLeader.id) : "",
-      leader_name: matchedLeader ? `${matchedLeader.first_name} ${matchedLeader.last_name}` : (coordName || prev.leader_name),
-      leader_contact: matchedLeader ? (matchedLeader.contact_phone || matchedLeader.contact_email || "") : prev.leader_contact,
-      selectedMemberIds: ministryMemberIds,
-      volunteers_count: Math.max(ministryMemberIds.length, 4)
-    }));
   };
 
   const handleSaveTeam = async (e: React.FormEvent) => {
@@ -737,8 +900,10 @@ export const DishwashingPage: React.FC = () => {
       const payload = {
         name: teamForm.name.trim(),
         cycle_mode: teamForm.cycle_mode,
-        biblestudy_group_id: teamForm.biblestudy_group_id ? Number(teamForm.biblestudy_group_id) : null,
-        ministry_id: teamForm.ministry_id ? Number(teamForm.ministry_id) : null,
+        biblestudy_group_id: teamForm.biblestudy_group_ids[0] || (teamForm.biblestudy_group_id ? Number(teamForm.biblestudy_group_id) : null),
+        biblestudy_group_ids: teamForm.biblestudy_group_ids,
+        ministry_id: teamForm.ministry_ids[0] || (teamForm.ministry_id ? Number(teamForm.ministry_id) : null),
+        ministry_ids: teamForm.ministry_ids,
         order_seq: Number(teamForm.order_seq),
         leader_id: teamForm.leader_id ? Number(teamForm.leader_id) : null,
         leader_name: teamForm.leader_name ? teamForm.leader_name.trim() : null,
@@ -1298,6 +1463,7 @@ export const DishwashingPage: React.FC = () => {
               <option value="all">All Types</option>
               <option value="biblestudy_group">Bible Study Groups</option>
               <option value="ministry">Ministries</option>
+              <option value="combined">BS + Ministry (Combined)</option>
               <option value="custom">Custom Teams</option>
             </select>
           </div>
@@ -1336,22 +1502,65 @@ export const DishwashingPage: React.FC = () => {
                           <h3 className="font-black text-base text-slate-900 group-hover:text-teal-700 transition-colors">
                             {team.name}
                           </h3>
-                          <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span className="text-[10px] text-teal-900 font-black bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
                               Turn #{team.order_seq} in Loop
                             </span>
-                            {team.cycle_mode === "biblestudy_group" && (
-                              <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
-                                <BookOpen className="w-2.5 h-2.5" />
-                                <span>BS Group</span>
-                              </span>
-                            )}
-                            {team.cycle_mode === "ministry" && (
-                              <span className="text-[10px] text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1">
-                                <Building2 className="w-2.5 h-2.5" />
-                                <span>Ministry</span>
-                              </span>
-                            )}
+                            {(() => {
+                              const savedGroupIds = (team.biblestudy_group_ids && team.biblestudy_group_ids.length > 0)
+                                ? team.biblestudy_group_ids
+                                : (team.biblestudy_group_id ? [team.biblestudy_group_id] : []);
+                              const savedMinIds = (team.ministry_ids && team.ministry_ids.length > 0)
+                                ? team.ministry_ids
+                                : (team.ministry_id ? [team.ministry_id] : []);
+
+                              if (savedGroupIds.length > 0 && savedMinIds.length > 0) {
+                                return (
+                                  <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 flex items-center gap-1">
+                                    <HeartHandshake className="w-3 h-3 text-indigo-600" />
+                                    <span>{savedGroupIds.length} BS + {savedMinIds.length} Min</span>
+                                  </span>
+                                );
+                              }
+                              if (savedGroupIds.length > 1) {
+                                return (
+                                  <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 flex items-center gap-1">
+                                    <BookOpen className="w-2.5 h-2.5 text-indigo-600" />
+                                    <span>{savedGroupIds.length} BS Groups Combined</span>
+                                  </span>
+                                );
+                              }
+                              if (team.cycle_mode === "biblestudy_group" || savedGroupIds.length === 1) {
+                                return (
+                                  <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
+                                    <BookOpen className="w-2.5 h-2.5" />
+                                    <span>BS Group</span>
+                                  </span>
+                                );
+                              }
+                              if (savedMinIds.length > 1) {
+                                return (
+                                  <span className="text-[10px] text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                    <Building2 className="w-2.5 h-2.5 text-emerald-600" />
+                                    <span>{savedMinIds.length} Ministries Combined</span>
+                                  </span>
+                                );
+                              }
+                              if (team.cycle_mode === "ministry" || savedMinIds.length === 1) {
+                                return (
+                                  <span className="text-[10px] text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1">
+                                    <Building2 className="w-2.5 h-2.5" />
+                                    <span>Ministry</span>
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="text-[10px] text-slate-700 font-bold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                  <Layers className="w-2.5 h-2.5" />
+                                  <span>Custom Unit</span>
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -1392,13 +1601,20 @@ export const DishwashingPage: React.FC = () => {
 
                     {/* Volunteer Roster */}
                     {(() => {
-                      const linkedGroup = bsGroups.find(g => g.id === team.biblestudy_group_id || g.name === team.name);
-                      const linkedMinistry = ministriesList.find(m => m.id === team.ministry_id || team.name.toLowerCase().includes(m.name.toLowerCase()));
+                      const savedGroupIds = (team.biblestudy_group_ids && team.biblestudy_group_ids.length > 0)
+                        ? team.biblestudy_group_ids
+                        : (team.biblestudy_group_id ? [team.biblestudy_group_id] : []);
+                      const savedMinIds = (team.ministry_ids && team.ministry_ids.length > 0)
+                        ? team.ministry_ids
+                        : (team.ministry_id ? [team.ministry_id] : []);
+
+                      const linkedGroups = bsGroups.filter(g => savedGroupIds.includes(g.id) || g.name === team.name);
+                      const linkedMinistries = ministriesList.filter(m => savedMinIds.includes(m.id) || team.name.toLowerCase().includes(m.name.toLowerCase()));
 
                       const explicitMembers = team.members || [];
                       const existingIds = new Set(explicitMembers.map(m => m.member_id));
 
-                      const autoGroupMembers = (linkedGroup?.members || []).map(gm => {
+                      const autoGroupMembers = linkedGroups.flatMap(g => (g.members || []).map(gm => {
                         const cm = gm.member_id ? churchMembers.find(c => c.id === gm.member_id) : null;
                         return {
                           member_id: (gm.member_id || gm.id) as number,
@@ -1406,16 +1622,16 @@ export const DishwashingPage: React.FC = () => {
                           last_name: cm?.last_name || gm.display_name?.split(" ").slice(1).join(" ") || gm.member_name?.split(" ").slice(1).join(" ") || "",
                           team_role: Number(gm.member_id) === Number(team.leader_id) ? "Team Leader" : "Member"
                         };
-                      });
+                      }));
 
-                      const autoMinMembers = getMinistryMembers(linkedMinistry).map(cm => ({
+                      const autoMinMembers = linkedMinistries.flatMap(m => getMinistryMembers(m)).map(cm => ({
                         member_id: cm.id,
                         first_name: cm.first_name,
                         last_name: cm.last_name,
                         team_role: Number(cm.id) === Number(team.leader_id) ? "Team Leader" : "Member"
                       }));
 
-                      const autoMembers = linkedGroup ? autoGroupMembers : (linkedMinistry ? autoMinMembers : []);
+                      const autoMembers = [...autoGroupMembers, ...autoMinMembers];
                       const displayMembers = [...explicitMembers];
                       for (const am of autoMembers) {
                         if (am.member_id && !existingIds.has(am.member_id)) {
@@ -1586,14 +1802,22 @@ export const DishwashingPage: React.FC = () => {
                           <span className="text-[10px] text-slate-400 font-bold">
                             ({item.team.members?.length || item.team.members_count || item.team.volunteers_count || 5} Volunteers)
                           </span>
-                          {item.team.cycle_mode === "biblestudy_group" && (
+                          {item.team.cycle_mode === "combined" || (Boolean(item.team.biblestudy_group_ids?.length) && Boolean(item.team.ministry_ids?.length)) ? (
+                            <span className="text-[9px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.2 rounded border border-indigo-200 flex items-center gap-0.5">
+                              <HeartHandshake className="w-2.5 h-2.5 text-indigo-600" />
+                              <span>BS + Ministry</span>
+                            </span>
+                          ) : item.team.cycle_mode === "biblestudy_group" || Boolean(item.team.biblestudy_group_ids?.length) ? (
                             <span className="text-[9px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.2 rounded border border-indigo-100">
                               BS Group
                             </span>
-                          )}
-                          {item.team.cycle_mode === "ministry" && (
+                          ) : item.team.cycle_mode === "ministry" || Boolean(item.team.ministry_ids?.length) ? (
                             <span className="text-[9px] bg-teal-50 text-teal-900 font-bold px-1.5 py-0.2 rounded border border-teal-100">
                               Ministry
+                            </span>
+                          ) : (
+                            <span className="text-[9px] bg-slate-50 text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
+                              Custom Unit
                             </span>
                           )}
                         </div>
@@ -1868,11 +2092,11 @@ export const DishwashingPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveTeam} className="space-y-3.5 text-xs">
+            <form onSubmit={handleSaveTeam} className="space-y-4 text-xs">
               {/* Unit Mode Picker */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1.5">Unit Classification</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => handleCycleModeChange("biblestudy_group")}
@@ -1882,7 +2106,7 @@ export const DishwashingPage: React.FC = () => {
                       }`}
                   >
                     <BookOpen className="w-4 h-4" />
-                    <span>BS Group</span>
+                    <span>BS Group(s)</span>
                   </button>
                   <button
                     type="button"
@@ -1893,7 +2117,18 @@ export const DishwashingPage: React.FC = () => {
                       }`}
                   >
                     <Building2 className="w-4 h-4" />
-                    <span>Ministry</span>
+                    <span>Ministry(s)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCycleModeChange("combined")}
+                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "combined"
+                      ? "bg-indigo-900 text-white border-indigo-900 shadow-sm"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-400"
+                      }`}
+                  >
+                    <HeartHandshake className={`w-4 h-4 ${teamForm.cycle_mode === "combined" ? "text-amber-300" : "text-indigo-600"}`} />
+                    <span>BS + Ministry</span>
                   </button>
                   <button
                     type="button"
@@ -1909,165 +2144,405 @@ export const DishwashingPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Conditional Selection Fields */}
-              {teamForm.cycle_mode === "biblestudy_group" && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Select Bible Study Group *</label>
-                  <select
-                    value={teamForm.biblestudy_group_id}
-                    onChange={(e) => handleSelectGroup(e.target.value)}
-                    className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium cursor-pointer"
-                  >
-                    <option value="">-- Choose Bible Study Group --</option>
-                    {bsGroups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name} (Leader: {g.leader_name || "Unassigned"})
-                      </option>
-                    ))}
-                  </select>
+              {/* Conditional Selection Fields: BIBLE STUDY GROUPS */}
+              {(teamForm.cycle_mode === "biblestudy_group" || teamForm.cycle_mode === "combined") && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <label className="block font-black text-slate-800 text-xs">
+                        Select Bible Study Group(s) *
+                      </label>
+                      <span className="text-[11px] text-slate-500 block">
+                        {teamForm.cycle_mode === "combined"
+                          ? "Select Bible Study circles to pair with ministries (e.g. Jet/Blanca)"
+                          : "Select 1, 2, or more groups to combine for one Sunday turn (e.g. Jet/Blanca/Jessica)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
+                        {teamForm.biblestudy_group_ids.length} Group{teamForm.biblestudy_group_ids.length !== 1 ? "s" : ""} Selected
+                      </span>
+                      {bsGroups.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (teamForm.biblestudy_group_ids.length === bsGroups.length) {
+                              const nextName = generateCombinedTeamName([], teamForm.ministry_ids, teamForm.cycle_mode);
+                              const allMembers = gatherCombinedMembers([], teamForm.ministry_ids);
+                              setTeamForm(prev => ({
+                                ...prev,
+                                biblestudy_group_ids: [],
+                                biblestudy_group_id: "",
+                                name: nextName || prev.name,
+                                selectedMemberIds: allMembers
+                              }));
+                            } else {
+                              const allGIds = bsGroups.map(g => g.id);
+                              const nextName = generateCombinedTeamName(allGIds, teamForm.ministry_ids, teamForm.cycle_mode);
+                              const allMembers = gatherCombinedMembers(allGIds, teamForm.ministry_ids);
+                              setTeamForm(prev => ({
+                                ...prev,
+                                biblestudy_group_ids: allGIds,
+                                biblestudy_group_id: String(allGIds[0] || ""),
+                                name: nextName || prev.name,
+                                selectedMemberIds: allMembers,
+                                volunteers_count: Math.max(allMembers.length, 4)
+                              }));
+                            }
+                          }}
+                          className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline cursor-pointer"
+                        >
+                          {teamForm.biblestudy_group_ids.length === bsGroups.length ? "Clear Groups" : "Select All Groups"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
-                  {/* Visual chips of covered disciples in this group */}
-                  {(() => {
-                    const selGroup = bsGroups.find(g => String(g.id) === String(teamForm.biblestudy_group_id));
-                    const groupMembers = selGroup?.members || [];
-                    return (
-                      <div className="mt-2.5 p-3 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-teal-950">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3.5 h-3.5 text-teal-700" />
-                            <span>Covered Group Members ({groupMembers.length})</span>
-                          </span>
-                          {groupMembers.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const allIds = groupMembers.map(m => m.member_id).filter(Boolean) as number[];
-                                setTeamForm(prev => ({ ...prev, selectedMemberIds: allIds }));
-                              }}
-                              className="text-[10px] text-teal-700 hover:text-teal-900 underline font-black cursor-pointer"
-                            >
-                              Select All Members
-                            </button>
-                          )}
-                        </div>
+                  {/* Search filter for BS groups */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search group name or leader..."
+                      value={groupSearchQuery}
+                      onChange={(e) => setGroupSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-medium"
+                    />
+                  </div>
 
-                        {groupMembers.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-                            {groupMembers.map((sm) => {
-                              const isChecked = teamForm.selectedMemberIds.includes(sm.member_id as number);
-                              return (
-                                <button
-                                  key={sm.id || sm.member_id}
-                                  type="button"
-                                  onClick={() => {
-                                    if (!sm.member_id) return;
-                                    setTeamForm(prev => ({
-                                      ...prev,
-                                      selectedMemberIds: isChecked
-                                        ? prev.selectedMemberIds.filter(id => id !== sm.member_id)
-                                        : [...prev.selectedMemberIds, sm.member_id as number]
-                                    }));
-                                  }}
-                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${isChecked
-                                    ? "bg-teal-600 text-white shadow-xs"
-                                    : "bg-white text-slate-700 border border-teal-200 hover:bg-teal-100/60"
-                                    }`}
-                                >
-                                  {isChecked ? <Check className="w-3 h-3 text-white" /> : <Plus className="w-3 h-3 text-teal-600" />}
-                                  <span>{sm.display_name || sm.member_name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-slate-500 italic">
-                            No members registered in this Bible study group yet. Members will appear here once assigned to this leader.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  {/* Interactive Grid of BS Groups */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1 border border-slate-200/90 rounded-2xl p-2 bg-slate-50/60">
+                    {bsGroups
+                      .filter(g =>
+                        g.name.toLowerCase().includes(groupSearchQuery.toLowerCase()) ||
+                        (g.leader_name && g.leader_name.toLowerCase().includes(groupSearchQuery.toLowerCase()))
+                      )
+                      .map((g) => {
+                        const isChecked = teamForm.biblestudy_group_ids.includes(g.id);
+                        const disciplesCount = g.members?.length || 0;
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => handleToggleBSGroup(g.id)}
+                            className={`p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                              isChecked
+                                ? "bg-teal-50 border-teal-500 text-teal-950 shadow-2xs ring-1 ring-teal-400/40"
+                                : "bg-white border-slate-200 hover:border-teal-300 text-slate-700"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <span className="font-bold text-xs truncate block">{g.name}</span>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
+                                <span>Lead: <strong className="text-slate-700">{g.leader_name || "Unassigned"}</strong></span>
+                                <span>• {disciplesCount} {disciplesCount === 1 ? "disciple" : "disciples"}</span>
+                              </div>
+                            </div>
+
+                            <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                              isChecked ? "bg-teal-600 text-white shadow-2xs" : "border border-slate-300 text-transparent"
+                            }`}>
+                              <Check className="w-3.5 h-3.5" />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    {bsGroups.length === 0 && (
+                      <p className="text-xs text-slate-400 italic p-3 col-span-2 text-center">No Bible study groups found.</p>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {teamForm.cycle_mode === "ministry" && (
-                <div className="space-y-2">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Select Ministry *</label>
-                    <select
-                      value={teamForm.ministry_id}
-                      onChange={(e) => handleSelectMinistry(e.target.value)}
-                      className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium cursor-pointer"
-                    >
-                      <option value="">-- Choose Ministry --</option>
-                      {ministriesList.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} Ministry ({m.coordinators?.[0]?.name ? `Coord: ${m.coordinators[0].name}` : "Active"})
-                        </option>
-                      ))}
-                    </select>
+              {/* Conditional Selection Fields: MINISTRIES */}
+              {(teamForm.cycle_mode === "ministry" || teamForm.cycle_mode === "combined") && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <label className="block font-black text-slate-800 text-xs">
+                        Select Church Ministry(s) *
+                      </label>
+                      <span className="text-[11px] text-slate-500 block">
+                        {teamForm.cycle_mode === "combined"
+                          ? "Select ministries to pair with Bible Study groups (e.g. High School Ministry)"
+                          : "Select 1 or more ministries for this Sunday turn (e.g. High School Ministry)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
+                        {teamForm.ministry_ids.length} Selected
+                      </span>
+                      {ministriesList.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (teamForm.ministry_ids.length === ministriesList.length) {
+                              const nextName = generateCombinedTeamName(teamForm.biblestudy_group_ids, [], teamForm.cycle_mode);
+                              const allMembers = gatherCombinedMembers(teamForm.biblestudy_group_ids, []);
+                              setTeamForm(prev => ({
+                                ...prev,
+                                ministry_ids: [],
+                                ministry_id: "",
+                                name: nextName || prev.name,
+                                selectedMemberIds: allMembers
+                              }));
+                            } else {
+                              const allMIds = ministriesList.map(m => m.id);
+                              const nextName = generateCombinedTeamName(teamForm.biblestudy_group_ids, allMIds, teamForm.cycle_mode);
+                              const allMembers = gatherCombinedMembers(teamForm.biblestudy_group_ids, allMIds);
+                              setTeamForm(prev => ({
+                                ...prev,
+                                ministry_ids: allMIds,
+                                ministry_id: String(allMIds[0] || ""),
+                                name: nextName || prev.name,
+                                selectedMemberIds: allMembers,
+                                volunteers_count: Math.max(allMembers.length, 4)
+                              }));
+                            }
+                          }}
+                          className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline cursor-pointer"
+                        >
+                          {teamForm.ministry_ids.length === ministriesList.length ? "Clear Ministries" : "Select All Ministries"}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Visual chips of covered members in this ministry */}
-                  {(() => {
-                    const selMin = ministriesList.find(m => String(m.id) === String(teamForm.ministry_id));
-                    const ministryMembers = getMinistryMembers(selMin);
-                    return (
-                      <div className="mt-2.5 p-3 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-teal-950">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3.5 h-3.5 text-teal-700" />
-                            <span>Covered Ministry Members ({ministryMembers.length})</span>
-                          </span>
-                          {ministryMembers.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const allIds = ministryMembers.map(m => m.id);
-                                setTeamForm(prev => ({ ...prev, selectedMemberIds: allIds }));
-                              }}
-                              className="text-[10px] text-teal-700 hover:text-teal-900 underline font-black cursor-pointer"
-                            >
-                              Select All Members
-                            </button>
-                          )}
-                        </div>
+                  {/* Search filter for ministries */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search ministry name..."
+                      value={minSearchQuery}
+                      onChange={(e) => setMinSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-medium"
+                    />
+                  </div>
 
-                        {ministryMembers.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-                            {ministryMembers.map((sm) => {
-                              const isChecked = teamForm.selectedMemberIds.includes(sm.id);
-                              return (
-                                <button
-                                  key={sm.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setTeamForm(prev => ({
-                                      ...prev,
-                                      selectedMemberIds: isChecked
-                                        ? prev.selectedMemberIds.filter(id => id !== sm.id)
-                                        : [...prev.selectedMemberIds, sm.id]
-                                    }));
-                                  }}
-                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${isChecked
-                                    ? "bg-teal-600 text-white shadow-xs"
-                                    : "bg-white text-slate-700 border border-teal-200 hover:bg-teal-100/60"
+                  {/* Interactive Grid of Ministries */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1 border border-slate-200/90 rounded-2xl p-2 bg-slate-50/60">
+                    {ministriesList
+                      .filter(m => m.name.toLowerCase().includes(minSearchQuery.toLowerCase()))
+                      .map((m) => {
+                        const isChecked = teamForm.ministry_ids.includes(m.id);
+                        const minMembers = getMinistryMembers(m);
+                        const coordName = m.coordinators?.[0]?.name;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => handleToggleMinistry(m.id)}
+                            className={`p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                              isChecked
+                                ? "bg-teal-50 border-teal-500 text-teal-950 shadow-2xs ring-1 ring-teal-400/40"
+                                : "bg-white border-slate-200 hover:border-teal-300 text-slate-700"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: m.color || "#0D9488" }}
+                                ></span>
+                                <span className="font-bold text-xs truncate block">{m.name} Ministry</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
+                                <span>{coordName ? `Coord: ${coordName}` : "Active"}</span>
+                                <span>• {minMembers.length} members</span>
+                              </div>
+                            </div>
+
+                            <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                              isChecked ? "bg-teal-600 text-white shadow-2xs" : "border border-slate-300 text-transparent"
+                            }`}>
+                              <Check className="w-3.5 h-3.5" />
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Visual chips of covered disciples & members in selected groups / ministries */}
+              {teamForm.cycle_mode !== "custom" && (() => {
+                const selectedGroups = bsGroups.filter(g => teamForm.biblestudy_group_ids.includes(g.id));
+                const selectedMins = ministriesList.filter(m => teamForm.ministry_ids.includes(m.id));
+                const allGroupDisciples = selectedGroups.flatMap(g => (g.members || []).map(m => m.member_id).filter(Boolean)) as number[];
+                const allMinMembers = selectedMins.flatMap(m => getMinistryMembers(m)).map(cm => cm.id);
+                const totalCoveredCount = Array.from(new Set([...allGroupDisciples, ...allMinMembers])).length;
+
+                if (selectedGroups.length === 0 && selectedMins.length === 0) {
+                  return (
+                    <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-500 italic text-[11px] text-center">
+                      Please check at least one Bible Study Group or Ministry above to load covered volunteers.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="mt-2.5 p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-3">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-teal-950 flex-wrap gap-1">
+                      <span className="flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-teal-700" />
+                        <span>
+                          Covered Volunteers ({totalCoveredCount} total across {selectedGroups.length > 0 ? `${selectedGroups.length} BS Group${selectedGroups.length !== 1 ? "s" : ""}` : ""}{selectedGroups.length > 0 && selectedMins.length > 0 ? " + " : ""}{selectedMins.length > 0 ? `${selectedMins.length} Ministr${selectedMins.length !== 1 ? "ies" : "y"}` : ""})
+                        </span>
+                      </span>
+                      {totalCoveredCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allIds = Array.from(new Set([...allGroupDisciples, ...allMinMembers]));
+                            setTeamForm(prev => ({ ...prev, selectedMemberIds: allIds }));
+                          }}
+                          className="text-[10px] text-teal-700 hover:text-teal-900 underline font-black cursor-pointer"
+                        >
+                          Select All ({totalCoveredCount})
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {/* Groups breakdown */}
+                      {selectedGroups.map((g) => {
+                        const groupMembers = g.members || [];
+                        return (
+                          <div key={`bs-box-${g.id}`} className="bg-white/95 p-2.5 rounded-xl border border-teal-100 space-y-1.5 shadow-2xs">
+                            <div className="flex items-center justify-between text-[10px] font-black text-slate-700">
+                              <span className="flex items-center gap-1 text-teal-900 font-bold">
+                                <BookOpen className="w-3 h-3 text-teal-600" />
+                                <span>{g.name} ({groupMembers.length})</span>
+                              </span>
+                              <span className="text-slate-400 font-medium">Lead: {g.leader_name || "Unassigned"}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {groupMembers.map((sm) => {
+                                const isChecked = teamForm.selectedMemberIds.includes(sm.member_id as number);
+                                return (
+                                  <button
+                                    key={`disciple-${sm.id || sm.member_id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      if (!sm.member_id) return;
+                                      setTeamForm(prev => ({
+                                        ...prev,
+                                        selectedMemberIds: isChecked
+                                          ? prev.selectedMemberIds.filter(id => id !== sm.member_id)
+                                          : [...prev.selectedMemberIds, sm.member_id as number]
+                                      }));
+                                    }}
+                                    className={`px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                      isChecked
+                                        ? "bg-teal-600 text-white shadow-2xs"
+                                        : "bg-white text-slate-700 border border-slate-200 hover:bg-teal-50"
                                     }`}
-                                >
-                                  {isChecked ? <Check className="w-3 h-3 text-white" /> : <Plus className="w-3 h-3 text-teal-600" />}
-                                  <span>{sm.first_name} {sm.last_name}</span>
-                                </button>
-                              );
-                            })}
+                                  >
+                                    {isChecked ? <Check className="w-3 h-3 text-white" /> : <Plus className="w-3 h-3 text-teal-600" />}
+                                    <span>{sm.display_name || sm.member_name}</span>
+                                  </button>
+                                );
+                              })}
+                              {groupMembers.length === 0 && (
+                                <span className="text-[10px] text-slate-400 italic">No disciples listed in this group.</span>
+                              )}
+                            </div>
                           </div>
-                        ) : (
-                          <p className="text-[11px] text-slate-500 italic">
-                            No members registered in this ministry yet. Members will appear here once assigned or matched.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                        );
+                      })}
+
+                      {/* Ministries breakdown */}
+                      {selectedMins.map((m) => {
+                        const minMembers = getMinistryMembers(m);
+                        return (
+                          <div key={`min-box-${m.id}`} className="bg-white/95 p-2.5 rounded-xl border border-teal-100 space-y-1.5 shadow-2xs">
+                            <div className="flex items-center justify-between text-[10px] font-black text-slate-700">
+                              <span className="flex items-center gap-1 text-teal-900 font-bold">
+                                <Building2 className="w-3 h-3 text-teal-600" />
+                                <span>{m.name} Ministry ({minMembers.length})</span>
+                              </span>
+                              <span className="text-slate-400 font-medium">
+                                {m.coordinators?.[0]?.name ? `Coord: ${m.coordinators[0].name}` : "Active"}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {minMembers.map((sm) => {
+                                const isChecked = teamForm.selectedMemberIds.includes(sm.id);
+                                return (
+                                  <button
+                                    key={`min-mem-${sm.id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setTeamForm(prev => ({
+                                        ...prev,
+                                        selectedMemberIds: isChecked
+                                          ? prev.selectedMemberIds.filter(id => id !== sm.id)
+                                          : [...prev.selectedMemberIds, sm.id]
+                                      }));
+                                    }}
+                                    className={`px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                      isChecked
+                                        ? "bg-teal-600 text-white shadow-2xs"
+                                        : "bg-white text-slate-700 border border-slate-200 hover:bg-teal-50"
+                                    }`}
+                                  >
+                                    {isChecked ? <Check className="w-3 h-3 text-white" /> : <Plus className="w-3 h-3 text-teal-600" />}
+                                    <span>{sm.first_name} {sm.last_name}</span>
+                                  </button>
+                                );
+                              })}
+                              {minMembers.length === 0 && (
+                                <span className="text-[10px] text-slate-400 italic">No members registered in this ministry.</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* CUSTOM UNIT SELECTION */}
+              {teamForm.cycle_mode === "custom" && (
+                <div className="space-y-2">
+                  <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-emerald-950">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Select Members from Church Directory ({teamForm.selectedMemberIds.length} chosen)</span>
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                      {churchMembers.map((cm) => {
+                        const isChecked = teamForm.selectedMemberIds.includes(cm.id);
+                        return (
+                          <button
+                            key={cm.id}
+                            type="button"
+                            onClick={() => {
+                              setTeamForm(prev => ({
+                                ...prev,
+                                selectedMemberIds: isChecked
+                                  ? prev.selectedMemberIds.filter(id => id !== cm.id)
+                                  : [...prev.selectedMemberIds, cm.id]
+                              }));
+                            }}
+                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                              isChecked
+                                ? "bg-emerald-600 text-white shadow-2xs"
+                                : "bg-white text-slate-700 border border-slate-200 hover:bg-emerald-50"
+                            }`}
+                          >
+                            {isChecked ? <Check className="w-3 h-3 text-white" /> : <Plus className="w-3 h-3 text-emerald-600" />}
+                            <span>{cm.first_name} {cm.last_name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2077,7 +2552,7 @@ export const DishwashingPage: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Wednesday BS Group, Youth Ministry"
+                    placeholder="e.g. Jet/Blanca/Jessica, High School Ministry"
                     value={teamForm.name}
                     onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })}
                     className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium"
@@ -2106,11 +2581,51 @@ export const DishwashingPage: React.FC = () => {
                     className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium cursor-pointer"
                   >
                     <option value="">Select Church Member</option>
-                    {churchMembers.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.first_name} {m.last_name} ({m.ministry_name || "Member"})
-                      </option>
-                    ))}
+                    {/* Prioritize leaders from selected groups or ministries */}
+                    {(() => {
+                      const selectedGroups = bsGroups.filter(g => teamForm.biblestudy_group_ids.includes(g.id));
+                      const selectedMins = ministriesList.filter(m => teamForm.ministry_ids.includes(m.id));
+                      const prioritizedLeaders: Member[] = [];
+                      const leaderIdsFound = new Set<number>();
+
+                      selectedGroups.forEach(g => {
+                        const found = findMemberByLeaderName(g.leader_name, g.leader_id);
+                        if (found && !leaderIdsFound.has(found.id)) {
+                          prioritizedLeaders.push(found);
+                          leaderIdsFound.add(found.id);
+                        }
+                      });
+
+                      selectedMins.forEach(m => {
+                        const coordName = m.coordinators?.[0]?.name;
+                        const found = coordName ? findMemberByLeaderName(coordName) : null;
+                        if (found && !leaderIdsFound.has(found.id)) {
+                          prioritizedLeaders.push(found);
+                          leaderIdsFound.add(found.id);
+                        }
+                      });
+
+                      return (
+                        <>
+                          {prioritizedLeaders.length > 0 && (
+                            <optgroup label="Leaders from Selected Unit(s)">
+                              {prioritizedLeaders.map(m => (
+                                <option key={`prio-${m.id}`} value={m.id}>
+                                  ⭐ {m.first_name} {m.last_name} ({m.ministry_name || "Leader"})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          <optgroup label="All Church Members">
+                            {churchMembers.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.first_name} {m.last_name} ({m.ministry_name || "Member"})
+                              </option>
+                            ))}
+                          </optgroup>
+                        </>
+                      );
+                    })()}
                   </select>
                 </div>
 
@@ -2190,24 +2705,37 @@ export const DishwashingPage: React.FC = () => {
 
       {/* MODAL 2: Add Member to Team */}
       {isAddMemberModalOpen && targetTeam && (() => {
-        const targetGroup = bsGroups.find(g => g.id === targetTeam.biblestudy_group_id || g.name === targetTeam.name);
-        const targetMinistry = ministriesList.find(m => m.id === targetTeam.ministry_id || targetTeam.name.toLowerCase().includes(m.name.toLowerCase()));
+        const savedGroupIds = (targetTeam.biblestudy_group_ids && targetTeam.biblestudy_group_ids.length > 0)
+          ? targetTeam.biblestudy_group_ids
+          : (targetTeam.biblestudy_group_id ? [targetTeam.biblestudy_group_id] : []);
+        const savedMinIds = (targetTeam.ministry_ids && targetTeam.ministry_ids.length > 0)
+          ? targetTeam.ministry_ids
+          : (targetTeam.ministry_id ? [targetTeam.ministry_id] : []);
+
+        const linkedGroups = bsGroups.filter(g => savedGroupIds.includes(g.id) || g.name === targetTeam.name);
+        const linkedMinistries = ministriesList.filter(m => savedMinIds.includes(m.id) || targetTeam.name.toLowerCase().includes(m.name.toLowerCase()));
         const existingMemberIds = new Set(targetTeam.members?.map(m => m.member_id) || []);
 
-        const coveredMembersList: { id: number; first_name: string; last_name: string; ministry_name?: string }[] = targetGroup
-          ? (targetGroup?.members || []).map(m => {
+        const coveredMembersList: { id: number; first_name: string; last_name: string; ministry_name?: string }[] = [];
+        linkedGroups.forEach(g => {
+          (g.members || []).forEach(m => {
             const cm = m.member_id ? churchMembers.find(c => c.id === m.member_id) : null;
-            return cm || { id: (m.member_id || m.id) as number, first_name: m.display_name || m.member_name || "Member", last_name: "", ministry_name: targetGroup?.name || "BS Group" };
-          })
-          : targetMinistry
-            ? getMinistryMembers(targetMinistry).map(cm => ({ id: cm.id, first_name: cm.first_name, last_name: cm.last_name, ministry_name: targetMinistry.name }))
-            : [];
+            coveredMembersList.push(cm || { id: (m.member_id || m.id) as number, first_name: m.display_name || m.member_name || "Member", last_name: "", ministry_name: g.name });
+          });
+        });
+        linkedMinistries.forEach(m => {
+          getMinistryMembers(m).forEach(cm => {
+            coveredMembersList.push({ id: cm.id, first_name: cm.first_name, last_name: cm.last_name, ministry_name: m.name });
+          });
+        });
 
         const unassignedCoveredMembers = coveredMembersList.filter(m => !existingMemberIds.has(m.id));
         const allEligibleChurchMembers = churchMembers.filter(m => !existingMemberIds.has(m.id));
 
-        const hasCoveredEntity = Boolean(targetGroup || targetMinistry);
-        const entityLabel = targetGroup ? "Group Members" : (targetMinistry ? `${targetMinistry.name} Members` : "Unit Members");
+        const hasCoveredEntity = Boolean(linkedGroups.length > 0 || linkedMinistries.length > 0);
+        const entityLabel = linkedGroups.length > 1
+          ? `${linkedGroups.length} Combined Groups`
+          : (linkedGroups[0] ? "Group Members" : (linkedMinistries[0] ? `${linkedMinistries[0].name} Members` : "Unit Members"));
 
         const activeList = memberTab === "group" && hasCoveredEntity ? unassignedCoveredMembers : allEligibleChurchMembers;
         const filteredList = activeList.filter(m =>

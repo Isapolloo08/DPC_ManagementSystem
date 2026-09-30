@@ -5,6 +5,7 @@ import { ChurchLogo } from "../common/ChurchLogo";
 import { WindowControls } from "./WindowControls";
 import { UserCog } from "lucide-react";
 import { NotificationBell } from "../notifications/NotificationBell";
+import { ThemeSelector } from "../common/ThemeSelector";
 
 
 
@@ -109,6 +110,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
             className="flex items-center gap-2 sm:gap-3 shrink-0"
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           >
+            <ThemeSelector />
             {/* Real-time Socket.IO Live Indicator */}
             <div
               className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide border transition-all ${isConnected
@@ -121,7 +123,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
               <span className="hidden lg:inline">{isConnected ? "Live Sync" : "Syncing..."}</span>
             </div>
 
-            {onNavigate && <NotificationBell onNavigate={onNavigate} />}
+            {onNavigate && (user?.role_name === "Admin" || user?.role_name === "IT Admin" || user?.role_name === "Pastor") && (
+              <NotificationBell onNavigate={onNavigate} />
+            )}
 
             {/* User Pill (Interactive -> Opens Profile Management) */}
             {user && (

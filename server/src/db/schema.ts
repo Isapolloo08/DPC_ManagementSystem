@@ -2,6 +2,7 @@ import { Pool, PoolClient, QueryResult } from "pg";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
+import bcrypt from "bcryptjs";
 
 const envCandidates = [
   (process as any).resourcesPath ? path.resolve((process as any).resourcesPath, ".env") : null,
@@ -235,7 +236,7 @@ export async function initSchema() {
       await sql.unsafe(`
         CREATE TABLE IF NOT EXISTS roles (id SERIAL PRIMARY KEY, name VARCHAR(50) NOT NULL UNIQUE);
         CREATE TABLE IF NOT EXISTS ministries (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, min_age INT, max_age INT, description TEXT, color VARCHAR(20) DEFAULT '#2C3968');
-        CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, username VARCHAR(100) UNIQUE, email VARCHAR(255) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, role_id INT NOT NULL REFERENCES roles(id) ON DELETE RESTRICT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, username VARCHAR(100) UNIQUE, email VARCHAR(255) UNIQUE, password_hash VARCHAR(255) NOT NULL, role_id INT NOT NULL REFERENCES roles(id) ON DELETE RESTRICT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS user_ministries (id SERIAL PRIMARY KEY, user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE, ministry_id INT NOT NULL REFERENCES ministries(id) ON DELETE CASCADE, UNIQUE(user_id, ministry_id));
         CREATE TABLE IF NOT EXISTS households (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, address TEXT, primary_contact_phone VARCHAR(50), created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS members (id SERIAL PRIMARY KEY, first_name VARCHAR(100) NOT NULL, last_name VARCHAR(100) NOT NULL, birthdate DATE NOT NULL, gender VARCHAR(20), contact_email VARCHAR(255), contact_phone VARCHAR(50), household_id INT REFERENCES households(id) ON DELETE SET NULL, ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL, user_id INT REFERENCES users(id) ON DELETE SET NULL, status VARCHAR(50) NOT NULL DEFAULT 'active', photo_url VARCHAR(500), medical_notes TEXT, grade_level VARCHAR(50), created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
@@ -274,13 +275,51 @@ export async function initSchema() {
       await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS temp_password VARCHAR(255)`;
     } catch { }
 
-    // 3. Ensure all 5 roles exist (Admin, Coordinator, Leader, Volunteer, Member)
+    // 3. Ensure all 6 roles exist (Admin, Pastor, Coordinator, Leader, Volunteer, Member)
     try {
+      const mig11Path = getMigrationFilePath("011_rename_admin_to_pastor_and_it_admin_to_admin.sql");
+      if (mig11Path && fs.existsSync(mig11Path)) {
+        const mig11Sql = fs.readFileSync(mig11Path, "utf-8");
+        await sql.unsafe(mig11Sql);
+      } else {
+        await sql.unsafe(`
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM roles WHERE name = 'Admin') AND EXISTS (SELECT 1 FROM roles WHERE name = 'IT Admin') THEN
+              UPDATE roles SET name = 'Pastor' WHERE name = 'Admin';
+              UPDATE roles SET name = 'Admin' WHERE name = 'IT Admin';
+            ELSIF EXISTS (SELECT 1 FROM roles WHERE name = 'Admin') AND NOT EXISTS (SELECT 1 FROM roles WHERE name = 'Pastor') THEN
+              UPDATE roles SET name = 'Pastor' WHERE name = 'Admin';
+              INSERT INTO roles (name) VALUES ('Admin') ON CONFLICT (name) DO NOTHING;
+            ELSE
+              INSERT INTO roles (name) VALUES ('Admin'), ('Pastor') ON CONFLICT (name) DO NOTHING;
+            END IF;
+          END $$;
+        `);
+      }
+
       await sql`
-        INSERT INTO roles (name) VALUES ('Admin'), ('Coordinator'), ('Leader'), ('Volunteer'), ('Member')
+        INSERT INTO roles (name) VALUES ('Admin'), ('Pastor'), ('Coordinator'), ('Leader'), ('Volunteer'), ('Member')
         ON CONFLICT (name) DO NOTHING;
       `;
-    } catch { }
+
+      // Ensure at least one Super Admin account exists
+      const superAdminRole = await db.get("SELECT id FROM roles WHERE name = 'Admin'");
+      if (superAdminRole) {
+        const existingAdmin = await db.get("SELECT id FROM users WHERE role_id = $1", [superAdminRole.id]);
+        if (!existingAdmin) {
+          const passHash = bcrypt.hashSync("admin123", 10);
+          await db.run(
+            `INSERT INTO users (name, username, email, password_hash, temp_password, role_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT DO NOTHING`,
+            ["System Administrator", "admin", "admin@daetpresbyterian.org", passHash, "admin123", superAdminRole.id]
+          );
+        }
+      }
+    } catch (e: any) {
+      console.warn("Role/Admin seed note:", e.message);
+    }
 
     // 4. Ensure membership application form columns exist on members table
     try {
@@ -449,6 +488,14 @@ export async function initSchema() {
         ADD COLUMN IF NOT EXISTS partner_biblestudy_group_id INT REFERENCES bible_study_groups(id) ON DELETE SET NULL,
         ADD COLUMN IF NOT EXISTS partner_ministry_id INT REFERENCES ministries(id) ON DELETE SET NULL,
         ADD COLUMN IF NOT EXISTS is_joint_duty BOOLEAN DEFAULT false;
+
+        ALTER TABLE dishwashing_teams
+        ADD COLUMN IF NOT EXISTS biblestudy_group_ids TEXT,
+        ADD COLUMN IF NOT EXISTS ministry_ids TEXT;
+
+        ALTER TABLE dishwashing_schedules
+        ADD COLUMN IF NOT EXISTS biblestudy_group_ids TEXT,
+        ADD COLUMN IF NOT EXISTS ministry_ids TEXT;
       `);
 
       // Seed default dishwashing rotating teams from existing BS groups and ministries if empty
@@ -753,8 +800,68 @@ export async function initSchema() {
         } else {
           console.warn("Transitions migration note: 008_group_transitions.sql was not found.");
         }
-      } catch (transErr: any) {
-        console.warn("Group transitions migration note:", transErr.message);
+      } catch (transitionsErr: any) {
+        console.warn("Transitions migration note:", transitionsErr.message);
+      }
+
+      // 17. Ensure IT Admin role migration exists
+      try {
+        const itAdminMigrationPath = getMigrationFilePath("009_add_it_admin_role.sql");
+        if (itAdminMigrationPath && fs.existsSync(itAdminMigrationPath)) {
+          const itAdminSql = fs.readFileSync(itAdminMigrationPath, "utf-8");
+          await sql.unsafe(itAdminSql);
+          console.log("🛡️ Applied IT Admin role schema (Migration 009).");
+        }
+      } catch (itAdminErr: any) {
+        console.warn("IT Admin role migration note:", itAdminErr.message);
+      }
+
+      // 18. Ensure user email column is optional (Migration 010)
+      try {
+        const emailOptionalMigrationPath = getMigrationFilePath("010_make_user_email_optional.sql");
+        if (emailOptionalMigrationPath && fs.existsSync(emailOptionalMigrationPath)) {
+          const emailSql = fs.readFileSync(emailOptionalMigrationPath, "utf-8");
+          await sql.unsafe(emailSql);
+          console.log("📧 Applied optional user email schema (Migration 010).");
+        }
+      } catch (emailOptErr: any) {
+        console.warn("Email optional migration note:", emailOptErr.message);
+      }
+
+      // 19. Rename old Admin to Pastor and IT Admin to Admin (Migration 011)
+      try {
+        const mig11Path = getMigrationFilePath("011_rename_admin_to_pastor_and_it_admin_to_admin.sql");
+        if (mig11Path && fs.existsSync(mig11Path)) {
+          const mig11Sql = fs.readFileSync(mig11Path, "utf-8");
+          await sql.unsafe(mig11Sql);
+          console.log("🛡️ Applied role renaming (Migration 011): Admin (Super) & Pastor.");
+        }
+      } catch (mig11Err: any) {
+        console.warn("Role rename migration note:", mig11Err.message);
+      }
+
+      // 20. Update notification rules to target only Pastor & Admin (Migration 012)
+      try {
+        const mig12Path = getMigrationFilePath("012_update_notification_roles_for_pastor_and_admin.sql");
+        if (mig12Path && fs.existsSync(mig12Path)) {
+          const mig12Sql = fs.readFileSync(mig12Path, "utf-8");
+          await sql.unsafe(mig12Sql);
+          console.log("🔔 Applied notification role routing to Pastor & Admin (Migration 012).");
+        }
+      } catch (mig12Err: any) {
+        console.warn("Notification rules update migration note:", mig12Err.message);
+      }
+
+      // 21. Ensure Bible Study Group Lifecycle & Archiving schema exists (Migration 013)
+      try {
+        const mig13Path = getMigrationFilePath("013_group_lifecycle_and_archive.sql");
+        if (mig13Path && fs.existsSync(mig13Path)) {
+          const mig13Sql = fs.readFileSync(mig13Path, "utf-8");
+          await sql.unsafe(mig13Sql);
+          console.log("📦 Applied group lifecycle & archiving schema (Migration 013).");
+        }
+      } catch (mig13Err: any) {
+        console.warn("Group lifecycle migration note:", mig13Err.message);
       }
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {

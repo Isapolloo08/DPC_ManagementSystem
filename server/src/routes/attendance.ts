@@ -116,7 +116,7 @@ router.get("/roster", async (req: Request, res: Response) => {
 });
 
 // Check-in member / Mark attendance (Present, Absent, Excused)
-router.post("/check-in", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
+router.post("/check-in", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
     const { member_id, ministry_id, event_id, notes, service_name, status = "present", reason, target_date } = req.body;
 
@@ -230,7 +230,7 @@ router.post("/check-in", authMiddleware, requireRoles("Admin", "Coordinator", "V
 });
 
 // Batch Mark Attendance (Fast bulk roll call: present, absent, excused, reset)
-router.post("/batch-mark", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
+router.post("/batch-mark", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
     const {
       present_ids = [],
@@ -431,7 +431,7 @@ router.post("/batch-mark", authMiddleware, requireRoles("Admin", "Coordinator", 
 });
 
 // Batch Check-in (e.g. Household group check-in or multi-select present)
-router.post("/batch-check-in", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
+router.post("/batch-check-in", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
     const { member_ids, service_name } = req.body;
 
@@ -485,7 +485,7 @@ router.post("/batch-check-in", authMiddleware, requireRoles("Admin", "Coordinato
 });
 
 // Check-out member (Kinder & Elementary security tag matching or direct verification)
-router.post("/check-out", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
+router.post("/check-out", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
     const { attendance_id, member_id, security_code, force = false } = req.body;
 
@@ -538,7 +538,7 @@ router.post("/check-out", authMiddleware, requireRoles("Admin", "Coordinator", "
 });
 
 // Delete / Undo check-in (Admin & Coordinator)
-router.delete("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
+router.delete("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const current = await db.get("SELECT a.*, m.first_name, m.last_name FROM attendance a JOIN members m ON a.member_id = m.id WHERE a.id = $1", [id]);

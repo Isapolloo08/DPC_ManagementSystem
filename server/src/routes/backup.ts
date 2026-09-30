@@ -6,7 +6,7 @@ import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
 
-// Require authenticated user
+// Require authenticated user with Super Admin (Admin) role
 router.use(authMiddleware, requireRoles("Admin"));
 
 /**

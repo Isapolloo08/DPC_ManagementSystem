@@ -114,7 +114,7 @@ router.get("/lookups/:id", async (req: Request, res: Response) => {
 });
 
 // Create lookup (Admin only)
-router.post("/lookups", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/lookups", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const { type, name, description, color = "#2C3968", sort_order = 0, is_active = 1 } = req.body;
 
@@ -156,7 +156,7 @@ router.post("/lookups", authMiddleware, requireRoles("Admin"), async (req: AuthR
 });
 
 // Update lookup (Admin only)
-router.put("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.put("/lookups/:id", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const { name, description, color, sort_order, is_active } = req.body;
@@ -202,7 +202,7 @@ router.put("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req: Au
 });
 
 // Delete lookup (Admin only)
-router.delete("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.delete("/lookups/:id", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const current = await db.get("SELECT * FROM system_lookups WHERE id = $1", [id]);
@@ -221,7 +221,7 @@ router.delete("/lookups/:id", authMiddleware, requireRoles("Admin"), async (req:
 });
 
 // Restore default lookups (Admin only)
-router.post("/lookups/reset", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/lookups/reset", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     for (const item of DEFAULT_LOOKUPS) {
       await db.run(`
@@ -282,7 +282,7 @@ router.get("/general", authMiddleware, cacheMiddleware("general_settings", 600),
 });
 
 // Update general settings (Admin only)
-router.put("/general", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.put("/general", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const settingsData = req.body.settings || req.body;
 
@@ -307,7 +307,7 @@ router.put("/general", authMiddleware, requireRoles("Admin"), async (req: AuthRe
 });
 
 // Reset general settings to defaults (Admin only)
-router.post("/general/reset", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/general/reset", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     for (const [key, val] of Object.entries(DEFAULT_SETTINGS)) {
       await db.run(`

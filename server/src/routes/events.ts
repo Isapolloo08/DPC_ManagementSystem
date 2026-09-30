@@ -179,7 +179,7 @@ router.get("/recurring-sunday-cycle", async (req: Request, res: Response) => {
 });
 
 // Create new recurring Sunday event definition
-router.post("/recurring-sunday-cycle", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/recurring-sunday-cycle", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const {
       title,
@@ -244,7 +244,7 @@ router.post("/recurring-sunday-cycle", authMiddleware, requireRoles("Admin", "Co
 });
 
 // Update recurring Sunday event
-router.put("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.put("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const {
@@ -303,7 +303,7 @@ router.put("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", 
 });
 
 // Delete recurring Sunday event
-router.delete("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.delete("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     await db.run("DELETE FROM recurring_sunday_events WHERE id = $1", [id]);
@@ -317,7 +317,7 @@ router.delete("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin
 });
 
 // Sync / Schedule a recurring Sunday event into the main Church Events calendar for a given year
-router.post("/recurring-sunday-cycle/:id/sync-to-calendar", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/recurring-sunday-cycle/:id/sync-to-calendar", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const { year = new Date().getFullYear(), start_time_str = "09:00", end_time_str = "12:00", location = "Main Worship Sanctuary" } = req.body;
@@ -394,7 +394,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 });
 
 // Create event
-router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const { ministry_id, title, description, start_time, end_time, location } = req.body;
 
@@ -559,7 +559,7 @@ router.get("/:id/attendance-roster", authMiddleware, async (req: AuthRequest, re
 });
 
 // Mark one or more members as Present / Absent / Excused / Registered for an event
-router.post("/:id/attendance/mark", authMiddleware, requireRoles("Admin", "Coordinator", "Leader", "Volunteer"), async (req: AuthRequest, res: Response) => {
+router.post("/:id/attendance/mark", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
     const eventId = Number(req.params.id);
     const { member_ids, member_id, status = "attended", notes, reason } = req.body;
@@ -717,7 +717,7 @@ router.post("/:id/attendance/mark", authMiddleware, requireRoles("Admin", "Coord
 });
 
 // Batch Mark Event Attendance (Fast bulk roll call: present vs absent / pending)
-router.post("/:id/attendance/batch-mark", authMiddleware, requireRoles("Admin", "Coordinator", "Leader", "Volunteer"), async (req: AuthRequest, res: Response) => {
+router.post("/:id/attendance/batch-mark", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "Volunteer"), async (req: AuthRequest, res: Response) => {
   try {
     const eventId = Number(req.params.id);
     const {
@@ -818,7 +818,7 @@ router.post("/:id/attendance/batch-mark", authMiddleware, requireRoles("Admin", 
 });
 
 // Update event
-router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const { ministry_id, title, description, start_time, end_time, location } = req.body;
@@ -856,7 +856,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
 });
 
 // Delete event
-router.delete("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.delete("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     await db.run("DELETE FROM events WHERE id = $1", [id]);

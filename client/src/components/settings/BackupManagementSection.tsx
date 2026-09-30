@@ -13,12 +13,15 @@ import { RestoreModal } from "./RestoreModal";
 import { BackupModal } from "./BackupModal";
 import { CloudSyncModal } from "../cloud/CloudSyncModal";
 import { Cloud, ArrowUpCircle } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 
 interface BackupManagementSectionProps {
   onShowToast: (message: string, type?: "success" | "error") => void;
 }
 
 export const BackupManagementSection: React.FC<BackupManagementSectionProps> = ({ onShowToast }) => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role_name === "Admin" || user?.role_name === "IT Admin";
   const [summary, setSummary] = useState<BackupSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -338,11 +341,21 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
           </div>
 
           <button
-            onClick={() => setIsRestoreModalOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-indigo hover:bg-indigo-950 text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+            onClick={() => {
+              if (!isSuperAdmin) {
+                onShowToast("Database restore requires Super Administrator authorization.", "error");
+                return;
+              }
+              setIsRestoreModalOpen(true);
+            }}
+            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer ${
+              isSuperAdmin
+                ? "bg-indigo hover:bg-indigo-950 text-white"
+                : "bg-slate-200 text-charcoal/60 hover:bg-slate-300"
+            }`}
           >
             <UploadCloud className="w-4 h-4 text-amber-300" />
-            <span>Upload & Restore (.json)</span>
+            <span>{isSuperAdmin ? "Upload & Restore (.json)" : "Restore (Admin Only)"}</span>
           </button>
         </div>
 
@@ -382,12 +395,22 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
           </div>
 
           <button
-            onClick={() => containerPurgeYear && handleOpenPurgeModal(Number(containerPurgeYear))}
+            onClick={() => {
+              if (!isSuperAdmin) {
+                onShowToast("Database purge requires Tier 1 Administrator authorization.", "error");
+                return;
+              }
+              if (containerPurgeYear) handleOpenPurgeModal(Number(containerPurgeYear));
+            }}
             disabled={!containerPurgeYear}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer ${
+              isSuperAdmin
+                ? "bg-rose-600 hover:bg-rose-700 text-white"
+                : "bg-slate-200 text-charcoal/60 hover:bg-slate-300"
+            }`}
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Preview & Delete Data</span>
+            <span>{isSuperAdmin ? "Preview & Delete Data" : "Purge Data (Admin Only)"}</span>
           </button>
         </div>
 

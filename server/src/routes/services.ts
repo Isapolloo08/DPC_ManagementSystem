@@ -34,8 +34,8 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    if (!["Admin", "Coordinator"].includes(user.role_name)) {
-      return res.status(403).json({ error: "Access denied. Requires Admin or Coordinator role." });
+    if (!["Admin", "Pastor", "Coordinator", "IT Admin"].includes(user.role_name)) {
+      return res.status(403).json({ error: "Access denied. Requires Admin, Pastor, or Coordinator role." });
     }
 
     const defaultRange = getDefaultServiceRange();
@@ -76,8 +76,8 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.post("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
-    if (!user || !["Admin", "Coordinator"].includes(user.role_name)) {
-      return res.status(403).json({ error: "Access denied. Requires Admin or Coordinator role." });
+    if (!user || !["Admin", "Pastor", "Coordinator", "IT Admin"].includes(user.role_name)) {
+      return res.status(403).json({ error: "Access denied. Requires Admin, Pastor, or Coordinator role." });
     }
 
     const { service_date, service_type = "sunday_service", title, status = "held", notes } = req.body;
@@ -118,8 +118,8 @@ router.post("/", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.put("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
-    if (!user || !["Admin", "Coordinator"].includes(user.role_name)) {
-      return res.status(403).json({ error: "Access denied. Requires Admin or Coordinator role." });
+    if (!user || !["Admin", "Pastor", "Coordinator", "IT Admin"].includes(user.role_name)) {
+      return res.status(403).json({ error: "Access denied. Requires Admin, Pastor, or Coordinator role." });
     }
 
     const { id } = req.params;
@@ -162,7 +162,7 @@ router.put("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.post("/generate-sundays", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
-    if (!user || !["Admin", "Coordinator"].includes(user.role_name)) {
+    if (!user || !["Admin", "Pastor", "Coordinator", "IT Admin"].includes(user.role_name)) {
       return res.status(403).json({ error: "Access denied." });
     }
 

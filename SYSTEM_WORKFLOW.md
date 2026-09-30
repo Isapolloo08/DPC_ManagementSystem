@@ -95,7 +95,8 @@ flowchart TD
 
     subgraph WeeklyDiscipleship [Weekly Discipleship & Ministry Cycle]
         M[Saturday Cleaning & Duty Teams]
-        N1[Bible Study / Small Groups & Curriculum]
+        N1[Bible Study Groups: Active / Completed / Archived]
+        N1 --> N1_Merge[Group Merging & Transition History]
         N1 --> N2[Leader Attendance & At-Risk Monitor]
         N2 --> N3[Session Rescheduling & Notes]
         O1[Daily Bible Reading Tracker]
@@ -436,6 +437,76 @@ sequenceDiagram
 
 ---
 
+### Workflow 5.11: Bible Study Groups Lifecycle, Transitions, Soft-Delete & Member Enrollment
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Admin / Pastor / Coordinator
+    participant UI as Bible Study Page
+    participant Modal as Create/Edit/Transition Modal
+    participant API as /api/groups
+    participant DB as PostgreSQL
+
+    %% 1. Creation & Member Enrollment
+    alt Group Creation with Role & Ministry Filtering
+        Admin->>UI: Click "New Bible Study Group"
+        UI->>API: GET /api/users (Filter: Coordinator, Leader, Pastor)
+        UI->>API: GET /api/members (Filter: Unenrolled members without active group)
+        Admin->>Modal: Select Leader, Ministry Scope, and choose members by Ministry Filter
+        Note over Admin,Modal: Max Capacity Validation (e.g. Max 12)
+        alt Capacity Limit Reached
+            Modal-->>Admin: Show "⚠️ Full (Max 12)" badge & block extra member selections
+        end
+        Admin->>Modal: Submit Form (Validates selected <= max_capacity)
+        Modal->>API: POST /api/groups
+        API->>DB: INSERT bible_study_groups & bible_study_members
+        API-->>UI: Real-time update via WebSockets
+    end
+
+    %% 2. Study Completion
+    alt Mark Group as Completed
+        Admin->>UI: Click "Complete Study"
+        UI->>Modal: Open CompleteGroupModal
+        Admin->>Modal: Confirm finished chapter (e.g. Chapter 12 of 12) & notes
+        Modal->>API: POST /api/groups/:id/complete
+        API->>DB: UPDATE status = 'completed', completed_at = NOW(), save curriculum snapshot
+        API-->>UI: Move group to "Completed" filter (Emerald card with snapshot)
+    end
+
+    %% 3. Soft-Delete / Archiving
+    alt Archive (Soft-Delete) & Restore Group
+        Admin->>UI: Click "Archive Group"
+        UI->>Modal: Open Archive Confirmation Modal (Prompt optional reason)
+        Admin->>Modal: Confirm Archive
+        Modal->>API: POST /api/groups/:id/archive (or DELETE /api/groups/:id)
+        API->>DB: UPDATE status = 'archived', archived_at = NOW(), archived_by, archive_reason (No hard delete)
+        API-->>UI: Move group to "Archived" filter
+
+        alt Restore Group
+            Admin->>UI: Click "Restore Group" on Archived card
+            UI->>API: POST /api/groups/:id/restore
+            API->>DB: Check name conflict with active groups -> UPDATE status = 'active'
+            API-->>UI: Reactivate group back to "Active" list
+        end
+    end
+
+    %% 4. Group Merge & Transitions
+    alt Group Merge Transition
+        Admin->>UI: Click "Group Transition" -> Select "Merge Groups"
+        Admin->>Modal: Select Source Groups A & B -> Configure Resulting Group & Leader
+        Modal->>API: POST /api/groups/transitions/merge
+        API->>DB: BEGIN Transaction
+        API->>DB: INSERT new merged group (status = 'active')
+        API->>DB: UPDATE source groups SET status = 'merged', merged_into_group_id = new_id
+        API->>DB: Consolidate memberships into new group & record transition audit
+        API->>DB: COMMIT Transaction
+        API-->>UI: Hide source groups from normal lists; Display resulting merged group & update "Transitions Log"
+    end
+```
+
+---
+
 ## 6. Page & Navigation Matrix
 
 | Tab Identifier | Component Page | Primary Roles | Key Features |
@@ -448,8 +519,8 @@ sequenceDiagram
 | `attendance` | `CheckInPage.tsx` | Admin, Coordinator, Volunteer | Live Sunday check-in, search, security code generator, live roster |
 | `attendancelog` | `AttendanceLogPage.tsx` | Admin, Coordinator, Leader | Unified audit history of Sunday check-ins and Bible Study attendance with CSV/PDF exports |
 | `members` | `MembersPage.tsx` | Admin, Coordinator | Directory grid/list, member profile modal, family tree, status filters, individual attendance summary |
-| `biblestudy` | `BibleStudyPage.tsx` | Admin, Coordinator, Leader | Cell group management, curriculum tracker, reschedule manager |
-| `curriculum` | `CurriculumPage.tsx` | Admin, Coordinator, Leader | Study topics, chapter outlines, teaching notes and study guides |
+| `biblestudy` | `BibleStudyPage.tsx` | Admin, Coordinator, Leader | Full lifecycle management (Active, Completed, Archived, All), Group Transitions & Merge Wizard, Church-wide Transitions Log, Leader role filtering (Coordinator/Leader/Pastor), Unenrolled Member Ministry Filter, Max Capacity validation, Soft-delete & Restore, Curriculum progress tracking, and Reschedule manager |
+| `curriculum` | `CurriculumPage.tsx` | Admin, Coordinator, Leader | Study topics, chapter outlines, teaching notes, active/ongoing/completed group pacing |
 | `biblereading` | `BibleReadingPage.tsx` | All Users, Members | 365-day Bible reading plan, progress streaks, schedule alignment modal, in-app scripture reader |
 | `duty` | `DutyPage.tsx` | Admin, Coordinator, Leader | Saturday cleaning duty teams, rotation generator, checklist verification |
 | `dishwashing` | `DishwashingPage.tsx` | Admin, Coordinator, Leader | Sunday fellowship lunch cleanup roster, joint group assignment |

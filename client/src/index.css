@@ -189,10 +189,10 @@ body {
 
 /* Glassmorphism utility */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgb(var(--surface-white-DEFAULT) / 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(220, 227, 242, 0.6);
+  border: 1px solid rgb(var(--line-indigo-100) / 0.6);
 }
 
 /* Badge and tag pulse effects */
@@ -327,4 +327,15 @@ body {
   animation: spin-slow 8s linear infinite;
 }
 
+/* Native controls and non-utility surfaces also follow the active palette. */
+option {
+  background-color: rgb(var(--surface-white-DEFAULT));
+}
 
+.dark .skeleton-box {
+  background: linear-gradient(90deg, #1e293b, #334155, #1e293b);
+}
+
+.dark .skeleton-box::after {
+  opacity: 0.15;
+}

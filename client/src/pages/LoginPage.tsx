@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { ChurchLogo } from "../components/common/ChurchLogo";
 import { WindowControls } from "../components/layout/WindowControls";
+import { ThemeSelector } from "../components/common/ThemeSelector";
 import {
   Lock, Mail, ArrowRight, ShieldCheck,
   Users, CheckCircle2, AlertCircle, Heart, MapPin, BookOpen, UserPlus, LogIn, AtSign, X, ShieldAlert, KeyRound, Eye, EyeOff
@@ -408,6 +409,7 @@ export const LoginPage: React.FC = () => {
           )}
 
           {/* Header */}
+          <div className="flex justify-end"><ThemeSelector /></div>
           <div className="animate-fade-slide-up anim-delay-100 space-y-1">
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200/60 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full inline-block shadow-2xs">
               Portal Authentication
@@ -503,8 +505,11 @@ export const LoginPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
                 {demoUsers.map((u, idx) => {
                   const roleColors: Record<string, string> = {
-                    Admin: "border-amber-300 bg-amber-50/80 hover:bg-amber-100/90 text-amber-950 hover:border-amber-400",
+                    Admin: "border-cyan-400 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 hover:border-cyan-300",
+                    "IT Admin": "border-cyan-400 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 hover:border-cyan-300",
+                    Pastor: "border-amber-300 bg-amber-50/80 hover:bg-amber-100/90 text-amber-950 hover:border-amber-400",
                     Coordinator: "border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100/90 text-indigo-950 hover:border-indigo-300",
+                    Leader: "border-sky-300 bg-sky-50/80 hover:bg-sky-100/90 text-sky-950 hover:border-sky-400",
                     Volunteer: "border-sage-300 bg-sage-50/80 hover:bg-sage-100/90 text-sage-950 hover:border-sage-400",
                     Member: "border-rose-200 bg-rose-50/80 hover:bg-rose-100/90 text-rose-950 hover:border-rose-300",
                   };

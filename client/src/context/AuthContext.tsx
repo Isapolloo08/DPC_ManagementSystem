@@ -34,6 +34,8 @@ interface AuthContextType {
   allowedMinistries: Ministry[];
   isRestricted: boolean;
   isCoordinator: boolean;
+  isITAdmin: boolean;
+  isAdmin: boolean;
   hasUsers: boolean;
   hasAdmin: boolean;
   selectedMinistryId: number | null; // null = Church-Wide
@@ -92,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             const res = await api.getMe();
             setUser(res.user);
-            if (res.user.ministries && res.user.ministries.length > 0 && res.user.role_name !== "Admin") {
+            if (res.user.ministries && res.user.ministries.length > 0 && res.user.role_name !== "Admin" && res.user.role_name !== "Pastor" && res.user.role_name !== "IT Admin") {
               setSelectedMinistryId(res.user.ministries[0].id);
             } else {
               setSelectedMinistryId(null);
@@ -154,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    if (user && user.ministries && user.ministries.length > 0 && user.role_name !== "Admin") {
+    if (user && user.ministries && user.ministries.length > 0 && user.role_name !== "Admin" && user.role_name !== "Pastor" && user.role_name !== "IT Admin") {
       setSelectedMinistryId(user.ministries[0].id);
     }
   }, [user?.id, user?.role_name]);
@@ -164,7 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("chms_token", res.token);
     setToken(res.token);
     setUser(res.user);
-    if (res.user.ministries.length > 0 && res.user.role_name !== "Admin") {
+    if (res.user.ministries.length > 0 && res.user.role_name !== "Admin" && res.user.role_name !== "Pastor" && res.user.role_name !== "IT Admin") {
       setSelectedMinistryId(res.user.ministries[0].id);
     } else {
       setSelectedMinistryId(null);
@@ -178,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.user);
     setHasUsers(true);
     setHasAdmin(true);
-    if (res.user.ministries.length > 0 && res.user.role_name !== "Admin") {
+    if (res.user.ministries.length > 0 && res.user.role_name !== "Admin" && res.user.role_name !== "Pastor" && res.user.role_name !== "IT Admin") {
       setSelectedMinistryId(res.user.ministries[0].id);
     } else {
       setSelectedMinistryId(null);
@@ -192,7 +194,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem("chms_token", res.token);
       setToken(res.token);
       setUser(res.user);
-      if (res.user.ministries.length > 0 && res.user.role_name !== "Admin") {
+      if (res.user.ministries.length > 0 && res.user.role_name !== "Admin" && res.user.role_name !== "Pastor" && res.user.role_name !== "IT Admin") {
         setSelectedMinistryId(res.user.ministries[0].id);
       } else {
         setSelectedMinistryId(null);
@@ -207,7 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await api.getMe();
       setUser(res.user);
-      if (res.user.ministries && res.user.ministries.length > 0 && res.user.role_name !== "Admin") {
+      if (res.user.ministries && res.user.ministries.length > 0 && res.user.role_name !== "Admin" && res.user.role_name !== "Pastor" && res.user.role_name !== "IT Admin") {
         setSelectedMinistryId(res.user.ministries[0].id);
       } else {
         setSelectedMinistryId(null);
@@ -242,8 +244,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useSocketEvent("ministries:changed", () => refreshMinistries());
   useSocketEvent("settings:changed", () => refreshMinistries());
 
+  const isITAdmin = user?.role_name === "Admin" || user?.role_name === "IT Admin";
+  const isPastor = user?.role_name === "Pastor";
+  const isAdmin = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "IT Admin";
   const isCoordinator = user?.role_name === "Coordinator" || user?.role_name === "Volunteer";
-  const isRestricted = Boolean(user && user.role_name !== "Admin" && user.ministries && user.ministries.length > 0);
+  const isRestricted = Boolean(user && user.role_name !== "Admin" && user.role_name !== "Pastor" && user.role_name !== "IT Admin" && user.ministries && user.ministries.length > 0);
 
   const allowedMinistries = React.useMemo(() => {
     if (!isRestricted || !user?.ministries || user.ministries.length === 0) {
@@ -271,6 +276,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         allowedMinistries,
         isRestricted,
         isCoordinator,
+        isITAdmin,
+        isAdmin,
         hasUsers,
         hasAdmin,
         selectedMinistryId,

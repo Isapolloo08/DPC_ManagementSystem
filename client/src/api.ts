@@ -365,6 +365,8 @@ export const api = {
     status?: string;
     membership_filter?: string;
     attendance_health_filter?: string;
+    group_filter?: "none" | "unenrolled" | "enrolled";
+    no_group?: boolean;
     household_id?: number;
     birthday_filter?: string;
     page?: number;
@@ -376,6 +378,8 @@ export const api = {
     if (params?.status) q.set("status", params.status);
     if (params?.membership_filter) q.set("membership_filter", params.membership_filter);
     if (params?.attendance_health_filter) q.set("attendance_health_filter", params.attendance_health_filter);
+    if (params?.group_filter) q.set("group_filter", params.group_filter);
+    if (params?.no_group) q.set("no_group", "true");
     if (params?.household_id) q.set("household_id", String(params.household_id));
     if (params?.birthday_filter) q.set("birthday_filter", params.birthday_filter);
     if (params?.page !== undefined) q.set("page", String(params.page));
@@ -561,6 +565,7 @@ export const api = {
     }),
 
   // Bible Study & Small Groups
+  getMyGroups: () => request<BibleStudyGroup[]>("/groups/mine"),
   getGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string; status?: string }) => {
     const q = new URLSearchParams();
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
@@ -595,8 +600,33 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(data)
   }),
-  deleteGroup: (id: number) => request<{ message: string }>(`/groups/${id}`, {
-    method: "DELETE"
+  deleteGroup: (id: number, reason?: string) => request<{ message: string }>(`/groups/${id}`, {
+    method: "DELETE",
+    body: reason ? JSON.stringify({ reason }) : undefined
+  }),
+  archiveGroup: (id: number, data?: { reason?: string }) => request<{ message: string }>(`/groups/${id}/archive`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  }),
+  completeGroup: (id: number, data?: {
+    completed_chapter?: string;
+    completed_total_chapters?: number;
+    completed_book_id?: number | null;
+    completed_book_title_snapshot?: string;
+    notes?: string;
+  }) => request<{
+    message: string;
+    status: string;
+    completed_at: string;
+    completed_book_title_snapshot?: string;
+    completed_chapter?: string;
+    completed_total_chapters?: number;
+  }>(`/groups/${id}/complete`, {
+    method: "POST",
+    body: JSON.stringify(data || {})
+  }),
+  restoreGroup: (id: number) => request<{ message: string }>(`/groups/${id}/restore`, {
+    method: "POST"
   }),
   joinGroup: (groupId: number, data?: { member_id?: number; member_ids?: number[]; member_name?: string }) => request<{ message: string }>(`/groups/${groupId}/join`, {
     method: "POST",
@@ -786,6 +816,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data)
     }),
+  overrideSaturdayDuty: (data: { duty_date: string; team_id: number; ministry_id?: number | null; status?: string; notes?: string }) =>
+    request<{ message: string }>("/duty/schedule/override", {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+  resetSaturdayDuty: (data?: { duty_date?: string; ministry_id?: number | null }) =>
+    request<{ message: string }>("/duty/schedule/reset", {
+      method: "POST",
+      body: JSON.stringify(data || {})
+    }),
 
   // Dishwashing & Kitchen Fellowship Duty Roster (Rotating Cycle)
   getDishwashingTeams: (ministry_id?: number) => {
@@ -794,9 +834,11 @@ export const api = {
   },
   createDishwashingTeam: (data: {
     name: string;
-    cycle_mode?: "biblestudy_group" | "ministry" | "custom";
+    cycle_mode?: "biblestudy_group" | "ministry" | "combined" | "custom";
     biblestudy_group_id?: number | null;
+    biblestudy_group_ids?: number[] | null;
     ministry_id?: number | null;
+    ministry_ids?: number[] | null;
     leader_id?: number | null;
     leader_name?: string | null;
     leader_contact?: string | null;

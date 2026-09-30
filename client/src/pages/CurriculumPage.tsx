@@ -9,13 +9,15 @@ import {
   Plus, Edit2, Trash2, Search,
   Clock, X, ChevronRight,
   Users, AlertCircle, RefreshCw,
-  MapPin, Loader2, PanelRightClose, PanelRight
+  MapPin, Loader2, PanelRightClose, PanelRight,
+  GitMerge
 } from "lucide-react";
 import { useSocketEvent } from "../socket";
 import { CurriculumPageSkeleton, CardGridSkeleton } from "../components/common/SkeletonLoader";
 
 export const CurriculumPage: React.FC = () => {
   const { user } = useAuth();
+  const canManage = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "Leader" || user?.role_name === "IT Admin";
   const { showToast, deleteWithUndo } = useToast();
   const [loading, setLoading] = useState(true);
   const [studyTopicsSummary, setStudyTopicsSummary] = useState<StudyTopicsSummary | null>(null);
@@ -30,7 +32,7 @@ export const CurriculumPage: React.FC = () => {
   const [topicDetailData, setTopicDetailData] = useState<StudyTopicDetailResponse | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
-  const [detailGroupTab, setDetailGroupTab] = useState<"all" | "completed" | "ongoing">("all");
+  const [detailGroupTab, setDetailGroupTab] = useState<"all" | "completed" | "ongoing" | "merged">("all");
   const [isStudyTopicModalOpen, setIsStudyTopicModalOpen] = useState(false);
   const [editingStudyTopic, setEditingStudyTopic] = useState<StudyTopic | null>(null);
   const [deleteConfirmTopic, setDeleteConfirmTopic] = useState<StudyTopic | null>(null);
@@ -118,10 +120,13 @@ export const CurriculumPage: React.FC = () => {
       return false;
     });
 
-    const completedGroups = matchedGroups.filter(g => g.progress_stage === "completed");
-    const ongoingGroups = matchedGroups.filter(g => g.progress_stage !== "completed");
+    const activeGroups = matchedGroups.filter(g => (g.status || "active") !== "merged");
+    const mergedGroups = matchedGroups.filter(g => g.status === "merged");
 
-    return { completedGroups, ongoingGroups, matchedGroups };
+    const completedGroups = activeGroups.filter(g => g.progress_stage === "completed");
+    const ongoingGroups = activeGroups.filter(g => g.progress_stage !== "completed");
+
+    return { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups };
   };
 
   const handleOpenModal = (topic?: StudyTopic) => {
@@ -227,18 +232,18 @@ export const CurriculumPage: React.FC = () => {
     });
   }, [studyTopics, studyTopicSearch]);
 
-  // Dynamic Small Groups Stats
+  // Dynamic Small Groups Stats (Focusing on Active Groups)
   const curriculumStats = useMemo(() => {
     const totalBooks = studyTopics.length;
     const totalChapters = studyTopics.reduce((acc, t) => acc + (t.total_chapters || 0), 0);
-    const groupsWithCurriculum = allGroups.filter(g => g.curriculum);
-    const groupsDone = groupsWithCurriculum.filter(g => g.progress_stage === "completed").length;
-    const groupsOngoing = groupsWithCurriculum.filter(g => g.progress_stage !== "completed").length;
+    const activeGroupsWithCurriculum = allGroups.filter(g => g.curriculum && (g.status || "active") !== "merged");
+    const groupsDone = activeGroupsWithCurriculum.filter(g => g.progress_stage === "completed").length;
+    const groupsOngoing = activeGroupsWithCurriculum.filter(g => g.progress_stage !== "completed").length;
 
     return {
       totalBooks,
       totalChapters,
-      totalGroups: groupsWithCurriculum.length,
+      totalGroups: activeGroupsWithCurriculum.length,
       groupsDone,
       groupsOngoing
     };
@@ -277,13 +282,15 @@ export const CurriculumPage: React.FC = () => {
         </div>
 
         <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
-          <button
-            onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-indigo-950" />
-            <span>Add Book / Topic Study</span>
-          </button>
+          {canManage && (
+            <button
+              onClick={() => handleOpenModal()}
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-indigo-950" />
+              <span>Add Book / Topic Study</span>
+            </button>
+          )}
 
           <button
             onClick={loadData}
@@ -434,7 +441,7 @@ export const CurriculumPage: React.FC = () => {
               }`}>
               {filteredStudyTopics.map(topic => {
                 const isSelected = selectedDetailTopic?.id === topic.id;
-                const { completedGroups, ongoingGroups, matchedGroups } = getGroupsForTopic(topic);
+                const { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups } = getGroupsForTopic(topic);
 
                 return (
                   <div
@@ -481,9 +488,16 @@ export const CurriculumPage: React.FC = () => {
                             <Users className="w-3.5 h-3.5 text-indigo-700" />
                             <span>Small Groups Status</span>
                           </div>
-                          <span className="text-[10px] text-charcoal/50 font-bold">
-                            {matchedGroups.length} Total {matchedGroups.length === 1 ? "Group" : "Groups"}
-                          </span>
+                          <div className="flex items-center gap-1.5 text-[10px]">
+                            <span className="text-charcoal/70 font-bold">
+                              {activeGroups.length} Active {activeGroups.length === 1 ? "Group" : "Groups"}
+                            </span>
+                            {mergedGroups.length > 0 && (
+                              <span className="text-purple-700 font-bold bg-purple-100/80 px-1.5 py-0.2 rounded text-[9px] border border-purple-200">
+                                +{mergedGroups.length} merged
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Done & Ongoing Badges */}
@@ -518,17 +532,20 @@ export const CurriculumPage: React.FC = () => {
                         {/* Mini group badges preview if any */}
                         {matchedGroups.length > 0 ? (
                           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
-                            {matchedGroups.slice(0, 3).map((g) => {
-                              const isDone = completedGroups.some(cg => cg.id === g.id);
+                            {[...activeGroups, ...mergedGroups].slice(0, 3).map((g) => {
+                              const isM = g.status === "merged";
+                              const isDone = !isM && completedGroups.some(cg => cg.id === g.id);
                               return (
                                 <span
                                   key={g.id}
-                                  className={`px-2 py-0.5 rounded-lg text-[9px] font-bold whitespace-nowrap truncate max-w-[110px] ${isDone
-                                    ? "bg-emerald-100/80 text-emerald-900"
-                                    : "bg-amber-100/80 text-amber-900"
+                                  className={`px-2 py-0.5 rounded-lg text-[9px] font-bold whitespace-nowrap truncate max-w-[110px] ${isM
+                                    ? "bg-purple-100 text-purple-900 border border-purple-200"
+                                    : isDone
+                                      ? "bg-emerald-100/80 text-emerald-900"
+                                      : "bg-amber-100/80 text-amber-900"
                                     }`}
                                 >
-                                  {g.name}
+                                  {isM ? `📦 ${g.name}` : g.name}
                                 </span>
                               );
                             })}
@@ -566,28 +583,30 @@ export const CurriculumPage: React.FC = () => {
                     </div>
 
                     {/* Quick Card Action Buttons: Edit, Delete */}
-                    <div className="flex items-center justify-end gap-1 pt-3 border-t border-gray-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenModal(topic);
-                        }}
-                        className="p-2 hover:bg-indigo-50 rounded-xl text-charcoal/50 hover:text-indigo-700 transition-colors cursor-pointer"
-                        title="Edit book"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirmTopic(topic);
-                        }}
-                        className="p-2 hover:bg-rose-50 rounded-xl text-charcoal/50 hover:text-rose-600 transition-colors cursor-pointer"
-                        title="Delete book"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {canManage && (
+                      <div className="flex items-center justify-end gap-1 pt-3 border-t border-gray-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenModal(topic);
+                          }}
+                          className="p-2 hover:bg-indigo-50 rounded-xl text-charcoal/50 hover:text-indigo-700 transition-colors cursor-pointer"
+                          title="Edit book"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmTopic(topic);
+                          }}
+                          className="p-2 hover:bg-rose-50 rounded-xl text-charcoal/50 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Delete book"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -598,13 +617,15 @@ export const CurriculumPage: React.FC = () => {
         {/* Right Side: Group Status Inspector & Book Details Panel */}
         {selectedDetailTopic && isInspectorOpen && (() => {
           const topicData = topicDetailData?.topic || selectedDetailTopic;
-          const { completedGroups, ongoingGroups, matchedGroups } = getGroupsForTopic(topicData);
+          const { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups } = getGroupsForTopic(topicData);
 
           const displayedGroups = detailGroupTab === "completed"
             ? completedGroups
             : detailGroupTab === "ongoing"
               ? ongoingGroups
-              : matchedGroups;
+              : detailGroupTab === "merged"
+                ? mergedGroups
+                : activeGroups;
 
           return (
             <>
@@ -672,29 +693,38 @@ export const CurriculumPage: React.FC = () => {
                         <p className="text-[11px] text-charcoal/60">Groups studying this book</p>
                       </div>
 
-                      {/* Segmented Filter: All, Done, Ongoing */}
-                      <div className="flex items-center bg-gray-100 p-1 rounded-xl gap-1 shrink-0">
+                      {/* Segmented Filter: Active, Ongoing, Done, Merged */}
+                      <div className="flex items-center bg-gray-100 p-1 rounded-xl gap-1 shrink-0 flex-wrap">
                         <button
                           onClick={() => setDetailGroupTab("all")}
-                          className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "all" ? "bg-white text-indigo-900 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "all" ? "bg-white text-indigo-900 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
                             }`}
                         >
-                          All ({matchedGroups.length})
-                        </button>
-                        <button
-                          onClick={() => setDetailGroupTab("completed")}
-                          className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "completed" ? "bg-white text-emerald-800 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
-                            }`}
-                        >
-                          Done ({completedGroups.length})
+                          Active ({activeGroups.length})
                         </button>
                         <button
                           onClick={() => setDetailGroupTab("ongoing")}
-                          className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "ongoing" ? "bg-white text-amber-800 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "ongoing" ? "bg-white text-amber-800 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
                             }`}
                         >
                           Ongoing ({ongoingGroups.length})
                         </button>
+                        <button
+                          onClick={() => setDetailGroupTab("completed")}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "completed" ? "bg-white text-emerald-800 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                            }`}
+                        >
+                          Done ({completedGroups.length})
+                        </button>
+                        {mergedGroups.length > 0 && (
+                          <button
+                            onClick={() => setDetailGroupTab("merged")}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${detailGroupTab === "merged" ? "bg-white text-purple-900 shadow-2xs" : "text-purple-700/80 hover:text-purple-900"
+                              }`}
+                          >
+                            Merged ({mergedGroups.length})
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -704,10 +734,12 @@ export const CurriculumPage: React.FC = () => {
                         <Users className="w-6 h-6 text-charcoal/30 mx-auto" />
                         <p className="text-xs font-bold text-charcoal/70">
                           {detailGroupTab === "completed"
-                            ? "No small groups have completed this book yet."
+                            ? "No active small groups have completed this book yet."
                             : detailGroupTab === "ongoing"
-                              ? "No small groups are currently ongoing with this book."
-                              : "No small groups are assigned to this book yet."}
+                              ? "No active small groups are currently ongoing with this book."
+                              : detailGroupTab === "merged"
+                                ? "No merged/archived groups found for this book."
+                                : "No active small groups are assigned to this book yet."}
                         </p>
                         <p className="text-[11px] text-charcoal/50">
                           To link a group, set this book as their curriculum in Small Groups.
@@ -716,19 +748,23 @@ export const CurriculumPage: React.FC = () => {
                     ) : (
                       <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1 no-scrollbar">
                         {displayedGroups.map((grp) => {
-                          const isGroupDone = completedGroups.some((cg) => cg.id === grp.id);
+                          const isMerged = grp.status === "merged";
+                          const isGroupDone = !isMerged && completedGroups.some((cg) => cg.id === grp.id);
+                          const hasSourceMerge = !isMerged && Boolean(grp.source_group_names);
 
                           return (
                             <div
                               key={grp.id}
-                              className={`p-3 rounded-2xl border text-xs space-y-2 transition-all ${isGroupDone
-                                ? "bg-emerald-50/60 border-emerald-200 hover:border-emerald-300"
-                                : "bg-amber-50/60 border-amber-200 hover:border-amber-300"
+                              className={`p-3 rounded-2xl border text-xs space-y-2 transition-all ${isMerged
+                                ? "bg-purple-50/50 border-purple-200/80 hover:border-purple-300"
+                                : isGroupDone
+                                  ? "bg-emerald-50/60 border-emerald-200 hover:border-emerald-300"
+                                  : "bg-amber-50/60 border-amber-200 hover:border-amber-300"
                                 }`}
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-black text-charcoal text-xs truncate">{grp.name}</span>
                                     {grp.ministry_name && (
                                       <span
@@ -744,11 +780,18 @@ export const CurriculumPage: React.FC = () => {
                                   </div>
                                 </div>
 
-                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black shrink-0 ${isGroupDone
-                                  ? "bg-emerald-600 text-white shadow-2xs"
-                                  : "bg-amber-500 text-white shadow-2xs"
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black shrink-0 ${isMerged
+                                  ? "bg-purple-100 text-purple-900 border border-purple-200 shadow-2xs"
+                                  : isGroupDone
+                                    ? "bg-emerald-600 text-white shadow-2xs"
+                                    : "bg-amber-500 text-white shadow-2xs"
                                   }`}>
-                                  {isGroupDone ? (
+                                  {isMerged ? (
+                                    <>
+                                      <GitMerge className="w-3 h-3 text-purple-700" />
+                                      <span>Merged Archive</span>
+                                    </>
+                                  ) : isGroupDone ? (
                                     <>
                                       <CheckCircle2 className="w-3 h-3" />
                                       <span>Done</span>
@@ -761,6 +804,22 @@ export const CurriculumPage: React.FC = () => {
                                   )}
                                 </span>
                               </div>
+
+                              {/* Merged Group Information Notice */}
+                              {isMerged && grp.merged_into_group_name && (
+                                <div className="text-[10px] text-purple-900 bg-purple-100/70 p-2 rounded-xl border border-purple-200 flex items-center gap-1.5 font-medium leading-tight">
+                                  <GitMerge className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                                  <span>Merged into: <strong className="font-bold">{grp.merged_into_group_name}</strong></span>
+                                </div>
+                              )}
+
+                              {/* Resulting Merged Group Notice */}
+                              {hasSourceMerge && (
+                                <div className="text-[10px] text-teal-950 bg-teal-50 p-2 rounded-xl border border-teal-200 flex items-center gap-1.5 font-medium leading-tight">
+                                  <GitMerge className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                                  <span>Merged from: <strong className="font-bold">{grp.source_group_names}</strong></span>
+                                </div>
+                              )}
 
                               {/* Group Details: Schedule, Location, Members */}
                               <div className="flex items-center justify-between text-[10px] text-charcoal/60 pt-1.5 border-t border-black/5 flex-wrap gap-1">
@@ -775,7 +834,7 @@ export const CurriculumPage: React.FC = () => {
                                   </div>
                                 )}
                                 {grp.current_member_count !== undefined && (
-                                  <div className="flex items-center gap-1 font-bold text-indigo-900">
+                                  <div className={`flex items-center gap-1 font-bold ${isMerged ? "text-purple-900" : "text-indigo-900"}`}>
                                     <Users className="w-3 h-3" />
                                     <span>{grp.current_member_count} Members</span>
                                   </div>

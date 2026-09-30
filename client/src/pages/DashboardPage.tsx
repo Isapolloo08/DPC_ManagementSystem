@@ -40,6 +40,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [agingOutMembers, setAgingOutMembers] = useState<(Member & { current_age: number; suggested_next_ministry: Ministry })[]>([]);
   const [birthdaySummary, setBirthdaySummary] = useState<BirthdaySummary | null>(null);
   const [bibleStudyGroups, setBibleStudyGroups] = useState<BibleStudyGroup[]>([]);
+  const [unenrolledMembers, setUnenrolledMembers] = useState<Member[]>([]);
   const [dutySchedule, setDutySchedule] = useState<SaturdayDutyScheduleResponse | null>(null);
   const [dishwashingSchedule, setDishwashingSchedule] = useState<SundayDutyScheduleResponse | null>(null);
   const [baptismCandidateData, setBaptismCandidateData] = useState<BaptismCandidatesResponse | null>(null);
@@ -60,7 +61,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const isCoordinator = user?.role_name === "Coordinator";
   const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
     ? user.ministries[0].id
-    : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
+    : (user?.role_name !== "Admin" && user?.role_name !== "Pastor" && user?.role_name !== "IT Admin" && selectedMinistryId ? selectedMinistryId : null);
   const coordinatorMinistryName = user?.ministries && user.ministries.length > 0 ? user.ministries[0].name : "Youth";
   const scopedMemberCount = coordinatorMinistryId
     ? (metrics?.ministry_breakdown?.find(m => m.id === coordinatorMinistryId)?.member_count ?? 2)
@@ -84,7 +85,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     try {
       setLoading(true);
       const activeScope = coordinatorMinistryId ?? selectedMinistryId ?? undefined;
-      const [m, a, e, ao, b, grps, dutyRes, dishRes, baptismRes] = await Promise.all([
+      const [m, a, e, ao, b, grps, dutyRes, dishRes, baptismRes, membersRes] = await Promise.all([
         api.getDashboardMetrics(activeScope).catch((err) => {
           console.error("Metrics error:", err);
           return null;
@@ -92,11 +93,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         api.getAnnouncements(activeScope).catch(() => []),
         api.getEvents({ ministry_id: activeScope, upcoming: true }).catch(() => []),
         api.getAgingOutMembers().catch(() => []),
-        api.getBirthdays({ ministry_id: activeScope, timeframe: "all" }).catch(() => null),
+        api.getBirthdays({ ministry_id: activeScope, timeframe: "this_week" }).catch(() => null),
         api.getGroups({ ministry_id: activeScope }).catch(() => []),
         api.getDutySchedule({ ministry_id: activeScope }).catch(() => null),
         api.getDishwashingSchedule({ count: 8 }).catch(() => null),
-        api.getQualifiedBaptismCandidates(activeScope).catch(() => null)
+        api.getQualifiedBaptismCandidates(activeScope).catch(() => null),
+        api.getMembers({ ministry_id: activeScope, status: "active" }).catch(() => [])
       ]);
       if (m) setMetrics(m);
       setAnnouncements(a.slice(0, 3));
@@ -104,6 +106,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       setAgingOutMembers(coordinatorMinistryId ? ao.filter((item: any) => item.ministry_id === coordinatorMinistryId) : ao);
       if (b) setBirthdaySummary(b);
       setBibleStudyGroups(grps);
+      if (membersRes && Array.isArray(membersRes)) {
+        const unenrolled = membersRes.filter((mem: any) => !mem.bible_study_group_id && mem.status === "active");
+        setUnenrolledMembers(unenrolled);
+      }
       if (dutyRes) setDutySchedule(dutyRes);
       if (dishRes) setDishwashingSchedule(dishRes);
       if (baptismRes) setBaptismCandidateData(baptismRes);
@@ -506,14 +512,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           </div>
           <div>
             <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {bibleStudyGroups.length || 2} <span className="text-xs font-bold text-slate-500">Groups Active</span>
+              {bibleStudyGroups.length} <span className="text-xs font-bold text-slate-500">Groups Active</span>
             </div>
             <div className="text-[11px] font-medium text-slate-500 mt-0.5 truncate">
-              18 disciples enrolled total
+              {unenrolledMembers.length > 0 ? (
+                <span className="text-amber-700 font-bold">{unenrolledMembers.length} without small group</span>
+              ) : (
+                <span>100% disciples enrolled</span>
+              )}
             </div>
             <div className="text-[10px] font-bold text-emerald-700 mt-2 flex items-center gap-1 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              {todayBibleStudyGroups.length || 1} Meeting Today ({todayDayName.slice(0, 3)})
+              {todayBibleStudyGroups.length} Meeting Today ({todayDayName.slice(0, 3)})
             </div>
           </div>
         </div>
@@ -1262,7 +1272,97 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </button>
           </div>
 
-          {/* CARD 3: Birthday Celebrants */}
+          {/* CARD 3: Members Without Groups / Unassigned Disciples */}
+          <div className="bg-white rounded-3xl p-5 border border-indigo-100/80 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-100">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900">Members Without Groups</h4>
+                  <p className="text-[10px] text-slate-500">
+                    {unenrolledMembers.length} {unenrolledMembers.length === 1 ? "disciple needs" : "disciples need"} a small group
+                  </p>
+                </div>
+              </div>
+              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                unenrolledMembers.length > 0
+                  ? "bg-amber-100 text-amber-900 border-amber-200"
+                  : "bg-emerald-100 text-emerald-900 border-emerald-200"
+              }`}>
+                {unenrolledMembers.length > 0 ? `${unenrolledMembers.length} Unassigned` : "100% Enrolled"}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {unenrolledMembers.length > 0 ? (
+                unenrolledMembers.slice(0, 3).map((m: any) => (
+                  <div
+                    key={m.id}
+                    className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between gap-2 hover:bg-amber-50/40 hover:border-amber-200 transition-all"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0 shadow-2xs"
+                        style={{ backgroundColor: m.ministry_color || "#3b82f6" }}
+                      >
+                        {m.first_name?.[0] || ""}{m.last_name?.[0] || ""}
+                      </div>
+                      <div className="min-w-0">
+                        <h5 className="font-bold text-xs text-slate-900 truncate">{m.first_name} {m.last_name}</h5>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                          <span className="truncate">{m.ministry_name || "General"}</span>
+                          {m.age ? (
+                            <>
+                              <span>•</span>
+                              <span>Age {m.age}</span>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => onNavigate("biblestudy")}
+                      className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300/80 rounded-lg text-[10px] font-black shrink-0 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Enroll into a Bible Study Group"
+                    >
+                      <span>Assign</span>
+                      <ArrowRight className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="py-4 text-center space-y-1 bg-emerald-50/40 rounded-2xl border border-emerald-100 p-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto" />
+                  <p className="text-xs font-bold text-emerald-950">100% Group Coverage!</p>
+                  <p className="text-[10px] text-emerald-700/80">All active disciples belong to a small group.</p>
+                </div>
+              )}
+
+              {unenrolledMembers.length > 3 && (
+                <div className="text-center pt-0.5">
+                  <button
+                    onClick={() => onNavigate("biblestudy")}
+                    className="text-[11px] font-bold text-amber-700 hover:text-amber-800 transition-colors cursor-pointer"
+                  >
+                    + {unenrolledMembers.length - 3} more unassigned disciples →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => onNavigate("biblestudy")}
+              className="w-full bg-white hover:bg-amber-50 text-amber-950 border border-amber-300/80 font-bold text-xs py-2 px-3 rounded-2xl shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer hover:border-amber-400"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-amber-600" />
+              <span>Open Small Groups & Enroll</span>
+            </button>
+          </div>
+
+          {/* CARD 4: Birthday Celebrants (This Week Only) */}
           <div className="bg-white rounded-3xl p-5 border border-indigo-100/80 shadow-xs space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -1271,49 +1371,67 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                 </div>
                 <div>
                   <h4 className="text-xs font-black text-slate-900">Birthday Celebrants</h4>
-                  <p className="text-[10px] text-slate-500">{birthdaySummary?.counts.this_month || 0} celebrants this month</p>
+                  <p className="text-[10px] text-slate-500">
+                    {birthdaySummary?.celebrants?.length || birthdaySummary?.counts.this_week || 0} celebrants this week
+                  </p>
                 </div>
               </div>
-              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
-                September
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+                This Week
               </span>
             </div>
 
             <div className="space-y-2">
-              {(birthdaySummary?.celebrants && birthdaySummary.celebrants.length > 0
-                ? birthdaySummary.celebrants.slice(0, 3)
-                : [
-                    { id: 101, first_name: "Jayson", last_name: "Almadrove", turning_age: 23, birth_month_name: "Sep", birth_day: 20 },
-                    { id: 102, first_name: "Drizia Marie", last_name: "Mago", turning_age: 18, birth_month_name: "Sep", birth_day: 22 },
-                    { id: 103, first_name: "Jigger Adrian", last_name: "Igma", turning_age: 20, birth_month_name: "Sep", birth_day: 23 }
-                  ]
-              ).map((c: any) => (
-                <div
-                  key={c.id}
-                  className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between gap-2"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                      {c.first_name?.[0] || ""}{c.last_name?.[0] || ""}
-                    </div>
-                    <div className="min-w-0">
-                      <h5 className="font-bold text-xs text-slate-900 truncate">{c.first_name} {c.last_name}</h5>
-                      <p className="text-[10px] text-slate-500">Turning {c.turning_age} • {c.birth_month_name} {c.birth_day}</p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleOpenGreeting(c)}
-                    className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-[10px] font-bold shrink-0 transition-all flex items-center gap-1 cursor-pointer"
+              {birthdaySummary?.celebrants && birthdaySummary.celebrants.length > 0 ? (
+                birthdaySummary.celebrants.slice(0, 3).map((c: any) => (
+                  <div
+                    key={c.id}
+                    className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between gap-2 hover:bg-purple-50/30 hover:border-purple-200 transition-all"
                   >
-                    <span>Bless 🎂</span>
-                  </button>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0 shadow-2xs"
+                        style={{ backgroundColor: c.ministry_color || "#7c3aed" }}
+                      >
+                        {c.first_name?.[0] || ""}{c.last_name?.[0] || ""}
+                      </div>
+                      <div className="min-w-0">
+                        <h5 className="font-bold text-xs text-slate-900 truncate">{c.first_name} {c.last_name}</h5>
+                        <p className="text-[10px] text-slate-500">
+                          Turning {c.turning_age} • {c.birth_month_name} {c.birth_day} {c.is_today ? "🎉 (Today!)" : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleOpenGreeting(c)}
+                      className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-[10px] font-bold shrink-0 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Bless 🎂</span>
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="py-4 text-center space-y-1 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200 p-3">
+                  <Cake className="w-5 h-5 text-purple-400 mx-auto" />
+                  <p className="text-xs font-bold text-slate-700">No Birthdays This Week</p>
+                  <p className="text-[10px] text-slate-400">
+                    {birthdaySummary?.counts?.this_month ? `${birthdaySummary.counts.this_month} celebrants this month` : "No celebrants scheduled this week"}
+                  </p>
                 </div>
-              ))}
+              )}
             </div>
+
+            <button
+              onClick={() => onNavigate("events")}
+              className="w-full bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-bold text-xs py-2 px-3 rounded-2xl shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span>View All Events & Birthdays</span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+            </button>
           </div>
 
-          {/* CARD 4: Executive Shortcuts */}
+          {/* CARD 5: Executive Shortcuts */}
           <div className="bg-white rounded-3xl p-5 border border-indigo-100/80 shadow-xs space-y-3">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
               EXECUTIVE SHORTCUTS

@@ -42,7 +42,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   onNavigateGeneralTab
 }) => {
   const { user, selectedMinistryId } = useAuth();
-  const isLeaderOrHigher = user?.role_name === "Leader" || user?.role_name === "Coordinator" || user?.role_name === "Admin";
+  const isLeaderOrHigher = user?.role_name === "Leader" || user?.role_name === "Coordinator" || user?.role_name === "Pastor" || user?.role_name === "Admin" || user?.role_name === "IT Admin";
 
   // Active sub-view: "dashboard" | "biblestudy" | "attendance_monitor" | "duty"
   const [activeTab, setActiveTab] = useState<"dashboard" | "members" | "biblestudy" | "attendance_monitor" | "duty">(
@@ -63,12 +63,16 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   };
 
   // State
-  const [allGroups, setAllGroups] = useState<BibleStudyGroup[]>([]);
+  const [myGroups, setMyGroups] = useState<BibleStudyGroup[]>([]);
+  const [groupsUserId, setGroupsUserId] = useState<number | null>(null);
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [studyTopics, setStudyTopics] = useState<StudyTopic[]>([]);
   const [designatedDishwashing, setDesignatedDishwashing] = useState<SundayDutyScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequest = useRef(0);
+  useEffect(() => () => { loadRequest.current++; }, []);
 
   // Group selection IDs
   const [selectedLedGroupId, setSelectedLedGroupId] = useState<number | null>(null);
@@ -167,97 +171,67 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   useSocketEvent("dishwashing:changed", () => loadLeaderData());
 
   const loadLeaderData = async () => {
+    const requestId = ++loadRequest.current;
     try {
       setLoading(true);
+      setLoadError(null);
       const [grps, mems, anns, topics, dishRes] = await Promise.all([
-        api.getGroups({ ministry_id: selectedMinistryId ?? undefined }).catch(() => []),
+        api.getMyGroups(),
         api.getMembers({ ministry_id: selectedMinistryId ?? undefined }).catch(() => []),
         api.getAnnouncements(selectedMinistryId ?? undefined).catch(() => []),
         api.getStudyTopics({ ministry_id: selectedMinistryId ?? undefined }).catch(() => null),
         api.getDishwashingSchedule({ count: 12 }).catch(() => ({ schedule: [] }))
       ]);
 
+      if (requestId !== loadRequest.current) return;
       const rawGroups: BibleStudyGroup[] = grps || [];
-      setAllGroups(rawGroups);
+      setMyGroups(rawGroups);
+      setGroupsUserId(user?.id ?? null);
       setAllMembers(mems || []);
       setAnnouncements(anns || []);
       setStudyTopics(topics?.all || []);
 
-      const cleanUser = user ? user.name.replace(/\(.*?\)/g, "").trim().toLowerCase() : "";
-      const userMemberId = (user as any)?.member_id;
-
+      const userGroupIds = new Set(rawGroups.map(group => group.id));
       const myDishwashing = (dishRes?.schedule || []).filter((d: SundayDutyScheduleItem) => {
-        if (!user || user.role_name !== "Leader") return true;
         if (!d.team) return false;
-        const leaderName = (d.team.leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
-        if (leaderName && (leaderName === cleanUser || cleanUser.includes(leaderName) || leaderName.includes(cleanUser))) return true;
-        if (userMemberId && d.team.leader_id === userMemberId) return true;
-        if (d.team.members && d.team.members.some((m: any) => m.id === userMemberId || (m.name && m.name.toLowerCase().includes(cleanUser)))) return true;
-        return false;
+        return d.team.biblestudy_group_ids?.some(id => userGroupIds.has(id))
+          || (d.team.biblestudy_group_id != null && userGroupIds.has(d.team.biblestudy_group_id));
       });
       setDesignatedDishwashing(myDishwashing);
 
     } catch (err: any) {
-      console.error("Failed to load leader data:", err);
-      showToast(err.message || "Failed to load leader workspace", "error");
+      if (requestId !== loadRequest.current) return;
+      setMyGroups([]);
+      setDesignatedDishwashing([]);
+      setLoadError("Unable to load your assigned groups. Please try again.");
     } finally {
-      setLoading(false);
+      if (requestId === loadRequest.current) setLoading(false);
     }
   };
 
-  // Group matching: led groups or all groups
-  const myLedGroups = useMemo(() => {
-    const cleanUser = user ? user.name.replace(/\(.*?\)/g, "").trim().toLowerCase() : "";
-    const userEmail = user ? user.email.trim().toLowerCase() : "";
-    const userUsername = user?.username ? user.username.trim().toLowerCase() : "";
-    const userMemberId = (user as any)?.member_id;
-    const userLinkedName = ((user as any)?.linked_member_name || "").trim().toLowerCase();
-
-    const matched = allGroups.filter(g => {
-      // Primary Leader check
-      const cleanLeader = (g.leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
-      if (cleanLeader) {
-        if (cleanUser === cleanLeader || cleanUser.includes(cleanLeader) || cleanLeader.includes(cleanUser)) return true;
-        if (userLinkedName && (userLinkedName === cleanLeader || userLinkedName.includes(cleanLeader) || cleanLeader.includes(userLinkedName))) return true;
-      }
-      const cleanContact = (g.leader_contact || "").trim().toLowerCase();
-      if (cleanContact && (cleanContact === userEmail || cleanContact === userUsername)) return true;
-      if (user?.id && (g as any).leader_id === user.id) return true;
-      if (userMemberId && (g as any).leader_id === userMemberId) return true;
-
-      // Assistant Leader check
-      const cleanAssistant = (g.assistant_leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
-      if (cleanAssistant) {
-        if (cleanUser === cleanAssistant || cleanUser.includes(cleanAssistant) || cleanAssistant.includes(cleanUser)) return true;
-        if (userLinkedName && (userLinkedName === cleanAssistant || userLinkedName.includes(cleanAssistant) || cleanAssistant.includes(userLinkedName))) return true;
-      }
-      const cleanAssistantContact = (g.assistant_leader_contact || "").trim().toLowerCase();
-      if (cleanAssistantContact && (cleanAssistantContact === userEmail || cleanAssistantContact === userUsername)) return true;
-      if (user?.id && (g as any).assistant_leader_id === user.id) return true;
-      if (userMemberId && (g as any).assistant_leader_id === userMemberId) return true;
-
-      return false;
-    });
-
-    if (matched.length === 0) {
-      return allGroups;
-    }
-    return matched;
-  }, [allGroups, user]);
-
-  // Auto-select initial active group ID
+  // The personal endpoint is already scoped to this account, for every role.
   useEffect(() => {
-    if (allGroups.length > 0) {
-      if (!selectedLedGroupId || !allGroups.some(g => g.id === selectedLedGroupId)) {
-        setSelectedLedGroupId(myLedGroups[0]?.id || allGroups[0].id);
-      }
-    }
-  }, [allGroups, myLedGroups, selectedLedGroupId]);
+    setSelectedLedGroupId(current => myGroups.some(group => group.id === current)
+      ? current : myGroups[0]?.id ?? null);
+    setIsGroupSwitcherOpen(false);
+  }, [myGroups]);
 
-  const activeGroup = useMemo(() => {
-    if (!selectedLedGroupId || allGroups.length === 0) return allGroups[0] || null;
-    return allGroups.find(g => g.id === selectedLedGroupId) || allGroups[0] || null;
-  }, [allGroups, selectedLedGroupId]);
+  const activeGroup = useMemo(() =>
+    groupsUserId === user?.id ? myGroups.find(group => group.id === selectedLedGroupId) ?? myGroups[0] ?? null : null,
+    [myGroups, selectedLedGroupId, groupsUserId, user?.id]);
+
+  useEffect(() => {
+    setIsRollCallModalOpen(false);
+    setIsAddDiscipleModalOpen(false);
+    setIsBulletinModalOpen(false);
+    setIsSwapShiftModalOpen(false);
+    setIsRescheduleModalOpen(false);
+    setSelectedMemberIdsToAdd([]);
+  }, [activeGroup?.id]);
+
+  const activeGroupDuties = useMemo(() => designatedDishwashing.filter(duty =>
+    activeGroup && (duty.team?.biblestudy_group_id === activeGroup.id
+      || duty.team?.biblestudy_group_ids?.includes(activeGroup.id))), [designatedDishwashing, activeGroup]);
 
   const currentMembers: BibleStudyMember[] = useMemo(() => {
     if (!activeGroup || !activeGroup.members) return [];
@@ -570,8 +544,26 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     }
   };
 
-  if (loading && allGroups.length === 0) {
+  if (loading) {
     return <DashboardSkeleton />;
+  }
+
+  if (!activeGroup) {
+    return (
+      <section className="space-y-5">
+        <h1 className="text-2xl sm:text-3xl font-black text-charcoal">My Bible Study Group</h1>
+        <div className="rounded-3xl border border-indigo-100 bg-white p-8 text-center space-y-3">
+          <Users className="w-10 h-10 mx-auto text-indigo" />
+          <h2 className="text-lg font-bold text-charcoal">{loadError ? "Unable to load groups" : "No assigned group"}</h2>
+          <p className="text-sm text-charcoal/70">
+            {loadError || "You are not currently assigned to a Bible study group. Please contact your church coordinator to be assigned as a leader, assistant leader, or member."}
+          </p>
+          <button type="button" onClick={loadLeaderData} className="inline-flex items-center gap-2 rounded-xl bg-indigo px-4 py-2 text-sm font-bold text-white">
+            <RefreshCw className="w-4 h-4" /> {loadError ? "Try again" : "Refresh assignments"}
+          </button>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -618,6 +610,8 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         <div ref={switcherRef} className="relative shrink-0">
           <button
             type="button"
+            aria-label="Switch my Bible study group"
+            aria-expanded={isGroupSwitcherOpen}
             onClick={() => setIsGroupSwitcherOpen(!isGroupSwitcherOpen)}
             className="flex items-center gap-2.5 bg-white border border-indigo-200 hover:border-indigo-400 px-4 py-2.5 rounded-2xl shadow-2xs hover:shadow-md transition-all text-xs font-bold text-charcoal cursor-pointer active:scale-95"
           >
@@ -638,10 +632,10 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           {isGroupSwitcherOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-indigo-100 p-2 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95">
               <div className="p-2 text-[10px] font-black text-indigo-950 uppercase tracking-wider flex items-center justify-between">
-                <span>Switch Small Group ({allGroups.length})</span>
+                <span>Switch Small Group ({myGroups.length})</span>
               </div>
               <div className="max-h-60 overflow-y-auto py-1 space-y-1">
-                {allGroups.map(g => (
+                {myGroups.map(g => (
                   <button
                     key={g.id}
                     onClick={() => {
@@ -717,7 +711,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           <ShieldCheck className="w-4 h-4" />
           <span>Sunday Dishwashing Roster</span>
           <span className="bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2 py-0.2 rounded-full">
-            Upcoming Nov
+            My Schedule
           </span>
         </button>
       </div>
@@ -728,7 +722,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           activeGroup={activeGroup}
           groupDisciples={currentMembers}
           studyTopics={studyTopics}
-          designatedDishwashing={designatedDishwashing}
+          designatedDishwashing={activeGroupDuties}
           onNavigateTab={setActiveTab}
           onNavigateGeneralTab={onNavigateGeneralTab}
           onOpenRollCall={handleOpenRollCall}
@@ -743,7 +737,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         <LeaderMembers
           activeGroup={activeGroup}
           groupDisciples={currentMembers}
-          ledGroups={myLedGroups}
+          ledGroups={myGroups}
           selectedGroupId={selectedLedGroupId}
           onSelectGroup={(id) => setSelectedLedGroupId(id)}
           onOpenAddDiscipleModal={() => setIsAddDiscipleModalOpen(true)}
@@ -777,7 +771,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
             <div>
               <h3 className="text-xl font-black text-charcoal">Sunday Fellowship Meal Dishwashing Roster</h3>
               <p className="text-xs text-charcoal/60 mt-0.5">
-                Equitable Sunday fellowship meal dishwashing rotation for all Bible Study circles and small groups.
+                Sunday fellowship meal dishwashing assignments for your selected group.
               </p>
             </div>
             <button
@@ -801,19 +795,18 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                <tr className="bg-amber-50/80 font-bold">
-                  <td className="py-3.5 px-4 font-bold">Sun, Nov 15</td>
-                  <td className="py-3.5 px-4">{activeGroup?.name || "BS group ni ate April"}</td>
-                  <td className="py-3.5 px-4">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo border border-indigo-200">
-                      Sunday Dishwashing
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-charcoal/70">Full plates/pots rinse, 3-compartment sink, trash disposal & dish drying.</td>
-                  <td className="py-3.5 px-4 text-right">
-                    <span className="text-amber-950 font-black bg-amber-400 px-2 py-0.5 rounded-full">Active Soon</span>
-                  </td>
-                </tr>
+                {activeGroupDuties.map(duty => (
+                  <tr key={`${duty.duty_date}-${duty.team?.id}`}>
+                    <td className="py-3.5 px-4 font-bold">{duty.date_formatted || duty.duty_date}</td>
+                    <td className="py-3.5 px-4">{activeGroup.name}</td>
+                    <td className="py-3.5 px-4">Sunday Dishwashing</td>
+                    <td className="py-3.5 px-4 text-charcoal/70">{duty.team?.tasks_checklist || "Contact your coordinator for details."}</td>
+                    <td className="py-3.5 px-4 text-right">{duty.status.replace('_', ' ')}</td>
+                  </tr>
+                ))}
+                {activeGroupDuties.length === 0 && (
+                  <tr><td colSpan={5} className="py-6 px-4 text-center text-charcoal/70">No dishwashing assignments for this group.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1086,36 +1079,12 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <p className="text-charcoal/70">
-                To request a swap for <strong>Sun, Nov 15</strong>, select an alternative date or notify the church coordinator.
-              </p>
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Target Swap Group</label>
-                <select className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-bold">
-                  <option>Group 04 (Youth Leaders) • Sun, Nov 22</option>
-                  <option>Junior Ministry Teachers • Sun, Nov 29</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsSwapShiftModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  showToast("✓ Shift swap request sent to Group 04 Leader for approval.", "success");
-                  setIsSwapShiftModalOpen(false);
-                }}
-                className="px-5 py-2 rounded-xl bg-indigo text-white font-bold shadow-md cursor-pointer text-xs"
-              >
-                Send Swap Request
+            <p className="text-sm text-charcoal/70">
+              Please contact your church coordinator to request a duty swap for {activeGroup.name}.
+            </p>
+            <div className="pt-2 border-t border-gray-100 flex justify-end">
+              <button type="button" onClick={() => setIsSwapShiftModalOpen(false)} className="px-4 py-2 rounded-xl bg-indigo text-white font-bold text-xs">
+                Close
               </button>
             </div>
           </div>

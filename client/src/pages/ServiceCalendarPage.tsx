@@ -30,7 +30,7 @@ import {
 
 export const ServiceCalendarPage: React.FC = () => {
   const { user } = useAuth();
-  const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   // View mode
   const [viewMode, setViewMode] = useState<"list" | "month">("list");

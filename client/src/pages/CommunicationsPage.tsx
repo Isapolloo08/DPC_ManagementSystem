@@ -18,7 +18,7 @@ export const CommunicationsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isAnnounceModalOpen, setIsAnnounceModalOpen] = useState(false);
 
-  const canManageBulletins = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const canManageBulletins = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   const handleDeleteAnnouncement = (id: number, title: string) => {
     const originalAnnouncements = announcements;
@@ -123,7 +123,7 @@ export const CommunicationsPage: React.FC = () => {
     }
   };
 
-  const canPostAnnouncement = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const canPostAnnouncement = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   if (loading && announcements.length === 0) {
     return <CommunicationsPageSkeleton />;

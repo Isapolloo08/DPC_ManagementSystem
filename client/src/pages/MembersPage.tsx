@@ -73,7 +73,7 @@ export const MembersPage: React.FC = () => {
   const isCoordinator = user?.role_name === "Coordinator";
   const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
     ? user.ministries[0].id
-    : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
+    : (user?.role_name !== "Admin" && user?.role_name !== "Pastor" && user?.role_name !== "IT Admin" && selectedMinistryId ? selectedMinistryId : null);
   const coordinatorMinistryName = ministries.find(m => m.id === coordinatorMinistryId)?.name || "Assigned";
 
   const [households, setHouseholds] = useState<Household[]>([]);
@@ -1316,7 +1316,7 @@ export const MembersPage: React.FC = () => {
     })
     : [];
 
-  const canEdit = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const canEdit = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
   if (loading && members.length === 0) {
     return <MembersPageSkeleton />;
   }

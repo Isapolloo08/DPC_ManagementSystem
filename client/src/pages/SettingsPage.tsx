@@ -165,7 +165,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
   }, []);
 
   useEffect(() => {
-    if (user?.role_name === "Admin") void loadNotificationSettings();
+    if (user?.role_name === "Admin" || user?.role_name === "IT Admin" || user?.role_name === "Pastor") void loadNotificationSettings();
   }, [user?.role_name]);
 
   const loadNotificationSettings = async () => {
@@ -473,7 +473,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       });
   };
 
-  const tabs: { id: SettingsTab; label: string; icon: React.ReactNode; count?: number | string }[] = [
+  const isSuperAdmin = user?.role_name === "Admin" || user?.role_name === "IT Admin";
+  const isPastorOrAdmin = isSuperAdmin || user?.role_name === "Pastor";
+
+  useEffect(() => {
+    if (!isSuperAdmin && activeTab === "backup_restore") {
+      setActiveTab("ministries");
+    } else if (!isPastorOrAdmin && activeTab === "notifications_email") {
+      setActiveTab("ministries");
+    }
+  }, [isSuperAdmin, isPastorOrAdmin, activeTab]);
+
+  const allTabs: { id: SettingsTab; label: string; icon: React.ReactNode; count?: number | string }[] = [
     {
       id: "bible_study_categories",
       label: "Bible Study Categories",
@@ -527,6 +538,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       icon: <SettingsIcon className="w-4 h-4" />
     }
   ];
+
+  // Pastor and Admin can see Notifications & Email; only Super Admin can see Backup & Data Management
+  const tabs = allTabs.filter(t => {
+    if (t.id === "backup_restore") {
+      return isSuperAdmin;
+    }
+    if (t.id === "notifications_email") {
+      return isPastorOrAdmin;
+    }
+    return true;
+  });
 
   if (loading && lookups.length === 0 && ministries.length === 0) {
     return <SettingsPageSkeleton />;
@@ -1149,9 +1171,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
         )}
 
         {/* ==================================================== */}
+        {/* 6.5. DATABASE BACKUP & DATA MANAGEMENT */}
+        {/* ==================================================== */}
+        {activeTab === "backup_restore" && (user?.role_name === "Admin" || user?.role_name === "IT Admin") && (
+          <BackupManagementSection onShowToast={showToast} />
+        )}
+
+        {/* ==================================================== */}
         {/* 7. NOTIFICATIONS & EMAIL */}
         {/* ==================================================== */}
-        {activeTab === "notifications_email" && user?.role_name === "Admin" && (
+        {activeTab === "notifications_email" && (user?.role_name === "Admin" || user?.role_name === "IT Admin" || user?.role_name === "Pastor") && (
           <div className="space-y-6">
             <form onSubmit={saveEmailSettings} className="bg-white rounded-2xl p-5 sm:p-7 border border-indigo-100 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">

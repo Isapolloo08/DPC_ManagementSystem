@@ -19,7 +19,8 @@ import {
   Layers, ShieldCheck, HeartHandshake,
   Award, CheckCheck, Library, BookmarkCheck,
   ChevronDown, User as UserIcon, Check, Edit, FileText, AlertCircle,
-  CalendarClock, AlertTriangle, GitMerge, History, ArrowRight, ArrowLeftRight, UserCheck
+  CalendarClock, AlertTriangle, GitMerge, History, ArrowRight, ArrowLeftRight, UserCheck,
+  Archive, RotateCcw, Sparkles
 } from "lucide-react";
 import { getBookTotalChapters, generateChapterOptions } from "../utils/curriculumHelper";
 
@@ -58,6 +59,26 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
   // Group Transition & History Modals State
   const [isTransitionModalOpen, setIsTransitionModalOpen] = useState(false);
   const [historyGroup, setHistoryGroup] = useState<BibleStudyGroup | null>(null);
+  const [isGlobalHistoryOpen, setIsGlobalHistoryOpen] = useState(false);
+
+  // Complete Group Lifecycle Modal State
+  const [completeGroupModal, setCompleteGroupModal] = useState<BibleStudyGroup | null>(null);
+  const [completeFormData, setCompleteFormData] = useState({
+    completed_book_title_snapshot: "",
+    completed_chapter: "",
+    completed_total_chapters: 12,
+    notes: ""
+  });
+  const [isCompleting, setIsCompleting] = useState(false);
+
+  // Archive (Soft-Delete) Confirmation Modal State
+  const [archiveGroupModal, setArchiveGroupModal] = useState<BibleStudyGroup | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  // Restore Group Confirmation Modal State
+  const [restoreGroupModal, setRestoreGroupModal] = useState<BibleStudyGroup | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Custom Confirmation & Alert Modal State
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
@@ -94,8 +115,8 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
     ? String(allowedMinistries[0].id)
     : (selectedMinistryId ? String(selectedMinistryId) : "");
 
-  // Filter states
-  const [statusFilter, setStatusFilter] = useState<"active" | "all" | "merged">("active");
+  // Main visible lifecycle filters: Active | Completed | Archived | All
+  const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "archived" | "all">("active");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [filterMinistry, setFilterMinistry] = useState<string>(initialMinistry);
   const [filterDay, setFilterDay] = useState<string>("all");
@@ -125,8 +146,6 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
     ministry_id: isRestricted && allowedMinistries.length > 0 ? String(allowedMinistries[0].id) : "",
     leader_name: "",
     leader_contact: "",
-    assistant_leader_name: "",
-    assistant_leader_contact: "",
     meeting_day: "Wednesday",
     meeting_time_start: "7:00 PM",
     meeting_time_end: "8:30 PM",
@@ -151,25 +170,23 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
   // Dropdown states & refs
   const [leadersList, setLeadersList] = useState<{ id: string | number; name: string; contact: string; role_name?: string }[]>([]);
   const [isLeaderDropdownOpen, setIsLeaderDropdownOpen] = useState(false);
-  const [isAssistantLeaderDropdownOpen, setIsAssistantLeaderDropdownOpen] = useState(false);
   const [isCurriculumDropdownOpen, setIsCurriculumDropdownOpen] = useState(false);
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
   const [isCustomLocation, setIsCustomLocation] = useState(false);
   const [customLocationText, setCustomLocationText] = useState("");
 
   // Group Members Enrollment State
-  const [membersList, setMembersList] = useState<{ id: number; name: string; ministry_name?: string; age?: number }[]>([]);
+  const [membersList, setMembersList] = useState<{ id: number; name: string; ministry_name?: string; age?: number; bible_study_group_id?: number | null; bible_study_group_name?: string | null }[]>([]);
   const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
   const [memberQuery, setMemberQuery] = useState<string>("");
+  const [memberMinistryFilter, setMemberMinistryFilter] = useState<string>("all");
   const [isMemberDropdownOpen, setIsMemberDropdownOpen] = useState(false);
 
   const [curriculumQuery, setCurriculumQuery] = useState<string>("");
   const [leaderQuery, setLeaderQuery] = useState<string>("");
-  const [assistantLeaderQuery, setAssistantLeaderQuery] = useState<string>("");
   const [locationQuery, setLocationQuery] = useState<string>("");
 
   const leaderRef = useRef<HTMLDivElement>(null);
-  const assistantLeaderRef = useRef<HTMLDivElement>(null);
   const curriculumRef = useRef<HTMLDivElement>(null);
   const locationRef = useRef<HTMLDivElement>(null);
   const memberRef = useRef<HTMLDivElement>(null);
@@ -180,10 +197,6 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
       if (leaderRef.current && !leaderRef.current.contains(e.target as Node)) {
         setIsLeaderDropdownOpen(false);
         setLeaderQuery("");
-      }
-      if (assistantLeaderRef.current && !assistantLeaderRef.current.contains(e.target as Node)) {
-        setIsAssistantLeaderDropdownOpen(false);
-        setAssistantLeaderQuery("");
       }
       if (curriculumRef.current && !curriculumRef.current.contains(e.target as Node)) {
         setIsCurriculumDropdownOpen(false);
@@ -255,6 +268,8 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
         id: m.id,
         name: `${m.first_name} ${m.last_name}`,
         ministry_name: m.ministry_name,
+        bible_study_group_id: m.bible_study_group_id || null,
+        bible_study_group_name: m.bible_study_group_name || null,
         age: m.birthdate ? Math.floor((new Date().getTime() - new Date(m.birthdate).getTime()) / 31557600000) : undefined
       })).sort((a: any, b: any) => a.name.localeCompare(b.name));
       setMembersList(members);
@@ -266,29 +281,22 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
   const loadLeadersList = async (ministryId?: number | string) => {
     try {
-      const [usersRes, membersRes] = await Promise.all([
-        api.getUsers().catch(() => []),
-        api.getMembers({
-          ministry_id: ministryId && ministryId !== "all" ? Number(ministryId) : undefined
-        }).catch(() => [])
-      ]);
+      const usersRes = await api.getUsers().catch(() => []);
 
-      const userLeaders = (usersRes || []).map((u: any) => ({
-        id: u.id,
-        name: u.name || `${u.member_first_name || ""} ${u.member_last_name || ""}`.trim() || u.username,
-        contact: u.contact_phone || u.email || u.contact_email || "",
-        role_name: u.role_name || "User"
-      }));
+      const ALLOWED_LEADER_ROLES = ["coordinator", "leader", "pastor"];
+      const userLeaders = (usersRes || [])
+        .filter((u: any) => {
+          const role = (u.role_name || "").toLowerCase().trim();
+          return ALLOWED_LEADER_ROLES.includes(role);
+        })
+        .map((u: any) => ({
+          id: u.id,
+          name: u.name || `${u.member_first_name || ""} ${u.member_last_name || ""}`.trim() || u.username,
+          contact: u.contact_phone || u.email || u.contact_email || "",
+          role_name: u.role_name || "Leader"
+        }));
 
-      const memberLeaders = (membersRes || []).map((m: any) => ({
-        id: `m-${m.id}`,
-        name: `${m.first_name} ${m.last_name}`.trim(),
-        contact: m.contact_phone || m.contact_email || "",
-        role_name: m.ministry_name ? `${m.ministry_name} Member` : "Church Member"
-      }));
-
-      const combined = [...userLeaders, ...memberLeaders];
-      const unique = combined.filter((l: any, idx: number, arr: any[]) =>
+      const unique = userLeaders.filter((l: any, idx: number, arr: any[]) =>
         l.name && arr.findIndex((x: any) => x.name.toLowerCase().trim() === l.name.toLowerCase().trim()) === idx
       ).sort((a: any, b: any) => a.name.localeCompare(b.name));
       setLeadersList(unique);
@@ -308,16 +316,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
     );
   }, [leadersList, leaderQuery]);
 
-  const filteredAssistantLeaders = useMemo(() => {
-    const q = assistantLeaderQuery.toLowerCase().trim();
-    const available = leadersList.filter(l => l.name.toLowerCase().trim() !== formData.leader_name.toLowerCase().trim());
-    if (!q) return available;
-    return available.filter(l =>
-      l.name.toLowerCase().includes(q) ||
-      (l.contact && l.contact.toLowerCase().includes(q)) ||
-      (l.role_name && l.role_name.toLowerCase().includes(q))
-    );
-  }, [leadersList, assistantLeaderQuery, formData.leader_name]);
+
 
   const allCurricula = useMemo(() => {
     const churchTopics = (studySummary?.topics || []).map(t => ({
@@ -380,16 +379,42 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
     );
   }, [allCurricula, curriculumQuery]);
 
+  const memberMinistries = useMemo(() => {
+    const set = new Set<string>();
+    (allowedMinistries || []).forEach(m => set.add(m.name));
+    (membersList || []).forEach(m => {
+      if (m.ministry_name) set.add(m.ministry_name);
+    });
+    return ["all", ...Array.from(set).sort()];
+  }, [allowedMinistries, membersList]);
+
   const filteredMembers = useMemo(() => {
+    // Collect all member IDs currently in other active Bible study groups
+    const enrolledInOtherActiveGroups = new Set<number>();
+    groups.filter(g => (g.status || "active") === "active").forEach(g => {
+      if (g.id !== editingGroupId) {
+        (g.members || []).forEach((m: any) => {
+          const mId = m.member_id || m.id;
+          if (mId) enrolledInOtherActiveGroups.add(Number(mId));
+        });
+      }
+    });
+
     const q = memberQuery.toLowerCase().trim();
-    const list = !q
-      ? membersList
-      : membersList.filter(m =>
-          m.name.toLowerCase().includes(q) ||
-          (m.ministry_name && m.ministry_name.toLowerCase().includes(q))
-        );
+    // Only show members who do not currently belong to an active Bible study group
+    const list = membersList.filter(m => {
+      if (enrolledInOtherActiveGroups.has(m.id)) return false;
+      if (m.bible_study_group_id && m.bible_study_group_id !== editingGroupId) return false;
+      if (memberMinistryFilter !== "all" && m.ministry_name !== memberMinistryFilter) return false;
+      if (!q) return true;
+      return (
+        m.name.toLowerCase().includes(q) ||
+        (m.ministry_name && m.ministry_name.toLowerCase().includes(q))
+      );
+    });
+
     return [...list].sort((a, b) => a.name.localeCompare(b.name));
-  }, [membersList, memberQuery]);
+  }, [membersList, memberQuery, groups, editingGroupId, memberMinistryFilter]);
 
   const enrolledMembersDetails = useMemo(() => {
     const editingGroup = editingGroupId ? groups.find(g => g.id === editingGroupId) : null;
@@ -429,15 +454,29 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
     }
   };
 
+  const activeCount = useMemo(() => {
+    return groups.filter(g => (g.status || "active") === "active").length;
+  }, [groups]);
+
   const completedCount = useMemo(() => {
-    return groups.filter(g => g.progress_stage === "completed").length;
+    return groups.filter(g => g.status === "completed").length;
+  }, [groups]);
+
+  const archivedCount = useMemo(() => {
+    return groups.filter(g => g.status === "archived").length;
+  }, [groups]);
+
+  const allCount = useMemo(() => {
+    return groups.filter(g => g.status !== "merged").length;
   }, [groups]);
 
   const completionRate = useMemo(() => {
-    if (groups.length === 0) return 0;
-    return Math.round((completedCount / groups.length) * 100);
-  }, [groups, completedCount]);
+    const totalVisible = activeCount + completedCount;
+    if (totalVisible === 0) return 0;
+    return Math.round((completedCount / totalVisible) * 100);
+  }, [activeCount, completedCount]);
 
+  // Quick Chapter Progress Modal Handlers
   const handleOpenProgressModal = (group: BibleStudyGroup) => {
     setProgressGroupModal(group);
     setProgressFormData({
@@ -483,10 +522,108 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
       setIsJoinSuccess(`✓ Chapter progress updated for ${progressGroupModal.name}!`);
       setProgressGroupModal(null);
+      loadData();
     } catch (err: any) {
       showAlert("Progress Update Failed", err.message || "Failed to update study chapter", "danger");
     } finally {
       setIsSavingProgress(false);
+    }
+  };
+
+  // Complete Study Lifecycle Handlers
+  const handleOpenCompleteModal = (group: BibleStudyGroup) => {
+    const title = group.curriculum || "General Scripture Study";
+    const total = group.completed_total_chapters || group.curriculum_total_chapters || getBookTotalChapters(title, studySummary?.topics || []) || 12;
+    const current = group.completed_chapter || group.current_chapter || `Chapter ${total}`;
+    setCompleteGroupModal(group);
+    setCompleteFormData({
+      completed_book_title_snapshot: group.completed_book_title_snapshot || title,
+      completed_chapter: current,
+      completed_total_chapters: total,
+      notes: group.progress_notes || ""
+    });
+  };
+
+  const handleCompleteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!completeGroupModal) return;
+
+    try {
+      setIsCompleting(true);
+      await api.completeGroup(completeGroupModal.id, {
+        completed_book_title_snapshot: completeFormData.completed_book_title_snapshot.trim(),
+        completed_chapter: completeFormData.completed_chapter.trim(),
+        completed_total_chapters: Number(completeFormData.completed_total_chapters) || 12,
+        notes: completeFormData.notes.trim()
+      });
+
+      setIsJoinSuccess(`🎉 "${completeGroupModal.name}" marked as completed! Completion snapshot preserved.`);
+      setCompleteGroupModal(null);
+      if (selectedGroup?.id === completeGroupModal.id) {
+        setSelectedGroup(null);
+      }
+      loadData();
+    } catch (err: any) {
+      showAlert("Completion Failed", err.message || "Failed to mark group as completed", "danger");
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
+  // Archive (Soft-Delete) Handlers
+  const handleOpenArchiveModal = (group: BibleStudyGroup) => {
+    setArchiveGroupModal(group);
+    setArchiveReason("");
+  };
+
+  const handleArchiveSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!archiveGroupModal) return;
+
+    try {
+      setIsArchiving(true);
+      await api.archiveGroup(archiveGroupModal.id, {
+        reason: archiveReason.trim() || "Group discontinued"
+      });
+
+      setIsJoinSuccess(`✓ "${archiveGroupModal.name}" moved to Archived Groups.`);
+      setArchiveGroupModal(null);
+      if (selectedGroup?.id === archiveGroupModal.id) {
+        setSelectedGroup(null);
+      }
+      if (editingGroupId === archiveGroupModal.id) {
+        setIsCreateModalOpen(false);
+        setEditingGroupId(null);
+      }
+      loadData();
+    } catch (err: any) {
+      showAlert("Archiving Failed", err.message || "Failed to archive Bible study group", "danger");
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  // Restore Group Handlers
+  const handleOpenRestoreModal = (group: BibleStudyGroup) => {
+    setRestoreGroupModal(group);
+  };
+
+  const handleRestoreSubmit = async () => {
+    if (!restoreGroupModal) return;
+
+    try {
+      setIsRestoring(true);
+      await api.restoreGroup(restoreGroupModal.id);
+      setIsJoinSuccess(`✓ "${restoreGroupModal.name}" restored to Active Small Groups!`);
+      setRestoreGroupModal(null);
+      if (selectedGroup?.id === restoreGroupModal.id) {
+        setSelectedGroup(null);
+      }
+      loadData();
+    } catch (err: any) {
+      showAlert("Restore Failed", err.message || "Failed to restore Bible study group", "danger");
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -510,8 +647,6 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
       ministry_id: initialMin,
       leader_name: "",
       leader_contact: "",
-      assistant_leader_name: "",
-      assistant_leader_contact: "",
       meeting_day: "Wednesday",
       meeting_time_start: "7:00 PM",
       meeting_time_end: "8:30 PM",
@@ -560,8 +695,6 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
       ministry_id: group.ministry_id ? String(group.ministry_id) : "",
       leader_name: group.leader_name || "",
       leader_contact: group.leader_contact || "",
-      assistant_leader_name: group.assistant_leader_name || "",
-      assistant_leader_contact: group.assistant_leader_contact || "",
       meeting_day: group.meeting_day || "Wednesday",
       meeting_time_start: start,
       meeting_time_end: end,
@@ -587,28 +720,31 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
     const dupGroup = groups.find(g =>
       g.name.toLowerCase().trim() === formData.name.toLowerCase().trim() &&
-      g.id !== editingGroupId
+      g.id !== editingGroupId &&
+      (g.status || "active") === "active"
     );
     if (dupGroup) {
-      showAlert("Duplicate Group Name", `A Bible study group named "${formData.name.trim()}" already exists.`, "warning");
+      showAlert("Duplicate Group Name", `An active Bible study group named "${formData.name.trim()}" already exists.`, "warning");
       return;
     }
 
     if (!formData.leader_name.trim()) {
-      showAlert("Leader Required", "Please assign a primary leader for this group.", "warning");
-      return;
-    }
-
-    if (
-      formData.assistant_leader_name.trim() &&
-      formData.assistant_leader_name.toLowerCase().trim() === formData.leader_name.toLowerCase().trim()
-    ) {
-      showAlert("Invalid Leadership", "Primary Leader and Assistant Leader cannot be the same person.", "warning");
+      showAlert("Leader Required", "Please assign a leader for this group.", "warning");
       return;
     }
 
     if (!formData.location.trim()) {
       showAlert("Location Required", "Please specify the meeting location or room.", "warning");
+      return;
+    }
+
+    const maxCap = Number(formData.max_capacity) || 12;
+    if (selectedMemberIds.length > maxCap) {
+      showAlert(
+        "Max Capacity Exceeded",
+        `You have enrolled ${selectedMemberIds.length} members, but the max capacity is set to ${maxCap}. Please increase the Max Capacity or adjust the enrolled members.`,
+        "warning"
+      );
       return;
     }
 
@@ -620,15 +756,15 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
         ministry_id: formData.ministry_id ? Number(formData.ministry_id) : null,
         leader_name: formData.leader_name.trim(),
         leader_contact: formData.leader_contact.trim(),
-        assistant_leader_name: formData.assistant_leader_name.trim() || null,
-        assistant_leader_contact: formData.assistant_leader_contact.trim() || null,
+        assistant_leader_name: null,
+        assistant_leader_contact: null,
         meeting_day: formData.meeting_day,
         meeting_time: formData.meeting_time_end
           ? `${formData.meeting_time_start} - ${formData.meeting_time_end}`
           : formData.meeting_time_start,
         location: formData.location.trim(),
         category: formData.category,
-        max_capacity: Number(formData.max_capacity) || 12,
+        max_capacity: maxCap,
         current_chapter: formData.current_chapter.trim() || "Chapter 1",
         progress_stage: formData.progress_stage || "in_progress",
         progress_notes: formData.progress_notes.trim(),
@@ -650,30 +786,19 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
     }
   };
 
-  const handleDeleteGroup = (groupToDelete: BibleStudyGroup) => {
-    setIsCreateModalOpen(false);
-    setSelectedGroup(null);
-
-    const originalGroups = groups;
-    deleteWithUndo({
-      itemName: groupToDelete.name,
-      itemType: "Bible study group",
-      onOptimisticDelete: () => {
-        setGroups((prev) => prev.filter((g) => g.id !== groupToDelete.id));
-      },
-      onRestore: () => {
-        setGroups(originalGroups);
-      },
-      onCommitDelete: async () => {
-        await api.deleteGroup(groupToDelete.id);
-      }
-    });
-  };
-
   const handleToggleMember = (memId: number) => {
-    setSelectedMemberIds(prev =>
-      prev.includes(memId) ? prev.filter(id => id !== memId) : [...prev, memId]
-    );
+    setSelectedMemberIds(prev => {
+      const isCurrentlySelected = prev.includes(memId);
+      if (isCurrentlySelected) {
+        return prev.filter(id => id !== memId);
+      }
+      const maxCap = Number(formData.max_capacity) || 12;
+      if (prev.length >= maxCap) {
+        showToast(`⚠️ Max capacity reached (${maxCap} members). Increase Max Capacity to add more disciples.`, "error");
+        return prev;
+      }
+      return [...prev, memId];
+    });
   };
 
   const cleanUser = user ? user.name.replace(/\(.*?\)/g, "").trim().toLowerCase() : "";
@@ -709,19 +834,21 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
     const cleanContact = (g.leader_contact || "").trim().toLowerCase();
     if (cleanContact && (cleanContact === userEmail || cleanContact === userUsername)) return true;
 
-    const cleanAssistant = (g.assistant_leader_name || "").replace(/\(.*?\)/g, "").trim().toLowerCase();
-    if (cleanAssistant && (cleanUser === cleanAssistant || cleanUser.includes(cleanAssistant) || cleanAssistant.includes(cleanUser))) return true;
-    if (userLinkedName && (userLinkedName === cleanAssistant || userLinkedName.includes(cleanAssistant) || cleanAssistant.includes(userLinkedName))) return true;
-    const cleanAssistantContact = (g.assistant_leader_contact || "").trim().toLowerCase();
-    if (cleanAssistantContact && (cleanAssistantContact === userEmail || cleanAssistantContact === userUsername)) return true;
-
     return false;
   };
 
   const filteredGroups = useMemo(() => {
     return groups.filter(g => {
-      if (statusFilter === "active" && g.status === "merged") return false;
-      if (statusFilter === "merged" && g.status !== "merged") return false;
+      const s = g.status || "active";
+      // Merged source groups are internal DB history only: never display on main page
+      if (s === "merged") return false;
+
+      // Status tab filters
+      if (statusFilter === "active" && s !== "active") return false;
+      if (statusFilter === "completed" && s !== "completed") return false;
+      if (statusFilter === "archived" && s !== "archived") return false;
+      // statusFilter === "all" includes active, completed, and archived
+
       if (filterMinistry && String(g.ministry_id) !== filterMinistry) return false;
       if (selectedCategory !== "all" && g.category !== selectedCategory) return false;
       if (filterDay !== "all" && filterDay !== "All Days" && g.meeting_day !== filterDay) return false;
@@ -730,21 +857,25 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
       return (
         g.name.toLowerCase().includes(q) ||
         g.leader_name.toLowerCase().includes(q) ||
-        (g.assistant_leader_name && g.assistant_leader_name.toLowerCase().includes(q)) ||
         (g.curriculum && g.curriculum.toLowerCase().includes(q)) ||
+        (g.completed_book_title_snapshot && g.completed_book_title_snapshot.toLowerCase().includes(q)) ||
         (g.location && g.location.toLowerCase().includes(q)) ||
         (g.description && g.description.toLowerCase().includes(q)) ||
-        (g.source_group_names && g.source_group_names.toLowerCase().includes(q)) ||
-        (g.merged_into_group_name && g.merged_into_group_name.toLowerCase().includes(q))
+        (g.archive_reason && g.archive_reason.toLowerCase().includes(q)) ||
+        (g.archived_by_name && g.archived_by_name.toLowerCase().includes(q)) ||
+        (g.source_group_names && g.source_group_names.toLowerCase().includes(q))
       );
     });
   }, [groups, statusFilter, filterMinistry, selectedCategory, filterDay, searchQuery]);
 
   const totalMembersEnrolled = useMemo(() => {
-    return groups.reduce((sum, g) => sum + (g.current_member_count || (g.members ? g.members.length : 0)), 0);
+    // Total enrolled across active groups
+    return groups
+      .filter(g => (g.status || "active") === "active")
+      .reduce((sum, g) => sum + (g.current_member_count || (g.members ? g.members.length : 0)), 0);
   }, [groups]);
 
-  const canCreate = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const canCreate = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   if (loading && groups.length === 0) {
     return <BibleStudyPageSkeleton />;
@@ -782,7 +913,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
               <span>Small Groups & Discipleship</span>
             </div>
             <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-bold px-3 py-1 rounded-full backdrop-blur-md">
-              {groups.length} Active Groups
+              {activeCount} Active Groups
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
@@ -795,7 +926,18 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
         <div className="relative z-10 flex items-center gap-2.5 flex-wrap shrink-0">
           <button
-            onClick={() => setIsCompletedModalOpen(true)}
+            onClick={() => {
+              setHistoryGroup(null);
+              setIsGlobalHistoryOpen(true);
+            }}
+            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-purple-200 border border-white/15 font-bold px-3.5 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
+            title="View All Church Transitions & Merges Log"
+          >
+            <History className="w-4 h-4 text-purple-300" />
+            <span>Transitions Log</span>
+          </button>
+          <button
+            onClick={() => setStatusFilter("completed")}
             className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-emerald-300 border border-white/15 font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
           >
             <Award className="w-4 h-4 text-emerald-300" />
@@ -824,11 +966,14 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
       {/* KPI Overview Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-indigo-100/80 shadow-2xs flex items-center justify-between">
+        <div
+          onClick={() => setStatusFilter("active")}
+          className="bg-white p-4 rounded-2xl border border-indigo-100/80 shadow-2xs flex items-center justify-between cursor-pointer hover:border-indigo-300 transition-all"
+        >
           <div>
             <p className="text-xs font-semibold text-charcoal/60">Active Small Groups</p>
-            <h3 className="text-2xl font-black text-indigo mt-0.5">{groups.filter(g => g.status !== "merged").length}</h3>
-            <p className="text-[10px] text-sage-700 font-bold mt-1">Across all ministries</p>
+            <h3 className="text-2xl font-black text-indigo mt-0.5">{activeCount}</h3>
+            <p className="text-[10px] text-sage-700 font-bold mt-1">Operational discipleship circles</p>
           </div>
           <div className="p-3 bg-indigo-50 text-indigo rounded-2xl">
             <BookOpen className="w-6 h-6" />
@@ -850,7 +995,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
           <div>
             <p className="text-xs font-semibold text-charcoal/60">Average Group Size</p>
             <h3 className="text-2xl font-black text-sage-800 mt-0.5">
-              {groups.length > 0 ? Math.round(totalMembersEnrolled / Math.max(1, groups.filter(g => g.status !== "merged").length)) : 0} members
+              {activeCount > 0 ? Math.round(totalMembersEnrolled / activeCount) : 0} members
             </h3>
             <p className="text-[10px] text-charcoal/50 font-bold mt-1">Target capacity: 10-15</p>
           </div>
@@ -860,7 +1005,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
         </div>
 
         <div
-          onClick={() => setIsCompletedModalOpen(true)}
+          onClick={() => setStatusFilter("completed")}
           className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 shadow-2xs flex items-center justify-between cursor-pointer hover:border-emerald-300 hover:shadow-xs transition-all"
         >
           <div>
@@ -874,7 +1019,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
               {completedCount} Groups
             </h3>
             <p className="text-[10px] text-emerald-700 font-bold mt-1 underline">
-              View completed archive →
+              View completed studies →
             </p>
           </div>
           <div className="p-3 bg-emerald-100 text-emerald-800 rounded-2xl">
@@ -905,7 +1050,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
         <div className="flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-            {/* Status Filter Pills */}
+            {/* Status Filter Pills: Active | Completed | Archived | All */}
             <div className="flex items-center gap-1 bg-ivory-light p-1 rounded-2xl border border-gray-200">
               <button
                 type="button"
@@ -914,16 +1059,25 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                   statusFilter === "active" ? "bg-indigo text-white shadow-2xs" : "text-charcoal/70 hover:text-charcoal"
                 }`}
               >
-                Active ({groups.filter(g => g.status !== "merged").length})
+                Active ({activeCount})
               </button>
               <button
                 type="button"
-                onClick={() => setStatusFilter("merged")}
+                onClick={() => setStatusFilter("completed")}
                 className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  statusFilter === "merged" ? "bg-purple-700 text-white shadow-2xs" : "text-charcoal/70 hover:text-charcoal"
+                  statusFilter === "completed" ? "bg-emerald-600 text-white shadow-2xs" : "text-charcoal/70 hover:text-charcoal"
                 }`}
               >
-                Merged ({groups.filter(g => g.status === "merged").length})
+                Completed ({completedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("archived")}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  statusFilter === "archived" ? "bg-slate-700 text-white shadow-2xs" : "text-charcoal/70 hover:text-charcoal"
+                }`}
+              >
+                Archived ({archivedCount})
               </button>
               <button
                 type="button"
@@ -932,7 +1086,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                   statusFilter === "all" ? "bg-charcoal text-white shadow-2xs" : "text-charcoal/70 hover:text-charcoal"
                 }`}
               >
-                All ({groups.length})
+                All ({allCount})
               </button>
             </div>
 
@@ -969,7 +1123,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
             <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search by topic, leader, room..."
+              placeholder="Search by topic, leader, room, reason..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-ivory-light pl-9 pr-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-medium"
@@ -982,9 +1136,21 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
       {filteredGroups.length === 0 ? (
         <div className="bg-white p-12 rounded-3xl border border-indigo-100 text-center space-y-3 shadow-2xs">
           <BookOpen className="w-10 h-10 text-charcoal/30 mx-auto" />
-          <h3 className="text-sm font-bold text-charcoal">No Bible Study Groups Found</h3>
+          <h3 className="text-sm font-bold text-charcoal">
+            {statusFilter === "completed"
+              ? "No completed Bible Study Groups yet."
+              : statusFilter === "archived"
+              ? "No archived Bible Study Groups."
+              : statusFilter === "active"
+              ? "No active Bible Study Groups."
+              : "No Bible Study Groups Found"}
+          </h3>
           <p className="text-xs text-charcoal/50 max-w-sm mx-auto">
-            Try adjusting your category, status, ministry, or day filters, or schedule a new Bible study group.
+            {statusFilter === "completed"
+              ? "Groups that finish their curriculum track will appear here with permanent progress snapshots."
+              : statusFilter === "archived"
+              ? "Archived groups and soft-deleted records will appear here and can be restored at any time."
+              : "Try adjusting your category, status, ministry, or day filters, or schedule a new Bible study group."}
           </p>
         </div>
       ) : (
@@ -994,15 +1160,246 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
             const capacityPercent = Math.min(100, Math.round((memberCount / (g.max_capacity || 12)) * 100));
             const isLeaderOfThis = isUserLeaderOfGroup(g);
             const isDesignatedOfThis = isUserDesignatedInGroup(g);
-            const isMerged = g.status === "merged";
+            const isCompleted = g.status === "completed";
+            const isArchived = g.status === "archived";
 
+            // COMPLETED GROUP CARD
+            if (isCompleted) {
+              return (
+                <div
+                  key={g.id}
+                  className="bg-white rounded-3xl p-5 border border-emerald-200/90 shadow-xs flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden"
+                >
+                  <div className="absolute top-0 left-0 right-0 h-1.5 opacity-90 bg-emerald-600" />
+
+                  <div>
+                    <div className="flex items-center justify-between gap-1.5 mb-2.5 pt-1 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="bg-emerald-100 text-emerald-900 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                          <CheckCheck className="w-3 h-3 text-emerald-700" />
+                          <span>Completed</span>
+                        </span>
+                        <span className="bg-indigo-50/90 text-indigo font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-100/60">
+                          {g.category}
+                        </span>
+                        {isLeaderOfThis && (
+                          <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
+                            <BookmarkCheck className="w-2.5 h-2.5 text-slate-950" />
+                            <span>Led by You</span>
+                          </span>
+                        )}
+                        {!isLeaderOfThis && isDesignatedOfThis && (
+                          <span className="bg-sky-100 text-sky-900 font-black text-[10px] px-2 py-0.5 rounded-full border border-sky-200 flex items-center gap-1">
+                            <Users className="w-2.5 h-2.5 text-sky-700" />
+                            <span>Your Group</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <span
+                        className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white shadow-2xs shrink-0"
+                        style={{ backgroundColor: g.ministry_color || "#059669" }}
+                      >
+                        {g.ministry_name || "All-Church"}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base font-black text-charcoal group-hover:text-emerald-900 transition-colors leading-snug">
+                      {g.name}
+                    </h3>
+
+                    {/* Completion Snapshot Box */}
+                    <div className="mt-3 p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200 space-y-2.5 text-xs">
+                      <div>
+                        <span className="text-[10px] font-black text-emerald-900/70 uppercase tracking-wider block">
+                          Curriculum:
+                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-black text-emerald-950 mt-0.5">
+                          <BookOpen className="w-4 h-4 text-emerald-700 shrink-0" />
+                          <span>{g.completed_book_title_snapshot || g.curriculum || "General Scripture Study"}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-emerald-200/60 text-[11px]">
+                        <div>
+                          <span className="text-[10px] font-bold text-emerald-900/70 uppercase block">Finished at:</span>
+                          <span className="font-extrabold text-emerald-950">
+                            {g.completed_chapter || `Chapter ${g.completed_total_chapters || 12} of ${g.completed_total_chapters || 12}`}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-emerald-900/70 uppercase block">Completed:</span>
+                          <span className="font-extrabold text-emerald-950">
+                            {g.completed_at ? new Date(g.completed_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : "Recently Completed"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {g.progress_notes && (
+                        <div className="text-[11px] text-emerald-950/90 bg-white/90 p-2 rounded-xl border border-emerald-200/70 leading-tight">
+                          <span className="font-bold text-emerald-950">Notes: </span>
+                          <span>{g.progress_notes}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-gray-100 space-y-1.5 text-xs text-charcoal/75 font-medium">
+                      <div className="flex items-center gap-2 text-charcoal/70">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span>Leader: <strong>{g.leader_name}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-2 text-charcoal/70">
+                        <Users className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                        <span>Members: <strong>{memberCount}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Completed Card Bottom Actions */}
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => setSelectedGroup(g)}
+                      className="flex-1 px-3 py-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-gray-200/80"
+                    >
+                      <Users className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>View Details</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryGroup(g)}
+                      className="p-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal/70 hover:text-emerald-800 transition-colors border border-gray-200/80 cursor-pointer"
+                      title="View Study History"
+                    >
+                      <History className="w-4 h-4" />
+                    </button>
+                    {canCreate && (
+                      <button
+                        onClick={() => handleOpenArchiveModal(g)}
+                        className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200"
+                        title="Archive Group"
+                      >
+                        <Archive className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Archive</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // ARCHIVED GROUP CARD
+            if (isArchived) {
+              return (
+                <div
+                  key={g.id}
+                  className="bg-slate-50/80 rounded-3xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden opacity-95 hover:opacity-100"
+                >
+                  <div className="absolute top-0 left-0 right-0 h-1.5 opacity-60 bg-slate-400" />
+
+                  <div>
+                    <div className="flex items-center justify-between gap-1.5 mb-2.5 pt-1 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="bg-slate-200 text-slate-800 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-slate-300 flex items-center gap-1">
+                          <Archive className="w-3 h-3 text-slate-600" />
+                          <span>Archived</span>
+                        </span>
+                        <span className="bg-slate-100 text-slate-700 font-bold text-[10px] px-2.5 py-0.5 rounded-full border border-slate-200">
+                          {g.category}
+                        </span>
+                      </div>
+
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-300 text-slate-800 shrink-0">
+                        {g.ministry_name || "All-Church"}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base font-black text-slate-800 leading-snug">
+                      {g.name}
+                    </h3>
+
+                    {/* Archive Info Box */}
+                    <div className="mt-3 p-3.5 bg-white rounded-2xl border border-slate-200 space-y-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase block">Archived:</span>
+                          <span className="font-bold text-slate-800">
+                            {g.archived_at ? new Date(g.archived_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : "Archived"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase block">Archived By:</span>
+                          <span className="font-bold text-slate-800 truncate block">
+                            {g.archived_by_name || "Pastor / Admin"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {g.archive_reason && (
+                        <div className="pt-1.5 border-t border-slate-100 text-[11px]">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase block">Reason:</span>
+                          <span className="text-slate-700 italic">{g.archive_reason}</span>
+                        </div>
+                      )}
+
+                      <div className="pt-1.5 border-t border-slate-100 text-[11px]">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Last Study Progress:</span>
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800 mt-0.5">
+                          <BookOpen className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span>{g.completed_book_title_snapshot || g.curriculum || "General Scripture Study"}</span>
+                          <span className="text-slate-500 font-normal">• {g.completed_chapter || g.current_chapter || "Chapter 1"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/80 space-y-1.5 text-xs text-slate-600 font-medium">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span>Leader: <strong>{g.leader_name}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span>Previously Enrolled: <strong>{memberCount} members</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Archived Card Bottom Actions */}
+                  <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => setSelectedGroup(g)}
+                      className="flex-1 px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200"
+                    >
+                      <Users className="w-3.5 h-3.5 text-slate-600" />
+                      <span>View Details</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryGroup(g)}
+                      className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors border border-slate-200 cursor-pointer"
+                      title="View Group History"
+                    >
+                      <History className="w-4 h-4" />
+                    </button>
+                    {canCreate && (
+                      <button
+                        onClick={() => handleOpenRestoreModal(g)}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Restore Group</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // ACTIVE GROUP CARD (DEFAULT)
             return (
               <div
                 key={g.id}
                 className={`bg-white rounded-3xl p-5 border shadow-xs flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all duration-200 group relative overflow-hidden ${
-                  isMerged
-                    ? "border-purple-200 bg-purple-50/15"
-                    : isLeaderOfThis
+                  isLeaderOfThis
                     ? "border-amber-300 ring-2 ring-amber-100/70"
                     : isDesignatedOfThis
                     ? "border-sky-300 ring-2 ring-sky-100/70"
@@ -1011,7 +1408,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
               >
                 <div
                   className="absolute top-0 left-0 right-0 h-1.5 opacity-80 group-hover:opacity-100 transition-opacity"
-                  style={{ backgroundColor: isMerged ? "#7e22ce" : (g.ministry_color || "#2C3968") }}
+                  style={{ backgroundColor: g.ministry_color || "#2C3968" }}
                 />
 
                 <div>
@@ -1020,13 +1417,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                       <span className="bg-indigo-50/90 text-indigo font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-indigo-100/60">
                         {g.category}
                       </span>
-                      {isMerged && (
-                        <span className="bg-purple-100 text-purple-900 font-black text-[10px] px-2.5 py-0.5 rounded-full border border-purple-300 flex items-center gap-1 shadow-2xs">
-                          <GitMerge className="w-2.5 h-2.5 text-purple-700" />
-                          <span>Merged Archive</span>
-                        </span>
-                      )}
-                      {!isMerged && (g.created_transition_id || g.source_group_names) && (
+                      {(g.created_transition_id || g.source_group_names) && (
                         <span className="bg-teal-100 text-teal-900 font-black text-[10px] px-2.5 py-0.5 rounded-full border border-teal-300 flex items-center gap-1 shadow-2xs">
                           <GitMerge className="w-2.5 h-2.5 text-teal-700" />
                           <span>Merged Group</span>
@@ -1048,7 +1439,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
                     <span
                       className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white shadow-2xs shrink-0"
-                      style={{ backgroundColor: isMerged ? "#7e22ce" : (g.ministry_color || "#2C3968") }}
+                      style={{ backgroundColor: g.ministry_color || "#2C3968" }}
                     >
                       {g.ministry_name || "All-Church"}
                     </span>
@@ -1058,35 +1449,8 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                     {g.name}
                   </h3>
 
-                  {/* Notice for merged groups */}
-                  {isMerged && (
-                    <div className="mt-2.5 p-2.5 bg-purple-50 rounded-2xl border border-purple-200 text-xs shadow-2xs space-y-1">
-                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                        <div className="font-bold text-purple-950 text-xs flex items-center gap-1.5">
-                          <GitMerge className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                          <span>Merged Archive</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setHistoryGroup(g);
-                          }}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 hover:bg-purple-300 text-purple-950 border border-purple-300 cursor-pointer active:scale-95 transition-all"
-                        >
-                          View History
-                        </button>
-                      </div>
-                      {g.merged_into_group_name && (
-                        <p className="text-[11px] text-purple-900 font-medium">
-                          Merged into: <span className="font-bold">{g.merged_into_group_name}</span>
-                        </p>
-                      )}
-                    </div>
-                  )}
-
                   {/* Notice for resulting merged groups */}
-                  {!isMerged && g.source_group_names && (
+                  {g.source_group_names && (
                     <div className="mt-2.5 p-2.5 bg-teal-50/90 rounded-2xl border border-teal-200 text-xs flex items-center justify-between gap-2 shadow-2xs">
                       <div className="text-[11px] text-teal-950 leading-tight min-w-0 pr-1">
                         <span className="font-bold flex items-center gap-1 truncate">
@@ -1191,6 +1555,21 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                         <span>{g.is_rescheduled ? "Resched Active ⚠️" : "Reschedule"}</span>
                       </button>
 
+                      {canCreate && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenCompleteModal(g);
+                          }}
+                          className="text-[10px] font-bold text-emerald-900 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                          title="Mark this Bible study group as successfully finished"
+                        >
+                          <Award className="w-3 h-3 text-emerald-700" />
+                          <span>Complete Study</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1226,12 +1605,6 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                       <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>Leader: <strong>{g.leader_name}</strong></span>
                     </div>
-                    {g.assistant_leader_name && (
-                      <div className="flex items-center gap-2 text-charcoal/60">
-                        <UserCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        <span>Assistant: <strong>{g.assistant_leader_name}</strong></span>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1239,13 +1612,24 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                 <div className="mt-4 pt-3 border-t border-gray-100 space-y-3">
                   <div>
                     <div className="flex justify-between text-[11px] font-bold text-charcoal/60 mb-1">
-                      <span>Roster: {memberCount} of {g.max_capacity} Enrolled</span>
-                      <span>{capacityPercent}% Full</span>
+                      <span>Roster: {memberCount} of {g.max_capacity || 12} Enrolled</span>
+                      <span className={memberCount > (g.max_capacity || 12) ? "text-rose-600 font-extrabold flex items-center gap-1" : memberCount === (g.max_capacity || 12) ? "text-amber-600 font-extrabold" : "text-charcoal/60"}>
+                        {memberCount > (g.max_capacity || 12) ? "⚠️ Over Capacity" : memberCount === (g.max_capacity || 12) ? "100% Full" : `${capacityPercent}% Full`}
+                      </span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${capacityPercent >= 80 ? "bg-emerald-500" : capacityPercent >= 40 ? "bg-amber" : "bg-rose"
-                          }`}
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          memberCount > (g.max_capacity || 12)
+                            ? "bg-rose-500"
+                            : memberCount === (g.max_capacity || 12)
+                            ? "bg-amber-500"
+                            : capacityPercent >= 75
+                            ? "bg-emerald-500"
+                            : capacityPercent >= 40
+                            ? "bg-teal-500"
+                            : "bg-indigo-500"
+                        }`}
                         style={{ width: `${capacityPercent}%` }}
                       ></div>
                     </div>
@@ -1267,7 +1651,16 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                     >
                       <History className="w-4 h-4" />
                     </button>
-                    {canCreate && !isMerged && (
+                    {canCreate && (
+                      <button
+                        onClick={() => handleOpenArchiveModal(g)}
+                        className="p-2 rounded-xl bg-ivory-light hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors border border-gray-200/80 cursor-pointer"
+                        title="Archive Group"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canCreate && (
                       <button
                         onClick={() => handleOpenEditModal(g)}
                         className="flex-1 bg-indigo hover:bg-indigo-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
@@ -1287,17 +1680,19 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
       {/* GROUP DETAILS & ROSTER MODAL */}
       {selectedGroup && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-indigo-100">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-indigo-100">
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="bg-indigo-50 text-indigo text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                    {selectedGroup.category}
-                  </span>
-                  {selectedGroup.status === "merged" ? (
-                    <span className="bg-purple-100 text-purple-900 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-300 flex items-center gap-1">
-                      <GitMerge className="w-2.5 h-2.5 text-purple-700" />
-                      <span>Merged Archive</span>
+                  {selectedGroup.status === "completed" ? (
+                    <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1 uppercase tracking-wider">
+                      <CheckCheck className="w-3 h-3 text-emerald-700" />
+                      <span>Completed</span>
+                    </span>
+                  ) : selectedGroup.status === "archived" ? (
+                    <span className="bg-slate-200 text-slate-800 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-slate-300 flex items-center gap-1 uppercase tracking-wider">
+                      <Archive className="w-3 h-3 text-slate-600" />
+                      <span>Archived</span>
                     </span>
                   ) : (selectedGroup.created_transition_id || selectedGroup.source_group_names) ? (
                     <span className="bg-teal-100 text-teal-900 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-300 flex items-center gap-1">
@@ -1305,14 +1700,25 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                       <span>Merged Group</span>
                     </span>
                   ) : null}
+
+                  <span className="bg-indigo-50 text-indigo text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                    {selectedGroup.category}
+                  </span>
+
                   <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
-                    style={{ backgroundColor: selectedGroup.status === "merged" ? "#7e22ce" : (selectedGroup.ministry_color || "#2C3968") }}
+                    className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-white"
+                    style={{
+                      backgroundColor: selectedGroup.status === "completed"
+                        ? "#059669"
+                        : selectedGroup.status === "archived"
+                        ? "#64748b"
+                        : (selectedGroup.ministry_color || "#2C3968")
+                    }}
                   >
                     {selectedGroup.ministry_name || "All-Church"}
                   </span>
                 </div>
-                <h2 className="text-lg font-bold text-charcoal">{selectedGroup.name}</h2>
+                <h2 className="text-lg font-black text-charcoal">{selectedGroup.name}</h2>
               </div>
               <button
                 onClick={() => setSelectedGroup(null)}
@@ -1322,38 +1728,74 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
               </button>
             </div>
 
-            {/* Merged Archive notice in Details Modal */}
-            {selectedGroup.status === "merged" && (
-              <div className="p-3 bg-purple-50 rounded-2xl border border-purple-200 text-xs flex items-center justify-between gap-2 shadow-2xs">
-                <div className="space-y-0.5 min-w-0 pr-1">
-                  <span className="font-bold text-purple-950 flex items-center gap-1.5">
-                    <GitMerge className="w-4 h-4 text-purple-700 shrink-0" />
-                    <span>Historical Merged Group</span>
-                  </span>
-                  {selectedGroup.merged_into_group_name && (
-                    <p className="text-[11px] text-purple-900 font-medium">
-                      Merged into: <span className="font-bold">{selectedGroup.merged_into_group_name}</span>
-                    </p>
-                  )}
-                  <p className="text-[10px] text-purple-800/80">
-                    Past sessions and attendance roll-calls remain under this group.
-                  </p>
+            {/* Completed Snapshot Banner in Modal */}
+            {selectedGroup.status === "completed" && (
+              <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-950 space-y-2">
+                <div className="flex items-center gap-1.5 font-black text-emerald-900">
+                  <Award className="w-4 h-4 text-emerald-700" />
+                  <span>Curriculum Completion Snapshot</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const g = selectedGroup;
-                    setHistoryGroup(g);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs active:scale-95 transition-all"
-                >
-                  View History
-                </button>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-emerald-200/60">
+                  <div>
+                    <span className="text-[10px] font-bold text-emerald-900/70 uppercase block">Finished Study:</span>
+                    <span className="font-extrabold text-emerald-950">
+                      {selectedGroup.completed_book_title_snapshot || selectedGroup.curriculum || "Scripture Study"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-emerald-900/70 uppercase block">Finished at:</span>
+                    <span className="font-extrabold text-emerald-950">
+                      {selectedGroup.completed_chapter || `Chapter ${selectedGroup.completed_total_chapters || 12} of ${selectedGroup.completed_total_chapters || 12}`}
+                    </span>
+                  </div>
+                </div>
+                {selectedGroup.completed_at && (
+                  <div className="text-[11px] text-emerald-800">
+                    <span className="font-bold">Completed on: </span>
+                    <span>{new Date(selectedGroup.completed_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                  </div>
+                )}
+                {selectedGroup.progress_notes && (
+                  <div className="text-[11px] text-emerald-900 bg-white/80 p-2 rounded-xl border border-emerald-200/50">
+                    <span className="font-bold">Final Notes: </span>
+                    <span>{selectedGroup.progress_notes}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Archived Info Banner in Modal */}
+            {selectedGroup.status === "archived" && (
+              <div className="p-3.5 bg-slate-100 rounded-2xl border border-slate-200 text-xs text-slate-800 space-y-2">
+                <div className="flex items-center gap-1.5 font-black text-slate-800">
+                  <Archive className="w-4 h-4 text-slate-600" />
+                  <span>Archived Record</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-200">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Archived Date:</span>
+                    <span className="font-bold text-slate-800">
+                      {selectedGroup.archived_at ? new Date(selectedGroup.archived_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : "Archived"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Archived By:</span>
+                    <span className="font-bold text-slate-800">
+                      {selectedGroup.archived_by_name || "Pastor / Admin"}
+                    </span>
+                  </div>
+                </div>
+                {selectedGroup.archive_reason && (
+                  <div className="text-[11px] text-slate-700 bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="font-bold">Reason: </span>
+                    <span className="italic">{selectedGroup.archive_reason}</span>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Resulting Merged Group Notice in Details Modal */}
-            {selectedGroup.status !== "merged" && selectedGroup.source_group_names && (
+            {selectedGroup.source_group_names && (
               <div className="p-3 bg-teal-50 rounded-2xl border border-teal-200 text-xs flex items-center justify-between gap-2 shadow-2xs">
                 <div className="space-y-0.5 min-w-0 pr-1">
                   <span className="font-bold text-teal-950 flex items-center gap-1.5">
@@ -1378,18 +1820,18 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
             )}
 
             <div className="space-y-3 text-xs">
-              <div className="p-3.5 bg-ivory rounded-xl border border-amber/20 space-y-2">
+              <div className="p-3.5 bg-ivory rounded-2xl border border-amber/20 space-y-2">
                 <div className="flex items-center gap-2 text-charcoal font-bold">
                   <BookOpen className="w-4 h-4 text-amber-700" />
-                  <span>Curriculum: {selectedGroup.curriculum || "General Scripture Discussion"}</span>
+                  <span>Curriculum: {selectedGroup.completed_book_title_snapshot || selectedGroup.curriculum || "General Scripture Discussion"}</span>
                 </div>
 
-                <div className="p-2.5 bg-white/90 rounded-lg border border-indigo-100 flex items-center justify-between gap-2 flex-wrap">
+                <div className="p-2.5 bg-white/90 rounded-xl border border-indigo-100 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <BookmarkCheck className="w-4 h-4 text-indigo-700" />
                     <div>
                       <span className="font-bold text-indigo-950 block text-xs">
-                        {selectedGroup.current_chapter || "Chapter 1"}
+                        {selectedGroup.completed_chapter || selectedGroup.current_chapter || "Chapter 1"}
                       </span>
                       {selectedGroup.progress_notes && (
                         <span className="text-[11px] text-charcoal/70 block mt-0.5">
@@ -1403,13 +1845,15 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                       <span className={`w-1.5 h-1.5 rounded-full ${getProgressStageBadge(selectedGroup.progress_stage).dot}`}></span>
                       <span>{getProgressStageBadge(selectedGroup.progress_stage).label}</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenProgressModal(selectedGroup)}
-                      className="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-[10px] cursor-pointer"
-                    >
-                      Update
-                    </button>
+                    {selectedGroup.status === "active" && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProgressModal(selectedGroup)}
+                        className="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-[10px] cursor-pointer"
+                      >
+                        Update
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1422,15 +1866,9 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                   <span>Location: {selectedGroup.location}</span>
                 </div>
                 <div className="flex items-center gap-2 text-charcoal/80">
-                  <ShieldCheck className="w-4 h-4 text-amber-600" />
-                  <span>Primary Leader: <strong>{selectedGroup.leader_name}</strong> ({selectedGroup.leader_contact || "Contact through Church Office"})</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Leader: <strong>{selectedGroup.leader_name}</strong> ({selectedGroup.leader_contact || "Contact through Church Office"})</span>
                 </div>
-                {selectedGroup.assistant_leader_name && (
-                  <div className="flex items-center gap-2 text-charcoal/80">
-                    <UserCheck className="w-4 h-4 text-indigo-600" />
-                    <span>Assistant Leader: <strong>{selectedGroup.assistant_leader_name}</strong> ({selectedGroup.assistant_leader_contact || "Contact through Church Office"})</span>
-                  </div>
-                )}
               </div>
 
               <div>
@@ -1464,7 +1902,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                       </div>
                     ))
                   ) : (
-                    <p className="text-charcoal/40 text-center py-3 italic">No members enrolled yet. Be the first to join!</p>
+                    <p className="text-charcoal/40 text-center py-3 italic">No members enrolled yet.</p>
                   )}
                 </div>
               </div>
@@ -1477,7 +1915,7 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
               >
                 Close
               </button>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
@@ -1489,25 +1927,90 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                   <History className="w-4 h-4 text-indigo-600" />
                   <span>Timeline</span>
                 </button>
-                <button
-                  onClick={() => {
-                    const g = selectedGroup;
-                    setSelectedGroup(null);
-                    handleOpenRescheduleModal(g);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-xs border border-amber-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
-                >
-                  <CalendarClock className="w-4 h-4 text-amber-700" />
-                  <span>Reschedule</span>
-                </button>
-                {canCreate && selectedGroup.status !== "merged" && (
+
+                {selectedGroup.status === "archived" && canCreate && (
                   <button
-                    onClick={() => handleOpenEditModal(selectedGroup)}
-                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs shadow-md active:scale-95 transition-transform cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      const g = selectedGroup;
+                      setSelectedGroup(null);
+                      handleOpenRestoreModal(g);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
                   >
-                    <Edit className="w-4 h-4 text-amber-300" />
-                    <span>Edit Group</span>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Restore Group</span>
                   </button>
+                )}
+
+                {selectedGroup.status === "completed" && canCreate && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const g = selectedGroup;
+                      setSelectedGroup(null);
+                      handleOpenArchiveModal(g);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Archive className="w-4 h-4 text-slate-600" />
+                    <span>Archive</span>
+                  </button>
+                )}
+
+                {selectedGroup.status === "active" && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const g = selectedGroup;
+                        setSelectedGroup(null);
+                        handleOpenRescheduleModal(g);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-xs border border-amber-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                    >
+                      <CalendarClock className="w-4 h-4 text-amber-700" />
+                      <span>Reschedule</span>
+                    </button>
+
+                    {canCreate && (
+                      <button
+                        onClick={() => {
+                          const g = selectedGroup;
+                          setSelectedGroup(null);
+                          handleOpenCompleteModal(g);
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold text-xs border border-emerald-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Award className="w-4 h-4 text-emerald-700" />
+                        <span>Complete Study</span>
+                      </button>
+                    )}
+
+                    {canCreate && (
+                      <button
+                        onClick={() => {
+                          const g = selectedGroup;
+                          setSelectedGroup(null);
+                          handleOpenArchiveModal(g);
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                        title="Archive Group"
+                      >
+                        <Archive className="w-4 h-4 text-slate-600" />
+                        <span>Archive</span>
+                      </button>
+                    )}
+
+                    {canCreate && (
+                      <button
+                        onClick={() => handleOpenEditModal(selectedGroup)}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs shadow-md active:scale-95 transition-transform cursor-pointer"
+                      >
+                        <Edit className="w-4 h-4 text-amber-300" />
+                        <span>Edit Group</span>
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1682,11 +2185,11 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                 )}
               </div>
 
-              {/* Primary Leader Selection */}
+              {/* Leader Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div ref={leaderRef} className="relative">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="font-bold text-charcoal/70">Primary Leader *</label>
+                    <label className="font-bold text-charcoal/70">Leader *</label>
                   </div>
                   <div className="relative">
                     <input
@@ -1766,115 +2269,12 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Primary Leader Contact</label>
+                  <label className="block font-bold text-charcoal/70 mb-1">Leader Contact</label>
                   <input
                     type="text"
                     placeholder="e.g. 0917-123-4567 or email"
                     value={formData.leader_contact}
                     onChange={(e) => setFormData({ ...formData, leader_contact: e.target.value })}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                  />
-                </div>
-              </div>
-
-              {/* Optional Assistant Leader Selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div ref={assistantLeaderRef} className="relative">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-bold text-charcoal/70">Assistant Leader (Optional)</label>
-                    {formData.assistant_leader_name && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, assistant_leader_name: "", assistant_leader_contact: "" }))}
-                        className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Search assistant leader..."
-                      value={formData.assistant_leader_name}
-                      onFocus={(e) => {
-                        e.target.select();
-                        setAssistantLeaderQuery("");
-                        setIsAssistantLeaderDropdownOpen(true);
-                      }}
-                      onClick={() => {
-                        setAssistantLeaderQuery("");
-                        setIsAssistantLeaderDropdownOpen(true);
-                      }}
-                      onChange={(e) => {
-                        setFormData({ ...formData, assistant_leader_name: e.target.value });
-                        setAssistantLeaderQuery(e.target.value);
-                        setIsAssistantLeaderDropdownOpen(true);
-                      }}
-                      className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold"
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => {
-                        if (!isAssistantLeaderDropdownOpen) {
-                          setAssistantLeaderQuery("");
-                        }
-                        setIsAssistantLeaderDropdownOpen(!isAssistantLeaderDropdownOpen);
-                      }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-indigo p-0.5 cursor-pointer"
-                    >
-                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isAssistantLeaderDropdownOpen ? "rotate-180" : ""}`} />
-                    </button>
-                  </div>
-
-                  {isAssistantLeaderDropdownOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
-                      <div className="p-2 bg-indigo-50/70 text-[10px] font-bold text-indigo-900 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
-                        <span>Available Assistant Leaders ({filteredAssistantLeaders.length})</span>
-                      </div>
-                      {filteredAssistantLeaders.map((l) => (
-                        <button
-                          key={l.id}
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              assistant_leader_name: l.name,
-                              assistant_leader_contact: l.contact || prev.assistant_leader_contact
-                            }));
-                            setAssistantLeaderQuery("");
-                            setIsAssistantLeaderDropdownOpen(false);
-                          }}
-                          className="w-full text-left p-2.5 hover:bg-indigo-50/60 transition-colors flex items-center justify-between group cursor-pointer"
-                        >
-                          <div className="min-w-0 pr-2">
-                            <div className="font-bold text-charcoal group-hover:text-indigo text-xs">
-                              {l.name}
-                            </div>
-                            <div className="text-[10px] text-charcoal/60 mt-0.5 flex items-center gap-1.5">
-                              <span className="bg-gray-100 px-1.5 py-0.2 rounded text-[9px] font-semibold text-charcoal/80">
-                                {l.role_name}
-                              </span>
-                              {l.contact && <span className="truncate">• {l.contact}</span>}
-                            </div>
-                          </div>
-                          {formData.assistant_leader_name === l.name && (
-                            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Assistant Contact (Phone / Email)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 0917-000-0000 or email"
-                    value={formData.assistant_leader_contact}
-                    onChange={(e) => setFormData({ ...formData, assistant_leader_contact: e.target.value })}
                     className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
                   />
                 </div>
@@ -1974,11 +2374,20 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
               </div>
 
               {/* Enrollment section */}
-              <div ref={memberRef} className="relative">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-charcoal/70 text-xs">
-                    Enroll Church Members ({selectedMemberIds.length} Selected)
-                  </label>
+              <div ref={memberRef} className="space-y-2 p-3 bg-indigo-50/40 rounded-2xl border border-indigo-100/90">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Users className="w-4 h-4 text-indigo shrink-0" />
+                    <label className="block font-bold text-charcoal/80 text-xs">
+                      Enroll Church Members ({selectedMemberIds.length} of {formData.max_capacity || 12} Selected)
+                    </label>
+                    {selectedMemberIds.length >= (Number(formData.max_capacity) || 12) && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                        <span>Full (Max {formData.max_capacity || 12})</span>
+                      </span>
+                    )}
+                  </div>
                   {selectedMemberIds.length > 0 && (
                     <button
                       type="button"
@@ -1990,41 +2399,112 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                   )}
                 </div>
 
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search church members to add..."
-                    value={memberQuery}
-                    onChange={(e) => {
-                      setMemberQuery(e.target.value);
-                      setIsMemberDropdownOpen(true);
-                    }}
-                    onFocus={() => setIsMemberDropdownOpen(true)}
-                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:border-indigo"
-                  />
+                {/* Search Input & Ministry Filter Row */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal/40 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search unenrolled members to add..."
+                      value={memberQuery}
+                      onChange={(e) => {
+                        setMemberQuery(e.target.value);
+                        setIsMemberDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsMemberDropdownOpen(true)}
+                      className="w-full bg-white pl-8 pr-8 py-2 rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:border-indigo"
+                    />
+                    {memberQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setMemberQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 p-0.5 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Ministry Filter */}
+                  <div className="relative shrink-0">
+                    <select
+                      value={memberMinistryFilter}
+                      onChange={(e) => {
+                        setMemberMinistryFilter(e.target.value);
+                        setIsMemberDropdownOpen(true);
+                      }}
+                      className="px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-indigo focus:outline-none focus:border-indigo cursor-pointer shadow-2xs"
+                    >
+                      <option value="all">🏛️ All Ministries</option>
+                      {memberMinistries.filter(m => m !== "all").map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
+                {/* Candidate Members List (Inline Expandable / Overlap Safe) */}
                 {isMemberDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-2xl border border-indigo-100 max-h-52 overflow-y-auto divide-y divide-gray-100 animate-in fade-in">
+                  <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm max-h-52 overflow-y-auto divide-y divide-gray-100 animate-in fade-in">
+                    <div className="p-2 bg-indigo-50/60 text-[10px] font-bold text-indigo-900 uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span>Available Members ({filteredMembers.length})</span>
+                        {selectedMemberIds.length >= (Number(formData.max_capacity) || 12) && (
+                          <span className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-black text-[9px]">
+                            Capacity Full
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsMemberDropdownOpen(false)}
+                        className="text-[9px] text-indigo-600 hover:text-indigo-900 font-bold hover:underline cursor-pointer"
+                      >
+                        Hide List
+                      </button>
+                    </div>
+
+                    {selectedMemberIds.length >= (Number(formData.max_capacity) || 12) && (
+                      <div className="p-2.5 bg-amber-50/90 border-b border-amber-200 text-amber-950 text-[11px] font-medium flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Max capacity ({formData.max_capacity || 12}) reached. Increase capacity or remove a member to add more.</span>
+                      </div>
+                    )}
+
                     {filteredMembers.length === 0 ? (
                       <div className="p-3 text-center text-xs text-charcoal/50">
-                        No church members found matching "{memberQuery}"
+                        {memberQuery || memberMinistryFilter !== "all"
+                          ? `No available members found matching the filter.`
+                          : "No unenrolled members available."}
                       </div>
                     ) : (
                       filteredMembers.map((mem) => {
                         const isSelected = selectedMemberIds.includes(mem.id);
+                        const isAtMax = selectedMemberIds.length >= (Number(formData.max_capacity) || 12);
                         return (
                           <div
                             key={mem.id}
                             onClick={() => handleToggleMember(mem.id)}
-                            className={`p-2 hover:bg-indigo-50 flex items-center justify-between cursor-pointer transition-colors ${isSelected ? "bg-indigo-50/80 font-bold" : ""}`}
+                            className={`p-2.5 hover:bg-indigo-50/70 flex items-center justify-between cursor-pointer transition-colors ${
+                              isSelected ? "bg-indigo-50/80 font-bold" : ""
+                            }`}
                           >
-                            <div>
-                              <div className="text-xs text-charcoal">{mem.name}</div>
-                              {mem.ministry_name && <div className="text-[10px] text-charcoal/50">{mem.ministry_name}</div>}
+                            <div className="min-w-0 pr-2">
+                              <div className="text-xs text-charcoal font-bold truncate">{mem.name}</div>
+                              {mem.ministry_name && (
+                                <div className="text-[10px] text-indigo-700/70">{mem.ministry_name}</div>
+                              )}
                             </div>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isSelected ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-gray-100 text-charcoal/60"}`}>
-                              {isSelected ? "✓ Added" : "+ Add"}
+                            <span
+                              className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold shrink-0 transition-all ${
+                                isSelected
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : isAtMax
+                                  ? "bg-amber-100 text-amber-900 border border-amber-200 opacity-90"
+                                  : "bg-gray-100 hover:bg-indigo-100 text-charcoal/70"
+                              }`}
+                            >
+                              {isSelected ? "✓ Added" : isAtMax ? `Full (Max ${formData.max_capacity || 12})` : "+ Add"}
                             </span>
                           </div>
                         );
@@ -2035,15 +2515,15 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
                 {/* Display list of all currently enrolled/selected members */}
                 {enrolledMembersDetails.length > 0 && (
-                  <div className="mt-2.5 space-y-1.5">
+                  <div className="pt-1.5 space-y-1.5">
                     <div className="text-[11px] font-bold text-charcoal/60">
                       Currently Enrolled Disciples ({enrolledMembersDetails.length}):
                     </div>
-                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-indigo-50/50 rounded-2xl border border-indigo-100/80 max-h-36 overflow-y-auto">
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-white/90 rounded-xl border border-indigo-100 max-h-36 overflow-y-auto">
                       {enrolledMembersDetails.map((mem) => (
                         <span
                           key={mem.id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-indigo-200 text-charcoal text-xs font-bold shadow-2xs hover:border-rose-300 transition-all"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-50 border border-indigo-200 text-charcoal text-xs font-bold shadow-2xs hover:border-rose-300 transition-all"
                         >
                           <span>{mem.name}</span>
                           {mem.ministry_name && (
@@ -2080,12 +2560,17 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                   <button
                     type="button"
                     onClick={() => {
-                      const groupToDelete = groups.find((g) => g.id === editingGroupId);
-                      if (groupToDelete) handleDeleteGroup(groupToDelete);
+                      const groupToArchive = groups.find((g) => g.id === editingGroupId);
+                      if (groupToArchive) {
+                        setIsCreateModalOpen(false);
+                        handleOpenArchiveModal(groupToArchive);
+                      }
                     }}
-                    className="px-4 py-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-300"
+                    title="Move this Bible study group to Archived list (can be restored anytime)"
                   >
-                    <span>Delete Group</span>
+                    <Archive className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Archive Group</span>
                   </button>
                 ) : (
                   <div />
@@ -2107,6 +2592,235 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
                 </div>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ARCHIVE (SOFT-DELETE) CONFIRMATION MODAL */}
+      {archiveGroupModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-800 border border-slate-200 flex items-center justify-center font-bold">
+                  <Archive className="w-6 h-6 text-slate-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-charcoal">Archive Bible Study Group?</h3>
+                  <p className="text-xs text-charcoal/60 font-semibold">{archiveGroupModal.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setArchiveGroupModal(null)}
+                className="p-1.5 text-charcoal/40 hover:bg-gray-100 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs text-slate-700 space-y-2">
+              <p className="leading-relaxed">
+                This group will be removed from the active group list, but its <strong>members, attendance records, curriculum progress, schedules, and history will be preserved</strong>.
+              </p>
+              <p className="text-[11px] text-slate-500 font-medium">
+                💡 This will not permanently delete the group. It will be moved to <strong>Archived Groups</strong> and can be restored at any time.
+              </p>
+            </div>
+
+            <form onSubmit={handleArchiveSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-charcoal/80 mb-1">
+                  Reason for archiving <span className="text-charcoal/40 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Study cycle ended, group discontinued, leader relocated..."
+                  value={archiveReason}
+                  onChange={(e) => setArchiveReason(e.target.value)}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setArchiveGroupModal(null)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isArchiving}
+                  className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>{isArchiving ? "Archiving..." : "Archive Group"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* COMPLETE STUDY SNAPSHOT MODAL */}
+      {completeGroupModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-emerald-200 animate-in fade-in max-h-[92vh] overflow-y-auto">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center justify-center font-bold">
+                  <Award className="w-6 h-6 text-emerald-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-charcoal">Complete Bible Study Track</h3>
+                  <p className="text-xs text-emerald-900 font-semibold">{completeGroupModal.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompleteGroupModal(null)}
+                className="p-1.5 text-charcoal/40 hover:bg-gray-100 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-950 space-y-1">
+              <p className="font-bold">Celebrate the milestone of finishing this study circle!</p>
+              <p className="text-[11px] text-emerald-800">
+                This group will move to <strong>Completed Groups</strong> with a permanent snapshot of the finished curriculum and chapter. Full attendance history and roster remain intact.
+              </p>
+            </div>
+
+            <form onSubmit={handleCompleteSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-charcoal/80 mb-1">Curriculum / Study Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={completeFormData.completed_book_title_snapshot}
+                  onChange={(e) => setCompleteFormData({ ...completeFormData, completed_book_title_snapshot: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-bold text-charcoal focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-charcoal/80 mb-1">Finished at (Chapter/Lesson) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Chapter 12 of 12"
+                    value={completeFormData.completed_chapter}
+                    onChange={(e) => setCompleteFormData({ ...completeFormData, completed_chapter: e.target.value })}
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-bold focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-charcoal/80 mb-1">Total Chapters *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={150}
+                    required
+                    value={completeFormData.completed_total_chapters}
+                    onChange={(e) => setCompleteFormData({ ...completeFormData, completed_total_chapters: Number(e.target.value) || 12 })}
+                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-bold focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-charcoal/80 mb-1">
+                  Final Reflections / Completion Notes <span className="text-charcoal/40 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Key takeaways, testimony highlights, next study recommendation..."
+                  value={completeFormData.notes}
+                  onChange={(e) => setCompleteFormData({ ...completeFormData, notes: e.target.value })}
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCompleteGroupModal(null)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCompleting}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>{isCompleting ? "Recording..." : "Mark as Completed"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* RESTORE GROUP CONFIRMATION MODAL */}
+      {restoreGroupModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-emerald-200 animate-in fade-in">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center justify-center font-bold">
+                  <RotateCcw className="w-6 h-6 text-emerald-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-charcoal">Restore Bible Study Group?</h3>
+                  <p className="text-xs text-charcoal/60 font-semibold">{restoreGroupModal.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRestoreGroupModal(null)}
+                className="p-1.5 text-charcoal/40 hover:bg-gray-100 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-950 space-y-2">
+              <p className="leading-relaxed">
+                Restore <strong>"{restoreGroupModal.name}"</strong> back to <strong>Active Small Groups</strong>? It will immediately reappear in the active directory and active schedules.
+              </p>
+              <p className="text-[11px] text-emerald-800">
+                All previous members, attendance roll-calls, and study progress will be immediately accessible.
+              </p>
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRestoreGroupModal(null)}
+                className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRestoreSubmit}
+                disabled={isRestoring}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>{isRestoring ? "Restoring..." : "Restore to Active"}</span>
+              </button>
+            </div>
           </div>
         </div>,
         document.body
@@ -2216,14 +2930,16 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
             </div>
 
             <div className="space-y-2">
-              {groups.filter(g => g.progress_stage === "completed").length === 0 ? (
+              {groups.filter(g => g.status === "completed" || g.progress_stage === "completed").length === 0 ? (
                 <p className="text-xs text-charcoal/50 text-center py-6">No completed groups yet in this cycle.</p>
               ) : (
-                groups.filter(g => g.progress_stage === "completed").map(g => (
+                groups.filter(g => g.status === "completed" || g.progress_stage === "completed").map(g => (
                   <div key={g.id} className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs">
                     <div>
                       <div className="font-bold text-emerald-950">{g.name}</div>
-                      <div className="text-[10px] text-emerald-800">{g.curriculum} • Leader: {g.leader_name}</div>
+                      <div className="text-[10px] text-emerald-800">
+                        {g.completed_book_title_snapshot || g.curriculum} • {g.completed_chapter || g.current_chapter || "Finished"} • Leader: {g.leader_name}
+                      </div>
                     </div>
                     <span className="text-[10px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full">
                       ✓ Completed
@@ -2254,8 +2970,11 @@ export const BibleStudyPage: React.FC<BibleStudyPageProps> = ({ initialGroupId }
 
       {/* GROUP TRANSITION HISTORY MODAL */}
       <GroupHistoryModal
-        isOpen={Boolean(historyGroup)}
-        onClose={() => setHistoryGroup(null)}
+        isOpen={Boolean(historyGroup) || isGlobalHistoryOpen}
+        onClose={() => {
+          setHistoryGroup(null);
+          setIsGlobalHistoryOpen(false);
+        }}
         group={historyGroup}
         onSelectRelatedGroup={(relatedId) => {
           const target = groups.find(g => g.id === relatedId);

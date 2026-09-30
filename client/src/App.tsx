@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { DPCLoadingScreen } from "./components/DPCLoadingScreen";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ToastContainer } from "./components/common/ToastContainer";
@@ -29,37 +30,74 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { ProfileModal } from "./components/profile/ProfileModal";
 import { SystemConfigurationModal } from "./components/common/SystemConfigurationModal";
 
+const isTabAllowedForRole = (tab: NavTab, roleName?: string): boolean => {
+  switch (roleName) {
+    case "Admin":
+    case "Pastor":
+    case "IT Admin":
+      return true;
+    case "Coordinator":
+      return !["users", "settings", "audit", "notifications"].includes(tab);
+    case "Leader":
+      return [
+        "dashboard", "leader-dashboard", "biblereading", "leaderportal",
+        "curriculum", "duty", "dishwashing", "events", "sundaycycle",
+        "communications", "profile"
+      ].includes(tab);
+    case "Volunteer":
+      return [
+        "dashboard", "biblereading", "attendance", "attendancelog",
+        "duty", "dishwashing", "events", "sundaycycle",
+        "communications", "profile"
+      ].includes(tab);
+    case "Member":
+      return [
+        "biblereading", "leaderportal", "curriculum", "duty",
+        "dishwashing", "events", "sundaycycle", "communications",
+        "profile"
+      ].includes(tab);
+    default:
+      return true;
+  }
+};
+
+const getDefaultTabForRole = (roleName?: string): NavTab => {
+  if (roleName === "Member") return "biblereading";
+  return "dashboard";
+};
+
 const MainLayout: React.FC = () => {
   const { user } = useAuth();
-  const isLeader = user?.role_name === "Leader";
-  const [currentTab, setCurrentTab] = useState<NavTab>(
-    isLeader ? "leader-dashboard" : "dashboard"
-  );
+  const [currentTab, setCurrentTab] = useState<NavTab>(() => getDefaultTabForRole(user?.role_name));
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [navigationRefId, setNavigationRefId] = useState<number | null>(null);
 
   const navigateToTab = (tab: string, refId?: number | null) => {
-    const target = user?.role_name === "Leader" && tab === "biblestudy" ? "leaderportal" : tab;
+    let target = tab as NavTab;
+    if ((user?.role_name === "Leader" || user?.role_name === "Member") && tab === "biblestudy") {
+      target = "leaderportal";
+    }
+    if (!isTabAllowedForRole(target, user?.role_name)) {
+      target = getDefaultTabForRole(user?.role_name);
+    }
     setNavigationRefId(refId ?? null);
-    setCurrentTab(target as NavTab);
+    setCurrentTab(target);
   };
 
   useEffect(() => {
-    if (user?.role_name === "Leader") {
-      if (!["leader-dashboard", "leader-members", "leader-biblestudy", "biblereading", "profile", "notifications"].includes(currentTab)) {
-        setCurrentTab("leader-dashboard");
-      }
+    if (!isTabAllowedForRole(currentTab, user?.role_name)) {
+      setCurrentTab(getDefaultTabForRole(user?.role_name));
     }
-  }, [user?.role_name]);
+  }, [user?.role_name, currentTab]);
 
   const renderActiveView = () => {
-    // Direct profile page access for any role including leaders
+    // Direct profile page access for any role
     if (currentTab === "profile") {
       return <ProfilePage />;
     }
 
-    // Direct Bible reading page access for all roles including leaders
+    // Direct Bible reading page access for all roles
     if (currentTab === "biblereading") {
       return <BibleReadingPage />;
     }
@@ -68,52 +106,14 @@ const MainLayout: React.FC = () => {
       return <NotificationsPage onNavigate={navigateToTab} />;
     }
 
-    // Role Authorization: When logged in as Leader, support all leader tabs
-    if (isLeader) {
-      if (currentTab === "leaderportal") {
-        return <LeaderPortalPage onNavigateGeneralTab={setCurrentTab} />;
-      }
-      if (currentTab === "attendancelog") {
-        return <AttendanceLogPage />;
-      }
-      if (currentTab === "curriculum") {
-        return <CurriculumPage />;
-      }
-      if (currentTab === "duty") {
-        return <DutyPage />;
-      }
-      if (currentTab === "dishwashing") {
-        return <DishwashingPage />;
-      }
-      if (currentTab === "events") {
-        return <EventsPage onNavigate={setCurrentTab} />;
-      }
-      if (currentTab === "sundaycycle") {
-        return <SundayEventsCyclePage />;
-      }
-      if (currentTab === "communications") {
-        return <CommunicationsPage />;
-      }
-      // For dashboard (and legacy leader-* subtabs), render DashboardPage which loads LeaderDashboardPage
-      if (currentTab === "leader-members") {
-        return <LeaderPortalPage initialTab="members" onNavigateGeneralTab={setCurrentTab} />;
-      }
-      if (currentTab === "leader-biblestudy") {
-        return <LeaderPortalPage initialTab="biblestudy" onNavigateGeneralTab={setCurrentTab} />;
-      }
-      return <DashboardPage onNavigate={setCurrentTab} />;
-    }
-
     switch (currentTab) {
       case "dashboard":
+      case "leader-dashboard":
         return <DashboardPage onNavigate={setCurrentTab} />;
       case "leaderportal":
-      case "leader-dashboard":
-        return <LeaderPortalPage initialTab="dashboard" />;
       case "leader-members":
-        return <LeaderPortalPage initialTab="members" />;
       case "leader-biblestudy":
-        return <LeaderPortalPage initialTab="biblestudy" />;
+        return <LeaderPortalPage onNavigateGeneralTab={setCurrentTab} />;
       case "attendance":
         return <CheckInPage />;
       case "attendancelog":
@@ -145,7 +145,7 @@ const MainLayout: React.FC = () => {
       case "settings":
         return <SettingsPage onNavigateToUsers={() => setCurrentTab("users")} />;
       default:
-        return <DashboardPage onNavigate={setCurrentTab} />;
+        return user?.role_name === "Member" ? <BibleReadingPage /> : <DashboardPage onNavigate={setCurrentTab} />;
     }
   };
 
@@ -190,9 +190,13 @@ const MainLayout: React.FC = () => {
   );
 };
 
-const AppContent: React.FC = () => {
+const AppContent: React.FC<{ onReady: () => void }> = ({ onReady }) => {
   const { user, loading } = useAuth();
   const [isSystemConfigOpen, setIsSystemConfigOpen] = useState(false);
+
+  useEffect(() => {
+    if (!loading) onReady();
+  }, [loading, onReady]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -238,13 +242,18 @@ const AppContent: React.FC = () => {
 };
 
 export function App() {
+  const [ready, setReady] = useState(false);
+  const handleReady = useCallback(() => setReady(true), []);
+
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppContent />
-        <ToastContainer />
-      </AuthProvider>
-    </ToastProvider>
+    <DPCLoadingScreen ready={ready}>
+      <ToastProvider>
+        <AuthProvider>
+          <AppContent onReady={handleReady} />
+          <ToastContainer />
+        </AuthProvider>
+      </ToastProvider>
+    </DPCLoadingScreen>
   );
 }
 

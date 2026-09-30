@@ -144,11 +144,19 @@ router.get("/:id", async (req, res) => {
       SELECT 
         g.id, g.name, g.leader_name, g.leader_contact, g.meeting_day, g.meeting_time, 
         g.location, g.category, g.curriculum, g.current_chapter, g.progress_stage, g.ministry_id,
+        COALESCE(g.status, 'active') as status,
+        g.merged_into_group_id,
+        mg.name as merged_into_group_name,
+        (SELECT STRING_AGG(sg.name, ', ') FROM bible_study_groups sg WHERE sg.merged_into_group_id = g.id) as source_group_names,
         m.name as ministry_name, m.color as ministry_color,
-        (SELECT COUNT(*) FROM bible_study_members WHERE group_id = g.id) as current_member_count
+        (SELECT COUNT(*) FROM bible_study_members WHERE group_id = g.id AND COALESCE(status, 'active') = 'active') as current_member_count
       FROM bible_study_groups g
       LEFT JOIN ministries m ON g.ministry_id = m.id
-      ORDER BY g.name ASC
+      LEFT JOIN bible_study_groups mg ON g.merged_into_group_id = mg.id
+      WHERE COALESCE(g.status, 'active') != 'merged'
+      ORDER BY 
+        CASE WHEN COALESCE(g.status, 'active') = 'active' THEN 0 ELSE 1 END ASC,
+        g.name ASC
     `);
 
     res.json({
@@ -164,7 +172,7 @@ router.get("/:id", async (req, res) => {
 // ====================================================
 // 3. CREATE STUDY TOPIC
 // ====================================================
-router.post("/", requireRoles("Admin", "Coordinator", "Leader"), async (req, res) => {
+router.post("/", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req, res) => {
   try {
     const {
       title,
@@ -208,7 +216,7 @@ router.post("/", requireRoles("Admin", "Coordinator", "Leader"), async (req, res
 // ====================================================
 // 4. UPDATE STUDY TOPIC
 // ====================================================
-router.put("/:id", requireRoles("Admin", "Coordinator", "Leader"), async (req, res) => {
+router.put("/:id", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req, res) => {
   try {
     const topicId = Number(req.params.id);
     const {
@@ -254,7 +262,7 @@ router.put("/:id", requireRoles("Admin", "Coordinator", "Leader"), async (req, r
 // ====================================================
 // 5. DELETE STUDY TOPIC
 // ====================================================
-router.delete("/:id", requireRoles("Admin", "Coordinator", "Leader"), async (req, res) => {
+router.delete("/:id", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req, res) => {
   try {
     const topicId = Number(req.params.id);
     await db.run("DELETE FROM bible_study_topics WHERE id = $1", [topicId]);

@@ -7,7 +7,7 @@ import { emitRealtimeEvent } from "../socket";
 const router = Router();
 
 // List households with member summaries (Optimized: 0 N+1 roundtrips)
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: Request, res: Response) => {
   try {
     const { page, limit, search } = req.query;
 
@@ -133,7 +133,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 });
 
 // Create household
-router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, address, primary_contact_phone } = req.body;
     if (!name?.trim()) {
@@ -163,7 +163,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
 });
 
 // Update household
-router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, address, primary_contact_phone } = req.body;
     const id = req.params.id;

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
-import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
 import { calculateAge } from "./ministries";
 
 const router = Router();
@@ -19,7 +19,13 @@ router.get("/dashboard", authMiddleware, async (req: AuthRequest, res: Response)
         (SELECT COUNT(*) FROM households) as total_households,
         (SELECT COUNT(*) FROM attendance WHERE checked_in_at::date = CURRENT_DATE ${scopedMinistryId ? "AND ministry_id = $1" : ""}) as today_checkins,
         (SELECT COUNT(*) FROM announcements) as active_announcements,
-        (SELECT COUNT(*) FROM events WHERE start_time >= CURRENT_TIMESTAMP ${scopedMinistryId ? "AND (ministry_id = $1 OR ministry_id IS NULL)" : ""}) as upcoming_events_count
+        (SELECT COUNT(*) FROM events WHERE start_time >= CURRENT_TIMESTAMP ${scopedMinistryId ? "AND (ministry_id = $1 OR ministry_id IS NULL)" : ""}) as upcoming_events_count,
+        (SELECT COUNT(*) FROM members m WHERE m.status = 'active' ${scopedMinistryId ? "AND m.ministry_id = $1" : ""} AND m.id NOT IN (
+          SELECT bsm.member_id 
+          FROM bible_study_members bsm
+          JOIN bible_study_groups bsg ON bsm.group_id = bsg.id
+          WHERE (bsg.status IS NULL OR bsg.status = 'active')
+        )) as unenrolled_members_count
     `;
 
     // 2. Consolidated Ministry Breakdown in a single joined aggregation
@@ -76,7 +82,8 @@ router.get("/dashboard", authMiddleware, async (req: AuthRequest, res: Response)
         today_checkins: Number(metricsRow?.today_checkins || 0),
         active_announcements: Number(metricsRow?.active_announcements || 0),
         upcoming_events_count: Number(metricsRow?.upcoming_events_count || 0),
-        aging_out_alerts_count: agingOutAlertsCount
+        aging_out_alerts_count: agingOutAlertsCount,
+        unenrolled_members_count: Number(metricsRow?.unenrolled_members_count || 0)
       },
       ministry_breakdown: (ministryBreakdown || []).map(m => ({
         id: m.id,
@@ -92,9 +99,9 @@ router.get("/dashboard", authMiddleware, async (req: AuthRequest, res: Response)
 });
 
 // =========================================================================
-// Growth Insights & Ministry Health Dashboard Endpoint
+// Growth Insights & Ministry Health Dashboard Endpoint (Admin, Pastor, Coordinator)
 // =========================================================================
-router.get("/growth-insights", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get("/growth-insights", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const { ministry_id, timeframe = "6m" } = req.query;
     const scopedMinistryId = ministry_id ? Number(ministry_id) : null;

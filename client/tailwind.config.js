@@ -1,10 +1,19 @@
+import { themedColors, themePalette } from './theme-palette.js';
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    backgroundColor: ({ theme }) => themedColors('surface', theme('colors')),
+    gradientColorStops: ({ theme }) => themedColors('surface', theme('colors')),
+    textColor: ({ theme }) => themedColors('ink', theme('colors')),
+    borderColor: ({ theme }) => ({ DEFAULT: '#e5e7eb', ...themedColors('line', theme('colors')) }),
+    divideColor: ({ theme }) => themedColors('line', theme('colors')),
+    ringOffsetColor: ({ theme }) => themedColors('surface', theme('colors')),
     extend: {
       colors: {
         indigo: {
@@ -77,5 +86,5 @@ export default {
       }
     },
   },
-  plugins: [],
+  plugins: [themePalette],
 }

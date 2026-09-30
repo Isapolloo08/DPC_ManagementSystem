@@ -31,6 +31,11 @@ const { createOrUpdateTray, destroyTray, getLanIps, isTrayActive } = require("./
 // In production packaged apps (app.isPackaged = true), isDev is ALWAYS false regardless of environment variables
 const isDev = !app.isPackaged && process.env.NODE_ENV === "development";
 
+// Disable Electron developer security warnings in development (due to Vite HMR eval requirements)
+if (isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
+}
+
 // Single-instance lock to prevent multiple conflicting processes in production
 if (!isDev) {
   const gotTheLock = app.requestSingleInstanceLock();
@@ -226,7 +231,7 @@ function createWindow() {
     title: "Daet Presbyterian Church — ChMS",
     ...(appIcon ? { icon: appIcon } : {}),
     show: false,
-    backgroundColor: "#FDFBF7",
+    backgroundColor: "#08111f",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

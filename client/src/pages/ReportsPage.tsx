@@ -14,9 +14,9 @@ import {
 export const ReportsPage: React.FC = () => {
   const { user, selectedMinistryId } = useAuth();
   const isCoordinator = user?.role_name === "Coordinator";
-  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0 
-    ? user.ministries[0].id 
-    : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
+  const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
+    ? user.ministries[0].id
+    : (user?.role_name !== "Admin" && user?.role_name !== "Pastor" && user?.role_name !== "IT Admin" && selectedMinistryId ? selectedMinistryId : null);
   const coordinatorMinistryName = user?.ministries && user.ministries.length > 0 ? user.ministries[0].name : "Youth";
   const activeScope = coordinatorMinistryId ?? selectedMinistryId ?? undefined;
 
@@ -63,11 +63,11 @@ export const ReportsPage: React.FC = () => {
     }
   };
 
-  const displayedBreakdown = coordinatorMinistryId 
+  const displayedBreakdown = coordinatorMinistryId
     ? (metrics?.ministry_breakdown?.filter(m => m.id === coordinatorMinistryId) || [])
     : (metrics?.ministry_breakdown || []);
 
-  const scopedMemberCount = coordinatorMinistryId 
+  const scopedMemberCount = coordinatorMinistryId
     ? (metrics?.ministry_breakdown?.find(m => m.id === coordinatorMinistryId)?.member_count ?? metrics?.metrics.total_active_members ?? "...")
     : (metrics?.metrics.total_active_members ?? "...");
 
@@ -120,7 +120,7 @@ export const ReportsPage: React.FC = () => {
             Ministry Health & Growth Insights
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
-            {coordinatorMinistryId 
+            {coordinatorMinistryId
               ? `Water baptism trajectory, retention metrics, small group health, and Sunday attendance trends for ${coordinatorMinistryName} Ministry.`
               : "Executive analytics dashboard with month-over-month baptism counts, discipleship ratio, new member retention funnel, and Sunday service momentum."}
           </p>
@@ -139,11 +139,10 @@ export const ReportsPage: React.FC = () => {
               <button
                 key={t.id}
                 onClick={() => setTimeframe(t.id as any)}
-                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                  timeframe === t.id
-                    ? "bg-amber-400 text-slate-950 font-black shadow-md"
-                    : "text-slate-300 hover:text-white hover:bg-white/5"
-                }`}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${timeframe === t.id
+                  ? "bg-amber-400 text-slate-950 font-black shadow-md"
+                  : "text-slate-300 hover:text-white hover:bg-white/5"
+                  }`}
               >
                 {t.label}
               </button>
@@ -166,11 +165,10 @@ export const ReportsPage: React.FC = () => {
       <div className="flex items-center gap-2 border-b border-gray-200/80 pb-2 print:hidden overflow-x-auto">
         <button
           onClick={() => setActiveTab("growth")}
-          className={`px-4 py-2 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === "growth"
-              ? "bg-indigo text-white shadow-md shadow-indigo/20"
-              : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
-          }`}
+          className={`px-4 py-2 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${activeTab === "growth"
+            ? "bg-indigo text-white shadow-md shadow-indigo/20"
+            : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
+            }`}
         >
           <TrendingUp className="w-4 h-4 text-amber-300" />
           <span>Growth Insights & Vitality</span>
@@ -178,11 +176,10 @@ export const ReportsPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab("demographics")}
-          className={`px-4 py-2 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === "demographics"
-              ? "bg-indigo text-white shadow-md shadow-indigo/20"
-              : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
-          }`}
+          className={`px-4 py-2 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${activeTab === "demographics"
+            ? "bg-indigo text-white shadow-md shadow-indigo/20"
+            : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
+            }`}
         >
           <Cake className="w-4 h-4 text-rose-400" />
           <span>Demographics & Birthdays</span>
@@ -253,7 +250,7 @@ export const ReportsPage: React.FC = () => {
             {/* Card 3: Water Baptism Momentum */}
             <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black text-charcoal/70">Water Baptisms</span>
+                <span className="text-xs font-black text-charcoal/70">Baptisms</span>
                 <span className="p-2 rounded-2xl bg-sky-50 text-sky-700 border border-sky-100/80">
                   <Droplets className="w-4 h-4" />
                 </span>
@@ -313,7 +310,7 @@ export const ReportsPage: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="text-base font-black text-charcoal">
-                      Month-over-Month Water Baptism Trajectory
+                      Month-over-Month Baptism Trajectory
                     </h2>
                     <p className="text-xs text-charcoal/60">
                       Tracking public declarations of faith and baptismal growth across ministries.
@@ -371,7 +368,7 @@ export const ReportsPage: React.FC = () => {
             ) : (
               <div className="p-8 text-center bg-ivory-light rounded-2xl border border-dashed border-gray-300 space-y-2">
                 <Droplets className="w-8 h-8 text-sky-400 mx-auto" />
-                <h4 className="font-bold text-xs text-charcoal">No Water Baptism Records in this Timeframe</h4>
+                <h4 className="font-bold text-xs text-charcoal">No Baptism Records in this Timeframe</h4>
                 <p className="text-[11px] text-charcoal/50 max-w-sm mx-auto">
                   Baptism dates logged on member profiles will automatically populate this trajectory chart.
                 </p>
@@ -413,7 +410,7 @@ export const ReportsPage: React.FC = () => {
                           <span className="text-[10px] font-black text-indigo opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                             {att.total}
                           </span>
-                          
+
                           {/* Bar */}
                           <div className="w-full bg-gray-100 rounded-t-xl h-32 flex items-end p-0.5 overflow-hidden">
                             <div
@@ -484,11 +481,10 @@ export const ReportsPage: React.FC = () => {
                     <div
                       className="h-full bg-emerald-600 rounded-full transition-all duration-500"
                       style={{
-                        width: `${
-                          growthData?.summary.total_new_members
-                            ? Math.round(((growthData.summary.new_members_attended) / growthData.summary.total_new_members) * 100)
-                            : 0
-                        }%`
+                        width: `${growthData?.summary.total_new_members
+                          ? Math.round(((growthData.summary.new_members_attended) / growthData.summary.total_new_members) * 100)
+                          : 0
+                          }%`
                       }}
                     ></div>
                   </div>
@@ -510,11 +506,10 @@ export const ReportsPage: React.FC = () => {
                     <div
                       className="h-full bg-amber-500 rounded-full transition-all duration-500"
                       style={{
-                        width: `${
-                          growthData?.summary.total_new_members
-                            ? Math.round(((growthData.summary.new_members_in_groups) / growthData.summary.total_new_members) * 100)
-                            : 0
-                        }%`
+                        width: `${growthData?.summary.total_new_members
+                          ? Math.round(((growthData.summary.new_members_in_groups) / growthData.summary.total_new_members) * 100)
+                          : 0
+                          }%`
                       }}
                     ></div>
                   </div>
@@ -536,11 +531,10 @@ export const ReportsPage: React.FC = () => {
                     <div
                       className="h-full bg-sky-500 rounded-full transition-all duration-500"
                       style={{
-                        width: `${
-                          growthData?.summary.total_new_members
-                            ? Math.round(((growthData.summary.new_members_baptized) / growthData.summary.total_new_members) * 100)
-                            : 0
-                        }%`
+                        width: `${growthData?.summary.total_new_members
+                          ? Math.round(((growthData.summary.new_members_baptized) / growthData.summary.total_new_members) * 100)
+                          : 0
+                          }%`
                       }}
                     ></div>
                   </div>
@@ -602,9 +596,8 @@ export const ReportsPage: React.FC = () => {
                         </div>
                         <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              util >= 80 ? "bg-emerald-500" : util >= 40 ? "bg-amber" : "bg-rose"
-                            }`}
+                            className={`h-full rounded-full transition-all duration-300 ${util >= 80 ? "bg-emerald-500" : util >= 40 ? "bg-amber" : "bg-rose"
+                              }`}
                             style={{ width: `${util}%` }}
                           ></div>
                         </div>
@@ -643,13 +636,13 @@ export const ReportsPage: React.FC = () => {
                 <h2 className="text-base font-black text-charcoal flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-indigo" />
                   <span>
-                    {coordinatorMinistryId 
-                      ? `${coordinatorMinistryName} Ministry Demographic & Capacity` 
+                    {coordinatorMinistryId
+                      ? `${coordinatorMinistryName} Ministry Demographic & Capacity`
                       : "Ministry Demographic & Capacity Distribution"}
                   </span>
                 </h2>
                 <p className="text-xs text-charcoal/60 mt-0.5">
-                  {coordinatorMinistryId 
+                  {coordinatorMinistryId
                     ? `Active disciples and capacity strictly for ${coordinatorMinistryName} Ministry`
                     : "Relative distribution of active disciples across the 7 age bracket ministries"}
                 </p>
@@ -663,8 +656,8 @@ export const ReportsPage: React.FC = () => {
 
             <div className="space-y-4 pt-2">
               {displayedBreakdown.map((m) => {
-                const total = coordinatorMinistryId 
-                  ? (m.member_count || 1) 
+                const total = coordinatorMinistryId
+                  ? (m.member_count || 1)
                   : (metrics?.metrics.total_active_members || 1);
                 const pct = coordinatorMinistryId ? 100 : Math.round((m.member_count / total) * 100);
 
@@ -725,25 +718,22 @@ export const ReportsPage: React.FC = () => {
                   <div
                     key={m.month}
                     onClick={() => setSelectedMonth(isSelected ? null : m.month)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                      isSelected
-                        ? "bg-amber-400 text-indigo-950 border-amber-500 shadow-md ring-2 ring-amber-400/40"
-                        : isCurrentMonth
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${isSelected
+                      ? "bg-amber-400 text-indigo-950 border-amber-500 shadow-md ring-2 ring-amber-400/40"
+                      : isCurrentMonth
                         ? "bg-amber-50/80 border-amber-200 hover:border-amber-300 shadow-2xs"
                         : "bg-indigo-50/30 border-indigo-100/70 hover:border-indigo-200 hover:bg-indigo-50/60"
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-[10px] font-black uppercase tracking-wider ${
-                          isSelected ? "text-indigo-950/80" : isCurrentMonth ? "text-amber-800" : "text-charcoal/50"
-                        }`}>
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${isSelected ? "text-indigo-950/80" : isCurrentMonth ? "text-amber-800" : "text-charcoal/50"
+                          }`}>
                           Month {m.month}
                         </span>
                         {isCurrentMonth && (
-                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                            isSelected ? "bg-indigo-950 text-white" : "bg-amber-500 text-white"
-                          }`}>
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isSelected ? "bg-indigo-950 text-white" : "bg-amber-500 text-white"
+                            }`}>
                             CURRENT
                           </span>
                         )}
@@ -755,9 +745,8 @@ export const ReportsPage: React.FC = () => {
 
                     <div className="mt-3 pt-2 border-t border-black/5 flex items-center justify-between text-xs">
                       <span className={`font-bold ${isSelected ? "text-indigo-950/80" : "text-charcoal/60"}`}>Birthdays:</span>
-                      <span className={`font-black text-sm px-2.5 py-0.5 rounded-full ${
-                        isSelected ? "bg-indigo-950/15 text-indigo-950" : "bg-indigo-50 text-indigo border border-indigo-100"
-                      }`}>
+                      <span className={`font-black text-sm px-2.5 py-0.5 rounded-full ${isSelected ? "bg-indigo-950/15 text-indigo-950" : "bg-indigo-50 text-indigo border border-indigo-100"
+                        }`}>
                         {m.count}
                       </span>
                     </div>

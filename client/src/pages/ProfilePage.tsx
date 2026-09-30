@@ -123,17 +123,43 @@ export const ProfilePage: React.FC = () => {
   // Role details mapping
   const roleMetadata: Record<string, { badge: string; color: string; desc: string; permissions: string[] }> = {
     Admin: {
-      badge: "Master Administrator",
-      color: "bg-rose-600 text-white",
-      desc: "Full system administration, access management, master lookups, audit logs, and church oversight.",
+      badge: "System Administrator (Super Admin)",
+      color: "bg-cyan-950 text-cyan-200 border border-cyan-500/40",
+      desc: "Top super administrator with root infrastructure control, database disaster recovery, hard backups & restores, email SMTP settings, security audit inspection, and user account management across all roles.",
       permissions: [
-        "Create, update, and manage all user accounts & permissions",
-        "Manage 7 Age-bracket Ministries, Leaders, and Coordinators",
-        "Sunday Attendance live check-ins and session management",
-        "Life Groups and Discipleship curriculum books & lessons",
-        "Saturday Cleaning Duty & Sunday Dishwashing rotation cycles",
-        "Events calendar, announcements, and bulletins",
-        "Financial records, tithes, and system audit trails"
+        "Root infrastructure & full database disaster recovery, instant snapshot backups, and restores",
+        "Notification rules & SMTP email configuration",
+        "Year-end data cleanup, retention policies, and hard purge operations",
+        "Full user account lifecycle management across all 6 roles (including Admin & Pastor)",
+        "Security audit trail inspection and system diagnostics",
+        "Universal church-wide access across all ministries and operational modules"
+      ]
+    },
+    "IT Admin": {
+      badge: "System Administrator (Super Admin)",
+      color: "bg-cyan-950 text-cyan-200 border border-cyan-500/40",
+      desc: "Top super administrator with root infrastructure control, database disaster recovery, hard backups & restores, email SMTP settings, security audit inspection, and user account management across all roles.",
+      permissions: [
+        "Root infrastructure & full database disaster recovery, instant snapshot backups, and restores",
+        "Notification rules & SMTP email configuration",
+        "Year-end data cleanup, retention policies, and hard purge operations",
+        "Full user account lifecycle management across all 6 roles (including Admin & Pastor)",
+        "Security audit trail inspection and system diagnostics",
+        "Universal church-wide access across all ministries and operational modules"
+      ]
+    },
+    Pastor: {
+      badge: "Senior Pastor / Church Executive",
+      color: "bg-indigo-900 text-amber-300 border border-indigo-700",
+      desc: "Senior pastoral leadership, executive church governance, discipleship oversight, and spiritual administration across all ministries.",
+      permissions: [
+        "Full operational administration across all 7 age-bracket ministries",
+        "Manage church coordinators, life group leaders, volunteers, and members",
+        "Sunday attendance intelligence, live check-ins, and session records",
+        "Life Groups curriculum books, discipleship paths, and spiritual milestones",
+        "Saturday Cleaning Duty & Sunday Dishwashing rotation oversight",
+        "Official events calendar, broadcasts, announcements, and bulletins",
+        "Church statistics, demographic reports, and ministry health insights"
       ]
     },
     Coordinator: {

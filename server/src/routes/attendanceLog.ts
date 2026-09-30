@@ -171,8 +171,8 @@ async function buildAttendanceLogQuery(
   }
 
   // RBAC SQL Enforcement
-  if (user.role_name === "Admin") {
-    // Admin has unrestricted access
+  if (user.role_name === "Admin" || user.role_name === "Pastor" || user.role_name === "IT Admin") {
+    // Admin and Pastor have unrestricted access
   } else if (user.role_name === "Coordinator") {
     // Coordinator can only see members in their assigned ministries
     if (!user.ministry_ids || user.ministry_ids.length === 0) {
@@ -217,8 +217,8 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    // RBAC: Only Admin, Coordinator, and Leader are allowed
-    if (!["Admin", "Coordinator", "Leader"].includes(user.role_name)) {
+    // RBAC: Only Admin, Pastor, Coordinator, and Leader are allowed
+    if (!["Admin", "Pastor", "Coordinator", "Leader", "IT Admin"].includes(user.role_name)) {
       return res.status(403).json({ error: "Access denied. You do not have permission to view attendance logs." });
     }
 
@@ -346,7 +346,7 @@ router.get("/export.csv", authMiddleware, async (req: AuthRequest, res: Response
       return res.status(401).json({ error: "Authentication required" });
     }
 
-    if (!["Admin", "Coordinator", "Leader"].includes(user.role_name)) {
+    if (!["Admin", "Pastor", "Coordinator", "Leader", "IT Admin"].includes(user.role_name)) {
       return res.status(403).json({ error: "Access denied. You do not have permission to export attendance logs." });
     }
 

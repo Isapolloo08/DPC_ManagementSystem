@@ -18,7 +18,8 @@ router.get("/roles", cacheMiddleware("roles", 600), async (req: Request, res: Re
     `);
 
     const roleDescriptions: Record<string, string> = {
-      "Admin": "Full administrative privileges: user accounts, system configuration, master lookups, audit logs, and church-wide oversight.",
+      "Admin": "Root / Super Administrator: full system control, database recovery, server configuration, user account management, and security infrastructure.",
+      "Pastor": "Senior Pastor & Church Executive: pastoral oversight, discipleship leadership, member directories, Sunday attendance, ministries, and events.",
       "Coordinator": "Ministry department leader: manages age-bracket ministries, events, volunteer assignments, and discipleship curriculum.",
       "Leader": "Small group / Ministry leader: leads Bible study groups, records discipleship progress, and facilitates group fellowship.",
       "Volunteer": "Ministry helper: facilitates Sunday check-ins, attendance tracking, and event logistics.",
@@ -145,8 +146,8 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 });
 
-// Get user by ID (Admin only)
-router.get("/users/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Get user by ID (Admin and Pastor)
+router.get("/users/:id", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const user = await db.get(`
@@ -178,23 +179,36 @@ router.get("/users/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
   }
 });
 
-// Create user (Admin only)
-router.post("/users", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Create user (Admin and Pastor)
+router.post("/users", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, username, email, password, role_id, ministry_ids, member_id } = req.body;
 
     if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
-    if (!email || !email.trim()) return res.status(400).json({ error: "Email is required" });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: "Invalid email format" });
+    const trimmedEmail = (email && typeof email === "string" && email.trim()) ? email.trim().toLowerCase() : null;
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
     if (!password || password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
     if (!role_id) return res.status(400).json({ error: "Role is required" });
 
-    const cleanUsername = (username && username.trim()) 
-      ? username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "")
-      : email.trim().toLowerCase().split("@")[0].replace(/[^a-z0-9._-]/g, "");
+    // Validate target role
+    const targetRole = await db.get("SELECT id, name FROM roles WHERE id = $1", [Number(role_id)]);
+    if (!targetRole) return res.status(400).json({ error: "Invalid role selected" });
 
-    const existingEmail = await db.get("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email.trim()]);
-    if (existingEmail) return res.status(400).json({ error: "A user with this email already exists" });
+    // Hierarchy protection: Pastor cannot create Admin or Pastor accounts
+    if (req.user?.role_name === "Pastor" && (targetRole.name === "Admin" || targetRole.name === "Pastor" || targetRole.name === "IT Admin")) {
+      return res.status(403).json({ error: "Access denied. Pastors can only create Coordinator, Leader, Volunteer, or Member accounts." });
+    }
+
+    const cleanUsername = (username && typeof username === "string" && username.trim()) 
+      ? username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "")
+      : (trimmedEmail ? trimmedEmail.split("@")[0].replace(/[^a-z0-9._-]/g, "") : name.trim().toLowerCase().replace(/[^a-z0-9]/g, "."));
+
+    if (trimmedEmail) {
+      const existingEmail = await db.get("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [trimmedEmail]);
+      if (existingEmail) return res.status(400).json({ error: "A user with this email already exists" });
+    }
 
     if (cleanUsername) {
       const existingUser = await db.get("SELECT id FROM users WHERE LOWER(username) = LOWER($1)", [cleanUsername]);
@@ -207,7 +221,7 @@ router.post("/users", authMiddleware, requireRoles("Admin"), async (req: AuthReq
       INSERT INTO users (name, username, email, password_hash, temp_password, role_id)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
-    `, [name.trim(), cleanUsername || null, email.trim().toLowerCase(), passwordHash, password.trim(), Number(role_id)]);
+    `, [name.trim(), cleanUsername || null, trimmedEmail || null, passwordHash, password.trim(), Number(role_id)]);
 
     const newUserId = result.lastInsertRowid;
 
@@ -225,8 +239,7 @@ router.post("/users", authMiddleware, requireRoles("Admin"), async (req: AuthReq
       await db.run("UPDATE members SET user_id = $1 WHERE id = $2", [newUserId, Number(member_id)]);
     }
 
-    const role = await db.get("SELECT name FROM roles WHERE id = $1", [role_id]);
-    await logAuditAction(req.user?.id || null, "CREATE", "users", newUserId, `Created user account '${name.trim()}' (${cleanUsername}) with role ${role?.name || role_id}`);
+    await logAuditAction(req.user?.id || null, "CREATE", "users", newUserId, `Created user account '${name.trim()}' (${cleanUsername || trimmedEmail || newUserId}) with role ${targetRole.name}`);
 
     res.status(201).json({ id: newUserId, message: "User account created successfully" });
   } catch (err: any) {
@@ -234,31 +247,52 @@ router.post("/users", authMiddleware, requireRoles("Admin"), async (req: AuthReq
   }
 });
 
-// Update user (Admin only)
-router.put("/users/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Update user (Admin and Pastor)
+router.put("/users/:id", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const { name, username, email, password, role_id, ministry_ids, member_id } = req.body;
 
-    const current = await db.get("SELECT * FROM users WHERE id = $1", [id]);
+    const current = await db.get(`
+      SELECT u.*, r.name as role_name 
+      FROM users u 
+      JOIN roles r ON u.role_id = r.id 
+      WHERE u.id = $1
+    `, [id]);
     if (!current) return res.status(404).json({ error: "User not found" });
+
+    // Hierarchy protection: Pastor cannot modify Admin or Pastor accounts
+    if (req.user?.role_name === "Pastor") {
+      if (current.role_name === "Admin" || current.role_name === "Pastor" || current.role_name === "IT Admin") {
+        return res.status(403).json({ error: "Access denied. Pastors cannot modify Admin or Pastor accounts." });
+      }
+      if (role_id !== undefined) {
+        const targetRole = await db.get("SELECT id, name FROM roles WHERE id = $1", [Number(role_id)]);
+        if (targetRole && (targetRole.name === "Admin" || targetRole.name === "Pastor" || targetRole.name === "IT Admin")) {
+          return res.status(403).json({ error: "Access denied. Pastors cannot promote users to Admin or Pastor." });
+        }
+      }
+    }
 
     if (name !== undefined && !name.trim()) {
       return res.status(400).json({ error: "Name cannot be empty" });
     }
 
+    let trimmedEmail = current.email;
     if (email !== undefined) {
-      if (!email.trim()) return res.status(400).json({ error: "Email cannot be empty" });
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: "Invalid email format" });
-      if (email.trim().toLowerCase() !== current.email.toLowerCase()) {
-        const duplicate = await db.get("SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id != $2", [email.trim(), id]);
-        if (duplicate) return res.status(400).json({ error: "Another user already has this email" });
+      trimmedEmail = (email && typeof email === "string" && email.trim()) ? email.trim().toLowerCase() : null;
+      if (trimmedEmail) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) return res.status(400).json({ error: "Invalid email format" });
+        if (!current.email || trimmedEmail !== current.email.toLowerCase()) {
+          const duplicate = await db.get("SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id != $2", [trimmedEmail, id]);
+          if (duplicate) return res.status(400).json({ error: "Another user already has this email" });
+        }
       }
     }
 
     let cleanUsername = current.username;
     if (username !== undefined) {
-      cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+      cleanUsername = (username && typeof username === "string" && username.trim()) ? username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") : null;
       if (cleanUsername && cleanUsername !== current.username) {
         const duplicateUsername = await db.get("SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id != $2", [cleanUsername, id]);
         if (duplicateUsername) return res.status(400).json({ error: "Another user already has this username" });
@@ -280,7 +314,7 @@ router.put("/users/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
     `, [
       name !== undefined ? name.trim() : current.name,
       cleanUsername || null,
-      email !== undefined ? email.trim().toLowerCase() : current.email,
+      trimmedEmail || null,
       newHash,
       tempPass,
       role_id !== undefined ? Number(role_id) : current.role_id,
@@ -312,8 +346,8 @@ router.put("/users/:id", authMiddleware, requireRoles("Admin"), async (req: Auth
   }
 });
 
-// Reveal password for a user (Requires Admin Re-Authentication Password)
-router.post("/users/:id/reveal-password", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Reveal password for a user (Requires Admin authentication)
+router.post("/users/:id/reveal-password", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const targetUserId = req.params.id;
     const { admin_password } = req.body;
@@ -346,6 +380,12 @@ router.post("/users/:id/reveal-password", authMiddleware, requireRoles("Admin"),
       return res.status(404).json({ error: "Target user account not found" });
     }
 
+    // Hierarchy protection: Only Super Admin (Admin) can reveal credentials for Admin or Pastor accounts
+    const isTargetPrivileged = targetUser.role_name === "Admin" || targetUser.role_name === "Pastor" || targetUser.role_name === "IT Admin";
+    if (isTargetPrivileged && req.user?.role_name !== "Admin" && req.user?.role_name !== "IT Admin") {
+      return res.status(403).json({ error: "Access denied. Only a Super Admin can reveal credentials for this account." });
+    }
+
     const hasPlainPassword = !!(targetUser.temp_password && targetUser.temp_password.trim());
     const revealedPassword = hasPlainPassword ? targetUser.temp_password.trim() : null;
 
@@ -375,8 +415,8 @@ router.post("/users/:id/reveal-password", authMiddleware, requireRoles("Admin"),
   }
 });
 
-// Quick Reset Password for a user (Admin only, requires admin password verification)
-router.post("/users/:id/reset-password", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Quick Reset Password for a user (Admin and Pastor)
+router.post("/users/:id/reset-password", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const targetUserId = req.params.id;
     const { admin_password, new_password } = req.body;
@@ -400,22 +440,37 @@ router.post("/users/:id/reset-password", authMiddleware, requireRoles("Admin"), 
       return res.status(400).json({ error: "Incorrect administrator password. Authentication failed." });
     }
 
+    const targetUser = await db.get(`
+      SELECT u.id, u.name, u.email, r.name as role_name 
+      FROM users u 
+      JOIN roles r ON u.role_id = r.id 
+      WHERE u.id = $1
+    `, [targetUserId]);
+
+    if (!targetUser) {
+      return res.status(404).json({ error: "Target user not found" });
+    }
+
+    // Hierarchy protection: Only Super Admin (Admin) can reset password for Admin or Pastor accounts
+    const isTargetPrivileged = targetUser.role_name === "Admin" || targetUser.role_name === "Pastor" || targetUser.role_name === "IT Admin";
+    if (isTargetPrivileged && req.user?.role_name !== "Admin" && req.user?.role_name !== "IT Admin") {
+      return res.status(403).json({ error: "Access denied. Only a Super Admin can reset password for this account." });
+    }
+
     const newHash = bcrypt.hashSync(new_password.trim(), 10);
     await db.run("UPDATE users SET password_hash = $1, temp_password = $2 WHERE id = $3", [newHash, new_password.trim(), targetUserId]);
-
-    const targetUser = await db.get("SELECT id, name, email FROM users WHERE id = $1", [targetUserId]);
 
     await logAuditAction(
       req.user!.id,
       "UPDATE",
       "users",
       Number(targetUserId),
-      `Admin '${adminUser.name}' reset password for user '${targetUser?.name || targetUserId}'`
+      `Admin '${adminUser.name}' reset password for user '${targetUser.name}'`
     );
 
     res.json({
       success: true,
-      message: `Password for ${targetUser?.name || 'user'} has been reset successfully.`,
+      message: `Password for ${targetUser.name} has been reset successfully.`,
       new_password: new_password.trim()
     });
   } catch (err: any) {
@@ -423,8 +478,8 @@ router.post("/users/:id/reset-password", authMiddleware, requireRoles("Admin"), 
   }
 });
 
-// Delete user (Admin only)
-router.delete("/users/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Delete user (Admin and Pastor)
+router.delete("/users/:id", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
 
@@ -435,8 +490,19 @@ router.delete("/users/:id", authMiddleware, requireRoles("Admin"), async (req: A
       return res.status(403).json({ error: "Cannot delete your own active user account" });
     }
 
-    const current = await db.get("SELECT * FROM users WHERE id = $1", [id]);
+    const current = await db.get(`
+      SELECT u.*, r.name as role_name 
+      FROM users u 
+      JOIN roles r ON u.role_id = r.id 
+      WHERE u.id = $1
+    `, [id]);
     if (!current) return res.status(404).json({ error: "User not found" });
+
+    // Hierarchy protection: Pastor cannot delete Admin or Pastor accounts
+    const isTargetPrivileged = current.role_name === "Admin" || current.role_name === "Pastor" || current.role_name === "IT Admin";
+    if (isTargetPrivileged && req.user?.role_name !== "Admin" && req.user?.role_name !== "IT Admin") {
+      return res.status(403).json({ error: "Access denied. Pastors cannot delete Admin or Pastor accounts." });
+    }
 
     await db.run("UPDATE members SET user_id = NULL WHERE user_id = $1", [id]);
     await db.run("DELETE FROM user_ministries WHERE user_id = $1", [id]);

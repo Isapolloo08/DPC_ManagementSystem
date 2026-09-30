@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { db } from "../db/schema";
-import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
+import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
@@ -93,7 +93,7 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
 });
 
 // 2. Create Duty Team (e.g. Team 1, Team 2, Team 3)
-router.post("/teams", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/teams", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, ministry_id, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
 
@@ -167,7 +167,7 @@ router.post("/teams", authMiddleware, requireRoles("Admin", "Coordinator"), asyn
 });
 
 // 3. Update Duty Team
-router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const { name, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
@@ -224,7 +224,7 @@ router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator"), a
 });
 
 // 4. Delete Duty Team
-router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     await db.run("DELETE FROM duty_teams WHERE id = $1", [id]);
@@ -236,7 +236,7 @@ router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Coordinator")
 });
 
 // 5. Add Member(s) to Duty Team (Supports Single or Batch)
-router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const teamId = req.params.id;
     const { member_id, member_ids, role = "Member" } = req.body;
@@ -268,7 +268,7 @@ router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Coordin
 });
 
 // 6. Remove Member from Duty Team
-router.delete("/teams/:id/members/:memberId", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.delete("/teams/:id/members/:memberId", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const { id, memberId } = req.params;
     await db.run("DELETE FROM duty_team_members WHERE team_id = $1 AND member_id = $2", [id, memberId]);
@@ -319,13 +319,22 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
     const todayStr = new Date().toISOString().split("T")[0];
     const anchorSat = new Date(2026, 0, 3, 0, 0, 0, 0).getTime();
 
-    // Fetch any saved overrides/completions from duty_schedules
-    const savedSchedules = await db.all(`
-      SELECT ds.*, dt.name as team_name, dt.color as team_color, dt.leader_name as team_leader_name
+    // Fetch any saved overrides/completions/swaps from duty_schedules
+    let savedQuery = `
+      SELECT ds.id, TO_CHAR(ds.duty_date, 'YYYY-MM-DD') as duty_date_str, ds.duty_date, ds.team_id, ds.ministry_id, ds.status, ds.notes, ds.completed_at,
+             dt.name as team_name, dt.color as team_color, dt.leader_name as team_leader_name
       FROM duty_schedules ds
-      JOIN duty_teams dt ON ds.team_id = dt.id
+      LEFT JOIN duty_teams dt ON ds.team_id = dt.id
       WHERE ds.duty_date >= $1
-    `, [upcomingSaturdays[0]]);
+    `;
+    const savedParams: any[] = [upcomingSaturdays[0]];
+    if (ministry_id) {
+      savedParams.push(Number(ministry_id));
+      savedQuery += ` AND (ds.ministry_id = $${savedParams.length} OR ds.ministry_id IS NULL)`;
+    }
+    savedQuery += " ORDER BY ds.id DESC";
+
+    const savedSchedules = await db.all(savedQuery, savedParams);
 
     const scheduleList = upcomingSaturdays.map((satDate, idx) => {
       const isThisSaturday = idx === 0;
@@ -341,10 +350,20 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
       const satTime = dObj.getTime();
       const diffWeeks = Math.floor(Math.round((satTime - anchorSat) / 86400000) / 7);
 
-      // Check for saved record
-      const saved = savedSchedules.find(s => s.duty_date === satDate || s.duty_date?.toString().startsWith(satDate));
+      // Default rotating team from automatic weekly cycle across all registered teams
+      let defaultTeam = null;
+      if (teamsWithMembers.length > 0) {
+        const cycleIndex = ((diffWeeks % teamsWithMembers.length) + teamsWithMembers.length) % teamsWithMembers.length;
+        defaultTeam = teamsWithMembers[cycleIndex];
+      }
 
-      let assignedTeam = null;
+      // Check for saved record (override, completion, or swap)
+      const saved = savedSchedules.find(s => {
+        const sDate = s.duty_date_str || (s.duty_date instanceof Date ? formatLocalDate(s.duty_date) : String(s.duty_date).split("T")[0]);
+        return sDate === satDate;
+      });
+
+      let assignedTeam = defaultTeam;
       if (saved && saved.team_id) {
         assignedTeam = teamsWithMembers.find(t => t.id === saved.team_id) || {
           id: saved.team_id,
@@ -354,10 +373,12 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
           tasks_checklist: saved.notes,
           members: []
         };
-      } else if (teamsWithMembers.length > 0) {
-        // Automatically cycle every Saturday across all registered teams
-        const cycleIndex = ((diffWeeks % teamsWithMembers.length) + teamsWithMembers.length) % teamsWithMembers.length;
-        assignedTeam = teamsWithMembers[cycleIndex];
+      }
+
+      const isPast = satDate < todayStr;
+      let status: "on_duty" | "scheduled" | "completed" | "swapped" = isThisSaturday ? "on_duty" : "scheduled";
+      if (saved?.status) {
+        status = saved.status as any;
       }
 
       return {
@@ -366,8 +387,8 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
         week_number: idx + 1,
         is_this_saturday: isThisSaturday,
         is_next_saturday: isNextSaturday,
-        is_past: satDate < todayStr,
-        status: saved?.status || (isThisSaturday ? "on_duty" : "scheduled"),
+        is_past: isPast,
+        status,
         completed_at: saved?.completed_at || null,
         notes: saved?.notes || (assignedTeam?.tasks_checklist || "General Saturday Cleaning & Setup"),
         team: assignedTeam
@@ -385,7 +406,7 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
 });
 
 // 8. Mark Saturday Duty Complete
-router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
+router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { duty_date, team_id, ministry_id, notes } = req.body;
 
@@ -393,14 +414,23 @@ router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Coordin
       return res.status(400).json({ error: "Duty date and team ID are required" });
     }
 
+    const team = await db.get("SELECT name FROM duty_teams WHERE id = $1", [team_id]);
+
+    // Clean existing entry for duty_date to ensure single row consistency
+    if (ministry_id) {
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1 AND (ministry_id = $2 OR ministry_id IS NULL)", [duty_date, ministry_id]);
+    } else {
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1", [duty_date]);
+    }
+
     await db.run(`
       INSERT INTO duty_schedules (duty_date, team_id, ministry_id, status, notes, completed_at)
       VALUES ($1, $2, $3, 'completed', $4, CURRENT_TIMESTAMP)
-      ON CONFLICT (duty_date, team_id) DO UPDATE
-      SET status = 'completed',
-          notes = COALESCE(EXCLUDED.notes, duty_schedules.notes),
-          completed_at = CURRENT_TIMESTAMP
     `, [duty_date, team_id, ministry_id || null, notes || "Saturday cleaning & duties completed"]);
+
+    if (req.user) {
+      await logAuditAction(req.user.id, "COMPLETE_SATURDAY_DUTY", "duty_schedules", Number(team_id), `Marked Saturday duty completed on ${duty_date} for ${team?.name || "Team"}`);
+    }
 
     emitRealtimeEvent("duty:changed", { action: "complete_duty", duty_date, team_id });
     res.json({ message: "Saturday duty marked as completed" });
@@ -410,7 +440,7 @@ router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Coordin
 });
 
 // 9. Swap Teams between Two Saturdays
-router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { date1, teamId1, date2, teamId2, ministry_id } = req.body;
 
@@ -418,22 +448,115 @@ router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Coordinator
       return res.status(400).json({ error: "Dates and team IDs for swap are required" });
     }
 
+    const team1 = await db.get("SELECT name, leader_name FROM duty_teams WHERE id = $1", [teamId1]);
+    const team2 = await db.get("SELECT name, leader_name FROM duty_teams WHERE id = $1", [teamId2]);
+
+    // Execute swap atomically: clean existing rows for both dates, then insert swapped rows
+    if (ministry_id) {
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1 AND (ministry_id = $2 OR ministry_id IS NULL)", [date1, ministry_id]);
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1 AND (ministry_id = $2 OR ministry_id IS NULL)", [date2, ministry_id]);
+    } else {
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1", [date1]);
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1", [date2]);
+    }
+
     // Assign teamId2 to date1
     await db.run(`
       INSERT INTO duty_schedules (duty_date, team_id, ministry_id, status, notes)
-      VALUES ($1, $2, $3, 'swapped', 'Date swapped with team')
-      ON CONFLICT (duty_date, team_id) DO UPDATE SET team_id = $2, status = 'swapped'
-    `, [date1, teamId2, ministry_id || null]);
+      VALUES ($1, $2, $3, 'swapped', $4)
+    `, [
+      date1,
+      teamId2,
+      ministry_id || null,
+      `Swapped turn with ${team1?.name || "Team"} (originally scheduled for ${date2})`
+    ]);
 
     // Assign teamId1 to date2
     await db.run(`
       INSERT INTO duty_schedules (duty_date, team_id, ministry_id, status, notes)
-      VALUES ($1, $2, $3, 'swapped', 'Date swapped with team')
-      ON CONFLICT (duty_date, team_id) DO UPDATE SET team_id = $2, status = 'swapped'
-    `, [date2, teamId1, ministry_id || null]);
+      VALUES ($1, $2, $3, 'swapped', $4)
+    `, [
+      date2,
+      teamId1,
+      ministry_id || null,
+      `Swapped turn with ${team2?.name || "Team"} (originally scheduled for ${date1})`
+    ]);
+
+    if (req.user) {
+      await logAuditAction(
+        req.user.id,
+        "SWAP_SATURDAY_DUTY",
+        "duty_schedules",
+        Number(teamId1),
+        `Swapped Saturday duties between ${date1} (${team1?.name}) and ${date2} (${team2?.name})`
+      );
+    }
 
     emitRealtimeEvent("duty:changed", { action: "swap_duty", date1, teamId1, date2, teamId2 });
     res.json({ message: "Saturday duty teams swapped successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 10. Override / Edit Single Saturday Assignment
+router.post("/schedule/override", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "IT Admin"), async (req: AuthRequest, res: Response) => {
+  try {
+    const { duty_date, team_id, ministry_id, status = "scheduled", notes } = req.body;
+
+    if (!duty_date || !team_id) {
+      return res.status(400).json({ error: "duty_date and team_id are required" });
+    }
+
+    const team = await db.get("SELECT name FROM duty_teams WHERE id = $1", [team_id]);
+
+    if (ministry_id) {
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1 AND (ministry_id = $2 OR ministry_id IS NULL)", [duty_date, ministry_id]);
+    } else {
+      await db.run("DELETE FROM duty_schedules WHERE duty_date = $1", [duty_date]);
+    }
+
+    await db.run(`
+      INSERT INTO duty_schedules (duty_date, team_id, ministry_id, status, notes)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [duty_date, team_id, ministry_id || null, status, notes || `Assigned to ${team?.name || "Team"}`]);
+
+    if (req.user) {
+      await logAuditAction(req.user.id, "OVERRIDE_SATURDAY_DUTY", "duty_schedules", Number(team_id), `Modified Saturday assignment for ${duty_date} to ${team?.name}`);
+    }
+
+    emitRealtimeEvent("duty:changed", { action: "override_duty", duty_date, team_id });
+    res.json({ message: "Successfully updated Saturday duty assignment!" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 11. Reset Overrides back to Automatic Rotation
+router.post("/schedule/reset", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "IT Admin"), async (req: AuthRequest, res: Response) => {
+  try {
+    const { duty_date, ministry_id } = req.body;
+
+    if (duty_date) {
+      if (ministry_id) {
+        await db.run("DELETE FROM duty_schedules WHERE duty_date = $1 AND (ministry_id = $2 OR ministry_id IS NULL)", [duty_date, ministry_id]);
+      } else {
+        await db.run("DELETE FROM duty_schedules WHERE duty_date = $1", [duty_date]);
+      }
+    } else {
+      if (ministry_id) {
+        await db.run("DELETE FROM duty_schedules WHERE ministry_id = $1 OR ministry_id IS NULL", [ministry_id]);
+      } else {
+        await db.run("DELETE FROM duty_schedules");
+      }
+    }
+
+    if (req.user) {
+      await logAuditAction(req.user.id, "RESET_SATURDAY_DUTY", "duty_schedules", 0, `Reset duty schedule overrides${duty_date ? ` for ${duty_date}` : ""}`);
+    }
+
+    emitRealtimeEvent("duty:changed", { action: "reset_duty", duty_date });
+    res.json({ message: "Saturday duty schedule reset to automatic cycle!" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

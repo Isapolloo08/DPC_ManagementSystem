@@ -13,7 +13,7 @@ export interface Ministry {
 
 export interface Role {
   id: number;
-  name: "Admin" | "Coordinator" | "Leader" | "Volunteer" | "Member" | string;
+  name: "Admin" | "Pastor" | "Coordinator" | "Leader" | "Volunteer" | "Member" | string;
   description?: string;
   user_count?: number;
 }
@@ -22,7 +22,7 @@ export interface User {
   id: number;
   name: string;
   username?: string;
-  email: string;
+  email?: string | null;
   role_id: number;
   role_name: string;
   ministries: { id: number; name: string; color: string; min_age?: number | null; max_age?: number | null }[];
@@ -416,6 +416,7 @@ export interface DashboardMetrics {
     aging_out_alerts_count: number;
     birthdays_this_month_count?: number;
     birthdays_today_count?: number;
+    unenrolled_members_count?: number;
   };
   upcoming_birthdays?: BirthdayCelebrant[];
   ministry_breakdown: {
@@ -552,11 +553,20 @@ export interface BibleStudyGroup {
   rescheduled_date?: string | null;
   rescheduled_time?: string | null;
   reschedule_reason?: string | null;
-  status?: "active" | "merged" | "split" | "inactive" | "archived" | string;
+  status?: "active" | "completed" | "archived" | "merged" | string;
   merged_into_group_id?: number | null;
   merged_into_group_name?: string | null;
   closed_at?: string | null;
   effective_date?: string | null;
+  completed_at?: string | null;
+  completed_book_id?: number | null;
+  completed_book_title_snapshot?: string | null;
+  completed_chapter?: string | null;
+  completed_total_chapters?: number | null;
+  archived_at?: string | null;
+  archived_by?: number | null;
+  archived_by_name?: string | null;
+  archive_reason?: string | null;
   created_transition_id?: number | null;
   created_transition_type?: string | null;
   source_group_names?: string | null;
@@ -774,9 +784,11 @@ export interface SaturdayDutyScheduleResponse {
 export interface DishwashingTeam {
   id: number;
   name: string;
-  cycle_mode: "biblestudy_group" | "ministry" | "custom";
+  cycle_mode: "biblestudy_group" | "ministry" | "combined" | "custom";
   biblestudy_group_id?: number | null;
+  biblestudy_group_ids?: number[] | null;
   ministry_id?: number | null;
+  ministry_ids?: number[] | null;
   ministry_name?: string | null;
   ministry_color?: string | null;
   group_name?: string | null;

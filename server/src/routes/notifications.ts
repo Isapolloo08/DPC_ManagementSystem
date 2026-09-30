@@ -14,12 +14,9 @@ router.use(authMiddleware);
 
 router.get("/unread-count", async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.role_name === "Admin";
     const row = await db.get<{ count: string }>(
-      isAdmin
-        ? "SELECT COUNT(*) AS count FROM notifications WHERE is_read = FALSE"
-        : "SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE",
-      isAdmin ? [] : [req.user!.id]
+      "SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE",
+      [req.user!.id]
     );
     res.json({ count: Number(row?.count || 0) });
   } catch (error) {
@@ -27,7 +24,7 @@ router.get("/unread-count", async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get("/rules", requireRoles("Admin"), async (_req: AuthRequest, res: Response) => {
+router.get("/rules", requireRoles("Admin", "Pastor"), async (_req: AuthRequest, res: Response) => {
   try {
     const rules = await db.all(`
       SELECT nr.*, m.name AS ministry_name
@@ -41,7 +38,7 @@ router.get("/rules", requireRoles("Admin"), async (_req: AuthRequest, res: Respo
   }
 });
 
-router.post("/rules", requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/rules", requireRoles("Admin", "Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const { event_type, recipient_type, recipient_value, ministry_id, threshold, email_enabled, in_app_enabled, enabled } = req.body;
     if (!event_type || !["user", "role", "email"].includes(recipient_type) || !String(recipient_value || "").trim()) {
@@ -64,7 +61,7 @@ router.post("/rules", requireRoles("Admin"), async (req: AuthRequest, res: Respo
   }
 });
 
-router.put("/rules/:id", requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.put("/rules/:id", requireRoles("Admin", "Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const current = await db.get<NotificationRuleUpdateRow>("SELECT * FROM notification_rules WHERE id = $1", [req.params.id]);
     if (!current) return res.status(404).json({ error: "Notification rule not found" });
@@ -100,7 +97,7 @@ router.put("/rules/:id", requireRoles("Admin"), async (req: AuthRequest, res: Re
   }
 });
 
-router.delete("/rules/:id", requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.delete("/rules/:id", requireRoles("Admin", "Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const result = await db.run("DELETE FROM notification_rules WHERE id = $1", [req.params.id]);
     if (!result.changes) return res.status(404).json({ error: "Notification rule not found" });
@@ -111,7 +108,7 @@ router.delete("/rules/:id", requireRoles("Admin"), async (req: AuthRequest, res:
   }
 });
 
-router.get("/email-settings", requireRoles("Admin"), async (_req: AuthRequest, res: Response) => {
+router.get("/email-settings", requireRoles("Admin", "Pastor"), async (_req: AuthRequest, res: Response) => {
   try {
     res.json(await getPublicNotificationEmailSettings());
   } catch (error) {
@@ -119,7 +116,7 @@ router.get("/email-settings", requireRoles("Admin"), async (_req: AuthRequest, r
   }
 });
 
-router.put("/email-settings", requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.put("/email-settings", requireRoles("Admin", "Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const update = req.body as NotificationEmailSettingsUpdate;
     if (update.smtpPort !== undefined && (!Number.isInteger(Number(update.smtpPort)) || Number(update.smtpPort) < 1 || Number(update.smtpPort) > 65535)) {
@@ -133,7 +130,7 @@ router.put("/email-settings", requireRoles("Admin"), async (req: AuthRequest, re
   }
 });
 
-router.post("/test-email", requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/test-email", requireRoles("Admin", "Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const settings = await getPublicNotificationEmailSettings();
     const toEmail = String(req.body.to_email || settings.pastorEmail || req.user!.email).trim();
@@ -149,10 +146,7 @@ router.post("/test-email", requireRoles("Admin"), async (req: AuthRequest, res: 
 
 router.patch("/read-all", async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.role_name === "Admin";
-    const result = isAdmin
-      ? await db.run("UPDATE notifications SET is_read = TRUE WHERE is_read = FALSE")
-      : await db.run("UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE", [req.user!.id]);
+    const result = await db.run("UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE", [req.user!.id]);
     res.json({ updated: result.changes });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to mark notifications read" });
@@ -161,8 +155,8 @@ router.patch("/read-all", async (req: AuthRequest, res: Response) => {
 
 router.patch("/:id/read", async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.role_name === "Admin";
-    const result = isAdmin
+    const isPrivileged = req.user!.role_name === "Admin" || req.user!.role_name === "IT Admin" || req.user!.role_name === "Pastor";
+    const result = isPrivileged
       ? await db.run("UPDATE notifications SET is_read = TRUE WHERE id = $1", [req.params.id])
       : await db.run("UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2", [req.params.id, req.user!.id]);
     if (!result.changes) return res.status(404).json({ error: "Notification not found" });
@@ -174,8 +168,8 @@ router.patch("/:id/read", async (req: AuthRequest, res: Response) => {
 
 router.patch("/:id/unread", async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.role_name === "Admin";
-    const result = isAdmin
+    const isPrivileged = req.user!.role_name === "Admin" || req.user!.role_name === "IT Admin" || req.user!.role_name === "Pastor";
+    const result = isPrivileged
       ? await db.run("UPDATE notifications SET is_read = FALSE WHERE id = $1", [req.params.id])
       : await db.run("UPDATE notifications SET is_read = FALSE WHERE id = $1 AND user_id = $2", [req.params.id, req.user!.id]);
     if (!result.changes) return res.status(404).json({ error: "Notification not found" });
@@ -187,8 +181,8 @@ router.patch("/:id/unread", async (req: AuthRequest, res: Response) => {
 
 router.delete("/:id", async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.role_name === "Admin";
-    const result = isAdmin
+    const isPrivileged = req.user!.role_name === "Admin" || req.user!.role_name === "IT Admin" || req.user!.role_name === "Pastor";
+    const result = isPrivileged
       ? await db.run("DELETE FROM notifications WHERE id = $1", [req.params.id])
       : await db.run("DELETE FROM notifications WHERE id = $1 AND user_id = $2", [req.params.id, req.user!.id]);
     if (!result.changes) return res.status(404).json({ error: "Notification not found" });
@@ -203,12 +197,12 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size) || 20));
     const offset = (page - 1) * pageSize;
-    const isAdmin = req.user!.role_name === "Admin";
+    const isPrivileged = req.user!.role_name === "Admin" || req.user!.role_name === "IT Admin" || req.user!.role_name === "Pastor";
 
     const params: unknown[] = [];
     const whereClauses: string[] = [];
 
-    if (!isAdmin || req.query.mine === "true") {
+    if (!isPrivileged || req.query.mine === "true") {
       params.push(req.user!.id);
       whereClauses.push(`n.user_id = $${params.length}`);
     } else if (req.query.user_id) {

@@ -129,11 +129,12 @@ export const UsersPage: React.FC = () => {
           return demo;
         }),
         api.getRoles().catch(() => [
-          { id: 1, name: "Admin", description: "Full administrative privileges" },
-          { id: 2, name: "Coordinator", description: "Ministry department leader" },
-          { id: 3, name: "Leader", description: "Small group & discipleship leader" },
-          { id: 4, name: "Volunteer", description: "Ministry helper & attendance facilitator" },
-          { id: 5, name: "Member", description: "Regular church attendee / member" }
+          { id: 1, name: "Admin", description: "Top Super Administrator (Root infrastructure & all users)" },
+          { id: 2, name: "Pastor", description: "Senior Pastor / Church Executive (All ministries & operations)" },
+          { id: 3, name: "Coordinator", description: "Ministry department leader" },
+          { id: 4, name: "Leader", description: "Small group & discipleship leader" },
+          { id: 5, name: "Volunteer", description: "Ministry helper & attendance facilitator" },
+          { id: 6, name: "Member", description: "Regular church attendee / member" }
         ]),
         api.getMembers().catch(() => [])
       ]);
@@ -161,7 +162,7 @@ export const UsersPage: React.FC = () => {
       const cleanFirst = selectedMember.first_name.toLowerCase().replace(/[^a-z0-9]/g, '');
       const cleanLast = selectedMember.last_name.toLowerCase().replace(/[^a-z0-9]/g, '');
       const suggestedUsername = `${cleanFirst}.${cleanLast}`.trim();
-      const defaultEmail = selectedMember.contact_email || `${suggestedUsername}@church.org`;
+      const defaultEmail = selectedMember.contact_email || "";
 
       setFormData(prev => ({
         ...prev,
@@ -182,6 +183,11 @@ export const UsersPage: React.FC = () => {
   };
 
   const handleInitiateRevealPassword = (targetUser: User) => {
+    const isTargetPrivileged = targetUser.role_name === "Admin" || targetUser.role_name === "Pastor" || targetUser.role_name === "IT Admin";
+    if (isTargetPrivileged && currentUser?.role_name !== "Admin" && currentUser?.role_name !== "IT Admin") {
+      showToast("Access denied. Only a Super Admin can reveal credentials for this account.", "error");
+      return;
+    }
     setReAuthModal({
       isOpen: true,
       targetUser,
@@ -194,6 +200,11 @@ export const UsersPage: React.FC = () => {
   };
 
   const handleInitiateResetPassword = (targetUser: User) => {
+    const isTargetPrivileged = targetUser.role_name === "Admin" || targetUser.role_name === "Pastor" || targetUser.role_name === "IT Admin";
+    if (isTargetPrivileged && currentUser?.role_name !== "Admin" && currentUser?.role_name !== "IT Admin") {
+      showToast("Access denied. Only a Super Admin can reset password for this account.", "error");
+      return;
+    }
     setReAuthModal({
       isOpen: true,
       targetUser,
@@ -300,7 +311,7 @@ export const UsersPage: React.FC = () => {
       setFormData({
         name: targetUser.name,
         username: targetUser.username || "",
-        email: targetUser.email,
+        email: targetUser.email || "",
         password: "", // Blank in edit mode unless changing
         role_id: targetUser.role_id,
         ministry_ids: targetUser.ministries?.map(m => m.id) || [],
@@ -329,24 +340,22 @@ export const UsersPage: React.FC = () => {
         return;
       }
 
-      if (!formData.email.trim()) {
-        showToast("Please enter an email address", "error");
-        return;
+      const trimmedEmail = formData.email.trim();
+      if (trimmedEmail) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          showToast("Please enter a valid email address", "error");
+          return;
+        }
+
+        const dupEmail = users.find(u => u.email && u.email.toLowerCase() === trimmedEmail.toLowerCase() && u.id !== editingUser?.id);
+        if (dupEmail) {
+          showToast("A user with this email address already exists", "error");
+          return;
+        }
       }
 
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-        showToast("Please enter a valid email address", "error");
-        return;
-      }
-
-      const dupEmail = users.find(u => u.email.toLowerCase() === formData.email.trim().toLowerCase() && u.id !== editingUser?.id);
-      if (dupEmail) {
-        showToast("A user with this email address already exists", "error");
-        return;
-      }
-
-      if (formData.username.trim()) {
-        const cleanUsername = formData.username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+      let cleanUsername = formData.username.trim() ? formData.username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") : "";
+      if (cleanUsername) {
         const dupUser = users.find(u => u.username?.toLowerCase() === cleanUsername && u.id !== editingUser?.id);
         if (dupUser) {
           showToast("A user with this username already exists", "error");
@@ -371,8 +380,8 @@ export const UsersPage: React.FC = () => {
 
       const payload = {
         name: formData.name.trim(),
-        username: formData.username.trim() || undefined,
-        email: formData.email.trim(),
+        username: cleanUsername || undefined,
+        email: trimmedEmail || undefined,
         password: formData.password ? formData.password.trim() : undefined,
         role_id: Number(formData.role_id),
         ministry_ids: formData.ministry_ids,
@@ -441,15 +450,27 @@ export const UsersPage: React.FC = () => {
     });
   };
 
+  // Available roles for current modal (Pastor cannot create or assign Admin or Pastor)
+  const availableRoles = useMemo(() => {
+    if (currentUser?.role_name === "Pastor") {
+      return roles.filter(r => !["Admin", "Pastor", "IT Admin"].includes(r.name));
+    }
+    return roles;
+  }, [roles, currentUser?.role_name]);
+
   // Filtered Users
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
-      const matchesRole = selectedRole === "all" || u.role_name.toLowerCase() === selectedRole.toLowerCase();
+      const matchesRole = selectedRole === "all" ||
+        u.role_name.toLowerCase() === selectedRole.toLowerCase() ||
+        (selectedRole === "admin" && (u.role_name === "Admin" || u.role_name === "IT Admin")) ||
+        (selectedRole === "pastor" && u.role_name === "Pastor");
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = !q || (
         u.name.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
         u.role_name.toLowerCase().includes(q) ||
+        (u.username && u.username.toLowerCase().includes(q)) ||
         (u.linked_member_name && u.linked_member_name.toLowerCase().includes(q)) ||
         (u.ministries && u.ministries.some(m => m.name.toLowerCase().includes(q)))
       );
@@ -460,7 +481,8 @@ export const UsersPage: React.FC = () => {
   // Counts by Role
   const roleCounts = useMemo(() => {
     return {
-      admin: users.filter(u => u.role_name === "Admin").length,
+      admin: users.filter(u => u.role_name === "Admin" || u.role_name === "IT Admin").length,
+      pastor: users.filter(u => u.role_name === "Pastor").length,
       coordinator: users.filter(u => u.role_name === "Coordinator").length,
       leader: users.filter(u => u.role_name === "Leader").length,
       volunteer: users.filter(u => u.role_name === "Volunteer").length,
@@ -471,10 +493,18 @@ export const UsersPage: React.FC = () => {
   const getRoleBadge = (roleName: string) => {
     switch (roleName) {
       case "Admin":
+      case "IT Admin":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-cyan-950 text-cyan-200 border border-cyan-500/40 text-xs font-bold shadow-2xs">
+            <ShieldAlert className="w-3.5 h-3.5 text-cyan-300" />
+            <span>Admin (Super)</span>
+          </span>
+        );
+      case "Pastor":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-bold shadow-2xs">
-            <Shield className="w-3.5 h-3.5 text-indigo-700" />
-            <span>Admin</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
+            <span>Pastor</span>
           </span>
         );
       case "Coordinator":
@@ -517,7 +547,6 @@ export const UsersPage: React.FC = () => {
     <div className="space-y-6">
 
       {/* Header Banner */}
-      {/* Header */}
       <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <img
           src="/container_bg.jpg"
@@ -529,16 +558,16 @@ export const UsersPage: React.FC = () => {
 
         <div className="space-y-2 relative z-10">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
-              <UserCog className="w-3.5 h-3.5 text-amber-300" />
-              <span>Access & Role Management</span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-400/20 border border-cyan-300/30 text-cyan-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <ShieldAlert className="w-3.5 h-3.5 text-cyan-300" />
+              <span>Hierarchical RBAC & Security</span>
             </div>
           </div>
           <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight">
-            User Accounts & Permissions
+            User Accounts & Role Permissions
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
-            Manage system logins, assign ministry departments, configure permissions for Admins, Coordinators, Leaders, Volunteers, and link accounts to church member profiles.
+            Manage system logins, assign ministry scopes, configure access boundaries for Admins (Super Administrator), Pastors (Senior Pastor / Church Executive), Coordinators, Leaders, Volunteers, and link accounts to church member profiles.
           </p>
         </div>
 
@@ -561,33 +590,54 @@ export const UsersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 5 Core Roles KPI Overview Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-        {/* 1. Admin */}
+      {/* 6 Core Roles KPI Overview Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+        {/* 1. Admin (Super Admin) */}
         <div
           onClick={() => setSelectedRole(selectedRole === "admin" ? "all" : "admin")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "admin"
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "admin"
+              ? "border-cyan-500 ring-2 ring-cyan-500/20 bg-cyan-950/10"
+              : "border-cyan-200/60 hover:border-cyan-400"
+            }`}
+        >
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <ShieldAlert className="w-4 h-4 text-cyan-600 shrink-0" />
+              <span className="text-xs font-black text-cyan-950">Admin</span>
+            </div>
+            <div className="text-2xl font-black text-cyan-950 tracking-tight">{roleCounts.admin}</div>
+            <p className="text-[10px] text-charcoal/60 font-semibold">Super Admin</p>
+          </div>
+          <div className="p-3 bg-cyan-950 text-cyan-300 rounded-2xl shrink-0 border border-cyan-800">
+            <ShieldAlert className="w-4 h-4" />
+          </div>
+        </div>
+
+        {/* 2. Pastor */}
+        <div
+          onClick={() => setSelectedRole(selectedRole === "pastor" ? "all" : "pastor")}
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "pastor"
               ? "border-indigo ring-2 ring-indigo/20 bg-indigo-50/30"
               : "border-indigo-100/90 hover:border-indigo-300"
             }`}
         >
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1.5">
-              <Shield className="w-4 h-4 text-indigo shrink-0" />
-              <span className="text-xs font-black text-indigo">Admins</span>
+              <ShieldCheck className="w-4 h-4 text-indigo shrink-0" />
+              <span className="text-xs font-black text-indigo">Pastor</span>
             </div>
-            <div className="text-2xl font-black text-indigo tracking-tight">{roleCounts.admin}</div>
-            <p className="text-[10px] text-charcoal/60 font-semibold">Full System Access</p>
+            <div className="text-2xl font-black text-indigo tracking-tight">{roleCounts.pastor}</div>
+            <p className="text-[10px] text-charcoal/60 font-semibold">Senior Pastor / Exec</p>
           </div>
           <div className="p-3 bg-indigo-50 text-indigo rounded-2xl shrink-0 border border-indigo-100">
             <Lock className="w-4 h-4" />
           </div>
         </div>
 
-        {/* 2. Coordinator */}
+        {/* 3. Coordinator */}
         <div
           onClick={() => setSelectedRole(selectedRole === "coordinator" ? "all" : "coordinator")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "coordinator"
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "coordinator"
               ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/30"
               : "border-emerald-100/90 hover:border-emerald-300"
             }`}
@@ -605,10 +655,10 @@ export const UsersPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 3. Leader */}
+        {/* 4. Leader */}
         <div
           onClick={() => setSelectedRole(selectedRole === "leader" ? "all" : "leader")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "leader"
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "leader"
               ? "border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/30"
               : "border-sky-100/90 hover:border-sky-300"
             }`}
@@ -626,10 +676,10 @@ export const UsersPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. Volunteer */}
+        {/* 5. Volunteer */}
         <div
           onClick={() => setSelectedRole(selectedRole === "volunteer" ? "all" : "volunteer")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "volunteer"
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "volunteer"
               ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30"
               : "border-amber-100/90 hover:border-amber-300"
             }`}
@@ -647,10 +697,10 @@ export const UsersPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 5. Member */}
+        {/* 6. Member */}
         <div
           onClick={() => setSelectedRole(selectedRole === "member" ? "all" : "member")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "member"
+          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "member"
               ? "border-slate-500 ring-2 ring-slate-500/20 bg-slate-50/40"
               : "border-slate-100/90 hover:border-slate-300"
             }`}
@@ -669,7 +719,7 @@ export const UsersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Optional: Interactive Role Permissions Matrix */}
+      {/* Interactive Role Permissions Matrix */}
       {isMatrixOpen && (
         <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center justify-between pb-3 border-b border-gray-100">
@@ -680,7 +730,7 @@ export const UsersPage: React.FC = () => {
               <div>
                 <h3 className="text-base font-black text-charcoal">Role Permissions Overview Matrix</h3>
                 <p className="text-xs text-charcoal/60">
-                  Feature access and functional capabilities for each of the 5 system roles.
+                  Feature access and functional capabilities across all 6 system roles.
                 </p>
               </div>
             </div>
@@ -697,7 +747,8 @@ export const UsersPage: React.FC = () => {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/70 text-charcoal/80">
                   <th className="py-2.5 px-3 font-black">Module / Feature</th>
-                  <th className="py-2.5 px-3 font-black text-indigo">Admin</th>
+                  <th className="py-2.5 px-3 font-black text-cyan-900">Admin (Super)</th>
+                  <th className="py-2.5 px-3 font-black text-indigo">Pastor</th>
                   <th className="py-2.5 px-3 font-black text-emerald-800">Coordinator</th>
                   <th className="py-2.5 px-3 font-black text-sky-800">Leader</th>
                   <th className="py-2.5 px-3 font-black text-amber-800">Volunteer</th>
@@ -706,8 +757,27 @@ export const UsersPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 text-charcoal/80 font-medium">
                 <tr>
-                  <td className="py-2.5 px-3 font-bold">User Accounts & Roles CRUD</td>
-                  <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Full Access</td>
+                  <td className="py-2.5 px-3 font-bold">Backups & Data Management</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ Full Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 px-3 font-bold">Notifications & SMTP Email Settings</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ Full Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                  <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 px-3 font-bold">User Accounts & Roles Management</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ All 6 Roles</td>
+                  <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Coordinator, Leader, Volunteer, Member</td>
                   <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— Read Only</td>
                   <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
                   <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
@@ -715,6 +785,7 @@ export const UsersPage: React.FC = () => {
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-bold">System Settings & Master Lookups</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ Full Access</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Full Access</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Ministry Lookups</td>
                   <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
@@ -723,6 +794,7 @@ export const UsersPage: React.FC = () => {
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-bold">Members & Household Directory</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ All Members</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ All Members</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Dept. Members</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Group Members</td>
@@ -731,6 +803,7 @@ export const UsersPage: React.FC = () => {
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-bold">Bible Study Small Groups & Books</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ Create & Manage</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Create & Manage</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Dept. Groups</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Own Group & Roster</td>
@@ -739,6 +812,7 @@ export const UsersPage: React.FC = () => {
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-bold">Announcements & Church Board</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ Pin & Moderate</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Pin & Moderate</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Post & Moderate</td>
                   <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— View Only</td>
@@ -747,6 +821,7 @@ export const UsersPage: React.FC = () => {
                 </tr>
                 <tr>
                   <td className="py-2.5 px-3 font-bold">Security Audit Logs</td>
+                  <td className="py-2.5 px-3 text-cyan-700 font-black">✓ Full Audit Trail</td>
                   <td className="py-2.5 px-3 text-emerald-600 font-black">✓ Full Audit Trail</td>
                   <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
                   <td className="py-2.5 px-3 text-charcoal/40 font-semibold">— No Access</td>
@@ -766,7 +841,8 @@ export const UsersPage: React.FC = () => {
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {[
               { id: "all", label: "All Roles", icon: null, count: users.length },
-              { id: "admin", label: "Admin", icon: <Shield className="w-3.5 h-3.5 text-indigo-700" />, count: roleCounts.admin },
+              { id: "admin", label: "Admin", icon: <ShieldAlert className="w-3.5 h-3.5 text-cyan-500" />, count: roleCounts.admin },
+              { id: "pastor", label: "Pastor", icon: <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />, count: roleCounts.pastor },
               { id: "coordinator", label: "Coordinator", icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />, count: roleCounts.coordinator },
               { id: "leader", label: "Leader", icon: <BookOpen className="w-3.5 h-3.5 text-sky-600" />, count: roleCounts.leader },
               { id: "volunteer", label: "Volunteer", icon: <HeartHandshake className="w-3.5 h-3.5 text-amber-600" />, count: roleCounts.volunteer },
@@ -834,6 +910,9 @@ export const UsersPage: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {filteredUsers.map((u) => {
                   const isCurrentSessionUser = currentUser?.id === u.id;
+                  const isSuperAdmin = currentUser?.role_name === "Admin" || currentUser?.role_name === "IT Admin";
+                  const isTargetPrivileged = u.role_name === "Admin" || u.role_name === "Pastor" || u.role_name === "IT Admin";
+                  const canManageThisUser = isSuperAdmin || (!isTargetPrivileged && currentUser?.role_name === "Pastor");
 
                   return (
                     <tr key={u.id} className="hover:bg-indigo-50/30 transition-colors group">
@@ -861,10 +940,16 @@ export const UsersPage: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-charcoal/60 flex items-center gap-1 mt-0.5 font-medium">
-                              <Mail className="w-3 h-3 text-charcoal/40" />
-                              <span>{u.email}</span>
-                            </div>
+                            {u.email ? (
+                              <div className="text-[11px] text-charcoal/60 flex items-center gap-1 mt-0.5 font-medium">
+                                <Mail className="w-3 h-3 text-charcoal/40" />
+                                <span>{u.email}</span>
+                              </div>
+                            ) : (
+                              <div className="text-[10.5px] text-charcoal/40 flex items-center gap-1 mt-0.5 font-medium italic">
+                                <span>(No email registered)</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -876,7 +961,11 @@ export const UsersPage: React.FC = () => {
 
                       {/* Assigned Ministries */}
                       <td className="py-4 px-4">
-                        {u.role_name === "Admin" ? (
+                        {(u.role_name === "Admin" || u.role_name === "IT Admin") ? (
+                          <span className="text-[11px] font-bold text-cyan-300 bg-cyan-950 px-2.5 py-1 rounded-xl border border-cyan-800">
+                            Universal / Infrastructure Root
+                          </span>
+                        ) : u.role_name === "Pastor" ? (
                           <span className="text-[11px] font-bold text-indigo bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-100">
                             All 7 Ministries (Church-Wide)
                           </span>
@@ -939,8 +1028,13 @@ export const UsersPage: React.FC = () => {
                           {/* Edit Button */}
                           <button
                             onClick={() => handleOpenUserModal(u)}
-                            className="p-2 hover:bg-indigo-50 text-charcoal/70 hover:text-indigo rounded-xl transition-colors cursor-pointer"
-                            title="Edit user account"
+                            disabled={!canManageThisUser}
+                            className={`p-2 rounded-xl transition-colors ${
+                              !canManageThisUser
+                                ? "text-gray-300 cursor-not-allowed"
+                                : "hover:bg-indigo-50 text-charcoal/70 hover:text-indigo cursor-pointer"
+                            }`}
+                            title={!canManageThisUser ? "Only Super Admins can modify Admin and Pastor accounts" : "Edit user account"}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -948,12 +1042,12 @@ export const UsersPage: React.FC = () => {
                           {/* Delete Button */}
                           <button
                             onClick={() => setDeleteConfirmUser(u)}
-                            disabled={u.id === 1 || isCurrentSessionUser}
-                            className={`p-2 rounded-xl transition-colors ${u.id === 1 || isCurrentSessionUser
+                            disabled={u.id === 1 || isCurrentSessionUser || !canManageThisUser}
+                            className={`p-2 rounded-xl transition-colors ${u.id === 1 || isCurrentSessionUser || !canManageThisUser
                                 ? "text-gray-300 cursor-not-allowed"
                                 : "hover:bg-rose-50 text-rose-600 cursor-pointer"
                               }`}
-                            title={u.id === 1 ? "Cannot delete root admin" : isCurrentSessionUser ? "Cannot delete own account" : "Delete user account"}
+                            title={u.id === 1 ? "Cannot delete root admin" : isCurrentSessionUser ? "Cannot delete own account" : !canManageThisUser ? "Only Super Admins can delete Admin and Pastor accounts" : "Delete user account"}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1131,11 +1225,13 @@ export const UsersPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-charcoal">Email Address *</label>
+                  <label className="text-xs font-bold text-charcoal flex items-center justify-between">
+                    <span>Email Address</span>
+                    <span className="text-[10px] text-charcoal/50 font-normal">Optional</span>
+                  </label>
                   <input
                     type="email"
-                    required
-                    placeholder="e.g. coordinator.kinder@church.org"
+                    placeholder="e.g. coordinator.kinder@church.org (optional)"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium"
@@ -1169,13 +1265,15 @@ export const UsersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Role Selection (Dynamic 5 RBAC Roles from Database) */}
+              {/* Role Selection (Dynamic RBAC Roles from Database) */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-charcoal">System Role & Permissions *</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {roles.map(r => {
+                  {availableRoles.map(r => {
                     const roleDisplayMeta: Record<string, { icon: React.ReactNode; desc: string }> = {
-                      "Admin": { icon: <Shield className="w-4 h-4 text-indigo" />, desc: "Full System Access" },
+                      "Admin": { icon: <ShieldAlert className="w-4 h-4 text-cyan-500" />, desc: "Tier 1 Super Admin (Root Infrastructure)" },
+                      "IT Admin": { icon: <ShieldAlert className="w-4 h-4 text-cyan-500" />, desc: "Tier 1 Super Admin (Root Infrastructure)" },
+                      "Pastor": { icon: <ShieldCheck className="w-4 h-4 text-indigo-700" />, desc: "Senior Pastor / Church Executive (All Ministries)" },
                       "Coordinator": { icon: <ShieldCheck className="w-4 h-4 text-emerald-700" />, desc: "Ministry Leader" },
                       "Leader": { icon: <BookOpen className="w-4 h-4 text-sky-700" />, desc: "Small Group / Life Leader" },
                       "Volunteer": { icon: <HeartHandshake className="w-4 h-4 text-amber-700" />, desc: "Attendance Helper" },
@@ -1365,18 +1463,22 @@ export const UsersPage: React.FC = () => {
                 <div className="p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs space-y-1">
                   <span className="text-[10px] text-charcoal/50 font-bold block uppercase">Email Address</span>
                   <div className="flex items-center justify-between gap-1">
-                    <span className="font-medium text-charcoal truncate font-mono text-[11px]">{detailUser.email}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(detailUser.email);
-                        showToast("✓ Email copied!");
-                      }}
-                      className="p-1 text-charcoal/40 hover:text-indigo hover:bg-indigo-50 rounded-md transition-colors"
-                      title="Copy Email"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
+                    <span className="font-medium text-charcoal truncate font-mono text-[11px]">
+                      {detailUser.email || <span className="italic text-charcoal/40 font-sans font-normal">(No email registered)</span>}
+                    </span>
+                    {detailUser.email && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(detailUser.email || "");
+                          showToast("✓ Email copied!");
+                        }}
+                        className="p-1 text-charcoal/40 hover:text-indigo hover:bg-indigo-50 rounded-md transition-colors"
+                        title="Copy Email"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1544,7 +1646,11 @@ export const UsersPage: React.FC = () => {
                 <div className="flex items-start gap-2">
                   <span className="text-xs text-charcoal/60 font-semibold shrink-0 pt-0.5">Ministries:</span>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {detailUser.role_name === "Admin" ? (
+                    {(detailUser.role_name === "Admin" || detailUser.role_name === "IT Admin") ? (
+                      <span className="text-[11px] font-bold text-cyan-300 bg-cyan-950 px-2.5 py-1 rounded-xl border border-cyan-800">
+                        Root Infrastructure & Universal Access
+                      </span>
+                    ) : detailUser.role_name === "Pastor" ? (
                       <span className="text-[11px] font-bold text-indigo bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-100">
                         All 7 Ministries (Church-Wide Access)
                       </span>

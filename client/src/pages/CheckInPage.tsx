@@ -23,7 +23,7 @@ export const CheckInPage: React.FC = () => {
   const [activeAttendanceTab, setActiveAttendanceTab] = useState<"sunday" | "event">("sunday");
   const coordinatorMinistryId = isRestricted && allowedMinistries.length > 0
     ? allowedMinistries[0].id
-    : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
+    : (user?.role_name !== "Admin" && user?.role_name !== "Pastor" && user?.role_name !== "IT Admin" && selectedMinistryId ? selectedMinistryId : null);
 
   // Helper to get today's local date string (YYYY-MM-DD)
   const getTodayDateStr = () => {

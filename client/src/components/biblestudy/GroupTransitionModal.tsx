@@ -198,25 +198,22 @@ export const GroupTransitionModal: React.FC<GroupTransitionModalProps> = ({
         setFetchedStudyTopics(studyRes.topics);
       }
 
-      // 3. Leaders directory
-      const userLeaders = (usersRes || []).map((u: any) => ({
-        id: u.id,
-        rawId: u.id,
-        name: u.name || `${u.member_first_name || ""} ${u.member_last_name || ""}`.trim() || u.username,
-        contact: u.contact_phone || u.email || u.contact_email || "",
-        role_name: u.role_name || "User"
-      }));
+      // 3. Leaders directory (Filter users by Coordinator, Leader, Pastor)
+      const ALLOWED_LEADER_ROLES = ["coordinator", "leader", "pastor"];
+      const userLeaders = (usersRes || [])
+        .filter((u: any) => {
+          const role = (u.role_name || "").toLowerCase().trim();
+          return ALLOWED_LEADER_ROLES.includes(role);
+        })
+        .map((u: any) => ({
+          id: u.id,
+          rawId: u.id,
+          name: u.name || `${u.member_first_name || ""} ${u.member_last_name || ""}`.trim() || u.username,
+          contact: u.contact_phone || u.email || u.contact_email || "",
+          role_name: u.role_name || "Leader"
+        }));
 
-      const memberLeaders = (membersRes || []).map((m: any) => ({
-        id: `m-${m.id}`,
-        rawId: m.id,
-        name: `${m.first_name} ${m.last_name}`.trim(),
-        contact: m.contact_phone || m.contact_email || "",
-        role_name: m.ministry_name ? `${m.ministry_name} Member` : "Church Member"
-      }));
-
-      const combined = [...userLeaders, ...memberLeaders];
-      const unique = combined.filter((l: any, idx: number, arr: any[]) =>
+      const unique = userLeaders.filter((l: any, idx: number, arr: any[]) =>
         l.name && arr.findIndex((x: any) => x.name.toLowerCase().trim() === l.name.toLowerCase().trim()) === idx
       ).sort((a: any, b: any) => a.name.localeCompare(b.name));
 

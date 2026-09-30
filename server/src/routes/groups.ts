@@ -5,6 +5,7 @@ import { emitRealtimeEvent } from "../socket";
 import { resolveTotalChapters } from "./studyTopics";
 import { notify } from "../services/notificationService";
 import { countConsecutiveAbsences } from "../utils/groupAttendanceIntelligence";
+import { MY_GROUP_SCOPE } from "../utils/myGroupScope";
 
 const router = Router();
 
@@ -124,12 +125,24 @@ async function sendRescheduleNotification(group: GroupNotificationRow, date: str
 }
 
 // List Bible study groups with members
-router.get("/", async (req: Request, res: Response) => {
+router.get("/mine", authMiddleware, listGroups);
+router.get("/", listGroups);
+
+async function listGroups(req: AuthRequest, res: Response) {
   try {
-    const { ministry_id, category, meeting_day, search, status, page, limit } = req.query;
+    const { ministry_id, category, meeting_day, search, page, limit } = req.query;
+    const mine = req.route.path === "/mine";
+    const status = mine ? "active" : req.query.status;
 
     let whereClause = " WHERE 1=1";
     const params: any[] = [];
+
+    if (mine) {
+      // Identity comes only from the authenticated account, regardless of role.
+      if (!req.user) return res.status(401).json({ error: "Authentication required" });
+      params.push(req.user.id);
+      whereClause += ` AND ${MY_GROUP_SCOPE}`;
+    }
 
     if (ministry_id) {
       params.push(ministry_id);
@@ -146,9 +159,26 @@ router.get("/", async (req: Request, res: Response) => {
       whereClause += ` AND g.meeting_day = $${params.length}`;
     }
 
-    if (status && typeof status === "string" && status.trim() && status !== "all") {
-      params.push(status.trim());
-      whereClause += ` AND g.status = $${params.length}`;
+    if (status && typeof status === "string" && status.trim()) {
+      const s = status.trim().toLowerCase();
+      if (s === "active") {
+        whereClause += ` AND COALESCE(g.status, 'active') = 'active'`;
+      } else if (s === "completed") {
+        whereClause += ` AND g.status = 'completed'`;
+      } else if (s === "archived") {
+        whereClause += ` AND g.status = 'archived'`;
+      } else if (s === "merged") {
+        whereClause += ` AND g.status = 'merged'`;
+      } else if (s === "all") {
+        // "All" visible lifecycle includes active, completed, and archived (excludes merged source groups)
+        whereClause += ` AND COALESCE(g.status, 'active') IN ('active', 'completed', 'archived')`;
+      } else {
+        params.push(s);
+        whereClause += ` AND g.status = $${params.length}`;
+      }
+    } else {
+      // Default: exclude internal merged source groups
+      whereClause += ` AND COALESCE(g.status, 'active') IN ('active', 'completed', 'archived')`;
     }
 
     if (search && typeof search === "string" && search.trim()) {
@@ -176,15 +206,26 @@ router.get("/", async (req: Request, res: Response) => {
              g.is_rescheduled, g.rescheduled_date, g.rescheduled_time, g.reschedule_reason,
              COALESCE(g.status, 'active') as status, g.merged_into_group_id, g.closed_at, g.effective_date,
              g.assistant_leader_name, g.assistant_leader_contact, g.assistant_leader_id,
+             g.completed_at, g.completed_book_id, g.completed_book_title_snapshot,
+             g.completed_chapter, g.completed_total_chapters,
+             g.archived_at, g.archived_by, g.archive_reason,
+             u_arch.name as archived_by_name,
              min.name as ministry_name, min.color as ministry_color,
              mg.name as merged_into_group_name,
              (SELECT COUNT(*) FROM bible_study_members WHERE group_id = g.id AND COALESCE(status, 'active') = 'active') as current_member_count
       FROM bible_study_groups g
       LEFT JOIN ministries min ON g.ministry_id = min.id
       LEFT JOIN bible_study_groups mg ON g.merged_into_group_id = mg.id
+      LEFT JOIN users u_arch ON g.archived_by = u_arch.id
       ${whereClause}
       ORDER BY 
-        CASE WHEN COALESCE(g.status, 'active') = 'active' THEN 0 ELSE 1 END ASC,
+        CASE 
+          WHEN COALESCE(g.status, 'active') = 'active' THEN 0 
+          WHEN g.status = 'completed' THEN 1
+          WHEN g.status = 'archived' THEN 2
+          ELSE 3 
+        END ASC,
+        COALESCE(g.completed_at, g.archived_at, g.created_at) DESC,
         g.id ASC
     `;
 
@@ -244,7 +285,7 @@ router.get("/", async (req: Request, res: Response) => {
 
     const detailed = groups.map((g) => {
       const members = membersByGroup.get(g.id) || [];
-      const totalChapters = resolveTotalChapters(g.curriculum || "", dbTopics);
+      const totalChapters = g.completed_total_chapters || resolveTotalChapters(g.completed_book_title_snapshot || g.curriculum || "", dbTopics);
       const createdTransition = transitionsByNewGroup.get(g.id) || null;
 
       return {
@@ -260,14 +301,14 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
+}
 
 // =========================================================================
 // BIBLE STUDY GROUP TRANSITIONS ENDPOINTS
 // =========================================================================
 
 // POST /api/groups/transitions/merge — Merge two or more groups into a new group
-router.post("/transitions/merge", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/transitions/merge", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const {
       source_group_ids,
@@ -627,11 +668,14 @@ router.get("/:id/history", async (req: Request, res: Response) => {
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const group = await db.get(`
-      SELECT g.*, min.name as ministry_name, min.color as ministry_color,
-             mg.name as merged_into_group_name
+      SELECT g.*,
+             min.name as ministry_name, min.color as ministry_color,
+             mg.name as merged_into_group_name,
+             u_arch.name as archived_by_name
       FROM bible_study_groups g
       LEFT JOIN ministries min ON g.ministry_id = min.id
       LEFT JOIN bible_study_groups mg ON g.merged_into_group_id = mg.id
+      LEFT JOIN users u_arch ON g.archived_by = u_arch.id
       WHERE g.id = $1
     `, [req.params.id]);
 
@@ -683,7 +727,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       `, [group.merged_into_group_id]).catch(() => null);
     }
 
-    const totalChapters = resolveTotalChapters(group.curriculum || "", dbTopics);
+    const totalChapters = group.completed_total_chapters || resolveTotalChapters(group.completed_book_title_snapshot || group.curriculum || "", dbTopics);
 
     res.json({
       ...group,
@@ -702,7 +746,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 });
 
 // Create group (Admin / Coordinator)
-router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const {
       name,
@@ -729,9 +773,9 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
       return res.status(400).json({ error: "Group name, leader name, day, time, and location are required" });
     }
 
-    const existing = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND COALESCE(status, 'active') != 'merged'", [name.trim()]);
+    const existing = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND COALESCE(status, 'active') = 'active'", [name.trim()]);
     if (existing) {
-      return res.status(400).json({ error: "A Bible study group with this name already exists" });
+      return res.status(400).json({ error: "An active Bible study group with this name already exists" });
     }
 
     const result = await db.run(`
@@ -803,7 +847,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
 });
 
 // Update group
-router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
+router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const {
@@ -837,8 +881,8 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
 
     if (name !== undefined) {
       if (!name.trim()) return res.status(400).json({ error: "Group name cannot be empty" });
-      const duplicate = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND id != $2 AND COALESCE(status, 'active') != 'merged'", [name.trim(), id]);
-      if (duplicate) return res.status(400).json({ error: "Another Bible study group already has this name" });
+      const duplicate = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND id != $2 AND COALESCE(status, 'active') = 'active'", [name.trim(), id]);
+      if (duplicate) return res.status(400).json({ error: "Another active Bible study group already has this name" });
     }
 
     await db.run(`
@@ -914,6 +958,69 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"
   }
 });
 
+// Mark Bible Study Group as Completed with Snapshot
+router.post("/:id/complete", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const {
+      completed_chapter,
+      completed_total_chapters,
+      completed_book_id,
+      completed_book_title_snapshot,
+      notes
+    } = req.body;
+
+    const group = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
+    if (!group) return res.status(404).json({ error: "Small group not found" });
+
+    if (group.status === "merged") {
+      return res.status(400).json({ error: "Merged source groups cannot be marked as completed." });
+    }
+
+    const dbTopics = await db.all<{ id: number; title: string; total_chapters: number }>("SELECT id, title, total_chapters FROM bible_study_topics").catch(() => []);
+    const titleSnapshot = completed_book_title_snapshot?.trim() || group.curriculum || "General Scripture Study";
+    const matchedTopic = dbTopics.find(t => t.title.toLowerCase().trim() === titleSnapshot.toLowerCase().trim());
+    const resolvedBookId = completed_book_id ? Number(completed_book_id) : (matchedTopic ? matchedTopic.id : null);
+    const totalChapters = completed_total_chapters ? Number(completed_total_chapters) : (matchedTopic ? matchedTopic.total_chapters : resolveTotalChapters(titleSnapshot, dbTopics) || 12);
+    const finishedChapter = completed_chapter?.trim() || group.current_chapter || `Chapter ${totalChapters}`;
+
+    await db.run(`
+      UPDATE bible_study_groups
+      SET status = 'completed',
+          progress_stage = 'completed',
+          completed_at = CURRENT_TIMESTAMP,
+          completed_book_id = $1,
+          completed_book_title_snapshot = $2,
+          completed_chapter = $3,
+          completed_total_chapters = $4,
+          progress_notes = COALESCE($5, progress_notes)
+      WHERE id = $6
+    `, [
+      resolvedBookId,
+      titleSnapshot,
+      finishedChapter,
+      totalChapters,
+      notes !== undefined ? (notes ? notes.trim() : null) : group.progress_notes,
+      id
+    ]);
+
+    const auditText = `Marked Bible study group "${group.name}" as completed. Finished at: ${finishedChapter} of ${totalChapters} (${titleSnapshot}).`;
+    await logAuditAction(req.user?.id || null, "GROUP_COMPLETED", "bible_study_groups", id, auditText);
+    emitRealtimeEvent("groups:changed", { action: "complete", id });
+
+    res.json({
+      message: `✓ Small group "${group.name}" successfully marked as completed!`,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      completed_book_title_snapshot: titleSnapshot,
+      completed_chapter: finishedChapter,
+      completed_total_chapters: totalChapters
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Dedicated Fast Endpoint: Update Study Chapter Progress & Notice
 router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -923,18 +1030,49 @@ router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Resp
     const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Small group not found" });
 
-    await db.run(`
-      UPDATE bible_study_groups
-      SET current_chapter = COALESCE($1, current_chapter),
-          progress_stage = COALESCE($2, progress_stage),
-          progress_notes = $3
-      WHERE id = $4
-    `, [
-      current_chapter ? current_chapter.trim() : current.current_chapter,
-      progress_stage || current.progress_stage || 'in_progress',
-      progress_notes !== undefined ? progress_notes : current.progress_notes,
-      id
-    ]);
+    const newStage = progress_stage || current.progress_stage || 'in_progress';
+    const isNowCompleted = newStage === 'completed';
+
+    const dbTopics = await db.all<{ id: number; title: string; total_chapters: number }>("SELECT id, title, total_chapters FROM bible_study_topics").catch(() => []);
+    const titleSnapshot = current.completed_book_title_snapshot || current.curriculum || "General Scripture Study";
+    const matchedTopic = dbTopics.find(t => t.title.toLowerCase().trim() === titleSnapshot.toLowerCase().trim());
+    const totalChapters = current.completed_total_chapters || (matchedTopic ? matchedTopic.total_chapters : resolveTotalChapters(titleSnapshot, dbTopics) || 12);
+    const finishedChapter = current_chapter ? current_chapter.trim() : (current.current_chapter || `Chapter ${totalChapters}`);
+
+    if (isNowCompleted && current.status === 'active') {
+      await db.run(`
+        UPDATE bible_study_groups
+        SET current_chapter = $1,
+            progress_stage = $2,
+            progress_notes = $3,
+            status = 'completed',
+            completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+            completed_book_title_snapshot = COALESCE(completed_book_title_snapshot, $4),
+            completed_chapter = COALESCE(completed_chapter, $1),
+            completed_total_chapters = COALESCE(completed_total_chapters, $5)
+        WHERE id = $6
+      `, [
+        finishedChapter,
+        newStage,
+        progress_notes !== undefined ? progress_notes : current.progress_notes,
+        titleSnapshot,
+        totalChapters,
+        id
+      ]);
+    } else {
+      await db.run(`
+        UPDATE bible_study_groups
+        SET current_chapter = COALESCE($1, current_chapter),
+            progress_stage = COALESCE($2, progress_stage),
+            progress_notes = $3
+        WHERE id = $4
+      `, [
+        current_chapter ? current_chapter.trim() : current.current_chapter,
+        newStage,
+        progress_notes !== undefined ? progress_notes : current.progress_notes,
+        id
+      ]);
+    }
 
     await logAuditAction(
       req.user?.id || null,
@@ -952,7 +1090,7 @@ router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Resp
 });
 
 // Dedicated Fast Endpoint: Reschedule Small Group Next Meeting Session
-router.patch("/:id/reschedule", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
+router.patch("/:id/reschedule", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const { is_rescheduled, rescheduled_date, rescheduled_time, reschedule_reason, location } = req.body;
@@ -1011,16 +1149,123 @@ router.patch("/:id/reschedule", authMiddleware, requireRoles("Admin", "Coordinat
   }
 });
 
-// Delete group
-router.delete("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+// Archive group (Soft Delete endpoint)
+router.post("/:id/archive", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id;
-    await db.run("DELETE FROM bible_study_members WHERE group_id = $1", [id]);
-    await db.run("DELETE FROM bible_study_groups WHERE id = $1", [id]);
+    const id = Number(req.params.id);
+    const { reason } = req.body;
 
-    await logAuditAction(req.user?.id || null, "DELETE", "bible_study_groups", Number(id), `Deleted small group #${id}`);
-    emitRealtimeEvent("groups:changed", { action: "delete", id: Number(id) });
-    res.json({ message: "Small group deleted successfully" });
+    const group = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
+    if (!group) return res.status(404).json({ error: "Small group not found" });
+
+    if (group.status === "merged") {
+      return res.status(400).json({ error: "Merged source groups cannot be archived directly." });
+    }
+
+    const archiveReason = reason && typeof reason === "string" && reason.trim() ? reason.trim() : "Group discontinued";
+
+    await db.run(`
+      UPDATE bible_study_groups
+      SET status = 'archived',
+          archived_at = CURRENT_TIMESTAMP,
+          archived_by = $1,
+          archive_reason = $2
+      WHERE id = $3
+    `, [req.user?.id || null, archiveReason, id]);
+
+    await logAuditAction(
+      req.user?.id || null,
+      "GROUP_ARCHIVED",
+      "bible_study_groups",
+      id,
+      `Archived Bible study group: ${group.name}. Reason: ${archiveReason}`
+    );
+
+    emitRealtimeEvent("groups:changed", { action: "archive", id });
+    res.json({ message: `✓ Small group "${group.name}" moved to Archived Groups.` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Soft Delete / Archive via DELETE route (Guarantees zero hard data loss)
+router.delete("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const reason = (req.body?.reason || req.query?.reason || "Group archived") as string;
+
+    const group = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
+    if (!group) return res.status(404).json({ error: "Small group not found" });
+
+    if (group.status === "merged") {
+      return res.status(400).json({ error: "Merged source groups cannot be deleted or archived directly." });
+    }
+
+    await db.run(`
+      UPDATE bible_study_groups
+      SET status = 'archived',
+          archived_at = CURRENT_TIMESTAMP,
+          archived_by = $1,
+          archive_reason = $2
+      WHERE id = $3
+    `, [req.user?.id || null, reason, id]);
+
+    await logAuditAction(
+      req.user?.id || null,
+      "GROUP_ARCHIVED",
+      "bible_study_groups",
+      id,
+      `Archived Bible study group: ${group.name}. Reason: ${reason}`
+    );
+
+    emitRealtimeEvent("groups:changed", { action: "archive", id });
+    res.json({ message: `✓ Small group "${group.name}" archived successfully.` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Restore archived group back to active
+router.post("/:id/restore", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const group = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
+    if (!group) return res.status(404).json({ error: "Small group not found" });
+
+    if (group.status === "merged") {
+      return res.status(400).json({ error: "Merged source groups cannot be restored directly." });
+    }
+
+    // Check name collision with currently active groups
+    const conflict = await db.get(
+      "SELECT id, name FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND id != $2 AND COALESCE(status, 'active') = 'active'",
+      [group.name.trim(), id]
+    );
+    if (conflict) {
+      return res.status(400).json({
+        error: `Cannot restore group: an active Bible study group named "${group.name}" already exists. Please rename the active group or rename this group first.`
+      });
+    }
+
+    await db.run(`
+      UPDATE bible_study_groups
+      SET status = 'active',
+          archived_at = NULL,
+          archived_by = NULL,
+          archive_reason = NULL
+      WHERE id = $1
+    `, [id]);
+
+    await logAuditAction(
+      req.user?.id || null,
+      "GROUP_RESTORED",
+      "bible_study_groups",
+      id,
+      `Restored Bible study group to active: ${group.name}`
+    );
+
+    emitRealtimeEvent("groups:changed", { action: "restore", id });
+    res.json({ message: `✓ Small group "${group.name}" restored to Active Groups successfully!` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

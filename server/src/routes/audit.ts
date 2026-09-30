@@ -4,8 +4,8 @@ import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
 
 const router = Router();
 
-// Get audit trail (Admin only)
-router.get("/", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Get audit trail (Admin and Pastor)
+router.get("/", authMiddleware, requireRoles("Admin", "Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const { page, limit, action, target_table } = req.query;
 

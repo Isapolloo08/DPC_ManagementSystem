@@ -45,7 +45,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
   onMemberUpdated
 }) => {
   const { user } = useAuth();
-  const canEditBaptism = user?.role_name === "Admin" || user?.role_name === "Coordinator" || user?.role_name === "Leader";
+  const canEditBaptism = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "Leader" || user?.role_name === "IT Admin";
 
   const getDefaultDateRange = () => {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());

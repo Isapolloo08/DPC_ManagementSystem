@@ -17,7 +17,7 @@ router.get("/setup-status", async (_req: Request, res: Response) => {
       SELECT COUNT(*) as count 
       FROM users u 
       JOIN roles r ON u.role_id = r.id 
-      WHERE LOWER(r.name) = 'admin'
+      WHERE LOWER(r.name) = 'admin' OR LOWER(r.name) = 'pastor' OR LOWER(r.name) = 'it admin'
     `);
     const count = Number(userCount?.count || 0);
     const admins = Number(adminCount?.count || 0);
@@ -35,7 +35,7 @@ router.get("/setup-status", async (_req: Request, res: Response) => {
   }
 });
 
-// Register / Create Account (only an empty installation receives the initial Admin)
+// Register / Create Account (only an empty installation receives the initial Admin / Master Admin)
 router.post("/register", async (req: Request, res: Response) => {
   try {
     const { name, username, email, password } = req.body;
@@ -69,22 +69,24 @@ router.post("/register", async (req: Request, res: Response) => {
       }
     }
 
-    // Only an entirely empty installation may create its initial Admin publicly.
+    // Only an entirely empty installation may create its initial Super Admin publicly.
     const userCount = await db.get<{ count: string | number }>("SELECT COUNT(*) as count FROM users");
     const totalUsers = Number(userCount?.count || 0);
     const isFirstUser = totalUsers === 0;
 
     // Fetch Admin & Member roles dynamically from the database
     const adminRole = await db.get<{ id: number }>("SELECT id FROM roles WHERE LOWER(name) = 'admin'");
+    const pastorRole = await db.get<{ id: number }>("SELECT id FROM roles WHERE LOWER(name) = 'pastor'");
     const memberRole = await db.get<{ id: number }>("SELECT id FROM roles WHERE LOWER(name) = 'member'");
 
-    if (!adminRole || !memberRole) {
+    if (!memberRole) {
       return res.status(503).json({ error: "Required system roles are not configured" });
     }
 
-    // Public registration can only create the initial Admin; every later account is a Member.
-    // Privileged roles are assigned through the authenticated Admin user-management API.
-    const assignedRoleId = isFirstUser ? adminRole.id : memberRole.id;
+    // Public registration creates the initial Super Admin; subsequent public registrations are Members.
+    const assignedRoleId = isFirstUser 
+      ? (adminRole?.id || pastorRole?.id || memberRole.id) 
+      : memberRole.id;
 
     const passwordHash = bcrypt.hashSync(password.trim(), 10);
 

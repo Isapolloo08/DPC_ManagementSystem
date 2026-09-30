@@ -37,7 +37,7 @@ router.get("/announcements", async (req: Request, res: Response) => {
 });
 
 // Create announcement
-router.post("/announcements", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/announcements", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const { ministry_id, title, body, is_pinned = false } = req.body;
 
@@ -69,7 +69,7 @@ router.post("/announcements", authMiddleware, requireRoles("Admin", "Coordinator
 });
 
 // Delete announcement
-router.delete("/announcements/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.delete("/announcements/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     await db.run("DELETE FROM announcements WHERE id = $1", [id]);

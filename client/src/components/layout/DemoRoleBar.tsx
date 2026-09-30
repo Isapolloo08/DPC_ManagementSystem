@@ -1,6 +1,6 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
-import { ShieldCheck, UserCheck, HeartHandshake, User, Sliders, BookOpen } from "lucide-react";
+import { Shield, ShieldCheck, UserCheck, HeartHandshake, User, Sliders, BookOpen } from "lucide-react";
 
 export const DemoRoleBar: React.FC = () => {
   const { user, demoUsers, switchDemoUser } = useAuth();
@@ -8,6 +8,9 @@ export const DemoRoleBar: React.FC = () => {
   const getRoleIcon = (roleName: string) => {
     switch (roleName) {
       case "Admin":
+      case "IT Admin":
+        return <Shield className="w-3.5 h-3.5 text-cyan-300" />;
+      case "Pastor":
         return <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />;
       case "Coordinator":
         return <UserCheck className="w-3.5 h-3.5 text-emerald-300" />;
@@ -28,7 +31,7 @@ export const DemoRoleBar: React.FC = () => {
           Interactive Role Switcher:
         </span>
         <span className="text-indigo-200 hidden sm:inline">
-          Test the system across all 5 RBAC tiers with realistic pre-seeded data:
+          Test the system across all 6 RBAC tiers with realistic pre-seeded data:
         </span>
       </div>
 

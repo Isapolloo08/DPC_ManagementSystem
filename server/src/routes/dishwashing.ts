@@ -30,6 +30,23 @@ function getUpcomingSundays(count = 16): string[] {
   return sundays;
 }
 
+function parseIdArray(val: any, fallbackId?: any): number[] {
+  if (Array.isArray(val)) return val.map(Number).filter(Boolean);
+  if (typeof val === "string" && val.trim()) {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed.map(Number).filter(Boolean);
+    } catch {
+      return val.split(",").map(s => Number(s.trim())).filter(Boolean);
+    }
+  }
+  if (fallbackId) {
+    const num = Number(fallbackId);
+    if (!isNaN(num) && num > 0) return [num];
+  }
+  return [];
+}
+
 // ====================================================
 // 1. GET ALL DISHWASHING ROTATING TEAMS / UNITS
 // ====================================================
@@ -77,8 +94,12 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
 
     const teamsWithMembers = teams.map((team) => {
       const members = membersByTeam.get(team.id) || [];
+      const parsedGroupIds = parseIdArray(team.biblestudy_group_ids, team.biblestudy_group_id);
+      const parsedMinistryIds = parseIdArray(team.ministry_ids, team.ministry_id);
       return {
         ...team,
+        biblestudy_group_ids: parsedGroupIds,
+        ministry_ids: parsedMinistryIds,
         members_count: members.length,
         members
       };
@@ -99,7 +120,9 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
       name, 
       cycle_mode = "biblestudy_group",
       biblestudy_group_id,
+      biblestudy_group_ids,
       ministry_id,
+      ministry_ids,
       leader_id, 
       leader_name, 
       leader_contact,
@@ -137,18 +160,25 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
       }
     }
 
+    const groupIdsArray = parseIdArray(biblestudy_group_ids, biblestudy_group_id);
+    const ministryIdsArray = parseIdArray(ministry_ids, ministry_id);
+    const primaryGroupId = groupIdsArray[0] || (biblestudy_group_id ? Number(biblestudy_group_id) : null);
+    const primaryMinistryId = ministryIdsArray[0] || (ministry_id ? Number(ministry_id) : null);
+
     const result = await db.run(`
       INSERT INTO dishwashing_teams (
-        name, cycle_mode, biblestudy_group_id, ministry_id, leader_id, leader_name, leader_contact,
-        color, order_seq, tasks_checklist, volunteers_count
+        name, cycle_mode, biblestudy_group_id, biblestudy_group_ids, ministry_id, ministry_ids,
+        leader_id, leader_name, leader_contact, color, order_seq, tasks_checklist, volunteers_count
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING id
     `, [
       name.trim(),
       cycle_mode,
-      biblestudy_group_id ? Number(biblestudy_group_id) : null,
-      ministry_id ? Number(ministry_id) : null,
+      primaryGroupId,
+      groupIdsArray.length > 0 ? JSON.stringify(groupIdsArray) : null,
+      primaryMinistryId,
+      ministryIdsArray.length > 0 ? JSON.stringify(ministryIdsArray) : null,
       leader_id ? Number(leader_id) : null,
       resolvedLeaderName || null,
       resolvedLeaderContact || null,
@@ -168,41 +198,43 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
       );
     }
 
-    // Auto-fetch disciples from the bible study group or ministry if present
+    // Auto-fetch disciples from all selected bible study groups or ministries if present
     const allMemberIdsToLink = new Set<number>();
     if (Array.isArray(member_ids)) {
       member_ids.forEach(id => id && allMemberIdsToLink.add(Number(id)));
     }
-    if (biblestudy_group_id) {
+    if (groupIdsArray.length > 0) {
       const bsGroupMembers = await db.all<{ member_id: number }>(
-        "SELECT member_id FROM bible_study_members WHERE group_id = $1",
-        [biblestudy_group_id]
+        "SELECT member_id FROM bible_study_members WHERE group_id = ANY($1)",
+        [groupIdsArray]
       );
       bsGroupMembers.forEach(bm => bm.member_id && allMemberIdsToLink.add(Number(bm.member_id)));
     }
-    if (ministry_id) {
+    if (ministryIdsArray.length > 0) {
       const minMembers = await db.all<{ id: number }>(
-        "SELECT id FROM members WHERE status = 'active' AND ministry_id = $1",
-        [ministry_id]
+        "SELECT id FROM members WHERE status = 'active' AND ministry_id = ANY($1)",
+        [ministryIdsArray]
       );
       minMembers.forEach(mm => mm.id && allMemberIdsToLink.add(Number(mm.id)));
 
-      const minData = await db.get<{ min_age: number; max_age: number; name: string }>(
-        "SELECT min_age, max_age, name FROM ministries WHERE id = $1",
-        [ministry_id]
-      );
-      if (minData && (minData.min_age !== null || minData.max_age !== null)) {
-        const minAge = minData.min_age ?? 0;
-        const maxAge = minData.max_age ?? 120;
-        const ageMembers = await db.all<{ id: number }>(
-          `SELECT id FROM members 
-           WHERE status = 'active' 
-             AND birthdate IS NOT NULL 
-             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) >= $1 
-             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) <= $2`,
-          [minAge, maxAge]
+      for (const minId of ministryIdsArray) {
+        const minData = await db.get<{ min_age: number; max_age: number; name: string }>(
+          "SELECT min_age, max_age, name FROM ministries WHERE id = $1",
+          [minId]
         );
-        ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
+        if (minData && (minData.min_age !== null || minData.max_age !== null)) {
+          const minAge = minData.min_age ?? 0;
+          const maxAge = minData.max_age ?? 120;
+          const ageMembers = await db.all<{ id: number }>(
+            `SELECT id FROM members 
+             WHERE status = 'active' 
+               AND birthdate IS NOT NULL 
+               AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) >= $1 
+               AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) <= $2`,
+            [minAge, maxAge]
+          );
+          ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
+        }
       }
     }
 
@@ -238,7 +270,9 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
       name, 
       cycle_mode,
       biblestudy_group_id,
+      biblestudy_group_ids,
       ministry_id,
+      ministry_ids,
       leader_id, 
       leader_name, 
       leader_contact,
@@ -265,25 +299,34 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
       }
     }
 
+    const groupIdsArray = parseIdArray(biblestudy_group_ids, biblestudy_group_id);
+    const ministryIdsArray = parseIdArray(ministry_ids, ministry_id);
+    const primaryGroupId = groupIdsArray[0] || (biblestudy_group_id ? Number(biblestudy_group_id) : null);
+    const primaryMinistryId = ministryIdsArray[0] || (ministry_id ? Number(ministry_id) : null);
+
     await db.run(`
       UPDATE dishwashing_teams
       SET name = COALESCE($1, name),
           cycle_mode = COALESCE($2, cycle_mode),
           biblestudy_group_id = $3,
-          ministry_id = $4,
-          leader_id = $5,
-          leader_name = COALESCE($6, leader_name),
-          leader_contact = COALESCE($7, leader_contact),
-          color = COALESCE($8, color),
-          order_seq = COALESCE($9, order_seq),
-          tasks_checklist = COALESCE($10, tasks_checklist),
-          volunteers_count = COALESCE($11, volunteers_count)
-      WHERE id = $12
+          biblestudy_group_ids = $4,
+          ministry_id = $5,
+          ministry_ids = $6,
+          leader_id = $7,
+          leader_name = COALESCE($8, leader_name),
+          leader_contact = COALESCE($9, leader_contact),
+          color = COALESCE($10, color),
+          order_seq = COALESCE($11, order_seq),
+          tasks_checklist = COALESCE($12, tasks_checklist),
+          volunteers_count = COALESCE($13, volunteers_count)
+      WHERE id = $14
     `, [
       name,
       cycle_mode,
-      biblestudy_group_id ? Number(biblestudy_group_id) : null,
-      ministry_id ? Number(ministry_id) : null,
+      primaryGroupId,
+      groupIdsArray.length > 0 ? JSON.stringify(groupIdsArray) : null,
+      primaryMinistryId,
+      ministryIdsArray.length > 0 ? JSON.stringify(ministryIdsArray) : null,
       leader_id ? Number(leader_id) : null,
       resolvedLeaderName,
       resolvedLeaderContact,
@@ -301,41 +344,43 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
       );
     }
 
-    // Auto-fetch disciples from the bible study group or ministry if present
+    // Auto-fetch disciples from the bible study groups or ministries if present
     const allMemberIdsToLink = new Set<number>();
     if (Array.isArray(member_ids)) {
       member_ids.forEach(mId => mId && allMemberIdsToLink.add(Number(mId)));
     }
-    if (biblestudy_group_id) {
+    if (groupIdsArray.length > 0) {
       const bsGroupMembers = await db.all<{ member_id: number }>(
-        "SELECT member_id FROM bible_study_members WHERE group_id = $1",
-        [biblestudy_group_id]
+        "SELECT member_id FROM bible_study_members WHERE group_id = ANY($1)",
+        [groupIdsArray]
       );
       bsGroupMembers.forEach(bm => bm.member_id && allMemberIdsToLink.add(Number(bm.member_id)));
     }
-    if (ministry_id) {
+    if (ministryIdsArray.length > 0) {
       const minMembers = await db.all<{ id: number }>(
-        "SELECT id FROM members WHERE status = 'active' AND ministry_id = $1",
-        [ministry_id]
+        "SELECT id FROM members WHERE status = 'active' AND ministry_id = ANY($1)",
+        [ministryIdsArray]
       );
       minMembers.forEach(mm => mm.id && allMemberIdsToLink.add(Number(mm.id)));
 
-      const minData = await db.get<{ min_age: number; max_age: number; name: string }>(
-        "SELECT min_age, max_age, name FROM ministries WHERE id = $1",
-        [ministry_id]
-      );
-      if (minData && (minData.min_age !== null || minData.max_age !== null)) {
-        const minAge = minData.min_age ?? 0;
-        const maxAge = minData.max_age ?? 120;
-        const ageMembers = await db.all<{ id: number }>(
-          `SELECT id FROM members 
-           WHERE status = 'active' 
-             AND birthdate IS NOT NULL 
-             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) >= $1 
-             AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) <= $2`,
-          [minAge, maxAge]
+      for (const minId of ministryIdsArray) {
+        const minData = await db.get<{ min_age: number; max_age: number; name: string }>(
+          "SELECT min_age, max_age, name FROM ministries WHERE id = $1",
+          [minId]
         );
-        ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
+        if (minData && (minData.min_age !== null || minData.max_age !== null)) {
+          const minAge = minData.min_age ?? 0;
+          const maxAge = minData.max_age ?? 120;
+          const ageMembers = await db.all<{ id: number }>(
+            `SELECT id FROM members 
+             WHERE status = 'active' 
+               AND birthdate IS NOT NULL 
+               AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) >= $1 
+               AND (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM birthdate)) <= $2`,
+            [minAge, maxAge]
+          );
+          ageMembers.forEach(am => am.id && allMemberIdsToLink.add(Number(am.id)));
+        }
       }
     }
 
@@ -477,6 +522,8 @@ export async function calculateDishwashingSchedule(count = 16) {
 
   const teamsWithMembers = teams.map((t) => ({
     ...t,
+    biblestudy_group_ids: parseIdArray(t.biblestudy_group_ids, t.biblestudy_group_id),
+    ministry_ids: parseIdArray(t.ministry_ids, t.ministry_id),
     members: membersByTeam.get(t.id) || []
   }));
 

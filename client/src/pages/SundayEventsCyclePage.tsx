@@ -82,7 +82,7 @@ export const SundayEventsCyclePage: React.FC = () => {
   const [syncLocation, setSyncLocation] = useState<string>("Main Sanctuary");
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   useEffect(() => {
     loadAllEvents();

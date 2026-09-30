@@ -150,8 +150,8 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
-// Create ministry (Admin only)
-router.post("/", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Create ministry (Pastor & Admin)
+router.post("/", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, min_age, max_age, description, color = "#2C3968" } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: "Ministry name is required" });
@@ -187,8 +187,8 @@ router.post("/", authMiddleware, requireRoles("Admin"), async (req: AuthRequest,
   }
 });
 
-// Update ministry details (Admin only)
-router.put("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Update ministry details (Pastor & Admin)
+router.put("/:id", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, min_age, max_age, description, color } = req.body;
     const id = req.params.id;
@@ -242,8 +242,8 @@ router.put("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthReques
   }
 });
 
-// Delete ministry (Admin only)
-router.delete("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+// Delete ministry (Pastor & Admin)
+router.delete("/:id", authMiddleware, requireRoles("Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const current = await db.get("SELECT * FROM ministries WHERE id = $1", [id]);

@@ -11,7 +11,7 @@ import {
 import { NavTab } from "../../components/layout/Sidebar";
 import { getBookTotalChapters } from "../../utils/curriculumHelper";
 
-// Default / mock duty rotation schedule for groups
+// Real assignments for the selected personal group
 interface DutyRotationItem {
   id: string;
   date: string;
@@ -21,50 +21,6 @@ interface DutyRotationItem {
   status: "completed" | "active" | "scheduled";
   is_my_group?: boolean;
 }
-
-const DEFAULT_DUTY_ROTATIONS: DutyRotationItem[] = [
-  {
-    id: "duty-1",
-    date: "Sun, Nov 01",
-    group_name: "Couples for Christ Cell",
-    category: "Sunday Dishwashing",
-    checklist: "Full kitchen sanitation, dish racks wipe down & cutlery storage.",
-    status: "completed"
-  },
-  {
-    id: "duty-2",
-    date: "Sun, Nov 08",
-    group_name: "Men of Valor Cell Group",
-    category: "Sunday Dishwashing",
-    checklist: "Scrub cooking pots, clean 3-compartment sink & dispose garbage.",
-    status: "completed"
-  },
-  {
-    id: "duty-3",
-    date: "Sun, Nov 15",
-    group_name: "BS group ni ate April",
-    category: "Sunday Dishwashing",
-    checklist: "Full plates/pots rinse, 3-compartment sink, trash disposal & dish drying.",
-    status: "active",
-    is_my_group: true
-  },
-  {
-    id: "duty-4",
-    date: "Sun, Nov 22",
-    group_name: "Young Adults Discipleship",
-    category: "Sunday Dishwashing",
-    checklist: "Dishwashing rotation, fellowship hall sweeping & trash clearing.",
-    status: "scheduled"
-  },
-  {
-    id: "duty-5",
-    date: "Sun, Nov 29",
-    group_name: "Junior Ministry Teachers",
-    category: "Sunday Dishwashing",
-    checklist: "Pre-rinse plates, sanitize cups, wipe down dining tables.",
-    status: "scheduled"
-  }
-];
 
 interface LeaderDashboardProps {
   activeGroup: BibleStudyGroup | null;
@@ -125,14 +81,18 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
 
   const courseProgressPercent = Math.min(100, Math.round((currentChapterNum / totalChapters) * 100));
 
-  // Filtered Duty items
-  const filteredDuties = useMemo(() => {
-    return DEFAULT_DUTY_ROTATIONS.filter(item => {
-      if (dutyFilter !== "all" && item.category !== dutyFilter) return false;
-      if (highlightMyGroup && !item.is_my_group) return false;
-      return true;
-    });
-  }, [dutyFilter, highlightMyGroup]);
+  const dutyRotations = useMemo<DutyRotationItem[]>(() => designatedDishwashing.map(duty => ({
+    id: `${duty.duty_date}-${duty.team?.id}`,
+    date: duty.date_formatted || duty.duty_date,
+    group_name: activeGroup?.name || "",
+    category: "Sunday Dishwashing",
+    checklist: duty.team?.tasks_checklist || "Contact your coordinator for the task checklist.",
+    status: duty.status === "completed" ? "completed" : duty.status === "on_duty" ? "active" : "scheduled",
+    is_my_group: true,
+  })), [designatedDishwashing, activeGroup]);
+  const nextDuty = dutyRotations.find(duty => duty.status !== "completed");
+  const filteredDuties = dutyRotations.filter(item =>
+    (dutyFilter === "all" || item.category === dutyFilter) && (!highlightMyGroup || item.is_my_group));
 
   if (!activeGroup) {
     return (
@@ -366,16 +326,16 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-black text-charcoal">Sun, Nov 15</h3>
+              <h3 className="text-2xl font-black text-charcoal">{nextDuty?.date || "No upcoming duty"}</h3>
               <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full uppercase">
-                Assigned
+                {nextDuty ? "Assigned" : "Not scheduled"}
               </span>
             </div>
             <p className="text-[11px] text-amber-900 font-bold mt-1">Sunday Dishwashing Roster</p>
           </div>
           <div className="flex items-center justify-between text-[10px] text-charcoal/60 font-bold border-t border-gray-100 pt-2">
             <span>Sunday Dishwashing</span>
-            <span className="text-charcoal/70">Gym / K-2</span>
+            <span className="text-charcoal/70">{activeGroup.name}</span>
           </div>
         </div>
       </div>
@@ -521,44 +481,15 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           </div>
         </div>
 
-        {/* Upcoming Assignment Banner */}
-        <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full uppercase">
-                  Upcoming Assignment
-                </span>
-                <span className="text-xs font-bold text-amber-950">Sunday Fellowship Meal Service</span>
-              </div>
-              <h4 className="text-sm sm:text-base font-black text-amber-950">
-                Sunday Dishwashing Duty • Sun, Nov 15
-              </h4>
-              <p className="text-xs text-amber-900/90 leading-tight">
-                Assigned: <strong>{activeGroup.name}</strong> • Task Scope: Basin & Kitchen Scrubdown, Utensil Sanitizing...
-              </p>
-            </div>
+        {nextDuty && (
+          <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 space-y-1">
+            <h4 className="text-sm font-black text-amber-950">Sunday Dishwashing Duty • {nextDuty.date}</h4>
+            <p className="text-xs text-amber-900">Assigned: {activeGroup.name} • {nextDuty.checklist}</p>
           </div>
-
-          <div className="flex items-center gap-2 self-end md:self-center">
-            <div className="flex -space-x-2 overflow-hidden">
-              {['R', 'G', 'E', 'I'].map((char, idx) => (
-                <div key={idx} className="inline-block h-7 w-7 rounded-full ring-2 ring-white bg-indigo-900 text-amber-300 text-[10px] font-black flex items-center justify-center">
-                  {char}
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => { }}
-              className="bg-slate-950 hover:bg-slate-900 text-amber-300 border border-amber-400/40 px-3.5 py-2 rounded-xl text-xs font-black shadow-md cursor-pointer transition-all active:scale-95"
-            >
-              Confirm Team (6/6)
-            </button>
-          </div>
-        </div>
+        )}
+        {filteredDuties.length === 0 && (
+          <p className="text-sm text-charcoal/70">No dishwashing assignments for this group.</p>
+        )}
 
         {/* Duty Rotation Table */}
         <div className="overflow-x-auto rounded-2xl border border-gray-200">
@@ -612,7 +543,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                       )}
                       {item.status === "active" && (
                         <span className="inline-flex items-center gap-1 text-amber-950 font-black bg-amber-400 border border-amber-500 px-2.5 py-0.5 rounded-full text-[10px] animate-pulse">
-                          <Clock className="w-3 h-3" /> Active in 2 Days
+                          <Clock className="w-3 h-3" /> On duty
                         </span>
                       )}
                       {item.status === "scheduled" && (
@@ -629,7 +560,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         </div>
 
         <div className="flex items-center justify-between text-xs text-charcoal/60 pt-1">
-          <span>Showing {filteredDuties.length} of 16 quarterly duty assignments</span>
+          <span>Showing {filteredDuties.length} assignments for this group</span>
           <button
             onClick={() => onNavigateTab("duty")}
             className="text-indigo font-bold hover:underline cursor-pointer flex items-center gap-1"

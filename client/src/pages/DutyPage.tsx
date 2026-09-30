@@ -82,10 +82,10 @@ export const DutyPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
   const { showToast, deleteWithUndo } = useToast();
   const isCoordinator = user?.role_name === "Coordinator";
-  const canManage = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const canManage = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
   const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
     ? user.ministries[0].id
-    : (user?.role_name !== "Admin" && selectedMinistryId ? selectedMinistryId : null);
+    : (user?.role_name !== "Admin" && user?.role_name !== "Pastor" && user?.role_name !== "IT Admin" && selectedMinistryId ? selectedMinistryId : null);
   const coordinatorMinistryName = user?.ministries && user.ministries.length > 0 ? user.ministries[0].name : "Youth";
   const activeScope = coordinatorMinistryId ?? selectedMinistryId ?? undefined;
 
@@ -327,6 +327,7 @@ export const DutyPage: React.FC = () => {
   const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
   const [swapItem1, setSwapItem1] = useState<SaturdayDutyScheduleItem | null>(null);
   const [swapTargetDate, setSwapTargetDate] = useState<string>("");
+  const [isSubmittingSwap, setIsSubmittingSwap] = useState(false);
 
   useEffect(() => {
     if (ministries && ministries.length > 0) {
@@ -628,6 +629,7 @@ export const DutyPage: React.FC = () => {
     }
 
     try {
+      setIsSubmittingSwap(true);
       await api.swapSaturdayDuty({
         date1: swapItem1.duty_date,
         teamId1: swapItem1.team.id,
@@ -635,11 +637,70 @@ export const DutyPage: React.FC = () => {
         teamId2: targetItem.team.id,
         ministry_id: coordinatorMinistryId || null
       });
+      showToast(`Successfully swapped Saturday duty between ${swapItem1.date_formatted} and ${targetItem.date_formatted}!`, "success");
       setIsSwapModalOpen(false);
-      loadDutyData();
+      setSwapItem1(null);
+      await loadDutyData();
     } catch (err: any) {
       showAlert("Swap Failed", err.message || "Failed to swap duty teams", "danger");
+    } finally {
+      setIsSubmittingSwap(false);
     }
+  };
+
+  const handleCompleteDuty = async (item: SaturdayDutyScheduleItem) => {
+    if (!item.team) return;
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Mark Saturday Duty as Completed",
+      type: "info",
+      confirmText: "Mark Completed",
+      description: (
+        <p className="text-xs text-charcoal/80 text-center">
+          Mark <strong>{item.date_formatted}</strong> duty for <strong>{item.team.name}</strong> as completed?
+        </p>
+      ),
+      onConfirm: async () => {
+        try {
+          await api.completeSaturdayDuty({
+            duty_date: item.duty_date,
+            team_id: item.team!.id,
+            ministry_id: coordinatorMinistryId || null
+          });
+          showToast(`Saturday duty for ${item.date_formatted} marked as completed!`, "success");
+          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+          loadDutyData();
+        } catch (err: any) {
+          showAlert("Error", err.message || "Failed to mark duty complete", "danger");
+        }
+      }
+    });
+  };
+
+  const handleResetScheduleOverrides = () => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: "Reset Duty Roster to Automatic Cycle",
+      type: "warning",
+      confirmText: "Reset to Cycle",
+      description: (
+        <p className="text-xs text-charcoal/80 text-center">
+          This will clear all manual swaps and date overrides, restoring the default rotating schedule across all {teams.length} teams.
+        </p>
+      ),
+      onConfirm: async () => {
+        try {
+          await api.resetSaturdayDuty({
+            ministry_id: coordinatorMinistryId || null
+          });
+          showToast("Saturday duty roster reset to automatic cycle!", "success");
+          setConfirmModalConfig(prev => ({ ...prev, isOpen: false }));
+          loadDutyData();
+        } catch (err: any) {
+          showAlert("Error", err.message || "Failed to reset schedule", "danger");
+        }
+      }
+    });
   };
 
   // Find this Saturday's item
@@ -998,9 +1059,21 @@ export const DutyPage: React.FC = () => {
                 Teams automatically cycle every Saturday ({teams.length}-week repeat interval).
               </p>
             </div>
-            <span className="text-xs font-black text-emerald-950 bg-emerald-100 border border-emerald-300 px-3.5 py-1 rounded-full">
-              Cycle Active: {teams.length} Teams
-            </span>
+            <div className="flex items-center gap-2">
+              {canManage && (
+                <button
+                  onClick={handleResetScheduleOverrides}
+                  className="text-xs font-bold text-charcoal/60 hover:text-indigo-950 hover:bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Reset all manual swaps and date overrides back to automatic cycle"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset to Cycle</span>
+                </button>
+              )}
+              <span className="text-xs font-black text-emerald-950 bg-emerald-100 border border-emerald-300 px-3.5 py-1 rounded-full">
+                Cycle Active: {teams.length} Teams
+              </span>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -1011,7 +1084,9 @@ export const DutyPage: React.FC = () => {
                   ? "bg-indigo-50/40 border-amber-300 shadow-xs ring-2 ring-amber-300/30"
                   : item.status === "completed"
                     ? "bg-emerald-50/40 border-emerald-200/80"
-                    : "bg-white border-indigo-100/70 hover:border-indigo-200"
+                    : item.status === "swapped"
+                      ? "bg-amber-50/40 border-amber-200/80"
+                      : "bg-white border-indigo-100/70 hover:border-indigo-200"
                   }`}
               >
                 <div className="flex items-center gap-4">
@@ -1047,6 +1122,11 @@ export const DutyPage: React.FC = () => {
                         <span className="text-[11px] text-charcoal/60">
                           Leader: <strong className="text-indigo-950 font-bold">{item.team.leader_name || "Assigned"}</strong>
                         </span>
+                        {item.status === "swapped" && item.notes && (
+                          <p className="text-[10px] text-amber-800 font-semibold mt-0.5">
+                            ⇄ {item.notes}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1056,7 +1136,17 @@ export const DutyPage: React.FC = () => {
 
                 {/* Status & Actions */}
                 <div className="flex items-center gap-2 self-end md:self-center">
-                  {item.is_this_saturday ? (
+                  {item.status === "completed" ? (
+                    <span className="bg-emerald-100 text-emerald-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-emerald-300 shadow-2xs">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Completed</span>
+                    </span>
+                  ) : item.status === "swapped" ? (
+                    <span className="bg-amber-100 text-amber-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-amber-300 shadow-2xs">
+                      <ArrowLeftRight className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Swapped Turn</span>
+                    </span>
+                  ) : item.is_this_saturday ? (
                     <span className="bg-indigo-100 text-indigo-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-300 shadow-2xs">
                       <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700" />
                       <span>Active This Saturday</span>
@@ -1070,6 +1160,16 @@ export const DutyPage: React.FC = () => {
                     <span className="bg-slate-50 text-charcoal/70 text-xs font-medium px-3 py-1.5 rounded-xl border border-slate-200">
                       Turn #{item.team?.order_seq || item.week_number}
                     </span>
+                  )}
+
+                  {canManage && item.status !== "completed" && (
+                    <button
+                      onClick={() => handleCompleteDuty(item)}
+                      className="p-2 hover:bg-emerald-50 rounded-xl text-charcoal/50 hover:text-emerald-700 transition-colors cursor-pointer"
+                      title="Mark as completed"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
                   )}
 
                   <button
@@ -1646,14 +1746,14 @@ export const DutyPage: React.FC = () => {
       {/* MODAL 3: Swap Saturday Duty */}
       {isSwapModalOpen && swapItem1 && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
                 <ArrowLeftRight className="w-5 h-5 text-indigo-700" />
-                <span>Swap Saturday Duty Turn</span>
+                <span>Swap Saturday Duty Turns</span>
               </h2>
               <button
-                onClick={() => setIsSwapModalOpen(false)}
+                onClick={() => !isSubmittingSwap && setIsSwapModalOpen(false)}
                 className="p-1.5 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1663,8 +1763,24 @@ export const DutyPage: React.FC = () => {
             <form onSubmit={handleExecuteSwap} className="space-y-4 text-xs">
               <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-1">
                 <span className="text-[10px] font-black uppercase text-indigo-600 block">Currently Selected Turn:</span>
-                <span className="text-sm font-black text-indigo-950 block">{swapItem1.date_formatted}</span>
-                <span className="text-xs text-charcoal/70 font-semibold block">Team: <strong>{swapItem1.team?.name}</strong></span>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-black text-indigo-950">{swapItem1.date_formatted}</span>
+                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-full">
+                    Week {swapItem1.week_number}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <span
+                    className="w-3 h-3 rounded-full shrink-0 shadow-2xs"
+                    style={{ backgroundColor: swapItem1.team?.color || "#6366f1" }}
+                  ></span>
+                  <span className="text-xs text-charcoal font-bold">{swapItem1.team?.name || "Unassigned"}</span>
+                  {swapItem1.team?.leader_name && (
+                    <span className="text-[11px] text-charcoal/60">
+                      (Leader: {swapItem1.team.leader_name})
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -1680,25 +1796,78 @@ export const DutyPage: React.FC = () => {
                     .filter((s) => s.duty_date !== swapItem1.duty_date)
                     .map((s) => (
                       <option key={s.duty_date} value={s.duty_date}>
-                        {s.date_formatted} — {s.team?.name || "Unassigned"} (Turn #{s.team?.order_seq || s.week_number})
+                        {s.date_formatted} — {s.team?.name || "Unassigned"} (Leader: {s.team?.leader_name || "N/A"})
                       </option>
                     ))}
                 </select>
               </div>
 
+              {/* Dynamic Swap Outcome Preview */}
+              {(() => {
+                const targetItem = schedule.find((s) => s.duty_date === swapTargetDate);
+                if (!targetItem || !targetItem.team || !swapItem1.team) return null;
+                return (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 space-y-2.5">
+                    <span className="text-[10px] font-black uppercase text-amber-950 flex items-center gap-1.5">
+                      <ArrowLeftRight className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Swap Outcome Preview</span>
+                    </span>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {/* Box 1 */}
+                      <div className="bg-white/95 p-3 rounded-xl border border-amber-200/70 shadow-2xs space-y-1">
+                        <span className="text-[10px] text-charcoal/60 font-bold block">{swapItem1.date_formatted}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: targetItem.team.color }}
+                          ></span>
+                          <span className="font-black text-indigo-950 text-xs truncate">
+                            {targetItem.team.name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-emerald-800 font-bold block">New Assigned Team</span>
+                      </div>
+
+                      {/* Box 2 */}
+                      <div className="bg-white/95 p-3 rounded-xl border border-amber-200/70 shadow-2xs space-y-1">
+                        <span className="text-[10px] text-charcoal/60 font-bold block">{targetItem.date_formatted}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: swapItem1.team.color }}
+                          ></span>
+                          <span className="font-black text-indigo-950 text-xs truncate">
+                            {swapItem1.team.name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-emerald-800 font-bold block">New Assigned Team</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-charcoal/60 leading-tight">
+                      This will safely swap team turn assignments for these two dates without modifying subsequent recurring cycles.
+                    </p>
+                  </div>
+                );
+              })()}
+
               <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
+                  disabled={isSubmittingSwap}
                   onClick={() => setIsSwapModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                  disabled={isSubmittingSwap || !swapTargetDate}
+                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 disabled:opacity-50 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
-                  Confirm Swap
+                  {isSubmittingSwap && <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-300" />}
+                  <span>{isSubmittingSwap ? "Swapping..." : "Confirm Swap"}</span>
                 </button>
               </div>
             </form>

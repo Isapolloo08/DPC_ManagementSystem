@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { BibleStudyGroup, BibleStudyGroupHistoryResponse } from "../../types";
+import { BibleStudyGroup, BibleStudyGroupHistoryResponse, BibleStudyGroupTransition } from "../../types";
 import { api } from "../../api";
 import {
   History, GitMerge, ShieldCheck, Users, Calendar,
   ArrowRight, X, Clock, MapPin, BookOpen, AlertCircle,
-  CheckCircle2, ChevronRight, UserCheck
+  CheckCircle2, ChevronRight, UserCheck, Search, Layers,
+  FileText, Sparkles, Filter
 } from "lucide-react";
 
 interface GroupHistoryModalProps {
@@ -21,17 +22,33 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
   group,
   onSelectRelatedGroup
 }) => {
+  const [activeTab, setActiveTab] = useState<"group" | "all">("group");
   const [historyData, setHistoryData] = useState<BibleStudyGroupHistoryResponse | null>(null);
+  const [allTransitions, setAllTransitions] = useState<BibleStudyGroupTransition[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<string>("all");
 
   useEffect(() => {
-    if (isOpen && group?.id) {
-      loadHistory(group.id);
+    if (isOpen) {
+      if (group?.id) {
+        setActiveTab("group");
+        loadGroupHistory(group.id);
+      } else {
+        setActiveTab("all");
+        loadAllTransitions();
+      }
     }
   }, [isOpen, group?.id]);
 
-  const loadHistory = async (groupId: number) => {
+  useEffect(() => {
+    if (isOpen && activeTab === "all" && allTransitions.length === 0) {
+      loadAllTransitions();
+    }
+  }, [isOpen, activeTab]);
+
+  const loadGroupHistory = async (groupId: number) => {
     try {
       setLoading(true);
       setError(null);
@@ -45,40 +62,76 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
     }
   };
 
-  if (!isOpen || !group) return null;
+  const loadAllTransitions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.getGroupTransitions();
+      setAllTransitions(res || []);
+    } catch (err: any) {
+      console.warn("Failed to load all transitions:", err);
+      setError(err.message || "Failed to load transition log.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const isMergedSource = group.status === "merged";
+  if (!isOpen) return null;
+
+  const isMergedSource = group?.status === "merged";
   const createdTransition = historyData?.created_transition;
   const mergedInto = historyData?.merged_into_group;
   const sourceGroups = createdTransition?.source_groups || [];
-  const leaders = historyData?.leaders || [];
+
+  const filteredTransitions = allTransitions.filter(t => {
+    if (filterType !== "all" && t.transition_type !== filterType) return false;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase().trim();
+    const matchesTarget = (t.new_group_name || "").toLowerCase().includes(q);
+    const matchesReason = (t.reason || "").toLowerCase().includes(q);
+    const matchesCreator = (t.created_by_name || "").toLowerCase().includes(q);
+    const matchesSources = (t.source_groups || []).some(sg =>
+      sg.name.toLowerCase().includes(q) || (sg.leader_name || "").toLowerCase().includes(q)
+    );
+    return matchesTarget || matchesReason || matchesCreator || matchesSources;
+  });
 
   return createPortal(
     <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-4.5 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-indigo-100 space-y-4.5 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150">
         
         {/* Header */}
         <div className="flex items-start justify-between border-b border-gray-100 pb-3.5">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shadow-xs ${
-              isMergedSource
+              activeTab === "all"
+                ? "bg-purple-100 text-purple-900"
+                : isMergedSource
                 ? "bg-amber-100 text-amber-900"
                 : "bg-indigo-100 text-indigo-900"
             }`}>
-              <History className="w-5 h-5" />
+              {activeTab === "all" ? <GitMerge className="w-5 h-5" /> : <History className="w-5 h-5" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-base text-charcoal">Group Transition History</h3>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
-                  isMergedSource
-                    ? "bg-amber-100 text-amber-900 border border-amber-300"
-                    : "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                }`}>
-                  {isMergedSource ? "Merged Group" : "Active Group"}
-                </span>
+                <h3 className="font-black text-base text-charcoal">
+                  {activeTab === "all" ? "All Church Transitions & Merges Log" : "Group Transition History"}
+                </h3>
+                {group && activeTab === "group" && (
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
+                    isMergedSource
+                      ? "bg-amber-100 text-amber-900 border border-amber-300"
+                      : "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                  }`}>
+                    {isMergedSource ? "Merged Group" : "Active Group"}
+                  </span>
+                )}
               </div>
-              <p className="text-xs font-bold text-indigo-950/70">{group.name}</p>
+              <p className="text-xs font-bold text-indigo-950/70">
+                {activeTab === "all"
+                  ? "Overall central record of group merges, consolidations, and restructuring"
+                  : (group?.name || "Group History")}
+              </p>
             </div>
           </div>
 
@@ -90,6 +143,8 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
           </button>
         </div>
 
+
+
         {loading ? (
           <div className="py-12 text-center text-xs text-charcoal/50 space-y-2">
             <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -100,7 +155,145 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
+        ) : activeTab === "all" ? (
+          /* TAB 2: OVERALL / ALL-CHURCH TRANSITIONS LOG */
+          <div className="space-y-4">
+            {/* Search and Filters */}
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal/40" />
+                <input
+                  type="text"
+                  placeholder="Search by group name, leader, reason..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                />
+              </div>
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-charcoal"
+              >
+                <option value="all">All Types</option>
+                <option value="MERGE">Group Merges</option>
+                <option value="SPLIT">Group Splits</option>
+                <option value="MOVE_MEMBERS">Member Moves</option>
+              </select>
+            </div>
+
+            {/* List of transitions */}
+            {filteredTransitions.length === 0 ? (
+              <div className="py-12 text-center space-y-2 bg-gray-50 rounded-2xl border border-gray-100">
+                <GitMerge className="w-8 h-8 text-charcoal/30 mx-auto" />
+                <p className="text-xs font-bold text-charcoal/60">No transition or merge records found.</p>
+                <p className="text-[11px] text-charcoal/40">Merged group transitions will appear here automatically.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredTransitions.map((t) => {
+                  const sGroups = t.source_groups || [];
+                  const isMerge = t.transition_type === "MERGE" || sGroups.length > 1;
+
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-4 bg-gray-50/80 hover:bg-purple-50/40 rounded-2xl border border-gray-200 hover:border-purple-200 transition-all space-y-3 shadow-2xs"
+                    >
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase flex items-center gap-1 ${
+                            isMerge
+                              ? "bg-purple-100 text-purple-900 border border-purple-300"
+                              : "bg-blue-100 text-blue-900 border border-blue-300"
+                          }`}>
+                            <GitMerge className="w-3 h-3" />
+                            <span>{isMerge ? "Group Merge" : t.transition_type}</span>
+                          </span>
+                          <span className="text-[11px] font-bold text-charcoal/60">
+                            {new Date(t.effective_date || t.created_at).toLocaleDateString(undefined, {
+                              year: "numeric", month: "short", day: "numeric"
+                            })}
+                          </span>
+                        </div>
+
+                        {t.created_by_name && (
+                          <span className="text-[10px] text-charcoal/60 bg-white px-2 py-0.5 rounded-lg border border-gray-200 font-medium">
+                            Authorized by: <strong>{t.created_by_name}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Resulting Group & Source Groups Layout */}
+                      <div className="bg-white p-3 rounded-xl border border-gray-200/90 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                              Resulting Active Group
+                            </span>
+                            <strong className="text-xs text-charcoal font-black">
+                              {t.new_group_name || `Group #${t.new_group_id}`}
+                            </strong>
+                          </div>
+
+                          {t.new_group_id && onSelectRelatedGroup && (
+                            <button
+                              onClick={() => {
+                                onSelectRelatedGroup(t.new_group_id!);
+                                onClose();
+                              }}
+                              className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo border border-indigo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <span>Inspect Group</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Source Groups */}
+                        {sGroups.length > 0 && (
+                          <div className="pt-2 border-t border-gray-100">
+                            <span className="text-[10px] font-bold text-charcoal/50 block mb-1">
+                              Merged from {sGroups.length} source groups:
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {sGroups.map((sg) => (
+                                <div
+                                  key={sg.id}
+                                  className="p-2 rounded-lg bg-gray-50 border border-gray-200 text-[11px] flex items-center justify-between"
+                                >
+                                  <div>
+                                    <div className="font-extrabold text-charcoal">• {sg.name}</div>
+                                    <div className="text-[10px] text-charcoal/50">Leader: {sg.leader_name}</div>
+                                  </div>
+                                  <span className="text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold uppercase">
+                                    Merged Source
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Reason / Notes */}
+                        {(t.reason || t.notes) && (
+                          <div className="pt-2 border-t border-gray-100 text-[11px] text-charcoal/70 flex items-start gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-charcoal/40 shrink-0 mt-0.5" />
+                            <span>
+                              {t.reason && <strong className="text-charcoal font-bold">{t.reason}: </strong>}
+                              {t.notes}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ) : (
+          /* TAB 1: SINGLE GROUP HISTORY */
           <div className="space-y-4 text-xs">
             
             {/* Case 1: Resulting Group created through Merge Transition */}
@@ -178,7 +371,7 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
                     <ShieldCheck className="w-4 h-4 text-amber-700" />
                     <span>Status: Merged</span>
                   </div>
-                  {group.effective_date && (
+                  {group?.effective_date && (
                     <span className="text-[10px] font-bold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-full">
                       Active until: {group.effective_date}
                     </span>
@@ -221,39 +414,41 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
             )}
 
             {/* Leadership Roster & History */}
-            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2.5">
-              <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-                <span className="font-black text-xs text-charcoal uppercase tracking-wider flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-indigo" />
-                  <span>Leadership Record</span>
-                </span>
-                <span className="text-[10px] text-charcoal/50 font-medium">Assigned Leaders</span>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-gray-200 text-xs">
-                  <div>
-                    <div className="font-bold text-charcoal">{group.leader_name}</div>
-                    <div className="text-[10px] text-charcoal/50">{group.leader_contact || "Primary Facilitator"}</div>
-                  </div>
-                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900">
-                    Primary Leader
+            {group && (
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                  <span className="font-black text-xs text-charcoal uppercase tracking-wider flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-indigo" />
+                    <span>Leadership Record</span>
                   </span>
+                  <span className="text-[10px] text-charcoal/50 font-medium">Assigned Leaders</span>
                 </div>
 
-                {group.assistant_leader_name && (
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-gray-200 text-xs">
                     <div>
-                      <div className="font-bold text-charcoal">{group.assistant_leader_name}</div>
-                      <div className="text-[10px] text-charcoal/50">{group.assistant_leader_contact || "Assistant Facilitator"}</div>
+                      <div className="font-bold text-charcoal">{group.leader_name}</div>
+                      <div className="text-[10px] text-charcoal/50">{group.leader_contact || "Primary Facilitator"}</div>
                     </div>
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
-                      Assistant Leader
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900">
+                      Primary Leader
                     </span>
                   </div>
-                )}
+
+                  {group.assistant_leader_name && (
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-gray-200 text-xs">
+                      <div>
+                        <div className="font-bold text-charcoal">{group.assistant_leader_name}</div>
+                        <div className="text-[10px] text-charcoal/50">{group.assistant_leader_contact || "Assistant Facilitator"}</div>
+                      </div>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                        Assistant Leader
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Historical Notice */}
             <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[11px] text-charcoal/70 flex items-start gap-2">
@@ -267,7 +462,14 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
         )}
 
         {/* Footer */}
-        <div className="pt-2 border-t border-gray-100 flex items-center justify-end">
+        <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+          <div>
+            {activeTab === "all" && (
+              <span className="text-[11px] text-charcoal/50">
+                Total recorded transitions: <strong>{allTransitions.length}</strong>
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}

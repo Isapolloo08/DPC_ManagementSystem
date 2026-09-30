@@ -44,3 +44,9 @@ Thumbs.db
 dist_electron/
 release/
 dist/
+
+# Playwright reports, browser recordings, and local test credentials
+/playwright-report/
+/test-results/
+/playwright/.auth/
+.env.playwright.local

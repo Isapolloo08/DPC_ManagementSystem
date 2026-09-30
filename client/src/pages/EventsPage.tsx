@@ -823,7 +823,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
   // Set default active activity in inspector
   const activeInspectorItem = selectedActivity || upcomingActivitiesList[0] || null;
-  const canCreate = user?.role_name === "Admin" || user?.role_name === "Coordinator";
+  const canCreate = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   // Activity Type Counts
   const counts = useMemo(() => {

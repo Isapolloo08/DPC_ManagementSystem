@@ -82,7 +82,7 @@ async function usersForRule(rule: NotificationRuleRow, payload: NotifyPayload): 
     WHERE r.name = $1
   `;
 
-  if (effectiveMinistryId !== null && rule.recipient_value !== "Admin") {
+  if (effectiveMinistryId !== null && rule.recipient_value !== "Admin" && rule.recipient_value !== "Pastor" && rule.recipient_value !== "IT Admin") {
     params.push(effectiveMinistryId);
     query += ` AND EXISTS (
       SELECT 1 FROM user_ministries um

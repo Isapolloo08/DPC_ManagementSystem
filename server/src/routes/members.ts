@@ -138,8 +138,8 @@ function computeAttendanceHealthAndStatus(member: any, attendanceRecords: any[] 
   };
 }
 
-// Get list of members with search, filter, and pagination
-router.get("/", requireRoles("Admin", "Coordinator", "Leader", "Volunteer"), async (req: Request, res: Response) => {
+// Get list of members with search, filter, and pagination (Admin, Pastor, Coordinator)
+router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Request, res: Response) => {
   try {
     const {
       ministry_id,
@@ -149,6 +149,8 @@ router.get("/", requireRoles("Admin", "Coordinator", "Leader", "Volunteer"), asy
       birthday_filter,
       membership_filter,
       attendance_health_filter,
+      group_filter,
+      no_group,
       page,
       limit
     } = req.query;
@@ -169,6 +171,23 @@ router.get("/", requireRoles("Admin", "Coordinator", "Leader", "Volunteer"), asy
     if (status) {
       params.push(status);
       whereClause += ` AND m.status = $${params.length}`;
+    }
+
+    // Bible Study Group Filter
+    if (no_group === "true" || group_filter === "none" || group_filter === "unenrolled") {
+      whereClause += ` AND m.id NOT IN (
+        SELECT bsm.member_id 
+        FROM bible_study_members bsm 
+        JOIN bible_study_groups bsg ON bsm.group_id = bsg.id 
+        WHERE (bsg.status IS NULL OR bsg.status = 'active')
+      )`;
+    } else if (group_filter === "enrolled") {
+      whereClause += ` AND m.id IN (
+        SELECT bsm.member_id 
+        FROM bible_study_members bsm 
+        JOIN bible_study_groups bsg ON bsm.group_id = bsg.id 
+        WHERE (bsg.status IS NULL OR bsg.status = 'active')
+      )`;
     }
 
     // Specific Membership Status Filter
@@ -264,7 +283,7 @@ router.get("/", requireRoles("Admin", "Coordinator", "Leader", "Volunteer"), asy
           SELECT bsm.member_id, bsg.id as group_id, bsg.name as group_name, bsg.leader_name
           FROM bible_study_members bsm
           JOIN bible_study_groups bsg ON bsm.group_id = bsg.id
-          WHERE bsm.member_id = ANY($1)
+          WHERE bsm.member_id = ANY($1) AND (bsg.status IS NULL OR bsg.status = 'active')
         `, [memberIds]).catch(() => [])
       ]);
 
@@ -511,7 +530,7 @@ router.get("/aging-out", async (req: Request, res: Response) => {
 });
 
 // Auto-transition all aging out members to their respective age-bracket ministry
-router.post("/auto-transition", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/auto-transition", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const members = await db.all(`
       SELECT m.id, m.first_name, m.last_name, m.birthdate, m.ministry_id, min.name as current_min_name, min.max_age
@@ -811,7 +830,7 @@ router.get("/baptism-candidates/qualified", async (req: Request, res: Response) 
 });
 
 // Nominate one or multiple members as Baptism Candidates
-router.post("/baptism-candidates/nominate", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
+router.post("/baptism-candidates/nominate", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
   try {
     const { member_ids, notes } = req.body;
     if (!Array.isArray(member_ids) || member_ids.length === 0) {
@@ -948,7 +967,7 @@ router.get("/:id/attendance-summary", authMiddleware, async (req: AuthRequest, r
 
     // RBAC validation
     const user = req.user!;
-    if (user.role_name === "Admin") {
+    if (user.role_name === "Admin" || user.role_name === "Pastor" || user.role_name === "IT Admin") {
       // Unrestricted
     } else if (user.role_name === "Coordinator") {
       if (!user.ministry_ids || !user.ministry_ids.includes(member.ministry_id)) {
@@ -1035,7 +1054,7 @@ router.get("/:id/attendance-summary", authMiddleware, async (req: AuthRequest, r
 });
 
 // Create new member
-router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const {
       first_name,
@@ -1265,7 +1284,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Coordinator"), async (re
 });
 
 // Update member
-router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const currentMember = await db.get("SELECT * FROM members WHERE id = $1", [id]);
@@ -1518,7 +1537,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Coordinator"), async (
 });
 
 // Update Member Baptism Ceremony Status & Readiness
-router.put("/:id/baptism", authMiddleware, requireRoles("Admin", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
+router.put("/:id/baptism", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const { baptism_status, is_baptized, baptism_date, baptism_notes } = req.body;
@@ -1567,7 +1586,7 @@ router.put("/:id/baptism", authMiddleware, requireRoles("Admin", "Coordinator", 
 });
 
 // Delete member
-router.delete("/:id", authMiddleware, requireRoles("Admin"), async (req: AuthRequest, res: Response) => {
+router.delete("/:id", authMiddleware, requireRoles("Admin", "Pastor"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     await db.run("DELETE FROM members WHERE id = $1", [id]);

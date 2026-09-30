@@ -103,7 +103,20 @@ export function requireRoles(...allowedRoles: string[]) {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    if (!allowedRoles.includes(req.user.role_name)) {
+    // Admin (Super Admin) automatically inherits all permissions granted to Pastor
+    const effectiveAllowed = [...allowedRoles];
+    if (allowedRoles.includes("Pastor") && !allowedRoles.includes("Admin")) {
+      effectiveAllowed.push("Admin");
+    }
+    // Backwards compatibility for any legacy references to IT Admin / Admin
+    if (allowedRoles.includes("IT Admin") && !effectiveAllowed.includes("Admin")) {
+      effectiveAllowed.push("Admin");
+    }
+    if (allowedRoles.includes("Admin") && !effectiveAllowed.includes("IT Admin")) {
+      effectiveAllowed.push("IT Admin");
+    }
+
+    if (!effectiveAllowed.includes(req.user.role_name)) {
       return res.status(403).json({ error: `Access denied. Requires one of roles: ${allowedRoles.join(", ")}` });
     }
     next();
@@ -115,8 +128,8 @@ export function requireMinistryScope(paramKey: string = "ministryId") {
     if (!req.user) {
       return res.status(401).json({ error: "Authentication required" });
     }
-    // Admins have universal access across all ministries
-    if (req.user.role_name === "Admin") {
+    // Super Admins and Pastors have universal access across all ministries
+    if (req.user.role_name === "Admin" || req.user.role_name === "Pastor" || req.user.role_name === "IT Admin") {
       return next();
     }
 

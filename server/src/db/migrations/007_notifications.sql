@@ -101,19 +101,17 @@ INSERT INTO notification_rules (
   threshold, email_enabled, in_app_enabled, enabled
 ) VALUES
   ('absence_alert', 'role', 'Admin', NULL, 3, FALSE, TRUE, TRUE),
-  ('absence_alert', 'role', 'Coordinator', NULL, 3, TRUE, TRUE, TRUE),
+  ('absence_alert', 'role', 'Pastor', NULL, 3, TRUE, TRUE, TRUE),
   ('absence_alert', 'email', 'pastor', NULL, 3, TRUE, FALSE, TRUE),
   ('session_rescheduled', 'role', 'Admin', NULL, NULL, FALSE, TRUE, TRUE),
-  ('session_rescheduled', 'role', 'Member', NULL, NULL, FALSE, TRUE, TRUE),
-  ('session_rescheduled', 'role', 'Leader', NULL, NULL, FALSE, TRUE, TRUE),
-  ('session_rescheduled', 'role', 'Coordinator', NULL, NULL, FALSE, TRUE, TRUE),
+  ('session_rescheduled', 'role', 'Pastor', NULL, NULL, TRUE, TRUE, TRUE),
   ('at_risk_member', 'role', 'Admin', NULL, 3, FALSE, TRUE, TRUE),
-  ('at_risk_member', 'role', 'Coordinator', NULL, 3, TRUE, TRUE, TRUE),
+  ('at_risk_member', 'role', 'Pastor', NULL, 3, TRUE, TRUE, TRUE),
   ('sunday_absence_streak', 'role', 'Admin', NULL, 3, FALSE, TRUE, TRUE),
-  ('sunday_absence_streak', 'role', 'Coordinator', NULL, 3, TRUE, TRUE, TRUE),
+  ('sunday_absence_streak', 'role', 'Pastor', NULL, 3, TRUE, TRUE, TRUE),
   ('duty_incomplete', 'role', 'Admin', NULL, NULL, FALSE, TRUE, TRUE),
-  ('duty_incomplete', 'role', 'Coordinator', NULL, NULL, TRUE, TRUE, TRUE),
+  ('duty_incomplete', 'role', 'Pastor', NULL, NULL, TRUE, TRUE, TRUE),
   ('dishwashing_unresolved', 'role', 'Admin', NULL, NULL, FALSE, TRUE, TRUE),
-  ('dishwashing_unresolved', 'role', 'Coordinator', NULL, NULL, TRUE, TRUE, TRUE)
+  ('dishwashing_unresolved', 'role', 'Pastor', NULL, NULL, TRUE, TRUE, TRUE)
 ON CONFLICT DO NOTHING;
 
