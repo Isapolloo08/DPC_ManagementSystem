@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../api";
+import { useGuideDataState } from "../../components/help/GuideDataContext";
 import {
   BibleStudyGroup, BibleStudyMember, StudyTopic,
   SaturdayDutyScheduleResponse, SundayDutyScheduleResponse,
@@ -33,11 +34,12 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
 
   const loadDashboardData = async () => {
+    guideData.clearError();
     try {
       setLoading(true);
       const ministryScope = selectedMinistryId ?? undefined;
       const [grps, topics, dutyRes, dishRes, annRes, evRes] = await Promise.all([
-        api.getGroups({ ministry_id: ministryScope }).catch(() => []),
+        api.getGroups({ ministry_id: ministryScope }).catch(err => { guideData.reportError(err); return []; }),
         api.getStudyTopics({ ministry_id: ministryScope }).catch(() => null),
         api.getDutySchedule({ ministry_id: ministryScope }).catch(() => null),
         api.getDishwashingSchedule({ count: 8 }).catch(() => null),
@@ -53,6 +55,7 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
       setUpcomingEvents(evRes.slice(0, 3));
     } catch (err) {
       console.error("Failed to load leader dashboard:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
     }
@@ -82,6 +85,7 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
 
   // Active Led Group (or first led group, or first group)
   const activeGroup = myLedGroups[0] || groups[0] || null;
+  const guideData = useGuideDataState("dashboard", { loading, count: 1, retry: loadDashboardData });
   const disciples: BibleStudyMember[] = activeGroup?.members || [];
 
   // Match current active curriculum topic
@@ -121,11 +125,11 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-200 text-xs font-black tracking-wide uppercase">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-200 text-xs font-medium tracking-wide uppercase">
               <BookmarkCheck className="w-3.5 h-3.5 text-amber-400" />
               <span>Small Group Discipleship Leader Hub</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+            <h1 data-guide="leader-dashboard-summary" className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
               Welcome back, Leader {user?.name || ""}!
             </h1>
             <p className="text-xs sm:text-sm text-slate-300/90 max-w-xl leading-relaxed">
@@ -135,21 +139,21 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
 
           {activeGroup ? (
             <div className="shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-amber text-charcoal flex items-center justify-center font-black text-sm shadow-sm">
+              <div className="w-11 h-11 rounded-xl bg-amber text-charcoal flex items-center justify-center font-medium text-sm shadow-sm">
                 <Users className="w-5 h-5 text-slate-900" />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block">Assigned Small Group</span>
-                <span className="text-sm font-black text-white block truncate max-w-[180px]">{activeGroup.name}</span>
-                <span className="text-[11px] text-slate-300">{activeGroup.meeting_day} • {activeGroup.meeting_time}</span>
+                <span className="text-[12px] font-medium text-amber-300 uppercase tracking-wider block">Assigned Small Group</span>
+                <span className="text-sm font-medium text-white block truncate max-w-[180px]">{activeGroup.name}</span>
+                <span className="text-[12px] text-slate-300">{activeGroup.meeting_day} • {activeGroup.meeting_time}</span>
               </div>
             </div>
           ) : (
             <div className="shrink-0 bg-amber-500/10 rounded-2xl p-4 border border-amber-500/20 flex items-center gap-3">
               <AlertCircle className="w-6 h-6 text-amber-400" />
               <div className="text-xs text-amber-200">
-                <div className="font-bold">No Small Group Assigned</div>
-                <div className="text-[11px] opacity-80">Contact Admin/Coordinator</div>
+                <div className="font-medium">No Small Group Assigned</div>
+                <div className="text-[12px] opacity-80">Contact Admin/Coordinator</div>
               </div>
             </div>
           )}
@@ -164,25 +168,25 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
         {/* A. Disciples Roster Count */}
         <div className="bg-white rounded-2xl p-5 border border-sky-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Group Disciples</span>
+            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Group Disciples</span>
             <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900">
+            <div className="text-2xl font-medium text-slate-900">
               {disciples.length}
               <span className="text-xs font-normal text-slate-400 ml-1">/ {activeGroup?.max_capacity || 12} max</span>
             </div>
-            <p className="text-xs text-sky-700 font-bold mt-0.5">
+            <p className="text-xs text-sky-700 font-medium mt-0.5">
               {activeGroup ? activeGroup.name : "Active Group"}
             </p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-500">Enrolled disciples</span>
-            <button
+            <span className="text-[12px] text-slate-500">Enrolled disciples</span>
+            <button data-guide="leader-dashboard-group"
               onClick={() => onNavigate("leaderportal")}
-              className="text-xs font-bold text-sky-700 hover:text-sky-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
+              className="text-xs font-medium text-sky-700 hover:text-sky-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
             >
               <span>Manage Roster</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -193,24 +197,24 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
         {/* B. Meeting Schedule & Attendance */}
         <div className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Weekly Fellowship</span>
+            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Weekly Fellowship</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-xl font-black text-slate-900 truncate">
+            <div className="text-xl font-medium text-slate-900 truncate">
               {activeGroup?.meeting_day || "Wednesday"}
             </div>
-            <p className="text-xs text-emerald-700 font-bold mt-0.5">
+            <p className="text-xs text-emerald-700 font-medium mt-0.5">
               {activeGroup?.meeting_time || "7:00 PM"} • {activeGroup?.location || "Sanctuary"}
             </p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-500">Weekly Roll-Call</span>
-            <button
+            <span className="text-[12px] text-slate-500">Weekly Roll-Call</span>
+            <button data-guide="leader-dashboard-group"
               onClick={() => onNavigate("leaderportal")}
-              className="text-xs font-bold text-emerald-700 hover:text-emerald-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
             >
               <span>Take Attendance</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -221,24 +225,24 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
         {/* C. Active Curriculum & Study Topic */}
         <div className="bg-white rounded-2xl p-5 border border-indigo-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Curriculum Topic</span>
+            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Curriculum Topic</span>
             <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
               <BookmarkCheck className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-sm font-black text-slate-900 truncate" title={activeGroup?.curriculum || "General Scripture Study"}>
+            <div className="text-sm font-medium text-slate-900 truncate" title={activeGroup?.curriculum || "General Scripture Study"}>
               {activeGroup?.curriculum || "General Scripture Study"}
             </div>
-            <p className="text-xs text-indigo-700 font-bold mt-0.5">
+            <p className="text-xs text-indigo-700 font-medium mt-0.5">
               {currentTopic ? `${currentTopic.total_chapters} Total Chapters` : `${studyTopics.length} Topics Available`}
             </p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-500">Study Roadmap</span>
+            <span className="text-[12px] text-slate-500">Study Roadmap</span>
             <button
               onClick={() => onNavigate("curriculum")}
-              className="text-xs font-bold text-indigo-700 hover:text-indigo-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
+              className="text-xs font-medium text-indigo-700 hover:text-indigo-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
             >
               <span>Explore Books</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -249,24 +253,24 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
         {/* D. Sunday Dishwashing Rotation */}
         <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sunday Dishwashing</span>
+            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Sunday Dishwashing</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
               <Utensils className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-sm font-black text-slate-900 truncate">
+            <div className="text-sm font-medium text-slate-900 truncate">
               {upcomingDishwashing?.team?.name || activeGroup?.name || "Sunday Fellowship Meal"}
             </div>
-            <p className="text-xs text-amber-800 font-bold mt-0.5">
+            <p className="text-xs text-amber-800 font-medium mt-0.5">
               {upcomingDishwashing?.duty_date ? new Date(upcomingDishwashing.duty_date).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" }) : "Scheduled Sundays"}
             </p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] text-slate-500">Fellowship Meal Duty</span>
+            <span className="text-[12px] text-slate-500">Fellowship Meal Duty</span>
             <button
               onClick={() => onNavigate("dishwashing")}
-              className="text-xs font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
+              className="text-xs font-medium text-amber-800 hover:text-amber-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
             >
               <span>View Roster</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -280,7 +284,7 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="w-2 h-5 bg-amber-500 rounded-full" />
-            <h3 className="font-black text-sm text-slate-900 uppercase tracking-wide">
+            <h3 className="font-semibold text-sm text-slate-900 uppercase tracking-wide">
               Leader Quick Command Center
             </h3>
           </div>
@@ -288,22 +292,22 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <button
+          <button data-guide="leader-dashboard-group"
             onClick={() => onNavigate("leaderportal")}
             className="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-50/80 hover:bg-amber-100/90 border border-amber-200/80 text-amber-950 transition-all text-center group cursor-pointer hover:shadow-xs"
           >
             <UserCheck className="w-5 h-5 text-amber-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">Take Roll-Call</span>
-            <span className="text-[10px] text-amber-700/70">Session attendance</span>
+            <span className="text-xs font-medium">Take Roll-Call</span>
+            <span className="text-[12px] text-amber-700/70">Session attendance</span>
           </button>
 
-          <button
+          <button data-guide="leader-dashboard-group"
             onClick={() => onNavigate("leaderportal")}
             className="flex flex-col items-center justify-center p-4 rounded-2xl bg-sky-50/80 hover:bg-sky-100/90 border border-sky-200/80 text-sky-950 transition-all text-center group cursor-pointer hover:shadow-xs"
           >
             <Users className="w-5 h-5 text-sky-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">Group Disciples</span>
-            <span className="text-[10px] text-sky-700/70">Manage roster</span>
+            <span className="text-xs font-medium">Group Disciples</span>
+            <span className="text-[12px] text-sky-700/70">Manage roster</span>
           </button>
 
           <button
@@ -311,8 +315,8 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
             className="flex flex-col items-center justify-center p-4 rounded-2xl bg-indigo-50/80 hover:bg-indigo-100/90 border border-indigo-200/80 text-indigo-950 transition-all text-center group cursor-pointer hover:shadow-xs"
           >
             <BookmarkCheck className="w-5 h-5 text-indigo-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">Bible Topics</span>
-            <span className="text-[10px] text-indigo-700/70">Books & tracks</span>
+            <span className="text-xs font-medium">Bible Topics</span>
+            <span className="text-[12px] text-indigo-700/70">Books & tracks</span>
           </button>
 
           <button
@@ -320,8 +324,8 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
             className="flex flex-col items-center justify-center p-4 rounded-2xl bg-emerald-50/80 hover:bg-emerald-100/90 border border-emerald-200/80 text-emerald-950 transition-all text-center group cursor-pointer hover:shadow-xs"
           >
             <BookOpen className="w-5 h-5 text-emerald-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">Bible Reading</span>
-            <span className="text-[10px] text-emerald-700/70">1-Year Scripture</span>
+            <span className="text-xs font-medium">Bible Reading</span>
+            <span className="text-[12px] text-emerald-700/70">1-Year Scripture</span>
           </button>
 
           <button
@@ -329,8 +333,8 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
             className="flex flex-col items-center justify-center p-4 rounded-2xl bg-teal-50/80 hover:bg-teal-100/90 border border-teal-200/80 text-teal-950 transition-all text-center group cursor-pointer hover:shadow-xs"
           >
             <Utensils className="w-5 h-5 text-teal-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-bold">Dishwashing</span>
-            <span className="text-[10px] text-teal-700/70">Sunday kitchen</span>
+            <span className="text-xs font-medium">Dishwashing</span>
+            <span className="text-[12px] text-teal-700/70">Sunday kitchen</span>
           </button>
         </div>
       </div>
@@ -342,13 +346,13 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-sky-600" />
-              <h3 className="font-black text-sm text-slate-900">
+              <h3 className="font-semibold text-sm text-slate-900">
                 Disciples Roster ({disciples.length})
               </h3>
             </div>
-            <button
+            <button data-guide="leader-dashboard-group"
               onClick={() => onNavigate("leaderportal")}
-              className="text-xs font-bold text-sky-700 hover:text-sky-900 cursor-pointer flex items-center gap-1"
+              className="text-xs font-medium text-sky-700 hover:text-sky-900 cursor-pointer flex items-center gap-1"
             >
               <span>Manage in Portal</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -359,9 +363,9 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
             <div className="p-8 text-center text-slate-400 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
               <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
               <p className="text-xs font-medium">No disciples assigned to this group yet.</p>
-              <button
+              <button data-guide="leader-dashboard-group"
                 onClick={() => onNavigate("leaderportal")}
-                className="mt-3 px-3 py-1.5 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 transition-all cursor-pointer"
+                className="mt-3 px-3 py-1.5 rounded-xl bg-sky-600 text-white text-xs font-medium hover:bg-sky-700 transition-all cursor-pointer"
               >
                 Add Disciples in Portal
               </button>
@@ -375,15 +379,15 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
                 return (
                   <div key={d.id} className="py-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-900 flex items-center justify-center font-black text-xs shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-900 flex items-center justify-center font-medium text-xs shrink-0">
                         {initials}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-xs text-slate-900 truncate">{displayName}</div>
-                        <div className="text-[10px] text-slate-500 truncate">{d.contact_phone || "Active disciple"}</div>
+                        <div className="font-medium text-xs text-slate-900 truncate">{displayName}</div>
+                        <div className="text-[12px] text-slate-500 truncate">{d.contact_phone || "Active disciple"}</div>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                    <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                       Enrolled
                     </span>
                   </div>
@@ -398,11 +402,11 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-600" />
-              <h3 className="font-black text-sm text-slate-900">Bible Study Topics & Books</h3>
+              <h3 className="font-semibold text-sm text-slate-900">Bible Study Topics & Books</h3>
             </div>
             <button
               onClick={() => onNavigate("curriculum")}
-              className="text-xs font-bold text-indigo-700 hover:text-indigo-900 cursor-pointer flex items-center gap-1"
+              className="text-xs font-medium text-indigo-700 hover:text-indigo-900 cursor-pointer flex items-center gap-1"
             >
               <span>View All Books</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -422,13 +426,13 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
                   className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-indigo-50/50 border border-slate-200/80 transition-all space-y-1.5"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-bold text-xs text-slate-900 truncate">{topic.title}</h4>
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                    <h4 className="font-semibold text-xs text-slate-900 truncate">{topic.title}</h4>
+                    <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
                       {topic.total_chapters} Ch
                     </span>
                   </div>
                   {topic.summary_notes && (
-                    <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                    <p className="text-[12px] text-slate-600 line-clamp-2 leading-relaxed">
                       {topic.summary_notes}
                     </p>
                   )}
@@ -446,11 +450,11 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-purple-600" />
-              <h3 className="font-black text-sm text-slate-900">Church Calendar & Events</h3>
+              <h3 className="font-semibold text-sm text-slate-900">Church Calendar & Events</h3>
             </div>
-            <button
+            <button data-guide="leader-dashboard-calendar"
               onClick={() => onNavigate("events")}
-              className="text-xs font-bold text-purple-700 hover:text-purple-900 cursor-pointer"
+              className="text-xs font-medium text-purple-700 hover:text-purple-900 cursor-pointer"
             >
               All Events →
             </button>
@@ -469,8 +473,8 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
                   className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-purple-50/50 border border-slate-200/80 transition-all flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
-                    <h4 className="font-bold text-xs text-slate-900 truncate">{event.title}</h4>
-                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1">
+                    <h4 className="font-semibold text-xs text-slate-900 truncate">{event.title}</h4>
+                    <div className="flex items-center gap-3 text-[12px] text-slate-500 mt-1">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-400" />
                         {new Date(event.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" })}
@@ -484,7 +488,7 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
                     </div>
                   </div>
                   {event.ministry_name && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white text-purple-800 border border-purple-200 shrink-0">
+                    <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-white text-purple-800 border border-purple-200 shrink-0">
                       {event.ministry_name}
                     </span>
                   )}
@@ -499,11 +503,11 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-amber-600" />
-              <h3 className="font-black text-sm text-slate-900">Church Announcements</h3>
+              <h3 className="font-semibold text-sm text-slate-900">Church Announcements</h3>
             </div>
             <button
               onClick={() => onNavigate("communications")}
-              className="text-xs font-bold text-amber-800 hover:text-amber-950 cursor-pointer"
+              className="text-xs font-medium text-amber-800 hover:text-amber-950 cursor-pointer"
             >
               All Notices →
             </button>
@@ -522,14 +526,14 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
                   className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-amber-50/50 border border-slate-200/80 transition-all space-y-1"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-bold text-xs text-slate-900 truncate">{item.title}</h4>
+                    <h4 className="font-semibold text-xs text-slate-900 truncate">{item.title}</h4>
                     {item.is_pinned && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                      <span className="px-1.5 py-0.5 rounded text-[12px] font-medium bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                         PINNED
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">{item.body}</p>
+                  <p className="text-[12px] text-slate-600 line-clamp-2 leading-relaxed">{item.body}</p>
                 </div>
               ))}
             </div>

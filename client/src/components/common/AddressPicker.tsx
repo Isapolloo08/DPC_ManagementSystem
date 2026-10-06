@@ -33,6 +33,7 @@ export interface AddressPickerProps {
   onChange: (fullAddress: string) => void;
   required?: boolean;
   className?: string;
+  initialManualMode?: boolean;
 }
 
 // Convert all-caps string (e.g., "CAMARINES NORTE", "BARANGAY I (ILAOD)") into clean Title Case
@@ -538,7 +539,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   return (
     <div className="relative">
-      <label className="block font-bold text-[11px] text-indigo-950 mb-1 flex items-center justify-between">
+      <label className="block font-medium text-[12px] text-indigo-950 mb-1 flex items-center justify-between">
         <span className="flex items-center gap-1">
           {icon}
           <span>
@@ -546,7 +547,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           </span>
         </span>
         {loading && (
-          <span className="text-[9px] text-amber-600 font-semibold flex items-center gap-1">
+          <span className="text-[12px] text-amber-600 font-medium flex items-center gap-1">
             <RefreshCw className="w-2.5 h-2.5 animate-spin" />
             <span>Loading...</span>
           </span>
@@ -559,18 +560,18 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         type="button"
         disabled={disabled || loading}
         onClick={handleOpen}
-        className={`w-full bg-white px-3 py-2 rounded-xl border text-left flex items-center justify-between gap-2 shadow-2xs text-xs font-bold transition-all ${
+        className={`w-full bg-white px-3 py-2 rounded-xl border text-left flex items-center justify-between gap-2 shadow-2xs text-xs font-medium transition-all ${
           disabled
-            ? "opacity-60 bg-gray-100 cursor-not-allowed border-gray-200 text-charcoal/40"
+            ? "opacity-60 bg-gray-100 cursor-not-allowed border-gray-200 text-muted"
             : isOpen
             ? "border-indigo ring-2 ring-indigo-100 text-indigo-950 bg-indigo-50/20"
             : displayText
             ? "border-indigo-200/90 text-indigo-950 hover:border-indigo-400"
-            : "border-indigo-200/80 text-charcoal/50 hover:border-indigo-400"
+            : "border-indigo-200/80 text-muted hover:border-indigo-400"
         }`}
       >
         <span className="truncate">{displayText || placeholder}</span>
-        <div className="flex items-center gap-1 shrink-0 text-charcoal/40">
+        <div className="flex items-center gap-1 shrink-0 text-muted">
           <ChevronDown
             className={`w-3.5 h-3.5 transition-transform duration-200 ${
               isOpen ? "rotate-180 text-indigo" : ""
@@ -603,13 +604,13 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full bg-indigo-50/40 pl-8 pr-7 py-1.5 rounded-xl border border-indigo-100 text-xs font-semibold text-charcoal placeholder:text-charcoal/40 focus:outline-none focus:border-indigo focus:bg-white transition-colors"
+                className="w-full bg-indigo-50/40 pl-8 pr-7 py-1.5 rounded-xl border border-indigo-100 text-xs font-medium text-charcoal placeholder:text-muted focus:outline-none focus:border-indigo focus:bg-white transition-colors"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="p-1 text-charcoal/40 hover:text-charcoal absolute right-1.5 top-1/2 -translate-y-1/2 cursor-pointer"
+                  className="p-1 text-muted hover:text-charcoal absolute right-1.5 top-1/2 -translate-y-1/2 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -618,7 +619,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
             {/* Island Group Filter Tabs */}
             {showIslandTabs && (
-              <div className="grid grid-cols-4 gap-1 p-0.5 bg-gray-100 rounded-lg text-[10px] font-bold text-charcoal/70">
+              <div className="grid grid-cols-4 gap-1 p-0.5 bg-gray-100 rounded-lg text-[12px] font-medium text-charcoal/70">
                 {(["All", "Luzon", "Visayas", "Mindanao"] as const).map((group) => (
                   <button
                     key={group}
@@ -626,7 +627,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     onClick={() => setActiveIslandFilter(group)}
                     className={`py-1 rounded-md transition-colors text-center cursor-pointer ${
                       activeIslandFilter === group
-                        ? "bg-white text-indigo-950 font-black shadow-2xs"
+                        ? "bg-white text-indigo-950 font-medium shadow-2xs"
                         : "hover:text-charcoal hover:bg-gray-200/60"
                     }`}
                   >
@@ -637,7 +638,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             )}
 
             {/* Item Count / Scope Bar */}
-            <div className="px-1 flex items-center justify-between text-[10px] text-charcoal/50 font-bold border-b border-gray-100 pb-1">
+            <div className="px-1 flex items-center justify-between text-[12px] text-muted font-medium border-b border-gray-100 pb-1">
               <span>{label}</span>
               <span>
                 {filteredItems.length} {filteredItems.length === 1 ? "option" : "options"}
@@ -648,7 +649,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             <div className="overflow-y-auto max-h-[185px] space-y-0.5 pr-0.5 custom-scrollbar">
               {filteredItems.length === 0 ? (
                 <div className="py-6 px-3 text-center space-y-2">
-                  <p className="text-xs text-charcoal/60 font-medium">
+                  <p className="text-xs text-muted font-medium">
                     {searchQuery ? `No match for "${searchQuery}"` : emptyNotice}
                   </p>
                   {searchQuery && (
@@ -658,7 +659,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                         setSearchQuery("");
                         setActiveIslandFilter("All");
                       }}
-                      className="text-[11px] font-bold text-indigo hover:underline cursor-pointer"
+                      className="text-[12px] font-medium text-indigo hover:underline cursor-pointer"
                     >
                       Reset filters
                     </button>
@@ -677,7 +678,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                       onClick={() => handleSelectItem(item)}
                       className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
                         isSelected
-                          ? "bg-indigo text-white font-bold shadow-2xs"
+                          ? "bg-indigo text-white font-medium shadow-2xs"
                           : "hover:bg-indigo-50/80 text-charcoal font-medium hover:text-indigo-950"
                       }`}
                     >
@@ -685,7 +686,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                         <span className="truncate">{item.name}</span>
                         {item.islandGroup && (
                           <span
-                            className={`text-[9px] px-1 py-0.2 rounded font-black tracking-wide shrink-0 ${
+                            className={`text-[12px] px-1 py-0.2 rounded font-medium tracking-wide shrink-0 ${
                               isSelected
                                 ? "bg-white/20 text-white"
                                 : item.islandGroup === "Luzon"
@@ -720,10 +721,11 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
   value,
   onChange,
   required = false,
-  className = ""
+  className = "",
+  initialManualMode = false
 }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isManualMode, setIsManualMode] = useState(!navigator.onLine);
+  const [isManualMode, setIsManualMode] = useState(initialManualMode || !navigator.onLine);
   const [autoOfflineSwitched, setAutoOfflineSwitched] = useState(!navigator.onLine);
 
   const [loadingProvinces, setLoadingProvinces] = useState(false);
@@ -748,7 +750,48 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
   const [selectedBarangay, setSelectedBarangay] = useState<string>("");
   const [streetDetails, setStreetDetails] = useState<string>("");
 
-  const isInitialMount = useRef(true);
+  const addressEdited = useRef(false);
+  const emittedAddress = useRef<string | null>(null);
+
+  // Hydrate external values (including household selections) without rewriting them.
+  useEffect(() => {
+    const isOwnUpdate = value === emittedAddress.current;
+    emittedAddress.current = null;
+    if (isOwnUpdate) return;
+    addressEdited.current = false;
+    const parts = value.split(",").map(part => part.trim()).filter(Boolean);
+    if (!parts.length) {
+      setStreetDetails("");
+      setSelectedBarangay("");
+      return;
+    }
+    const provinceName = parts[parts.length - 1].toLowerCase();
+    const province = [...provinces, ...ALL_PHILIPPINE_PROVINCES].find(p => p.name.toLowerCase() === provinceName);
+    const availableCities = province && (memoryCache.citiesByProvince[province.code]
+      || memoryCache.citiesByProvince[provinceName]
+      || (provinceName === "camarines norte" ? CAMARINES_NORTE_MUNICIPALITIES : []));
+    const cityName = parts[parts.length - 2]?.toLowerCase();
+    const city = availableCities?.find(c => c.name.toLowerCase() === cityName);
+    if (!province || !city) {
+      // An unrecognized/freeform address must remain complete and editable.
+      setIsManualMode(true);
+      return;
+    }
+    setSelectedProvince(province);
+    setCities(availableCities!);
+    setSelectedCity(city);
+    const availableBarangays = memoryCache.barangaysByCity[`${provinceName}_${cityName}`]
+      || memoryCache.barangaysByCity[city.code]
+      || memoryCache.barangaysByCity[cityName!]
+      || (cityName === "daet" ? DAET_BARANGAYS : []);
+    setBarangays(availableBarangays);
+    const prefix = parts.slice(0, -2);
+    const barangayName = prefix[prefix.length - 1]?.replace(/^(?:brgy\.?|barangay)\s+/i, "");
+    const barangay = availableBarangays.find(b => b.name.toLowerCase() === barangayName?.toLowerCase());
+    setSelectedBarangay(barangay?.name || "");
+    if (barangay) prefix.pop();
+    setStreetDetails(prefix.join(", "));
+  }, [value]);
 
   // Listen for online/offline events
   useEffect(() => {
@@ -786,9 +829,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
         if (loaded && mounted) {
           setProvinces(memoryCache.provinces);
           const camNorte = memoryCache.provinces.find((p) => p.name.toLowerCase().includes("camarines norte"));
-          if (camNorte) {
-            setSelectedProvince(camNorte);
-          }
+          if (camNorte) setSelectedProvince(current => current.name === DEFAULT_PROVINCE_NAME ? camNorte : current);
         }
       } catch (err) {
         console.warn("Could not load flores-jacob PSGC dataset, using bundled master provinces:", err);
@@ -806,6 +847,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
 
   // When Province Changes: Load its Municipalities / Cities instantly from memoryCache
   const handleProvinceChange = (provCode: string, provName?: string) => {
+    addressEdited.current = true;
     const pName = provName || provCode;
     const provObj = provinces.find((p) => p.code === provCode || p.name.toLowerCase() === pName.toLowerCase()) || {
       code: provCode,
@@ -862,6 +904,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
   };
 
   const handleCityChange = (cityCode: string, cityName?: string) => {
+    addressEdited.current = true;
     const city = cities.find((c) => c.code === cityCode || c.name === cityName) || {
       code: cityCode,
       name: cityName || cityCode
@@ -873,23 +916,8 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
 
   // Synchronize combined address string to parent form
   useEffect(() => {
-    if (isManualMode) return;
-
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      if (value && value.trim()) {
-        const lower = value.toLowerCase();
-        const matchedBgy = DAET_BARANGAYS.find((b) => lower.includes(b.name.toLowerCase()));
-        if (matchedBgy) {
-          setSelectedBarangay(matchedBgy.name);
-          const parts = value.split(new RegExp(`(?:brgy\\.?|barangay)?\\s*${matchedBgy.name}`, "i"));
-          if (parts[0] && parts[0].trim()) {
-            setStreetDetails(parts[0].replace(/,\s*$/, "").trim());
-          }
-        }
-      }
-      return;
-    }
+    if (isManualMode || !addressEdited.current) return;
+    addressEdited.current = false;
 
     const parts: string[] = [];
     if (streetDetails.trim()) {
@@ -907,6 +935,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
 
     const compiled = parts.join(", ");
     if (compiled) {
+      emittedAddress.current = compiled;
       onChange(compiled);
     }
   }, [streetDetails, selectedBarangay, selectedCity, selectedProvince, isManualMode]);
@@ -930,13 +959,13 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
     <div className={`space-y-2.5 ${className}`}>
       {/* Label & Network / Mode Status Header */}
       <div className="flex items-center justify-between">
-        <label className="block font-bold text-xs text-charcoal/80 flex items-center gap-1.5">
+        <label className="block font-medium text-xs text-charcoal/80 flex items-center gap-1.5">
           <MapPin className="w-3.5 h-3.5 text-amber-600" />
           <span>
             {label} {required && <span className="text-rose-500">*</span>}
           </span>
           {!isOnline && (
-            <span className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded font-bold flex items-center gap-1 border border-amber-200">
+            <span className="text-[12px] bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded font-medium flex items-center gap-1 border border-amber-200">
               <WifiOff className="w-2.5 h-2.5 text-amber-700" />
               <span>Offline</span>
             </span>
@@ -947,7 +976,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
         <button
           type="button"
           onClick={() => handleToggleManualMode(!isManualMode)}
-          className={`text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all px-2.5 py-1 rounded-xl shadow-2xs border ${
+          className={`text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-all px-2.5 py-1 rounded-xl shadow-2xs border ${
             isManualMode
               ? "bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-indigo-200"
               : "bg-white hover:bg-gray-50 text-indigo-800 border-indigo-200/80 hover:border-indigo-300"
@@ -969,7 +998,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
 
       {/* Automatic Offline Notification Banner */}
       {autoOfflineSwitched && !isOnline && (
-        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-[11px] text-amber-950 animate-in fade-in duration-200">
+        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-[12px] text-amber-950 animate-in fade-in duration-200">
           <div className="flex items-center gap-2">
             <WifiOff className="w-4 h-4 text-amber-600 shrink-0" />
             <span className="font-medium">
@@ -979,7 +1008,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
           <button
             type="button"
             onClick={() => handleToggleManualMode(false)}
-            className="text-[10px] text-indigo-900 font-bold underline hover:text-indigo-950 cursor-pointer ml-2 shrink-0"
+            className="text-[12px] text-indigo-900 font-medium underline hover:text-indigo-950 cursor-pointer ml-2 shrink-0"
           >
             Use Offline Dropdowns (Daet)
           </button>
@@ -989,12 +1018,12 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
       {isManualMode ? (
         /* Manual Freeform Input Card */
         <div className="p-3.5 bg-amber-50/40 rounded-2xl border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="font-bold text-amber-950 flex items-center gap-1.5">
+          <div className="flex items-center justify-between text-[12px]">
+            <span className="font-medium text-amber-950 flex items-center gap-1.5">
               <Edit3 className="w-3.5 h-3.5 text-amber-600" />
               <span>Manual Address Input Mode</span>
             </span>
-            <span className="text-[10px] text-charcoal/50 font-medium">
+            <span className="text-[12px] text-muted font-medium">
               Type full address, sitios, puroks, or landmarks
             </span>
           </div>
@@ -1006,13 +1035,13 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
               placeholder="e.g. Purok 4, Sitio Maligaya, Brgy. Bagang, Daet, Camarines Norte"
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              className="w-full bg-white p-2.5 pr-8 rounded-xl border border-amber-300/80 focus:outline-none focus:border-indigo text-xs font-semibold text-charcoal shadow-2xs placeholder:text-charcoal/40"
+              className="w-full bg-white p-2.5 pr-8 rounded-xl border border-amber-300/80 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal shadow-2xs placeholder:text-muted"
             />
             {value && (
               <button
                 type="button"
                 onClick={() => onChange("")}
-                className="p-1 text-charcoal/40 hover:text-charcoal absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer"
+                className="p-1 text-muted hover:text-charcoal absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -1020,20 +1049,20 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
           </div>
 
           {/* Quick Presets for Convenient Offline Typing */}
-          <div className="flex items-center justify-between gap-2 pt-1 border-t border-amber-100 flex-wrap text-[10px]">
-            <span className="text-charcoal/50 font-bold">Quick Presets:</span>
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-amber-100 flex-wrap text-[12px]">
+            <span className="text-muted font-medium">Quick Presets:</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
                 onClick={() => onChange(value ? `${value}, Daet, Camarines Norte` : "Daet, Camarines Norte")}
-                className="px-2 py-0.5 rounded-lg bg-white hover:bg-amber-100/70 border border-amber-200 font-bold text-amber-950 transition-colors cursor-pointer"
+                className="px-2 py-0.5 rounded-lg bg-white hover:bg-amber-100/70 border border-amber-200 font-medium text-amber-950 transition-colors cursor-pointer"
               >
                 + Daet, Cam Norte
               </button>
               <button
                 type="button"
                 onClick={() => onChange(value ? `${value}, Metro Manila` : "Metro Manila")}
-                className="px-2 py-0.5 rounded-lg bg-white hover:bg-indigo-100/70 border border-indigo-200 font-bold text-indigo-950 transition-colors cursor-pointer"
+                className="px-2 py-0.5 rounded-lg bg-white hover:bg-indigo-100/70 border border-indigo-200 font-medium text-indigo-950 transition-colors cursor-pointer"
               >
                 + Metro Manila
               </button>
@@ -1083,7 +1112,7 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
               required={required}
               items={barangays}
               selectedName={selectedBarangay}
-              onSelect={(item) => setSelectedBarangay(item.name)}
+              onSelect={(item) => { addressEdited.current = true; setSelectedBarangay(item.name); }}
               placeholder="-- Select Barangay --"
               searchPlaceholder="Search barangay (e.g. Bagang, Bagasbas, Lag-on)..."
               disabled={loadingBarangays || barangays.length === 0}
@@ -1092,27 +1121,27 @@ export const AddressPicker: React.FC<AddressPickerProps> = ({
 
             {/* 4. Street / Building / House / Subdivision Details */}
             <div>
-              <label className="block font-bold text-[11px] text-indigo-950 mb-1">
+              <label className="block font-medium text-[12px] text-indigo-950 mb-1">
                 Street / Subdivision / House No.
               </label>
               <input
                 type="text"
                 placeholder="e.g. Phase 3, Happy Homes / P. Burgos St."
                 value={streetDetails}
-                onChange={(e) => setStreetDetails(e.target.value)}
-                className="w-full bg-white px-3 py-2 rounded-xl border border-indigo-200/80 text-xs font-medium text-charcoal placeholder:text-charcoal/40 focus:outline-none focus:border-indigo shadow-2xs"
+                onChange={(e) => { addressEdited.current = true; setStreetDetails(e.target.value); }}
+                className="w-full bg-white px-3 py-2 rounded-xl border border-indigo-200/80 text-xs font-medium text-charcoal placeholder:text-muted focus:outline-none focus:border-indigo shadow-2xs"
               />
             </div>
           </div>
 
           {/* Real-time Compiled Address Preview Chip */}
           {value && (
-            <div className="p-2 rounded-xl bg-white/95 border border-indigo-100/90 flex items-start gap-2 text-[11px] shadow-2xs">
-              <span className="font-bold text-indigo-900 shrink-0 text-[10px] uppercase tracking-wider bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 mt-0.5 flex items-center gap-1">
+            <div className="p-2 rounded-xl bg-white/95 border border-indigo-100/90 flex items-start gap-2 text-[12px] shadow-2xs">
+              <span className="font-medium text-indigo-900 shrink-0 text-[12px] uppercase tracking-wider bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 mt-0.5 flex items-center gap-1">
                 <Navigation className="w-2.5 h-2.5 text-indigo-600" />
                 <span>Full Address:</span>
               </span>
-              <span className="font-bold text-indigo-950 truncate flex-1">{value}</span>
+              <span className="font-medium text-indigo-950 truncate flex-1">{value}</span>
             </div>
           )}
         </div>

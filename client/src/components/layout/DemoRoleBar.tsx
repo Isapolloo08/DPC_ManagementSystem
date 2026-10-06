@@ -26,7 +26,7 @@ export const DemoRoleBar: React.FC = () => {
   return (
     <div className="bg-indigo-900 text-white px-4 py-1.5 text-xs flex flex-wrap items-center justify-between border-b border-indigo-800 gap-2">
       <div className="flex items-center gap-2">
-        <span className="flex items-center gap-1.5 font-semibold text-amber-400">
+        <span className="flex items-center gap-1.5 font-medium text-amber-400">
           <Sliders className="w-3.5 h-3.5" />
           Interactive Role Switcher:
         </span>
@@ -44,13 +44,13 @@ export const DemoRoleBar: React.FC = () => {
               onClick={() => switchDemoUser(du.id)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
                 isActive
-                  ? "bg-amber text-charcoal font-bold shadow-sm ring-2 ring-white/50"
+                  ? "bg-amber text-charcoal font-medium shadow-sm ring-2 ring-white/50"
                   : "bg-indigo-800/80 hover:bg-indigo-700 text-indigo-100 hover:text-white"
               }`}
             >
               {getRoleIcon(du.role_name)}
               <span>{du.role_name}</span>
-              <span className="opacity-75 text-[10px] hidden md:inline">({du.name.split(" ")[0]})</span>
+              <span className="opacity-75 text-[12px] hidden md:inline">({du.name.split(" ")[0]})</span>
             </button>
           );
         })}

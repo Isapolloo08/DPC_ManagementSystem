@@ -104,13 +104,18 @@ function stopBackendServer() {
   if (!serverProcess) return;
   console.log("[ServerManager] Terminating backend server (Client PC mode / App Exit)...");
   try {
+    try {
+      serverProcess.send({ type: "SHUTDOWN" });
+    } catch (_) {}
     serverProcess.kill("SIGTERM");
     setTimeout(() => {
       if (serverProcess && !serverProcess.killed) {
-        serverProcess.kill("SIGKILL");
+        try {
+          serverProcess.kill("SIGKILL");
+        } catch (_) {}
         serverProcess = null;
       }
-    }, 1500);
+    }, 1000);
   } catch (err) {
     console.error("[ServerManager] Error stopping server process:", err);
     serverProcess = null;

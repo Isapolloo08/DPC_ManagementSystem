@@ -1,8 +1,10 @@
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { useSocketEvent } from "../socket";
 import { CommunicationsPageSkeleton, CardGridSkeleton } from "../components/common/SkeletonLoader";
 import { Announcement } from "../types";
@@ -85,13 +87,15 @@ export const CommunicationsPage: React.FC = () => {
     loadCommunications();
   });
 
-  const loadCommunications = async () => {
+ const loadCommunications = async () => {
+    guideData.clearError();
     try {
       setLoading(true);
       const aList = await api.getAnnouncements(selectedMinistryId ?? undefined);
       setAnnouncements(aList || []);
     } catch (err) {
       console.error("Communications load error:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
     }
@@ -125,6 +129,8 @@ export const CommunicationsPage: React.FC = () => {
 
   const canPostAnnouncement = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
+  const guideData = useGuideDataState("announcements", { loading, count: announcements.length, filtered: Boolean(selectedMinistryId), retry: loadCommunications });
+
   if (loading && announcements.length === 0) {
     return <CommunicationsPageSkeleton />;
   }
@@ -143,12 +149,12 @@ export const CommunicationsPage: React.FC = () => {
 
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <Megaphone className="w-3.5 h-3.5 text-amber-300" />
               <span>Church Broadcasts & Bulletins</span>
             </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
             Church Communications & Bulletins
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
@@ -159,9 +165,9 @@ export const CommunicationsPage: React.FC = () => {
         {/* Action controls */}
         <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
           {canPostAnnouncement && (
-            <button
+            <button data-guide="announcement-new"
               onClick={() => setIsAnnounceModalOpen(true)}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4 text-indigo-950" />
               <span>Post Announcement</span>
@@ -174,23 +180,24 @@ export const CommunicationsPage: React.FC = () => {
       <div className="flex items-center justify-between bg-white/95 p-4 rounded-3xl border border-indigo-100/90 shadow-sm">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-indigo-700" />
-          <span className="text-xs font-black text-charcoal">
+          <span className="text-xs font-medium text-charcoal">
             Active Bulletins ({announcements.length})
           </span>
         </div>
-        <span className="text-[11px] text-charcoal/60 font-semibold">
+        <span className="text-[12px] text-muted font-medium">
           {selectedMinistryId ? "Filtered by selected ministry" : "All church broadcasts"}
         </span>
       </div>
 
       {/* Announcements Content */}
+      <div data-guide="announcements-list">
       {loading && announcements.length === 0 ? (
         <CardGridSkeleton count={4} columns={2} />
       ) : announcements.length === 0 ? (
         <div className="bg-white/95 rounded-3xl p-12 text-center border border-indigo-100 shadow-sm space-y-3">
           <MessageSquare className="w-12 h-12 text-charcoal/20 mx-auto" />
-          <h3 className="font-bold text-sm text-charcoal">No Announcements Yet</h3>
-          <p className="text-xs text-charcoal/50 max-w-sm mx-auto">
+          <h3 className="font-semibold text-sm text-charcoal">No Announcements Yet</h3>
+          <p className="text-xs text-muted max-w-sm mx-auto">
             Check back soon for church-wide news, events reminders, and department updates.
           </p>
         </div>
@@ -206,14 +213,14 @@ export const CommunicationsPage: React.FC = () => {
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   {a.is_pinned === 1 && (
-                    <span className="px-2.5 py-1 rounded-full bg-amber-400 text-indigo-950 text-[10px] font-black flex items-center gap-1 shadow-2xs">
+                    <span className="px-2.5 py-1 rounded-full bg-amber-400 text-indigo-950 text-[12px] font-medium flex items-center gap-1 shadow-2xs">
                       <Pin className="w-3 h-3" /> Pinned
                     </span>
                   )}
-                  <h3 className="font-black text-lg text-charcoal">{a.title}</h3>
+                  <h3 className="font-semibold text-lg text-charcoal">{a.title}</h3>
                 </div>
                 <span
-                  className="text-[10px] font-black px-3 py-1 rounded-full text-white shrink-0 shadow-2xs"
+                  className="text-[12px] font-medium px-3 py-1 rounded-full text-white shrink-0 shadow-2xs"
                   style={{ backgroundColor: a.ministry_color || "#2C3968" }}
                 >
                   {a.ministry_name || "All Church"}
@@ -224,10 +231,10 @@ export const CommunicationsPage: React.FC = () => {
                 {a.body}
               </p>
 
-              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-charcoal/60 flex-wrap gap-2">
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-muted flex-wrap gap-2">
                 <span className="flex items-center gap-1.5 font-medium">
                   <User className="w-3.5 h-3.5 text-indigo-700" />
-                  <strong className="text-charcoal font-bold">{a.author_name}</strong> ({a.author_role})
+                  <strong className="text-charcoal font-medium">{a.author_name}</strong> ({a.author_role})
                 </span>
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1 font-medium">
@@ -252,39 +259,40 @@ export const CommunicationsPage: React.FC = () => {
       )}
 
       {/* Post Announcement Modal */}
+      </div>
       {isAnnounceModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 space-y-4 animate-scale-up">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-black text-charcoal flex items-center gap-2">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 space-y-4 animate-scale-up">
+            <div data-modal-header className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-indigo" />
                 <span>Post Ministry Announcement</span>
               </h2>
-              <button onClick={() => setIsAnnounceModalOpen(false)} className="p-1 text-charcoal/50 hover:text-charcoal cursor-pointer">
+              <button onClick={() => setIsAnnounceModalOpen(false)} className="p-1 text-muted hover:text-charcoal cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAnnouncement} className="space-y-4 text-xs">
+            <form data-guide="announcement-form" onSubmit={handleCreateAnnouncement} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-charcoal mb-1">Title *</label>
-                <input
+                <label className="block font-medium text-charcoal mb-1">Title *</label>
+                <input data-guide="announcement-title"
                   type="text"
                   required
                   placeholder="e.g. Summer Youth Camp 2026 Live"
                   value={announceForm.title}
                   onChange={(e) => setAnnounceForm({ ...announceForm, title: e.target.value })}
-                  className="w-full bg-ivory-light p-2.5 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 font-bold text-indigo-900"
+                  className="w-full bg-ivory-light p-2.5 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 font-medium text-indigo-900"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Ministry Audience</label>
-                <select
+                <label className="block font-medium text-charcoal mb-1">Ministry Audience</label>
+                <select data-guide="announcement-audience"
                   value={announceForm.ministry_id}
                   onChange={(e) => setAnnounceForm({ ...announceForm, ministry_id: e.target.value })}
                   disabled={isRestricted && allowedMinistries.length <= 1}
-                  className="w-full bg-ivory-light p-2.5 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 disabled:opacity-90 disabled:cursor-not-allowed font-bold text-charcoal cursor-pointer"
+                  className="w-full bg-ivory-light p-2.5 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 disabled:opacity-90 disabled:cursor-not-allowed font-medium text-charcoal cursor-pointer"
                 >
                   {!isRestricted && <option value="">Church-Wide (All Members)</option>}
                   {allowedMinistries.map((m) => (
@@ -294,8 +302,8 @@ export const CommunicationsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Announcement Body *</label>
-                <textarea
+                <label className="block font-medium text-charcoal mb-1">Announcement Body *</label>
+                <textarea data-guide="announcement-body"
                   rows={4}
                   required
                   placeholder="Write the update details..."
@@ -313,28 +321,28 @@ export const CommunicationsPage: React.FC = () => {
                   onChange={(e) => setAnnounceForm({ ...announceForm, is_pinned: e.target.checked })}
                   className="rounded text-indigo cursor-pointer"
                 />
-                <label htmlFor="pinCheck" className="font-bold text-charcoal/80 cursor-pointer">
+                <label htmlFor="pinCheck" className="font-medium text-charcoal/80 cursor-pointer">
                   Pin to top of communications board
                 </label>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAnnounceModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="announcement-save"
                   type="submit"
-                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black shadow-md cursor-pointer active:scale-95"
+                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium shadow-md cursor-pointer active:scale-95"
                 >
                   Broadcast Announcement
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

@@ -1,7 +1,9 @@
+import { ModalPanel } from "../../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../api";
+import { useGuideDataState } from "../../components/help/GuideDataContext";
 import { useSocketEvent } from "../../socket";
 import {
   BibleStudyGroup, Member, Announcement, StudyTopic,
@@ -90,6 +92,11 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   const [rollCallDate, setRollCallDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [rollCallAttendees, setRollCallAttendees] = useState<Record<number, boolean>>({});
   const [rollCallNotes, setRollCallNotes] = useState<string>("");
+  const [rollCallBook, setRollCallBook] = useState("");
+  const [rollCallChapter, setRollCallChapter] = useState("");
+  const [updateGroupProgress, setUpdateGroupProgress] = useState(false);
+  const [latestLoggedSessionDate, setLatestLoggedSessionDate] = useState("");
+  const initialRollCallLesson = useRef({ book: "", chapter: "", update: false });
   const [isSavingRollCall, setIsSavingRollCall] = useState(false);
   const [rollCallSessionsList, setRollCallSessionsList] = useState<SessionOptionItem[]>([]);
   const [isSpecialRollCall, setIsSpecialRollCall] = useState(false);
@@ -274,6 +281,8 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   }, [availableMembersToAdd, addDiscipleMinistryFilter, addDiscipleSearchQuery]);
 
   const isRollCallDirty = () => {
+    const lesson = initialRollCallLesson.current;
+    if (rollCallBook !== lesson.book || rollCallChapter !== lesson.chapter || updateGroupProgress !== lesson.update) return true;
     const initialAtt = initialRollCallData.current.attendees;
     const keys = Object.keys(rollCallAttendees);
     for (const k of keys) {
@@ -327,6 +336,19 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     setRollCallSessionsList(sessionsWithStatus);
   };
 
+  const canUpdateRollCallProgress = (date: string, sessions: SessionOptionItem[]) =>
+    activeGroup?.status === "active" && date >= latestLoggedSessionDate && !sessions.some(s => s.isLogged && s.date > date);
+
+  const initializeRollCallLesson = (date: string, session: SessionOptionItem | undefined, sessions: SessionOptionItem[]) => {
+    const book = session?.loggedSession?.topic_title || activeGroup?.curriculum || "Weekly Bible Study";
+    const chapter = session?.loggedSession?.chapter || activeGroup?.current_chapter || "Chapter 1";
+    const update = Boolean(activeGroup?.status === "active" && !sessions.some(s => s.isLogged && s.date > date) && date >= latestLoggedSessionDate);
+    setRollCallBook(book);
+    setRollCallChapter(chapter);
+    setUpdateGroupProgress(update);
+    initialRollCallLesson.current = { book, chapter, update };
+  };
+
   const handleOpenRollCall = async () => {
     if (!activeGroup) return;
 
@@ -363,6 +385,12 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     // 3. Default selection = latest session that has NO attendance yet; if none missing, default to latest
     const firstMissing = sessionsWithStatus.find(s => !s.isLogged);
     const targetSession = firstMissing || sessionsWithStatus[0];
+    const latestLogged = existingSessions.reduce((latest, session) => session.session_date > latest ? session.session_date : latest, "");
+    setLatestLoggedSessionDate(latestLogged);
+    initializeRollCallLesson(targetSession?.date || new Date().toISOString().split("T")[0], targetSession, sessionsWithStatus);
+    const defaultUpdate = Boolean(activeGroup.status === "active" && targetSession && targetSession.date >= latestLogged);
+    setUpdateGroupProgress(defaultUpdate);
+    initialRollCallLesson.current.update = defaultUpdate;
 
     if (targetSession) {
       setRollCallDate(targetSession.date);
@@ -416,6 +444,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   };
 
   const handleSessionChange = (date: string, session?: SessionOptionItem) => {
+    initializeRollCallLesson(date, session, rollCallSessionsList);
     setRollCallDate(date);
     setIsSpecialRollCall(false);
 
@@ -450,6 +479,10 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   };
 
   const handleSpecialChange = (isSpecial: boolean, date: string, reason: string) => {
+    if (date !== rollCallDate) {
+      const matched = rollCallSessionsList.find(s => s.date === date);
+      initializeRollCallLesson(date, matched, rollCallSessionsList);
+    }
     setIsSpecialRollCall(isSpecial);
     setRollCallDate(date);
     setSpecialRollCallReason(reason);
@@ -461,6 +494,11 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   const handleSaveRollCall = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeGroup) return;
+    if (isSavingRollCall) return;
+    if (!rollCallBook.trim() || !rollCallChapter.trim()) {
+      showToast("Enter the book / study topic and chapter covered in this session", "error");
+      return;
+    }
 
     if (isSpecialRollCall && !specialRollCallReason.trim()) {
       showToast("Please provide a reason for the special / rescheduled session", "error");
@@ -475,15 +513,16 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
       await api.saveGroupAttendance(activeGroup.id, {
         session_date: rollCallDate,
-        topic_title: activeGroup.curriculum || "Weekly Bible Study",
-        chapter: activeGroup.current_chapter || "Session",
+        topic_title: rollCallBook.trim(),
+        chapter: rollCallChapter.trim(),
+        update_group_progress: updateGroupProgress,
         notes: rollCallNotes.trim() || undefined,
         present_member_ids: presentIds,
         is_special: isSpecialRollCall,
         special_reason: isSpecialRollCall ? specialRollCallReason.trim() : undefined,
       });
 
-      showToast(`✓ Weekly Roll-Call for "${activeGroup.name}" on ${rollCallDate} saved successfully!`, "success");
+      showToast(`Weekly Roll-Call for"${activeGroup.name}" on ${rollCallDate} saved successfully!`, "success");
       setIsRollCallModalOpen(false);
       loadLeaderData();
     } catch (err: any) {
@@ -498,7 +537,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     if (!bulletinMessage.trim()) return;
     try {
       setIsSendingBulletin(true);
-      showToast(`✓ Group bulletin sent to all active disciples in "${activeGroup?.name}"!`, "success");
+      showToast(`Group bulletin sent to all active disciples in"${activeGroup?.name}"!`, "success");
       setBulletinSubject("");
       setBulletinMessage("");
       setIsBulletinModalOpen(false);
@@ -533,7 +572,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     if (!activeGroup || selectedMemberIdsToAdd.length === 0) return;
     try {
       const res = await api.joinGroup(activeGroup.id, { member_ids: selectedMemberIdsToAdd });
-      showToast(res.message || `✓ Successfully enrolled ${selectedMemberIdsToAdd.length} disciple(s) to ${activeGroup.name}!`, "success");
+      showToast(res.message || `Successfully enrolled ${selectedMemberIdsToAdd.length} disciple(s) to ${activeGroup.name}!`, "success");
       setSelectedMemberIdsToAdd([]);
       setAddDiscipleSearchQuery("");
       setAddDiscipleMinistryFilter("all");
@@ -544,21 +583,23 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     }
   };
 
+  useGuideDataState("assigned-groups", { loading, count: myGroups.length, error: loadError, retry: loadLeaderData });
+
   if (loading) {
     return <DashboardSkeleton />;
   }
 
   if (!activeGroup) {
     return (
-      <section className="space-y-5">
-        <h1 className="text-2xl sm:text-3xl font-black text-charcoal">My Bible Study Group</h1>
+      <section data-guide="my-group-empty" className="space-y-5">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-charcoal">My Bible Study Group</h1>
         <div className="rounded-3xl border border-indigo-100 bg-white p-8 text-center space-y-3">
           <Users className="w-10 h-10 mx-auto text-indigo" />
-          <h2 className="text-lg font-bold text-charcoal">{loadError ? "Unable to load groups" : "No assigned group"}</h2>
+          <h2 className="text-lg font-semibold text-charcoal">{loadError ? "Unable to load groups" : "No assigned group"}</h2>
           <p className="text-sm text-charcoal/70">
             {loadError || "You are not currently assigned to a Bible study group. Please contact your church coordinator to be assigned as a leader, assistant leader, or member."}
           </p>
-          <button type="button" onClick={loadLeaderData} className="inline-flex items-center gap-2 rounded-xl bg-indigo px-4 py-2 text-sm font-bold text-white">
+          <button data-guide="my-group-refresh" type="button" onClick={loadLeaderData} className="inline-flex items-center gap-2 rounded-xl bg-indigo px-4 py-2 text-sm font-medium text-white">
             <RefreshCw className="w-4 h-4" /> {loadError ? "Try again" : "Refresh assignments"}
           </button>
         </div>
@@ -570,7 +611,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     <div className="space-y-6 pb-12 print:p-0 print:space-y-4">
       {/* Toast Notification */}
       {toastMsg && (
-        <div className={`px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between text-xs font-bold animate-in fade-in ${toastMsg.type === "success" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+        <div className={`px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between text-xs font-medium animate-in fade-in ${toastMsg.type === "success" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
           }`}>
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-amber-300" />
@@ -584,12 +625,12 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
       {/* Top Breadcrumb + Status Tag */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 text-xs text-charcoal/60 font-semibold">
+        <div className="flex items-center gap-2 text-xs text-muted font-medium">
           <span>Bible Study & Discipleship</span>
           <ChevronRight className="w-3.5 h-3.5 text-charcoal/30" />
-          <span className="text-indigo font-bold">My Bible Study Group</span>
+          <span className="text-indigo font-medium">My Bible Study Group</span>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-extrabold shadow-2xs">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium shadow-2xs">
           <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
           <span>Facilitator / Leader Active</span>
         </div>
@@ -598,7 +639,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       {/* Header & Group Selector Dropdown */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-charcoal tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-charcoal tracking-tight">
             My Bible Study Group
           </h1>
           <p className="text-xs sm:text-sm text-charcoal/70 mt-0.5 max-w-2xl leading-relaxed">
@@ -611,27 +652,28 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           <button
             type="button"
             aria-label="Switch my Bible study group"
+            data-guide="my-group-switcher"
             aria-expanded={isGroupSwitcherOpen}
             onClick={() => setIsGroupSwitcherOpen(!isGroupSwitcherOpen)}
-            className="flex items-center gap-2.5 bg-white border border-indigo-200 hover:border-indigo-400 px-4 py-2.5 rounded-2xl shadow-2xs hover:shadow-md transition-all text-xs font-bold text-charcoal cursor-pointer active:scale-95"
+            className="flex items-center gap-2.5 bg-white border border-indigo-200 hover:border-indigo-400 px-4 py-2.5 rounded-2xl shadow-2xs hover:shadow-md transition-all text-xs font-medium text-charcoal cursor-pointer active:scale-95"
           >
-            <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo flex items-center justify-center font-black text-xs">
+            <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo flex items-center justify-center font-medium text-xs">
               <Users className="w-3.5 h-3.5 text-indigo-700" />
             </div>
             <div className="text-left">
-              <div className="text-xs font-extrabold text-charcoal truncate max-w-[200px]">
+              <div className="text-xs font-medium text-charcoal truncate max-w-[200px]">
                 {activeGroup?.name || "Select Group"}
               </div>
-              <div className="text-[10px] text-charcoal/50 font-medium">
+              <div className="text-[12px] text-muted font-medium">
                 {activeGroup?.category ? `(${activeGroup.category})` : "Active Life Group"}
               </div>
             </div>
-            <ChevronDown className={`w-4 h-4 text-charcoal/50 transition-transform ${isGroupSwitcherOpen ? "rotate-180" : ""}`} />
+            <ChevronDown className={`w-4 h-4 text-muted transition-transform ${isGroupSwitcherOpen ? "rotate-180" : ""}`} />
           </button>
 
           {isGroupSwitcherOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-indigo-100 p-2 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95">
-              <div className="p-2 text-[10px] font-black text-indigo-950 uppercase tracking-wider flex items-center justify-between">
+              <div className="p-2 text-[12px] font-medium text-indigo-950 uppercase tracking-wider flex items-center justify-between">
                 <span>Switch Small Group ({myGroups.length})</span>
               </div>
               <div className="max-h-60 overflow-y-auto py-1 space-y-1">
@@ -643,13 +685,13 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                       setIsGroupSwitcherOpen(false);
                     }}
                     className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${g.id === activeGroup?.id
-                      ? "bg-indigo-50 text-indigo font-black"
+                      ? "bg-indigo-50 text-indigo font-medium"
                       : "hover:bg-gray-50 text-charcoal"
                       }`}
                   >
                     <div className="truncate pr-2">
                       <div className="truncate">{g.name}</div>
-                      <div className="text-[10px] text-charcoal/50">{g.category || "General"} • {g.leader_name}</div>
+                      <div className="text-[12px] text-muted">{g.category || "General"} • {g.leader_name}</div>
                     </div>
                     {g.id === activeGroup?.id && <Check className="w-4 h-4 text-indigo shrink-0" />}
                   </button>
@@ -662,9 +704,9 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
       {/* Main Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-gray-200/80 pb-3 overflow-x-auto no-scrollbar">
-        <button
+        <button data-guide="my-group-overview"
           onClick={() => handleSelectTab("dashboard")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${activeTab === "dashboard"
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer ${activeTab === "dashboard"
             ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-800"
             : "bg-white text-charcoal/70 hover:bg-gray-100 hover:text-charcoal border border-gray-200"
             }`}
@@ -675,42 +717,43 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
         <button
           onClick={() => handleSelectTab("biblestudy")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${activeTab === "biblestudy"
+          data-guide="my-group-meetings"
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer ${activeTab === "biblestudy"
             ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-800"
             : "bg-white text-charcoal/70 hover:bg-gray-100 hover:text-charcoal border border-gray-200"
             }`}
         >
           <BookmarkCheck className="w-4 h-4" />
           <span>Curriculum & Roll-Call</span>
-          <span className="bg-indigo-100 text-indigo-900 text-[10px] font-extrabold px-2 py-0.2 rounded-full">
+          <span className="bg-indigo-100 text-indigo-900 text-[12px] font-medium px-2 py-0.2 rounded-full">
             12 Wks
           </span>
         </button>
 
-        <button
+        <button data-guide="my-group-attendance"
           onClick={() => handleSelectTab("attendance_monitor")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${activeTab === "attendance_monitor"
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer ${activeTab === "attendance_monitor"
             ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-800"
             : "bg-white text-charcoal/70 hover:bg-gray-100 hover:text-charcoal border border-gray-200"
             }`}
         >
           <ClipboardCheck className="w-4 h-4" />
           <span>Attendance Monitor</span>
-          <span className="bg-emerald-100 text-emerald-900 text-[10px] font-extrabold px-2 py-0.2 rounded-full">
+          <span className="bg-emerald-100 text-emerald-900 text-[12px] font-medium px-2 py-0.2 rounded-full">
             History & Absences
           </span>
         </button>
 
-        <button
+        <button data-guide="my-group-duty"
           onClick={() => handleSelectTab("duty")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${activeTab === "duty"
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer ${activeTab === "duty"
             ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-800"
             : "bg-white text-charcoal/70 hover:bg-gray-100 hover:text-charcoal border border-gray-200"
             }`}
         >
           <ShieldCheck className="w-4 h-4" />
           <span>Sunday Dishwashing Roster</span>
-          <span className="bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2 py-0.2 rounded-full">
+          <span className="bg-amber-100 text-amber-900 text-[12px] font-medium px-2 py-0.2 rounded-full">
             My Schedule
           </span>
         </button>
@@ -750,7 +793,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           activeGroup={activeGroup}
           groupDisciples={currentMembers}
           onSaveAttendanceSession={(date, memberIds) => {
-            showToast(`✓ Logged attendance for ${memberIds.length} members on ${date}!`);
+            showToast(`Logged attendance for ${memberIds.length} members on ${date}!`);
             loadLeaderData();
           }}
           onGroupUpdated={loadLeaderData}
@@ -769,14 +812,14 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-indigo-100 shadow-2xs space-y-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <h3 className="text-xl font-black text-charcoal">Sunday Fellowship Meal Dishwashing Roster</h3>
-              <p className="text-xs text-charcoal/60 mt-0.5">
+              <h3 className="text-xl font-semibold text-charcoal">Sunday Fellowship Meal Dishwashing Roster</h3>
+              <p className="text-xs text-muted mt-0.5">
                 Sunday fellowship meal dishwashing assignments for your selected group.
               </p>
             </div>
             <button
               onClick={() => setIsSwapShiftModalOpen(true)}
-              className="bg-indigo hover:bg-indigo-700 text-white font-black px-4 py-2 rounded-2xl text-xs flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+              className="bg-indigo hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-2xl text-xs flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
             >
               <ArrowLeftRight className="w-4 h-4 text-amber-300" />
               <span>Request Shift Swap</span>
@@ -785,7 +828,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
           <div className="overflow-x-auto rounded-2xl border border-gray-200">
             <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50 text-[10px] font-black text-charcoal/60 uppercase tracking-wider border-b border-gray-200">
+              <thead className="bg-gray-50 text-[12px] font-medium text-muted uppercase tracking-wider border-b border-gray-200">
                 <tr>
                   <th className="py-3.5 px-4">Rotation Date</th>
                   <th className="py-3.5 px-4">Assigned Group / Ministry</th>
@@ -797,7 +840,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
               <tbody className="divide-y divide-gray-100">
                 {activeGroupDuties.map(duty => (
                   <tr key={`${duty.duty_date}-${duty.team?.id}`}>
-                    <td className="py-3.5 px-4 font-bold">{duty.date_formatted || duty.duty_date}</td>
+                    <td className="py-3.5 px-4 font-medium">{duty.date_formatted || duty.duty_date}</td>
                     <td className="py-3.5 px-4">{activeGroup.name}</td>
                     <td className="py-3.5 px-4">Sunday Dishwashing</td>
                     <td className="py-3.5 px-4 text-charcoal/70">{duty.team?.tasks_checklist || "Contact your coordinator for details."}</td>
@@ -850,16 +893,16 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                     {/* Sticky Header */}
                     <div className="p-4 sm:p-5 border-b border-gray-100 flex items-start justify-between shrink-0 bg-white">
                       <div className="flex items-center gap-2.5">
-                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-medium shrink-0 ${
                           isEditMode ? "bg-indigo-100 text-indigo-900" : "bg-amber-100 text-amber-900"
                         }`}>
                           {isEditMode ? <BookOpen className="w-5 h-5 text-indigo-700" /> : <ClipboardCheck className="w-5 h-5 text-amber-700" />}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-base font-black text-charcoal truncate">
+                          <h3 className="text-base font-semibold text-charcoal truncate">
                             {isEditMode ? "Edit Session Attendance" : "Weekly Roll-Call Attendance"}
                           </h3>
-                          <p className="text-xs text-charcoal/60 truncate">
+                          <p className="text-xs text-muted truncate">
                             {activeGroup.name} {isEditMode ? `• Updating session on ${rollCallDate}` : ""}
                           </p>
                         </div>
@@ -867,14 +910,14 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsRollCallModalOpen(false)}
-                        className="p-1.5 text-charcoal/40 hover:bg-gray-100 rounded-xl cursor-pointer transition-colors"
+                        className="p-1.5 text-muted hover:bg-gray-100 rounded-xl cursor-pointer transition-colors"
                       >
                         <X className="w-5 h-5" />
                       </button>
                     </div>
 
-                    {/* Main Form Body - Fixed Container, ONLY disciples list scrolls */}
-                    <div className="p-4 sm:p-5 flex-1 min-h-0 flex flex-col space-y-3.5 overflow-hidden">
+                    {/* The form scrolls while its save/cancel actions remain visible. */}
+                    <div className="p-4 sm:p-5 flex-1 min-h-0 space-y-3.5 overflow-y-auto">
                       {/* Compact Session Row */}
                       <SessionDatePickerCompactRow
                         sessions={rollCallSessionsList}
@@ -889,16 +932,39 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                         changeButtonRef={rollCallChangeButtonRef}
                       />
 
+                      <fieldset className="shrink-0 space-y-2 p-3 rounded-xl border border-indigo-100 bg-indigo-50/40" disabled={isSavingRollCall}>
+                        <legend className="px-1 font-semibold text-indigo-950">Book & chapter covered</legend>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label htmlFor="roll-call-book" className="block mb-1 font-medium text-charcoal">Book / Study Topic</label>
+                            <input id="roll-call-book" list="roll-call-books" required maxLength={300} value={rollCallBook}
+                              onChange={e => setRollCallBook(e.target.value)} className="w-full bg-white p-2 rounded-lg border border-gray-200 text-charcoal" />
+                            <datalist id="roll-call-books">{studyTopics.map(topic => <option key={topic.id} value={topic.title} />)}</datalist>
+                          </div>
+                          <div>
+                            <label htmlFor="roll-call-chapter" className="block mb-1 font-medium text-charcoal">Chapter / Lesson</label>
+                            <input id="roll-call-chapter" required maxLength={120} value={rollCallChapter}
+                              onChange={e => setRollCallChapter(e.target.value)} placeholder="e.g. Chapter 3" className="w-full bg-white p-2 rounded-lg border border-gray-200 text-charcoal" />
+                          </div>
+                        </div>
+                        <label className="flex items-start gap-2 text-charcoal cursor-pointer">
+                          <input type="checkbox" checked={updateGroupProgress} disabled={!canUpdateRollCallProgress(rollCallDate, rollCallSessionsList)}
+                            onChange={e => setUpdateGroupProgress(e.target.checked)} className="mt-0.5" />
+                          <span>Update the group's current book and chapter when saving attendance</span>
+                        </label>
+                        {!canUpdateRollCallProgress(rollCallDate, rollCallSessionsList) && <p className="text-muted">This historical session records its own lesson without changing the group's current progress.</p>}
+                      </fieldset>
+
                       {/* Mark Present Disciples Section */}
-                      <div className="flex-1 min-h-0 flex flex-col">
+                      <div className="flex flex-col">
                         <div className="flex items-center justify-between mb-1.5 shrink-0">
-                          <label className="font-bold text-charcoal/70">Mark Present Disciples</label>
-                          <span className="text-[10px] text-indigo font-bold">
+                          <label className="font-medium text-charcoal/70">Mark Present Disciples</label>
+                          <span className="text-[12px] text-indigo font-medium">
                             {Object.values(rollCallAttendees).filter(Boolean).length} / {currentMembers.length} Present
                           </span>
                         </div>
                         {/* Disciples list scrolls independently */}
-                        <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin">
+                        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
                           {currentMembers.length > 0 ? (
                             currentMembers.map((m: any, idx: number) => {
                               const mId = m.member_id || m.id || idx;
@@ -908,8 +974,8 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                                   key={idx}
                                   onClick={() => setRollCallAttendees(prev => ({ ...prev, [mId]: !isPresent }))}
                                   className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${isPresent
-                                    ? "bg-emerald-50/70 border-emerald-300 text-emerald-950 font-bold"
-                                    : "bg-gray-50 border-gray-200 text-charcoal/50"
+                                    ? "bg-emerald-50/70 border-emerald-300 text-emerald-950 font-medium"
+                                    : "bg-gray-50 border-gray-200 text-muted"
                                     }`}
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
@@ -918,19 +984,19 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                                     </div>
                                     <span className="truncate">{m.member_name || `${m.first_name || ""} ${m.last_name || ""}`}</span>
                                   </div>
-                                  <span className="text-[10px] uppercase font-extrabold shrink-0">{isPresent ? "Present" : "Absent"}</span>
+                                  <span className="text-[12px] uppercase font-medium shrink-0">{isPresent ? "Present" : "Absent"}</span>
                                 </div>
                               );
                             })
                           ) : (
-                            <p className="text-xs text-charcoal/50 italic py-2 text-center">No disciples registered yet.</p>
+                            <p className="text-xs text-muted italic py-2 text-center">No disciples registered yet.</p>
                           )}
                         </div>
                       </div>
 
                       {/* Session Notes */}
                       <div className="shrink-0">
-                        <label className="block font-bold text-charcoal/70 mb-1">Session Notes & Discussion Highlights</label>
+                        <label className="block font-medium text-charcoal/70 mb-1">Session Notes & Discussion Highlights</label>
                         <textarea
                           rows={2}
                           placeholder="Record chapter discussion highlights or key takeaways from this session..."
@@ -946,14 +1012,14 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsRollCallModalOpen(false)}
-                        className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 font-semibold text-charcoal cursor-pointer shadow-2xs"
+                        className="px-4 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 font-medium text-charcoal cursor-pointer shadow-2xs"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={isSavingRollCall}
-                        className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-indigo-950 font-black shadow-md cursor-pointer disabled:opacity-50 transition-all"
+                        className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-indigo-950 font-medium shadow-md cursor-pointer disabled:opacity-50 transition-all"
                       >
                         {isSavingRollCall ? "Saving..." : isEditMode ? "Update Verified Attendance" : "Log Verified Attendance"}
                       </button>
@@ -996,36 +1062,36 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       {/* ==================================================== */}
       {isBulletinModalOpen && activeGroup && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-indigo-100">
-            <div className="flex items-start justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-indigo-100">
+            <div data-modal-header className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-medium">
                   <Send className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-charcoal">Send Group Bulletin</h3>
-                  <p className="text-xs text-charcoal/60">Broadcast notice to {activeGroup.name} members</p>
+                  <h3 className="text-base font-semibold text-charcoal">Send Group Bulletin</h3>
+                  <p className="text-xs text-muted">Broadcast notice to {activeGroup.name} members</p>
                 </div>
               </div>
-              <button onClick={() => setIsBulletinModalOpen(false)} className="p-1.5 text-charcoal/40 hover:bg-gray-100 rounded-xl cursor-pointer">
+              <button onClick={() => setIsBulletinModalOpen(false)} className="p-1.5 text-muted hover:bg-gray-100 rounded-xl cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSendBulletin} className="space-y-3.5 text-xs">
+            <form data-guide="my-group-bulletin-form" onSubmit={handleSendBulletin} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Subject Header</label>
+                <label className="block font-medium text-charcoal/70 mb-1">Subject Header</label>
                 <input
                   type="text"
                   placeholder="e.g. Thursday Fellowship Reminder & Reading Material"
                   value={bulletinSubject}
                   onChange={(e) => setBulletinSubject(e.target.value)}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-bold"
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Bulletin Message *</label>
+                <label className="block font-medium text-charcoal/70 mb-1">Bulletin Message *</label>
                 <textarea
                   rows={4}
                   required
@@ -1036,24 +1102,24 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                 />
               </div>
 
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsBulletinModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSendingBulletin}
-                  className="px-5 py-2 rounded-xl bg-indigo text-white font-bold shadow-md cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-indigo text-white font-medium shadow-md cursor-pointer disabled:opacity-50"
                 >
                   {isSendingBulletin ? "Sending..." : "Broadcast Bulletin"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1063,18 +1129,18 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       {/* ==================================================== */}
       {isSwapShiftModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-indigo-100">
-            <div className="flex items-start justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-indigo-100">
+            <div data-modal-header className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-medium">
                   <ArrowLeftRight className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-charcoal">Request Duty Shift Swap</h3>
-                  <p className="text-xs text-charcoal/60">Trade service date with another group</p>
+                  <h3 className="text-base font-semibold text-charcoal">Request Duty Shift Swap</h3>
+                  <p className="text-xs text-muted">Trade service date with another group</p>
                 </div>
               </div>
-              <button onClick={() => setIsSwapShiftModalOpen(false)} className="p-1.5 text-charcoal/40 hover:bg-gray-100 rounded-xl cursor-pointer">
+              <button onClick={() => setIsSwapShiftModalOpen(false)} className="p-1.5 text-muted hover:bg-gray-100 rounded-xl cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1082,12 +1148,12 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
             <p className="text-sm text-charcoal/70">
               Please contact your church coordinator to request a duty swap for {activeGroup.name}.
             </p>
-            <div className="pt-2 border-t border-gray-100 flex justify-end">
-              <button type="button" onClick={() => setIsSwapShiftModalOpen(false)} className="px-4 py-2 rounded-xl bg-indigo text-white font-bold text-xs">
+            <div data-modal-footer className="pt-2 border-t border-gray-100 flex justify-end">
+              <button type="button" onClick={() => setIsSwapShiftModalOpen(false)} className="px-4 py-2 rounded-xl bg-indigo text-white font-medium text-xs">
                 Close
               </button>
             </div>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1097,16 +1163,16 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       {/* ==================================================== */}
       {isAddDiscipleModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-bold shadow-2xs">
+                <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo flex items-center justify-center font-medium shadow-2xs">
                   <UserPlus className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-base text-charcoal">Add Disciples to Group</h3>
-                  <p className="text-xs text-charcoal/60 font-medium">Group: <span className="font-bold text-indigo">{activeGroup?.name}</span></p>
+                  <h3 className="font-semibold text-base text-charcoal">Add Disciples to Group</h3>
+                  <p className="text-xs text-muted font-medium">Group: <span className="font-medium text-indigo">{activeGroup?.name}</span></p>
                 </div>
               </div>
               <button
@@ -1117,31 +1183,31 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                   setAddDiscipleSearchQuery("");
                   setAddDiscipleMinistryFilter("all");
                 }}
-                className="p-1.5 rounded-xl text-charcoal/40 hover:bg-gray-100 hover:text-charcoal cursor-pointer transition-colors"
+                className="p-1.5 rounded-xl text-muted hover:bg-gray-100 hover:text-charcoal cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddMemberToGroup} className="space-y-4 text-xs">
+            <form data-guide="my-group-add-form" onSubmit={handleAddMemberToGroup} className="space-y-4 text-xs">
               {/* Search & Filter Controls */}
               <div className="space-y-2.5">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {/* Search Input */}
                   <div className="sm:col-span-2 relative">
-                    <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       placeholder="Search member name, phone, email..."
                       value={addDiscipleSearchQuery}
                       onChange={(e) => setAddDiscipleSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2.5 bg-ivory-light rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-semibold text-charcoal"
+                      className="w-full pl-9 pr-8 py-2.5 bg-ivory-light rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal"
                     />
                     {addDiscipleSearchQuery && (
                       <button
                         type="button"
                         onClick={() => setAddDiscipleSearchQuery("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 cursor-pointer"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-rose-500 cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1153,7 +1219,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                     <select
                       value={addDiscipleMinistryFilter}
                       onChange={(e) => setAddDiscipleMinistryFilter(e.target.value)}
-                      className="w-full bg-ivory-light py-2.5 px-3 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold text-charcoal cursor-pointer truncate"
+                      className="w-full bg-ivory-light py-2.5 px-3 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal cursor-pointer truncate"
                     >
                       <option value="all">All Ministries ({availableMinistries.length})</option>
                       {availableMinistries.map((min) => (
@@ -1166,7 +1232,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-charcoal/60 px-1 font-bold">
+                <div className="flex items-center justify-between text-[12px] text-muted px-1 font-medium">
                   <span>
                     {filteredAvailableMembersToAdd.length} eligible {filteredAvailableMembersToAdd.length === 1 ? "member" : "members"} found
                   </span>
@@ -1175,7 +1241,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                       <button
                         type="button"
                         onClick={handleSelectAllFiltered}
-                        className="text-indigo hover:text-indigo-800 hover:underline cursor-pointer font-bold"
+                        className="text-indigo hover:text-indigo-800 hover:underline cursor-pointer font-medium"
                       >
                         Select All Filtered ({filteredAvailableMembersToAdd.length})
                       </button>
@@ -1186,7 +1252,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                         <button
                           type="button"
                           onClick={handleClearAllSelected}
-                          className="text-rose-600 hover:text-rose-800 hover:underline cursor-pointer font-bold"
+                          className="text-rose-600 hover:text-rose-800 hover:underline cursor-pointer font-medium"
                         >
                           Clear ({selectedMemberIdsToAdd.length})
                         </button>
@@ -1199,10 +1265,10 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
               {/* Members Selection List */}
               <div className="border border-gray-200 rounded-2xl max-h-64 overflow-y-auto divide-y divide-gray-100 bg-gray-50/40 p-1">
                 {filteredAvailableMembersToAdd.length === 0 ? (
-                  <div className="py-8 text-center text-charcoal/50 space-y-1">
+                  <div className="py-8 text-center text-muted space-y-1">
                     <Users className="w-8 h-8 mx-auto text-charcoal/30" />
-                    <p className="font-bold text-xs">No church members found</p>
-                    <p className="text-[11px]">Try adjusting your search query or ministry filter</p>
+                    <p className="font-medium text-xs">No church members found</p>
+                    <p className="text-[12px]">Try adjusting your search query or ministry filter</p>
                   </div>
                 ) : (
                   filteredAvailableMembersToAdd.map((m) => {
@@ -1227,7 +1293,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                             {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                           </div>
 
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${isSelected
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium text-xs shrink-0 ${isSelected
                             ? "bg-indigo text-white shadow-2xs"
                             : "bg-slate-200 text-slate-700"
                             }`}>
@@ -1235,16 +1301,16 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                           </div>
 
                           <div className="min-w-0">
-                            <div className="font-bold text-charcoal text-xs truncate">
+                            <div className="font-medium text-charcoal text-xs truncate">
                               {m.first_name} {m.last_name}
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-charcoal/50 truncate flex-wrap">
+                            <div className="flex items-center gap-2 text-[12px] text-muted truncate flex-wrap">
                               {m.ministry_name ? (
-                                <span className="bg-indigo-100/80 text-indigo-900 font-bold px-1.5 py-0.2 rounded-md">
+                                <span className="bg-indigo-100/80 text-indigo-900 font-medium px-1.5 py-0.2 rounded-md">
                                   {m.ministry_name}
                                 </span>
                               ) : (
-                                <span className="text-charcoal/40 italic">General Member</span>
+                                <span className="text-muted italic">General Member</span>
                               )}
                               {m.contact_phone && <span>• {m.contact_phone}</span>}
                               {m.contact_email && <span className="truncate">• {m.contact_email}</span>}
@@ -1254,7 +1320,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
                         <div className="shrink-0">
                           {isSelected ? (
-                            <div className="flex items-center gap-1 bg-indigo text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-xs">
+                            <div className="flex items-center gap-1 bg-indigo text-white text-[12px] font-medium px-2.5 py-1 rounded-full shadow-xs">
                               <Check className="w-3 h-3" />
                               <span>Selected</span>
                             </div>
@@ -1265,7 +1331,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                                 e.stopPropagation();
                                 handleToggleMemberToAdd(m.id);
                               }}
-                              className="px-2.5 py-1 rounded-full bg-white hover:bg-indigo-50 text-indigo font-bold border border-gray-200 hover:border-indigo-300 text-[10px] transition-colors"
+                              className="px-2.5 py-1 rounded-full bg-white hover:bg-indigo-50 text-indigo font-medium border border-gray-200 hover:border-indigo-300 text-[12px] transition-colors"
                             >
                               + Select
                             </button>
@@ -1280,7 +1346,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
               {/* Selected Disciples Summary Chips */}
               {selectedMemberIdsToAdd.length > 0 && (
                 <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-2 animate-in fade-in">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-indigo-900">
+                  <div className="flex items-center justify-between text-[12px] font-medium text-indigo-900">
                     <div className="flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
                       <span>Selected to enroll ({selectedMemberIdsToAdd.length}):</span>
@@ -1288,7 +1354,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                     <button
                       type="button"
                       onClick={handleClearAllSelected}
-                      className="text-indigo-600 hover:text-rose-600 text-[10px] font-bold cursor-pointer hover:underline"
+                      className="text-indigo-600 hover:text-rose-600 text-[12px] font-medium cursor-pointer hover:underline"
                     >
                       Clear All
                     </button>
@@ -1300,7 +1366,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                       return (
                         <span
                           key={id}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-indigo-200 text-indigo-900 text-[11px] font-bold shadow-2xs"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-indigo-200 text-indigo-900 text-[12px] font-medium shadow-2xs"
                         >
                           <span>{m.first_name} {m.last_name}</span>
                           <button
@@ -1321,7 +1387,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
               )}
 
               {/* Footer Actions */}
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-gray-100">
+              <div data-modal-footer className="pt-3 flex items-center justify-end gap-2 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -1330,14 +1396,14 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                     setAddDiscipleSearchQuery("");
                     setAddDiscipleMinistryFilter("all");
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-gray-100 font-bold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-gray-100 font-medium text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={selectedMemberIdsToAdd.length === 0}
-                  className="px-6 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  className="px-6 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>
@@ -1348,7 +1414,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

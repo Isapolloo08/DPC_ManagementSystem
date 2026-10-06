@@ -1,3 +1,4 @@
+import { CalendarDays as UICalendarDays, Circle as UICircle, Waves as UIWaves } from "lucide-react";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api";
@@ -291,14 +292,14 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
 
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-charcoal/70 backdrop-blur-md animate-fadeIn">
-      <div className="bg-white rounded-3xl shadow-2xl border border-stone-200/90 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp">
+      <div data-modal-panel className="bg-white rounded-3xl shadow-2xl border border-stone-200/90 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-scaleUp">
         
         {/* Modal Header */}
-        <div className="p-5 sm:p-6 bg-slate-900 text-white flex items-center justify-between relative overflow-hidden shrink-0">
+        <div data-modal-header className="p-5 sm:p-6 bg-slate-900 text-white flex items-center justify-between relative overflow-hidden shrink-0">
           <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
           
           <div className="flex items-center gap-3.5 relative z-10">
-            <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white font-black text-lg overflow-hidden shadow-inner shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white font-medium text-lg overflow-hidden shadow-inner shrink-0">
               {member.photo_url ? (
                 <img src={member.photo_url} alt={member.first_name} className="w-full h-full object-cover" />
               ) : (
@@ -307,24 +308,22 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg sm:text-xl font-black tracking-tight text-white">
+                <h2 className="text-lg sm:text-xl font-semibold tracking-tight text-white">
                   {member.first_name} {member.last_name}
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-stone-900 shadow-sm">
+                <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-amber-400 text-stone-900 shadow-sm">
                   {member.ministry_name || "Member"}
                 </span>
                 {memberAgeDisplay && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/15 text-stone-200 border border-white/10">
+                  <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-white/15 text-stone-200 border border-white/10">
                     {memberAgeDisplay}
                   </span>
                 )}
                 {summaryData?.baptism_tracker?.is_baptized ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/40">
-                    💧 Baptized
+                  <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-emerald-500/30 text-emerald-200 border border-emerald-400/40"><Droplets aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Baptized
                   </span>
                 ) : summaryData?.baptism_tracker?.baptism_status === "candidate" ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 animate-pulse">
-                    🌊 Candidate
+                  <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 animate-pulse"><UIWaves aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Candidate
                   </span>
                 ) : null}
               </div>
@@ -346,7 +345,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
         {/* Date Filter Strip */}
         <div className="bg-stone-50 border-b border-stone-200 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-stone-600 flex items-center gap-1.5">
+            <span className="font-medium text-stone-600 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-indigo" />
               <span>Window:</span>
             </span>
@@ -354,17 +353,17 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="px-2.5 py-1 bg-white border border-stone-300 rounded-lg text-xs font-semibold text-charcoal outline-none focus:ring-2 focus:ring-indigo/20 focus:border-indigo cursor-pointer"
+              className="px-2.5 py-1 bg-white border border-stone-300 rounded-lg text-xs font-medium text-charcoal outline-none focus:ring-2 focus:ring-indigo/20 focus:border-indigo cursor-pointer"
             />
-            <span className="text-stone-400 font-bold">to</span>
+            <span className="text-stone-400 font-medium">to</span>
             <input
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="px-2.5 py-1 bg-white border border-stone-300 rounded-lg text-xs font-semibold text-charcoal outline-none focus:ring-2 focus:ring-indigo/20 focus:border-indigo cursor-pointer"
+              className="px-2.5 py-1 bg-white border border-stone-300 rounded-lg text-xs font-medium text-charcoal outline-none focus:ring-2 focus:ring-indigo/20 focus:border-indigo cursor-pointer"
             />
             {isRefreshing && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-indigo bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
                 <Loader2 className="w-3 h-3 animate-spin text-indigo" />
                 <span>Updating...</span>
               </span>
@@ -374,7 +373,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
               onClick={() => applyQuickWindow(4)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition cursor-pointer ${
                 isPresetActive("4w")
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "bg-white hover:bg-stone-100 border border-stone-200 text-stone-700"
@@ -384,7 +383,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
             </button>
             <button
               onClick={() => applyQuickWindow(12)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition cursor-pointer ${
                 isPresetActive("12w")
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "bg-white hover:bg-stone-100 border border-stone-200 text-stone-700"
@@ -394,7 +393,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
             </button>
             <button
               onClick={applyYtdWindow}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition cursor-pointer ${
                 isPresetActive("ytd")
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "bg-white hover:bg-stone-100 border border-stone-200 text-stone-700"
@@ -404,7 +403,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
             </button>
             <button
               onClick={applyThisYearWindow}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition cursor-pointer ${
                 isPresetActive("thisYear")
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "bg-white hover:bg-stone-100 border border-stone-200 text-stone-700"
@@ -415,7 +414,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
             <button
               onClick={handleExportCsv}
               disabled={isExporting || isInitialLoading}
-              className="ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[12px] font-medium shadow-sm transition disabled:opacity-50 cursor-pointer"
               title="Export data for active tab in selected window"
             >
               {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
@@ -428,7 +427,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
         <div className="flex border-b border-stone-200 bg-white px-5 overflow-x-auto shrink-0">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`py-3 px-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3.5 text-xs font-medium uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === "overview"
                 ? "border-indigo text-indigo"
                 : "border-transparent text-stone-500 hover:text-charcoal"
@@ -440,7 +439,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
           
           <button
             onClick={() => setActiveTab("logs")}
-            className={`py-3 px-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3.5 text-xs font-medium uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === "logs"
                 ? "border-indigo text-indigo"
                 : "border-transparent text-stone-500 hover:text-charcoal"
@@ -452,7 +451,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
 
           <button
             onClick={() => setActiveTab("monthly")}
-            className={`py-3 px-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3.5 text-xs font-medium uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === "monthly"
                 ? "border-indigo text-indigo"
                 : "border-transparent text-stone-500 hover:text-charcoal"
@@ -464,7 +463,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
 
           <button
             onClick={() => setActiveTab("milestones")}
-            className={`py-3 px-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3.5 text-xs font-medium uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === "milestones"
                 ? "border-indigo text-indigo"
                 : "border-transparent text-stone-500 hover:text-charcoal"
@@ -479,7 +478,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
 
           <button
             onClick={() => setActiveTab("audit")}
-            className={`py-3 px-3.5 text-xs font-black uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3.5 text-xs font-medium uppercase tracking-wider border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === "audit"
                 ? "border-indigo text-indigo"
                 : "border-transparent text-stone-500 hover:text-charcoal"
@@ -495,17 +494,17 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
           {isInitialLoading && (
             <div className="py-16 text-center">
               <Loader2 className="w-10 h-10 text-indigo animate-spin mx-auto mb-3" />
-              <p className="text-xs font-bold text-stone-500">Calculating attendance rates and streak patterns...</p>
+              <p className="text-xs font-medium text-stone-500">Calculating attendance rates and streak patterns...</p>
             </div>
           )}
 
           {!isInitialLoading && error && (
             <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-2">
               <AlertCircle className="w-8 h-8 text-rose-600 mx-auto" />
-              <div className="text-sm font-bold text-rose-900">{error}</div>
+              <div className="text-sm font-medium text-rose-900">{error}</div>
               <button
                 onClick={loadAttendanceData}
-                className="mt-2 px-4 py-1.5 bg-rose-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                className="mt-2 px-4 py-1.5 bg-rose-700 text-white rounded-xl text-xs font-medium transition cursor-pointer"
               >
                 Retry
               </button>
@@ -519,17 +518,17 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
               {/* Overall Rate Banner */}
               <div className="bg-indigo-950 text-white p-5 rounded-2xl border border-indigo-800 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-amber-400 font-black text-2xl shadow-inner shrink-0">
+                  <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-amber-400 font-medium text-2xl shadow-inner shrink-0">
                     {summaryData.consistency_score !== null ? `${summaryData.consistency_score}%` : "N/A"}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider">Overall Consistency Score</span>
-                      <span className="text-[10px] text-stone-400 group relative cursor-help" title="Formula: Attended Sundays / (Elapsed Sundays - Excused)">
+                      <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Overall Consistency Score</span>
+                      <span className="text-[12px] text-stone-400 group relative cursor-help" title="Formula: Attended Sundays / (Elapsed Sundays - Excused)">
                         <Info className="w-3.5 h-3.5" />
                       </span>
                     </div>
-                    <h3 className="text-lg font-black text-white">
+                    <h3 className="text-lg font-semibold text-white">
                       {summaryData.consistency_tier === "Consistent Regular" && "Consistent Regular"}
                       {summaryData.consistency_tier === "Regular Attendee" && "Regular Attendee"}
                       {summaryData.consistency_tier === "Developing Habit" && "Developing Habit"}
@@ -546,7 +545,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <div className="text-xs text-stone-300 font-medium">Sunday Streak</div>
-                    <div className="text-sm font-extrabold text-amber-400 flex items-center justify-end gap-1">
+                    <div className="text-sm font-medium text-amber-400 flex items-center justify-end gap-1">
                       <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
                       <span>{summaryData.sunday_service.current_streak} consecutive</span>
                     </div>
@@ -564,10 +563,10 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       <div className="p-2 bg-indigo-100 text-indigo rounded-xl">
                         <Calendar className="w-4 h-4 text-indigo" />
                       </div>
-                      <h4 className="text-sm font-extrabold text-charcoal">Sunday Services</h4>
+                      <h4 className="text-sm font-semibold text-charcoal">Sunday Services</h4>
                     </div>
                     <div className="text-right">
-                      <span className="text-lg font-black text-indigo">
+                      <span className="text-lg font-medium text-indigo">
                         {summaryData.sunday_service.attendance_rate_percentage !== null
                           ? `${summaryData.sunday_service.attendance_rate_percentage}%`
                           : "N/A"}
@@ -577,15 +576,15 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-white p-2.5 rounded-xl border border-stone-200">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Attended</span>
-                      <div className="text-base font-black text-emerald-700">
-                        {summaryData.sunday_service.attended} <span className="text-[10px] text-stone-400 font-normal">/ {summaryData.sunday_service.total_held_services}</span>
+                      <span className="text-[12px] uppercase font-medium text-stone-400">Attended</span>
+                      <div className="text-base font-medium text-emerald-700">
+                        {summaryData.sunday_service.attended} <span className="text-[12px] text-stone-400 font-normal">/ {summaryData.sunday_service.total_held_services}</span>
                       </div>
                     </div>
                     <div className="bg-white p-2.5 rounded-xl border border-stone-200">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Absent / Exc</span>
-                      <div className="text-base font-black text-amber-700">
-                        {summaryData.sunday_service.absent || 0} <span className="text-[10px] text-stone-400 font-normal">({summaryData.sunday_service.excused} exc)</span>
+                      <span className="text-[12px] uppercase font-medium text-stone-400">Absent / Exc</span>
+                      <div className="text-base font-medium text-amber-700">
+                        {summaryData.sunday_service.absent || 0} <span className="text-[12px] text-stone-400 font-normal">({summaryData.sunday_service.excused} exc)</span>
                       </div>
                     </div>
                   </div>
@@ -596,18 +595,18 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         <Flame className="w-3.5 h-3.5 text-amber-500" />
                         Current Streak:
                       </span>
-                      <span className="font-bold text-charcoal">{summaryData.sunday_service.current_streak} Sundays</span>
+                      <span className="font-medium text-charcoal">{summaryData.sunday_service.current_streak} Sundays</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5 font-medium">
                         <Award className="w-3.5 h-3.5 text-indigo" />
                         Longest Streak:
                       </span>
-                      <span className="font-bold text-charcoal">{summaryData.sunday_service.longest_streak} Sundays</span>
+                      <span className="font-medium text-charcoal">{summaryData.sunday_service.longest_streak} Sundays</span>
                     </div>
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-stone-400 font-medium">Last Attended:</span>
-                      <span className="font-bold text-charcoal">{summaryData.sunday_service.last_attended_date || "None in window"}</span>
+                      <span className="font-medium text-charcoal">{summaryData.sunday_service.last_attended_date || "None in window"}</span>
                     </div>
                   </div>
                 </div>
@@ -619,27 +618,27 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       <div className="p-2 bg-amber-100 text-amber-900 rounded-xl">
                         <HeartHandshake className="w-4 h-4 text-amber-600" />
                       </div>
-                      <h4 className="text-sm font-extrabold text-charcoal">Bible Study</h4>
+                      <h4 className="text-sm font-semibold text-charcoal">Bible Study</h4>
                     </div>
-                    <span className="text-lg font-black text-amber-800">
+                    <span className="text-lg font-medium text-amber-800">
                       {summaryData.bible_study.attendance_rate_percentage !== null
                         ? `${summaryData.bible_study.attendance_rate_percentage}%`
-                        : <span className="text-xs font-bold text-stone-400">No sessions</span>}
+                        : <span className="text-xs font-medium text-stone-400">No sessions</span>}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-1.5 text-xs text-center">
                     <div className="bg-white p-2 rounded-xl border border-stone-200">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Present</span>
-                      <div className="text-sm font-black text-emerald-700">{summaryData.bible_study.attended}</div>
+                      <span className="text-[12px] uppercase font-medium text-stone-400">Present</span>
+                      <div className="text-sm font-medium text-emerald-700">{summaryData.bible_study.attended}</div>
                     </div>
                     <div className="bg-white p-2 rounded-xl border border-stone-200">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Excused</span>
-                      <div className="text-sm font-black text-amber-600">{summaryData.bible_study.excused}</div>
+                      <span className="text-[12px] uppercase font-medium text-stone-400">Excused</span>
+                      <div className="text-sm font-medium text-amber-600">{summaryData.bible_study.excused}</div>
                     </div>
                     <div className="bg-white p-2 rounded-xl border border-stone-200">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Absent</span>
-                      <div className="text-sm font-black text-rose-600">{summaryData.bible_study.missed}</div>
+                      <span className="text-[12px] uppercase font-medium text-stone-400">Absent</span>
+                      <div className="text-sm font-medium text-rose-600">{summaryData.bible_study.missed}</div>
                     </div>
                   </div>
 
@@ -649,18 +648,18 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         <Flame className="w-3.5 h-3.5 text-amber-500" />
                         Current Streak:
                       </span>
-                      <span className="font-bold text-charcoal">{summaryData.bible_study.current_streak} Sessions</span>
+                      <span className="font-medium text-charcoal">{summaryData.bible_study.current_streak} Sessions</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5 font-medium">
                         <Award className="w-3.5 h-3.5 text-amber-700" />
                         Longest Streak:
                       </span>
-                      <span className="font-bold text-charcoal">{summaryData.bible_study.longest_streak} Sessions</span>
+                      <span className="font-medium text-charcoal">{summaryData.bible_study.longest_streak} Sessions</span>
                     </div>
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-stone-400 font-medium">Last Attended:</span>
-                      <span className="font-bold text-charcoal">{summaryData.bible_study.last_attended_date || "None in window"}</span>
+                      <span className="font-medium text-charcoal">{summaryData.bible_study.last_attended_date || "None in window"}</span>
                     </div>
                   </div>
                 </div>
@@ -672,27 +671,27 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       <div className="p-2 bg-purple-100 text-purple-900 rounded-xl">
                         <PartyPopper className="w-4 h-4 text-purple-600" />
                       </div>
-                      <h4 className="text-sm font-extrabold text-charcoal">Special Events</h4>
+                      <h4 className="text-sm font-semibold text-charcoal">Special Events</h4>
                     </div>
-                    <span className="text-lg font-black text-purple-900">
+                    <span className="text-lg font-medium text-purple-900">
                       {summaryData.events.attended} <span className="text-xs text-stone-400 font-normal">attended</span>
                     </span>
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-stone-200 text-xs space-y-2">
-                    <div className="text-[11px] font-bold text-stone-600 uppercase tracking-wider">
+                    <div className="text-[12px] font-medium text-stone-600 uppercase tracking-wider">
                       Events in this Period
                     </div>
                     {summaryData.events.events_list.length === 0 ? (
-                      <p className="text-stone-400 italic text-[11px]">No special events attended in this timeframe.</p>
+                      <p className="text-stone-400 italic text-[12px]">No special events attended in this timeframe.</p>
                     ) : (
                       <ul className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
                         {summaryData.events.events_list.map((ev) => (
-                          <li key={ev.id} className="flex items-center justify-between text-[11px]">
-                            <span className="font-semibold text-charcoal truncate max-w-[140px]" title={ev.title}>
+                          <li key={ev.id} className="flex items-center justify-between text-[12px]">
+                            <span className="font-medium text-charcoal truncate max-w-[140px]" title={ev.title}>
                               {ev.title}
                             </span>
-                            <span className="text-stone-400 text-[10px]">{ev.event_date}</span>
+                            <span className="text-stone-400 text-[12px]">{ev.event_date}</span>
                           </li>
                         ))}
                       </ul>
@@ -702,7 +701,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                   <div className="space-y-1.5 text-xs text-stone-600 pt-2 border-t border-stone-200">
                     <div className="flex items-center justify-between">
                       <span className="text-stone-400 font-medium">Last Event:</span>
-                      <span className="font-bold text-charcoal">{summaryData.events.last_attended_date || "None in window"}</span>
+                      <span className="font-medium text-charcoal">{summaryData.events.last_attended_date || "None in window"}</span>
                     </div>
                   </div>
                 </div>
@@ -715,11 +714,11 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
           {!isInitialLoading && !error && summaryData && activeTab === "logs" && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-                <div className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+                <div className="text-xs font-medium text-stone-700 flex items-center gap-1.5">
                   <FileText className="w-4 h-4 text-indigo" />
                   <span>Sunday & Midweek Attendance Records ({summaryData.records.length})</span>
                 </div>
-                <span className="text-[11px] text-stone-400">
+                <span className="text-[12px] text-stone-400">
                   Showing logs from {fromDate} to {toDate}
                 </span>
               </div>
@@ -727,13 +726,13 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
               {summaryData.records.length === 0 ? (
                 <div className="py-12 text-center text-stone-400 space-y-2">
                   <UserCheck className="w-10 h-10 mx-auto text-stone-300" />
-                  <p className="text-xs font-bold">No attendance records found for this member in the selected window.</p>
+                  <p className="text-xs font-medium">No attendance records found for this member in the selected window.</p>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
                   <div className="overflow-x-auto max-h-80 overflow-y-auto">
                     <table className="w-full text-left border-collapse text-xs">
-                      <thead className="bg-stone-50 border-b border-stone-200 text-[10px] font-black text-stone-500 uppercase tracking-wider sticky top-0">
+                      <thead className="bg-stone-50 border-b border-stone-200 text-[12px] font-medium text-stone-500 uppercase tracking-wider sticky top-0">
                         <tr>
                           <th className="py-3 px-4">Date & Time</th>
                           <th className="py-3 px-4">Service Name / Notes</th>
@@ -745,15 +744,15 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       <tbody className="divide-y divide-stone-100">
                         {summaryData.records.map((r) => (
                           <tr key={r.id} className="hover:bg-stone-50/80 transition-colors">
-                            <td className="py-2.5 px-4 font-black text-stone-900 whitespace-nowrap">
+                            <td className="py-2.5 px-4 font-medium text-stone-900 whitespace-nowrap">
                               <div>{r.date_str}</div>
-                              <div className="text-[10px] text-stone-400 font-normal">{r.time_str}</div>
+                              <div className="text-[12px] text-stone-400 font-normal">{r.time_str}</div>
                             </td>
-                            <td className="py-2.5 px-4 font-bold text-charcoal/80">
+                            <td className="py-2.5 px-4 font-medium text-charcoal/80">
                               {r.notes || "Sunday Divine Worship Service"}
                             </td>
                             <td className="py-2.5 px-4 text-center">
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              <span className={`px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase ${
                                 r.status === "present"
                                   ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
                                   : r.status === "excused"
@@ -763,9 +762,9 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                                 {r.status}
                               </span>
                             </td>
-                            <td className="py-2.5 px-4 font-mono text-[11px] text-stone-600">
+                            <td className="py-2.5 px-4 font-mono text-[12px] text-stone-600">
                               {r.security_code ? (
-                                <span className="px-2 py-0.5 rounded-md bg-stone-100 border border-stone-200 font-bold">
+                                <span className="px-2 py-0.5 rounded-md bg-stone-100 border border-stone-200 font-medium">
                                   {r.security_code}
                                 </span>
                               ) : "—"}
@@ -787,11 +786,11 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
           {!isInitialLoading && !error && summaryData && activeTab === "monthly" && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-                <div className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+                <div className="text-xs font-medium text-stone-700 flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-indigo" />
                   <span>12-Month Calendar Breakdown ({toDate.split("-")[0]})</span>
                 </div>
-                <span className="text-[11px] text-stone-400 font-medium">
+                <span className="text-[12px] text-stone-400 font-medium">
                   Sundays Present per Month
                 </span>
               </div>
@@ -811,15 +810,15 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-black text-xs text-stone-900">
+                        <span className="font-medium text-xs text-stone-900">
                           {m.month_name.slice(0, 3)}
                         </span>
                         {m.is_future ? (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-stone-200 text-stone-600">
+                          <span className="text-[12px] font-medium px-1.5 py-0.5 rounded bg-stone-200 text-stone-600">
                             Upcoming
                           </span>
                         ) : (
-                          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                          <span className={`text-[12px] font-medium px-1.5 py-0.5 rounded-md ${
                             hasAttendance ? "bg-emerald-600 text-white" : "bg-stone-100 text-stone-600"
                           }`}>
                             {m.present} {m.present === 1 ? "day" : "days"}
@@ -836,7 +835,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         />
                       </div>
 
-                      <div className="flex justify-between text-[9px] text-stone-400 font-semibold mt-2">
+                      <div className="flex justify-between text-[12px] text-stone-400 font-medium mt-2">
                         <span>Abs: {m.absent}</span>
                         <span>Exc: {m.excused}</span>
                       </div>
@@ -860,19 +859,19 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         <Droplets className="w-5 h-5 fill-white" />
                       </span>
                       <div>
-                        <h4 className="font-black text-xs text-stone-900 flex items-center gap-1.5">
+                        <h4 className="font-semibold text-xs text-stone-900 flex items-center gap-1.5">
                           <span>BAPTISM CEREMONY CANDIDATE ALERT</span>
-                          <span className="text-[10px] bg-cyan-700 text-white font-black px-2 py-0.5 rounded-full">
+                          <span className="text-[12px] bg-cyan-700 text-white font-medium px-2 py-0.5 rounded-full">
                             Qualified
                           </span>
                         </h4>
-                        <p className="text-[11px] text-stone-700 font-medium">
+                        <p className="text-[12px] text-stone-700 font-medium">
                           {summaryData.baptism_tracker.alert_reason || "This member is recommended for the upcoming Baptism Ceremony!"}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-white/90 px-3 py-1.5 rounded-xl border border-cyan-300 text-xs font-black text-cyan-950 shadow-2xs">
+                    <div className="flex items-center gap-1 bg-white/90 px-3 py-1.5 rounded-xl border border-cyan-300 text-xs font-medium text-cyan-950 shadow-2xs">
                       <Award className="w-4 h-4 text-amber-500" />
                       <span>Eligible for Ceremony</span>
                     </div>
@@ -888,10 +887,10 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       <Droplets className="w-5 h-5 fill-cyan-300" />
                     </span>
                     <div>
-                      <h3 className="font-black text-sm text-amber-300">
+                      <h3 className="font-semibold text-sm text-amber-300">
                         Water Baptism Ceremony Milestone
                       </h3>
-                      <p className="text-[11px] text-indigo-200">
+                      <p className="text-[12px] text-indigo-200">
                         Spiritual sacrament and ceremony milestones recording
                       </p>
                     </div>
@@ -899,7 +898,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
 
                   <div className="flex items-center gap-2">
                     {baptismSuccessMessage && (
-                      <span className="inline-flex items-center gap-1 bg-emerald-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full animate-bounce shadow-2xs">
+                      <span className="inline-flex items-center gap-1 bg-emerald-500 text-white text-[12px] font-medium px-2.5 py-1 rounded-full animate-bounce shadow-2xs">
                         <Check className="w-3 h-3" />
                         <span>{baptismSuccessMessage}</span>
                       </span>
@@ -909,7 +908,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       <button
                         type="button"
                         onClick={() => setIsEditingBaptism(true)}
-                        className="px-3.5 py-1.5 rounded-xl bg-indigo-800 hover:bg-indigo-700 text-amber-300 hover:text-amber-200 font-black text-xs border border-indigo-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                        className="px-3.5 py-1.5 rounded-xl bg-indigo-800 hover:bg-indigo-700 text-amber-300 hover:text-amber-200 font-medium text-xs border border-indigo-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       >
                         <Pencil className="w-3.5 h-3.5 text-amber-300" />
                         <span>Edit / Update Status</span>
@@ -922,37 +921,37 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                   /* VIEW MODE */
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                     <div className="bg-indigo-900/60 p-3.5 rounded-xl border border-indigo-800/80 space-y-1.5">
-                      <span className="text-[10px] text-indigo-300 block font-bold uppercase tracking-wider">
+                      <span className="text-[12px] text-indigo-300 block font-medium uppercase tracking-wider">
                         Current Baptism Status
                       </span>
                       <div className="flex items-center gap-2 pt-0.5">
                         {baptismForm.baptism_status === "candidate" ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-black text-cyan-300 bg-cyan-950/80 px-3 py-1 rounded-lg border border-cyan-500/50 shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-300 bg-cyan-950/80 px-3 py-1 rounded-lg border border-cyan-500/50 shadow-2xs">
                             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                            <span>🌊 Candidate for Ceremony</span>
+                            <span><UIWaves aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Candidate for Ceremony</span>
                           </span>
                         ) : baptismForm.baptism_status === "scheduled" ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-black text-amber-300 bg-amber-950/80 px-3 py-1 rounded-lg border border-amber-500/50 shadow-2xs">
-                            <span>📅 Scheduled for Ceremony</span>
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-300 bg-amber-950/80 px-3 py-1 rounded-lg border border-amber-500/50 shadow-2xs">
+                            <span><UICalendarDays aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Scheduled for Ceremony</span>
                           </span>
                         ) : (baptismForm.is_baptized || baptismForm.baptism_status === "baptized") ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded-lg border border-emerald-500/50 shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded-lg border border-emerald-500/50 shadow-2xs">
                             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>💧 Water Baptized</span>
+                            <span><Droplets aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Water Baptized</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-300 bg-slate-900/80 px-3 py-1 rounded-lg border border-slate-700 shadow-2xs">
-                            <span>⚪ Not Yet Baptized</span>
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-300 bg-slate-900/80 px-3 py-1 rounded-lg border border-slate-700 shadow-2xs">
+                            <span><UICircle aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Not Yet Baptized</span>
                           </span>
                         )}
                       </div>
                     </div>
 
                     <div className="bg-indigo-900/60 p-3.5 rounded-xl border border-indigo-800/80 space-y-1.5">
-                      <span className="text-[10px] text-indigo-300 block font-bold uppercase tracking-wider">
+                      <span className="text-[12px] text-indigo-300 block font-medium uppercase tracking-wider">
                         Officiating Minister / Ceremony Notes
                       </span>
-                      <p className="text-xs font-bold text-indigo-100 pt-0.5">
+                      <p className="text-xs font-medium text-indigo-100 pt-0.5">
                         {baptismForm.baptism_notes || <span className="text-indigo-400 italic font-normal">No minister / ceremony notes recorded yet.</span>}
                       </p>
                     </div>
@@ -961,7 +960,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                   /* EDIT MODE */
                   <div className="space-y-3.5 pt-1">
                     <div className="space-y-2">
-                      <label className="font-bold text-indigo-200 text-[11px] block">
+                      <label className="font-medium text-indigo-200 text-[12px] block">
                         Select Baptism Ceremony Status:
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -979,7 +978,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                               baptism_status: item.id,
                               is_baptized: item.isBaptized
                             }))}
-                            className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                            className={`py-2 px-2.5 rounded-xl font-medium text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
                               baptismForm.baptism_status === item.id
                                 ? item.isAlert
                                   ? "bg-cyan-600 text-white border-cyan-300 shadow-md scale-[1.02]"
@@ -996,7 +995,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                     </div>
 
                     <div>
-                      <label className="font-bold text-indigo-200 text-[11px] block mb-1">
+                      <label className="font-medium text-indigo-200 text-[12px] block mb-1">
                         Officiating Minister / Ceremony Notes:
                       </label>
                       <input
@@ -1004,7 +1003,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         placeholder="e.g. Pastor Juan Dela Cruz • DPC Baptism Service"
                         value={baptismForm.baptism_notes}
                         onChange={(e) => setBaptismForm(prev => ({ ...prev, baptism_notes: e.target.value }))}
-                        className="w-full bg-white text-indigo-950 p-2.5 rounded-xl border border-indigo-200 focus:outline-none focus:border-cyan-400 font-bold text-xs"
+                        className="w-full bg-white text-indigo-950 p-2.5 rounded-xl border border-indigo-200 focus:outline-none focus:border-cyan-400 font-medium text-xs"
                       />
                     </div>
 
@@ -1013,7 +1012,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         type="button"
                         disabled={isSavingBaptism}
                         onClick={() => setIsEditingBaptism(false)}
-                        className="px-4 py-2 rounded-xl bg-indigo-900/70 hover:bg-indigo-800 text-indigo-200 font-bold text-xs border border-indigo-700 cursor-pointer transition-colors"
+                        className="px-4 py-2 rounded-xl bg-indigo-900/70 hover:bg-indigo-800 text-indigo-200 font-medium text-xs border border-indigo-700 cursor-pointer transition-colors"
                       >
                         Cancel
                       </button>
@@ -1021,7 +1020,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                         type="button"
                         disabled={isSavingBaptism}
                         onClick={handleSaveBaptism}
-                        className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         {isSavingBaptism ? (
                           <>
@@ -1046,11 +1045,11 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
           {!isInitialLoading && !error && activeTab === "audit" && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-                <div className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+                <div className="text-xs font-medium text-stone-700 flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-indigo" />
                   <span>Audit Trail Logs ({attendanceLogs.length})</span>
                 </div>
-                <span className="text-[11px] text-stone-400">
+                <span className="text-[12px] text-stone-400">
                   Detailed check-in and membership audit logs
                 </span>
               </div>
@@ -1058,14 +1057,14 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
               {attendanceLogs.length === 0 ? (
                 <div className="py-12 text-center text-stone-400 space-y-2">
                   <UserCheck className="w-10 h-10 mx-auto text-stone-300" />
-                  <p className="text-xs font-bold">No audit trail records found in this timeframe.</p>
+                  <p className="text-xs font-medium">No audit trail records found in this timeframe.</p>
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
                   <div className="overflow-x-auto max-h-80 overflow-y-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-stone-50 border-b border-stone-200 text-[10px] font-black text-stone-500 uppercase tracking-wider sticky top-0">
+                        <tr className="bg-stone-50 border-b border-stone-200 text-[12px] font-medium text-stone-500 uppercase tracking-wider sticky top-0">
                           <th className="py-3 px-4">Date</th>
                           <th className="py-3 px-4">Type</th>
                           <th className="py-3 px-4">Context / Group</th>
@@ -1076,22 +1075,22 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                       <tbody className="divide-y divide-stone-100">
                         {attendanceLogs.map((log, i) => (
                           <tr key={i} className="hover:bg-stone-50/80 transition-colors">
-                            <td className="py-2.5 px-4 font-bold text-charcoal">{log.logDate}</td>
+                            <td className="py-2.5 px-4 font-medium text-charcoal">{log.logDate}</td>
                             <td className="py-2.5 px-4">
                               {log.logType === "sunday_service" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo border border-indigo-100">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[12px] font-medium bg-indigo-50 text-indigo border border-indigo-100">
                                   <Calendar className="w-2.5 h-2.5 text-amber-500" />
                                   <span>Sunday</span>
                                 </span>
                               )}
                               {log.logType === "bible_study" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[12px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
                                   <HeartHandshake className="w-2.5 h-2.5 text-amber-600" />
                                   <span>Bible Study</span>
                                 </span>
                               )}
                               {log.logType === "event" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-purple-50 text-purple-900 border border-purple-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[12px] font-medium bg-purple-50 text-purple-900 border border-purple-200">
                                   <PartyPopper className="w-2.5 h-2.5 text-purple-600" />
                                   <span>Special Event</span>
                                 </span>
@@ -1104,25 +1103,25 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
                             </td>
                             <td className="py-2.5 px-4 text-center">
                               {log.status === "present" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium bg-emerald-100 text-emerald-800">
                                   <CheckCircle2 className="w-2.5 h-2.5" />
                                   <span>Present</span>
                                 </span>
                               )}
                               {log.status === "absent" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium bg-rose-100 text-rose-800">
                                   <XCircle className="w-2.5 h-2.5" />
                                   <span>Absent</span>
                                 </span>
                               )}
                               {log.status === "excused" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium bg-amber-100 text-amber-800">
                                   <Clock className="w-2.5 h-2.5" />
                                   <span>Excused</span>
                                 </span>
                               )}
                             </td>
-                            <td className="py-2.5 px-4 text-right text-stone-400 text-[11px]">
+                            <td className="py-2.5 px-4 text-right text-stone-400 text-[12px]">
                               {log.recordedAt ? new Date(log.recordedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
                             </td>
                           </tr>
@@ -1138,13 +1137,13 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-stone-50 border-t border-stone-200 px-6 py-3.5 flex items-center justify-between shrink-0">
+        <div data-modal-footer className="bg-stone-50 border-t border-stone-200 px-6 py-3.5 flex items-center justify-between shrink-0">
           <span className="text-xs text-stone-500 font-medium">
             Daet Presbyterian Church Management System • Attendance Intelligence
           </span>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+            className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-medium transition shadow-sm cursor-pointer"
           >
             Close
           </button>

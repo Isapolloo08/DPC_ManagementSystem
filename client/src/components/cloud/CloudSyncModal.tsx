@@ -1,3 +1,5 @@
+import { ArrowRight as UIArrowRight } from "lucide-react";
+import { ModalPanel } from "../common/ModalPanel";
 import React, { useState, useEffect } from "react";
 import {
   Cloud, CloudRain, RefreshCw, ArrowUpCircle, ArrowDownCircle, CheckCircle2,
@@ -184,10 +186,10 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/60 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+      <div data-modal-panel className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
         
         {/* Header */}
-        <div className="p-6 bg-indigo-950 text-white flex items-center justify-between relative overflow-hidden shrink-0">
+        <div data-modal-header className="p-6 bg-indigo-950 text-white flex items-center justify-between relative overflow-hidden shrink-0">
           <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
           
           <div className="flex items-center gap-3.5 z-10">
@@ -196,19 +198,19 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black tracking-tight text-white">Supabase Cloud Sync & Backup</h2>
+                <h2 className="text-lg font-semibold tracking-tight text-white">Supabase Cloud Sync & Backup</h2>
                 {syncStatus?.connected ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                  <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                     Cloud Live
                   </span>
                 ) : syncStatus?.configured ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
+                  <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3 text-amber-400" />
                     Cloud Offline
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-500/20 text-slate-300 border border-slate-400/30">
+                  <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-slate-500/20 text-slate-300 border border-slate-400/30">
                     Not Configured
                   </span>
                 )}
@@ -235,11 +237,11 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
           {isSyncing && syncProgress && (
             <div className="bg-indigo-950 text-white rounded-2xl p-5 shadow-lg border border-indigo-800 space-y-3 animate-fade-in">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold flex items-center gap-2 text-indigo-300">
+                <span className="font-medium flex items-center gap-2 text-indigo-300">
                   <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
                   {syncDirection === "push" ? "Pushing Local Data to Supabase..." : "Pulling Data from Supabase..."}
                 </span>
-                <span className="font-mono font-black text-indigo-200">
+                <span className="font-mono font-medium text-indigo-200">
                   {syncProgress.percentage}%
                 </span>
               </div>
@@ -252,7 +254,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-indigo-200/70 pt-1">
+              <div className="flex items-center justify-between text-[12px] text-indigo-200/70 pt-1">
                 <span>{syncProgress.message}</span>
                 <span className="font-mono">Step {syncProgress.current} of {syncProgress.total}</span>
               </div>
@@ -264,7 +266,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl p-4 flex items-start gap-3 animate-fade-in">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <div className="font-black text-sm text-emerald-950">Synchronization Successful!</div>
+                <div className="font-medium text-sm text-emerald-950">Synchronization Successful!</div>
                 <div className="text-xs text-emerald-800">{syncSuccessMessage}</div>
               </div>
             </div>
@@ -275,8 +277,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             <div className="bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl p-4 flex items-start gap-3 animate-fade-in">
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <div className="font-black text-sm text-rose-950">Cloud Sync Error</div>
-                <div className="text-xs text-rose-800 leading-relaxed font-mono text-[11px]">{syncErrorMessage}</div>
+                <div className="font-medium text-sm text-rose-950">Cloud Sync Error</div>
+                <div className="text-xs text-rose-800 leading-relaxed font-mono text-[12px]">{syncErrorMessage}</div>
               </div>
             </div>
           )}
@@ -288,8 +290,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 <Server className="w-5 h-5 text-indigo-600" />
               </div>
               <div className="min-w-0">
-                <div className="text-[10px] font-black tracking-wider uppercase text-charcoal/50">Cloud Host</div>
-                <div className="text-xs font-bold text-charcoal truncate">
+                <div className="text-[12px] font-medium tracking-wider uppercase text-muted">Cloud Host</div>
+                <div className="text-xs font-medium text-charcoal truncate">
                   {syncStatus?.cloudHost || "Not Configured"}
                 </div>
               </div>
@@ -300,8 +302,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 <Clock className="w-5 h-5 text-emerald-600" />
               </div>
               <div className="min-w-0">
-                <div className="text-[10px] font-black tracking-wider uppercase text-charcoal/50">Last Cloud Sync</div>
-                <div className="text-xs font-bold text-charcoal truncate">
+                <div className="text-[12px] font-medium tracking-wider uppercase text-muted">Last Cloud Sync</div>
+                <div className="text-xs font-medium text-charcoal truncate">
                   {syncStatus?.lastSyncedAt
                     ? new Date(syncStatus.lastSyncedAt).toLocaleString("en-US", {
                         month: "short",
@@ -319,14 +321,14 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
           {syncStatus && syncStatus.comparison.length > 0 && (
             <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-2xs">
               <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-charcoal/70 flex items-center gap-1.5">
+                <span className="text-xs font-medium uppercase tracking-wider text-charcoal/70 flex items-center gap-1.5">
                   <Database className="w-3.5 h-3.5 text-indigo-600" />
                   Database Record Comparison
                 </span>
                 <button
                   onClick={loadStatus}
                   disabled={loading || isSyncing}
-                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                  className="text-[12px] font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
                 >
                   <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
                   Refresh
@@ -340,19 +342,18 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                   return (
                     <div key={row.table} className="px-4 py-2.5 flex items-center justify-between text-xs hover:bg-slate-50/50">
                       <span className="font-medium text-charcoal">{row.label}</span>
-                      <div className="flex items-center gap-4 font-mono text-[11px]">
-                        <span className="text-charcoal/70">Local: <strong className="text-charcoal font-bold">{row.localCount}</strong></span>
-                        <span className="text-charcoal/70">Cloud: <strong className="text-charcoal font-bold">{row.cloudCount}</strong></span>
+                      <div className="flex items-center gap-4 font-mono text-[12px]">
+                        <span className="text-charcoal/70">Local: <strong className="text-charcoal font-medium">{row.localCount}</strong></span>
+                        <span className="text-charcoal/70">Cloud: <strong className="text-charcoal font-medium">{row.cloudCount}</strong></span>
                         {isMatch ? (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
-                            Synced ✓
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[12px] font-medium border border-emerald-100">Synced <Check aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" />
                           </span>
                         ) : diff > 0 ? (
-                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-100">
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[12px] font-medium border border-indigo-100">
                             +{diff} Local Pending
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-100">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[12px] font-medium border border-amber-100">
                             Cloud Ahead
                           </span>
                         )}
@@ -370,9 +371,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             {/* Push to Cloud Card */}
             <div className="border-2 border-indigo-200/80 hover:border-indigo-400 bg-indigo-50/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-2xs">
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-indigo-900 font-black text-sm">
-                  <ArrowUpCircle className="w-5 h-5 text-indigo-600" />
-                  Push Local ➔ Supabase
+                <div className="flex items-center gap-2 text-indigo-900 font-medium text-sm">
+                  <ArrowUpCircle className="w-5 h-5 text-indigo-600" />Push Local <UIArrowRight aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Supabase
                 </div>
                 <p className="text-xs text-charcoal/70 leading-relaxed">
                   Uploads all new and edited members, attendance, events, and records from this computer up to Supabase Cloud.
@@ -383,7 +383,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 type="button"
                 onClick={() => setConfirmAction("push")}
                 disabled={isSyncing || !syncStatus?.configured}
-                className="w-full py-2.5 px-4 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs shadow-md shadow-indigo-950/20 transition-all cursor-pointer disabled:opacity-50 active:scale-98 flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white font-medium text-xs shadow-md shadow-indigo-950/20 transition-all cursor-pointer disabled:opacity-50 active:scale-98 flex items-center justify-center gap-2"
               >
                 <ArrowUpCircle className="w-4 h-4 text-indigo-300" />
                 <span>Push to Supabase Cloud</span>
@@ -393,9 +393,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             {/* Pull from Cloud Card */}
             <div className="border border-slate-200 bg-slate-50/50 hover:bg-white rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-2xs">
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-charcoal font-black text-sm">
-                  <ArrowDownCircle className="w-5 h-5 text-slate-600" />
-                  Pull Supabase ➔ Local
+                <div className="flex items-center gap-2 text-charcoal font-medium text-sm">
+                  <ArrowDownCircle className="w-5 h-5 text-slate-600" />Pull Supabase <UIArrowRight aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Local
                 </div>
                 <p className="text-xs text-charcoal/70 leading-relaxed">
                   Downloads all records from Supabase Cloud to this local machine. Ideal when setting up a new Master PC.
@@ -406,9 +405,9 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 type="button"
                 onClick={() => setConfirmAction("pull")}
                 disabled={isSyncing || !syncStatus?.configured}
-                className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-charcoal border border-slate-300 font-bold text-xs transition-all cursor-pointer disabled:opacity-50 active:scale-98 flex items-center justify-center gap-2 shadow-2xs"
+                className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-charcoal border border-slate-300 font-medium text-xs transition-all cursor-pointer disabled:opacity-50 active:scale-98 flex items-center justify-center gap-2 shadow-2xs"
               >
-                <ArrowDownCircle className="w-4 h-4 text-charcoal/60" />
+                <ArrowDownCircle className="w-4 h-4 text-muted" />
                 <span>Pull from Cloud</span>
               </button>
             </div>
@@ -422,11 +421,11 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
               onClick={() => setShowConfig(!showConfig)}
               className="w-full px-5 py-3.5 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-left transition-colors cursor-pointer"
             >
-              <div className="flex items-center gap-2 text-xs font-black text-charcoal/80 uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-xs font-medium text-charcoal/80 uppercase tracking-wider">
                 <Key className="w-4 h-4 text-indigo-600" />
                 <span>Supabase Cloud Connection String</span>
               </div>
-              {showConfig ? <ChevronUp className="w-4 h-4 text-charcoal/50" /> : <ChevronDown className="w-4 h-4 text-charcoal/50" />}
+              {showConfig ? <ChevronUp className="w-4 h-4 text-muted" /> : <ChevronDown className="w-4 h-4 text-muted" />}
             </button>
 
             {showConfig && (
@@ -443,7 +442,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                     onChange={(e) => setCloudUrlInput(e.target.value)}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   />
-                  <div className="text-[11px] text-charcoal/50 flex items-center gap-1">
+                  <div className="text-[12px] text-muted flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                     <span>The connection string is encrypted and securely stored in your Master Database.</span>
                   </div>
@@ -463,7 +462,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                     type="button"
                     onClick={handleTestConnection}
                     disabled={testingConfig || !cloudUrlInput.trim()}
-                    className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-charcoal text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
+                    className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-charcoal text-xs font-medium transition-all cursor-pointer disabled:opacity-40"
                   >
                     {testingConfig ? "Testing..." : "Test Connection"}
                   </button>
@@ -472,7 +471,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                     type="button"
                     onClick={handleSaveConfig}
                     disabled={savingConfig || !cloudUrlInput.trim()}
-                    className="px-5 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white text-xs font-black transition-all cursor-pointer disabled:opacity-40 shadow-sm"
+                    className="px-5 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-950 text-white text-xs font-medium transition-all cursor-pointer disabled:opacity-40 shadow-sm"
                   >
                     {savingConfig ? "Saving..." : "Save Connection"}
                   </button>
@@ -484,12 +483,12 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-charcoal/60 shrink-0">
-          <span className="text-[11px]">Daet Presbyterian Church • Cloud Replication Module</span>
+        <div data-modal-footer className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-muted shrink-0">
+          <span className="text-[12px]">Daet Presbyterian Church • Cloud Replication Module</span>
           <button
             onClick={onClose}
             disabled={isSyncing}
-            className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-charcoal font-bold transition-colors cursor-pointer disabled:opacity-40"
+            className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-charcoal font-medium transition-colors cursor-pointer disabled:opacity-40"
           >
             Close
           </button>
@@ -500,18 +499,18 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
       {/* Confirmation Dialog for Push / Pull */}
       {confirmAction && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-charcoal/70 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-md w-full space-y-4 animate-scale-up">
-            <div className="flex items-center gap-3">
+          <ModalPanel data-modal-panel className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-md w-full space-y-4 animate-scale-up">
+            <div data-modal-header className="flex items-center gap-3">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
                 confirmAction === "push" ? "bg-indigo-50 text-indigo-600" : "bg-amber-50 text-amber-600"
               }`}>
                 {confirmAction === "push" ? <ArrowUpCircle className="w-6 h-6" /> : <ArrowDownCircle className="w-6 h-6" />}
               </div>
               <div>
-                <h3 className="text-base font-black text-charcoal">
+                <h3 className="text-base font-semibold text-charcoal">
                   {confirmAction === "push" ? "Push Local Data to Supabase Cloud?" : "Pull Data from Supabase Cloud?"}
                 </h3>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-muted">
                   {confirmAction === "push" ? "Replicates all local changes to cloud" : "Replaces local data with cloud records"}
                 </p>
               </div>
@@ -523,25 +522,25 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 : "This will import records from Supabase Cloud into your local computer database. Are you sure you want to proceed?"}
             </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2">
+            <div data-modal-footer className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setConfirmAction(null)}
-                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-charcoal font-bold text-xs cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-charcoal font-medium text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmAction === "push" ? executePush : executePull}
-                className={`px-5 py-2 rounded-xl text-white font-black text-xs shadow-md cursor-pointer ${
+                className={`px-5 py-2 rounded-xl text-white font-medium text-xs shadow-md cursor-pointer ${
                   confirmAction === "push" ? "bg-indigo-900 hover:bg-indigo-950" : "bg-amber-600 hover:bg-amber-700"
                 }`}
               >
                 {confirmAction === "push" ? "Yes, Push to Cloud" : "Yes, Pull from Cloud"}
               </button>
             </div>
-          </div>
+          </ModalPanel>
         </div>
       )}
 

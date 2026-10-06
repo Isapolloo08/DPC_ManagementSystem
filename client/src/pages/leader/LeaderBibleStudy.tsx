@@ -1,3 +1,5 @@
+import { AlertTriangle as UIAlertTriangle } from "lucide-react";
+import { ModalPanel } from "../../components/common/ModalPanel";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { BibleStudyGroup, BibleStudyMember } from "../../types";
@@ -239,7 +241,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
         description: formData.description ? formData.description.trim() : null
       });
 
-      setSaveSuccessMsg("✓ Small group study details and schedule updated successfully!");
+      setSaveSuccessMsg("Small group study details and schedule updated successfully!");
       if (onGroupUpdated) onGroupUpdated();
       setTimeout(() => {
         setSaveSuccessMsg(null);
@@ -306,7 +308,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
     return (
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-12 text-center space-y-3">
         <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
-        <h3 className="text-base font-black text-slate-900">No Life Group Designated Yet</h3>
+        <h3 className="text-base font-semibold text-slate-900">No Life Group Designated Yet</h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
           You are logged in as a Leader, but no Life Group has been assigned to you. Weekly roll-call attendance, session scheduling, and curriculum tracking will be enabled once your group is designated.
         </p>
@@ -320,21 +322,21 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
       {activeGroup.is_rescheduled && (
         <div className="p-4 bg-amber-50 rounded-3xl border border-amber-300 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0 mt-0.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-medium shrink-0 mt-0.5">
               <CalendarClock className="w-5 h-5 text-amber-700" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="font-black text-sm text-amber-950">Next Session Rescheduled!</h4>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                <h4 className="font-semibold text-sm text-amber-950">Next Session Rescheduled!</h4>
+                <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
                   Temporary
                 </span>
               </div>
-              <p className="text-xs text-amber-900/90 font-bold mt-0.5">
+              <p className="text-xs text-amber-900/90 font-medium mt-0.5">
                 Moved to: {activeGroup.rescheduled_date ? new Date(activeGroup.rescheduled_date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : "TBD"} ({activeGroup.rescheduled_time || "Time TBD"})
               </p>
               {activeGroup.reschedule_reason && (
-                <p className="text-[11px] text-amber-800/80 mt-0.5 italic">
+                <p className="text-[12px] text-amber-800/80 mt-0.5 italic">
                   "{activeGroup.reschedule_reason}"
                 </p>
               )}
@@ -344,13 +346,13 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
           <div className="flex items-center gap-2 self-end sm:self-center">
             <button
               onClick={handleOpenReschedule}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold text-xs transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-amber-200 hover:bg-amber-300 text-amber-950 font-medium text-xs transition-colors cursor-pointer"
             >
               Edit Resched
             </button>
             <button
               onClick={handleRevertReschedule}
-              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs transition-colors cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 font-medium text-xs transition-colors cursor-pointer"
             >
               Revert
             </button>
@@ -360,18 +362,18 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2-Cols: Weekly Meeting Attendance Logger */}
-        <div className="lg:col-span-2 bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-5">
+        <div data-guide="my-group-rollcall" className="lg:col-span-2 bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-5">
           <div className="space-y-3 border-b border-gray-100 pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-bold">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-medium">
                   <UserCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm sm:text-base text-charcoal">
+                  <h3 className="font-semibold text-sm sm:text-base text-charcoal">
                     Weekly Small Group Attendance Roll-Call
                   </h3>
-                  <p className="text-[11px] text-charcoal/50">
+                  <p className="text-[12px] text-muted">
                     Check off disciples present for this week's Bible study session
                   </p>
                 </div>
@@ -401,7 +403,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                           key={idx}
                           type="button"
                           onClick={() => setSessionDate(chip.date)}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                          className={`px-2.5 py-1 rounded-lg text-[12px] font-medium border transition-all cursor-pointer flex items-center gap-1 ${
                             isSelected
                               ? "bg-indigo text-white border-indigo shadow-2xs"
                               : "bg-gray-50 text-charcoal/70 border-gray-200 hover:border-indigo/40 hover:bg-indigo-50/40"
@@ -416,12 +418,12 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
                   <div>
                     {isMatching ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                         <span>Regular ({activeGroup?.meeting_day || "Regular Sched"})</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
+                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
                         <CalendarClock className="w-3 h-3 text-amber-600" />
                         <span>Rescheduled Date (Regular is {activeGroup?.meeting_day || "Scheduled"})</span>
                       </span>
@@ -433,7 +435,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
           </div>
 
           {sessionSavedSuccess && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-medium flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>Attendance successfully recorded for {sessionDate}!</span>
             </div>
@@ -444,8 +446,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
             {groupDisciples.length === 0 ? (
               <div className="text-center py-10 bg-ivory-light rounded-2xl border border-dashed border-gray-200 space-y-2">
                 <Users className="w-8 h-8 text-charcoal/30 mx-auto" />
-                <p className="text-xs font-bold text-charcoal/70">No disciples enrolled yet in this group</p>
-                <p className="text-[11px] text-charcoal/50 max-w-xs mx-auto">
+                <p className="text-xs font-medium text-charcoal/70">No disciples enrolled yet in this group</p>
+                <p className="text-[12px] text-muted max-w-xs mx-auto">
                   Click on the "Members" tab to add disciples to this Small Group.
                 </p>
               </div>
@@ -469,12 +471,12 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                         {isChecked && <Check className="w-4 h-4" />}
                       </div>
                       <div>
-                        <div className="font-bold text-xs text-charcoal">{displayName}</div>
-                        <div className="text-[10px] text-charcoal/50">{d.contact_phone || "Member"}</div>
+                        <div className="font-medium text-xs text-charcoal">{displayName}</div>
+                        <div className="text-[12px] text-muted">{d.contact_phone || "Member"}</div>
                       </div>
                     </div>
 
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-xl ${isChecked ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-charcoal/50"
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-xl ${isChecked ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-muted"
                       }`}>
                       {isChecked ? "Present" : "Absent"}
                     </span>
@@ -485,13 +487,14 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
           </div>
 
           <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-xs font-bold text-charcoal/60">
+            <span className="text-xs font-medium text-muted">
               {Object.values(checkedMembers).filter(Boolean).length} / {groupDisciples.length} Disciples Present
             </span>
 
             <button
               onClick={handleSaveAttendance}
-              className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              data-guide="my-group-save"
+              className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <Check className="w-4 h-4 text-amber-300" />
               <span>Save Session Attendance</span>
@@ -503,19 +506,19 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
         <div className="space-y-4">
           <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
-              <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-medium">
                 <BookOpen className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="font-bold text-sm text-charcoal">Group Information</h4>
-                <p className="text-[11px] text-charcoal/50">Schedule & study progress</p>
+                <h4 className="font-semibold text-sm text-charcoal">Group Information</h4>
+                <p className="text-[12px] text-muted">Schedule & study progress</p>
               </div>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <span className="text-charcoal/50 block text-[10px] font-bold uppercase">Group Name</span>
-                <span className="font-black text-charcoal text-sm">{activeGroup?.name || "No Assigned Group"}</span>
+                <span className="text-muted block text-[12px] font-medium uppercase">Group Name</span>
+                <span className="font-medium text-charcoal text-sm">{activeGroup?.name || "No Assigned Group"}</span>
               </div>
 
               {/* UNIFIED STUDY TRACK & PACING HUB */}
@@ -524,31 +527,31 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                   <div className="flex items-center gap-1.5 min-w-0 pr-1">
                     <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
                     <div className="truncate">
-                      <span className="font-black text-xs text-charcoal">
+                      <span className="font-medium text-xs text-charcoal">
                         {activeGroup?.curriculum || "General Scripture Study"}
                       </span>
-                      <span className="text-[11px] text-indigo-900 font-bold ml-1.5">
+                      <span className="text-[12px] text-indigo-900 font-medium ml-1.5">
                         • {activeGroup?.current_chapter || "Chapter 1"}
                       </span>
                     </div>
                   </div>
 
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${getProgressStageBadge(activeGroup?.progress_stage).bg}`}>
+                  <span className={`text-[12px] font-medium px-2.5 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${getProgressStageBadge(activeGroup?.progress_stage).bg}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${getProgressStageBadge(activeGroup?.progress_stage).dot}`}></span>
                     <span>{getProgressStageBadge(activeGroup?.progress_stage).label}</span>
                   </span>
                 </div>
 
                 {activeGroup?.progress_notes ? (
-                  <div className="bg-white/95 p-2 rounded-xl border border-indigo-100 text-[11px] text-charcoal/80 flex items-start gap-1.5 mt-1">
+                  <div className="bg-white/95 p-2 rounded-xl border border-indigo-100 text-[12px] text-charcoal/80 flex items-start gap-1.5 mt-1">
                     <BookmarkCheck className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                     <div className="leading-tight">
-                      <span className="font-bold text-indigo-950 text-[10px] uppercase tracking-wider block">Current Notice:</span>
+                      <span className="font-medium text-indigo-950 text-[12px] uppercase tracking-wider block">Current Notice:</span>
                       <span>{activeGroup.progress_notes}</span>
                     </div>
                   </div>
                 ) : (
-                  <span className="text-[10px] text-charcoal/40 italic block">No lesson notice logged</span>
+                  <span className="text-[12px] text-muted italic block">No lesson notice logged</span>
                 )}
               </div>
 
@@ -567,7 +570,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               <div className="pt-2 border-t border-gray-100 flex items-center gap-2">
                 <button
                   onClick={() => setIsEditModalOpen(true)}
-                  className="flex-1 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                  className="flex-1 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer"
                 >
                   <Edit className="w-3.5 h-3.5 text-amber-300" />
                   <span>Update Book & Progress</span>
@@ -575,14 +578,14 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
                 <button
                   onClick={handleOpenReschedule}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${activeGroup?.is_rescheduled
+                  className={`py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${activeGroup?.is_rescheduled
                     ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300"
                     : "bg-ivory-light hover:bg-amber-50 text-amber-900 border-amber-200"
                     }`}
                   title="Reschedule next meeting"
                 >
                   <CalendarClock className="w-3.5 h-3.5 text-amber-700" />
-                  <span>{activeGroup?.is_rescheduled ? "Resched ⚠️" : "Reschedule"}</span>
+                  <span>{activeGroup?.is_rescheduled ? <>Resched <UIAlertTriangle aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></> : "Reschedule"}</span>
                 </button>
               </div>
             </div>
@@ -595,27 +598,27 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
       {/* ========================================================================= */}
       {isEditModalOpen && activeGroup && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 space-y-4.5 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-start justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 space-y-4.5 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            <div data-modal-header className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-800 flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-800 flex items-center justify-center font-medium">
                   <BookOpen className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-black text-base text-charcoal">Update Bible Study & Curriculum</h3>
-                  <p className="text-xs text-charcoal/60 truncate max-w-xs">{activeGroup.name}</p>
+                  <h3 className="font-semibold text-base text-charcoal">Update Bible Study & Curriculum</h3>
+                  <p className="text-xs text-muted truncate max-w-xs">{activeGroup.name}</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsEditModalOpen(false)}
-                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                className="p-1.5 text-muted hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {saveSuccessMsg && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-medium flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>{saveSuccessMsg}</span>
               </div>
@@ -625,11 +628,11 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               {/* Book / Study Topic Searchable Dropdown */}
               <div ref={curriculumRef} className="relative">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-charcoal/70 flex items-center gap-1.5">
+                  <label className="font-medium text-charcoal/70 flex items-center gap-1.5">
                     <BookOpen className="w-3.5 h-3.5 text-amber-700" />
                     <span>Book / Study Topic *</span>
                   </label>
-                  <span className="text-[10px] text-indigo-600 font-semibold">Select or type custom</span>
+                  <span className="text-[12px] text-indigo-600 font-medium">Select or type custom</span>
                 </div>
                 <div className="relative">
                   <input
@@ -650,7 +653,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                       setCurriculumQuery(e.target.value);
                       setIsCurriculumDropdownOpen(true);
                     }}
-                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal"
+                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal"
                   />
                   {formData.curriculum && (
                     <button
@@ -660,7 +663,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                         setCurriculumQuery("");
                         setIsCurriculumDropdownOpen(true);
                       }}
-                      className="absolute right-7 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 p-1 cursor-pointer transition-colors"
+                      className="absolute right-7 top-1/2 -translate-y-1/2 text-muted hover:text-rose-500 p-1 cursor-pointer transition-colors"
                       title="Clear"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -670,7 +673,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                     type="button"
                     tabIndex={-1}
                     onClick={() => setIsCurriculumDropdownOpen(!isCurriculumDropdownOpen)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-indigo p-0.5 cursor-pointer"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-indigo p-0.5 cursor-pointer"
                   >
                     <ChevronDown className={`w-4 h-4 transition-transform ${isCurriculumDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -679,7 +682,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 {/* Dropdown Menu */}
                 {isCurriculumDropdownOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-2xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
-                    <div className="p-2 bg-indigo-50/80 text-[10px] font-bold text-indigo-950 uppercase tracking-wider sticky top-0 z-10">
+                    <div className="p-2 bg-indigo-50/80 text-[12px] font-medium text-indigo-950 uppercase tracking-wider sticky top-0 z-10">
                       Bible Books & Curricula ({filteredCurricula.length})
                     </div>
                     {filteredCurricula.map((item) => (
@@ -694,11 +697,11 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                         className="w-full text-left p-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer"
                       >
                         <div className="min-w-0 pr-2">
-                          <div className="font-bold text-charcoal group-hover:text-indigo text-xs flex items-center gap-1.5">
+                          <div className="font-medium text-charcoal group-hover:text-indigo text-xs flex items-center gap-1.5">
                             <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <span className="truncate">{item.title}</span>
                           </div>
-                          <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-indigo-100 text-indigo-800 ml-5">
+                          <span className="text-[12px] px-1.5 py-0.2 rounded font-medium bg-indigo-100 text-indigo-800 ml-5">
                             {item.category}
                           </span>
                         </div>
@@ -719,12 +722,12 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                 return (
                   <div className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <label className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
+                      <label className="font-medium text-xs text-indigo-950 flex items-center gap-1.5">
                         <Bookmark className="w-3.5 h-3.5 text-indigo-700" />
                         <span>Current Chapter & Study Progress</span>
                       </label>
                       {formData.curriculum && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                        <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-amber-100 text-amber-900 border border-amber-300">
                           {formData.curriculum} • {bookTotalChapters} Chapters Total
                         </span>
                       )}
@@ -733,10 +736,10 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[11px] font-bold text-charcoal/70">
+                          <label className="text-[12px] font-medium text-charcoal/70">
                             What Chapter / Lesson na sila? *
                           </label>
-                          <span className="text-[10px] text-indigo-700 font-semibold">
+                          <span className="text-[12px] text-indigo-700 font-medium">
                             Max {bookTotalChapters} Ch.
                           </span>
                         </div>
@@ -746,7 +749,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                             placeholder="e.g. Chapter 1, Introduction, Lesson 3"
                             value={formData.current_chapter}
                             onChange={(e) => setFormData({ ...formData, current_chapter: e.target.value })}
-                            className="w-full bg-white p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-charcoal text-xs"
+                            className="w-full bg-white p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-xs"
                           />
                           <select
                             value=""
@@ -755,7 +758,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                                 setFormData({ ...formData, current_chapter: e.target.value });
                               }
                             }}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-indigo-50 text-indigo-900 px-1.5 py-1 rounded-lg border border-indigo-200 cursor-pointer outline-none"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[12px] font-medium bg-indigo-50 text-indigo-900 px-1.5 py-1 rounded-lg border border-indigo-200 cursor-pointer outline-none"
                             title="Pick from Book's Chapters"
                           >
                             <option value="">Pick ▼</option>
@@ -772,8 +775,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                               key={opt.value}
                               type="button"
                               onClick={() => setFormData({ ...formData, current_chapter: opt.value })}
-                              className={`px-2 py-0.5 rounded-md border text-[10px] font-semibold transition-colors cursor-pointer ${formData.current_chapter === opt.value
-                                ? "bg-indigo text-white border-indigo shadow-2xs font-bold"
+                              className={`px-2 py-0.5 rounded-md border text-[12px] font-medium transition-colors cursor-pointer ${formData.current_chapter === opt.value
+                                ? "bg-indigo text-white border-indigo shadow-2xs font-medium"
                                 : "bg-white hover:bg-indigo-50 border-gray-200 text-charcoal/70 hover:text-indigo"
                                 }`}
                             >
@@ -781,7 +784,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                             </button>
                           ))}
                           {chapterOptions.length > 12 && (
-                            <span className="text-[10px] text-charcoal/40 self-center pl-1 font-medium">
+                            <span className="text-[12px] text-muted self-center pl-1 font-medium">
                               +{chapterOptions.length - 12} more
                             </span>
                           )}
@@ -789,24 +792,24 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
+                        <label className="block text-[12px] font-medium text-charcoal/70 mb-1">
                           Study Stage (Nasaan sila banda?)
                         </label>
                         <select
                           value={formData.progress_stage}
                           onChange={(e) => setFormData({ ...formData, progress_stage: e.target.value })}
-                          className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-semibold text-charcoal h-[41px]"
+                          className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal h-[41px]"
                         >
-                          <option value="intro">🟢 Intro / Just Starting (No. 1 pa lang)</option>
-                          <option value="midway">🟡 Mid-way (Kalahati pa lang ng Chapter)</option>
-                          <option value="application">🟠 Discussion & Reflection Questions</option>
-                          <option value="completed">🔵 Chapter Completed / Ready for Next</option>
+                          <option value="intro"> Intro / Just Starting (No. 1 pa lang)</option>
+                          <option value="midway"> Mid-way (Kalahati pa lang ng Chapter)</option>
+                          <option value="application"> Discussion & Reflection Questions</option>
+                          <option value="completed"> Chapter Completed / Ready for Next</option>
                         </select>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-charcoal/70 mb-1">
+                      <label className="block text-[12px] font-medium text-charcoal/70 mb-1">
                         Lesson Notice & Specific Location (Saan Banda Sila)
                       </label>
                       <textarea
@@ -824,7 +827,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               {/* Schedule: Meeting Day, Time In (Start Time), Time Out (End Time / end_time) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Meeting Day *</label>
+                  <label className="block font-medium text-charcoal/70 mb-1">Meeting Day *</label>
                   <select
                     value={formData.meeting_day}
                     onChange={(e) => setFormData({ ...formData, meeting_day: e.target.value })}
@@ -863,8 +866,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               {/* Location */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-charcoal/70 text-xs">Location / Meeting Venue</label>
-                  <span className="text-[10px] text-indigo-700 font-semibold">Database Rooms</span>
+                  <label className="block font-medium text-charcoal/70 text-xs">Location / Meeting Venue</label>
+                  <span className="text-[12px] text-indigo-700 font-medium">Database Rooms</span>
                 </div>
                 <select
                   value={isCustomLoc ? "__custom__" : formData.location}
@@ -877,7 +880,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                       setFormData({ ...formData, location: e.target.value });
                     }
                   }}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold text-charcoal cursor-pointer"
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal cursor-pointer"
                 >
                   <option value="">-- Select Church Room / Venue --</option>
                   {churchRooms.map((r) => (
@@ -904,25 +907,25 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               </div>
 
               {/* Footer Actions */}
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-transform cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-4 h-4 text-amber-300" />
                   <span>{isSaving ? "Saving..." : "Save Study Changes"}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

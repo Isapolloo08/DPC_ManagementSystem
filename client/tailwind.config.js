@@ -16,6 +16,7 @@ export default {
     ringOffsetColor: ({ theme }) => themedColors('surface', theme('colors')),
     extend: {
       colors: {
+        muted: '#64748b',
         indigo: {
           DEFAULT: "#2C3968",
           50: "#F0F3FA",
@@ -80,10 +81,14 @@ export default {
         }
       },
       fontFamily: {
-        sans: ["Outfit", "Inter", "system-ui", "-apple-system", "sans-serif"],
+        sans: ["Outfit", "system-ui", "-apple-system", "sans-serif"],
         display: ["'Bebas Neue'", "Outfit", "sans-serif"],
         serif: ["Playfair Display", "Georgia", "serif"],
-      }
+      },
+      fontSize: {
+        xs: ['0.8125rem', { lineHeight: '1.5' }],
+        sm: ['0.875rem', { lineHeight: '1.5' }],
+      },
     },
   },
   plugins: [themePalette],

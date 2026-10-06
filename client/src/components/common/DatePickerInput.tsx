@@ -235,7 +235,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
   return (
     <div className={`relative ${className}`}>
       {label && (
-        <label className="block font-bold text-xs text-charcoal/70 mb-1">
+        <label className="block font-medium text-xs text-charcoal/70 mb-1">
           {label} {required && <span className="text-rose-500">*</span>}
         </label>
       )}
@@ -244,7 +244,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
       <div ref={triggerRef} className="relative">
         <div
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-bold h-[41px] ${
+          className={`w-full p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-medium h-[41px] ${
             dark
               ? "bg-indigo-950/80 text-white border-white/10 hover:border-white/20"
               : amberTheme
@@ -259,7 +259,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
               dark ? "text-amber-400" : amberTheme ? "text-amber-600" : "text-indigo-600"
             }`}
           />
-          <span className={`truncate ${value ? "font-bold" : "opacity-40 font-normal"}`}>
+          <span className={`truncate ${value ? "font-medium" : "opacity-40 font-normal"}`}>
             {value ? formatDisplay(value) : placeholder}
           </span>
           <ChevronDown
@@ -305,7 +305,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
               </button>
 
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-sm tracking-tight">
+                <span className="font-medium text-sm tracking-tight">
                   {monthNames[viewMonth]}
                 </span>
                 
@@ -313,7 +313,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsYearPickerOpen(!isYearPickerOpen)}
-                  className="px-2 py-0.5 rounded-md bg-white/15 hover:bg-white/25 text-amber-300 hover:text-amber-200 font-extrabold text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                  className="px-2 py-0.5 rounded-md bg-white/15 hover:bg-white/25 text-amber-300 hover:text-amber-200 font-medium text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
                 >
                   <span>{viewYear}</span>
                   <ChevronDown className={`w-3 h-3 transition-transform ${isYearPickerOpen ? "rotate-180" : ""}`} />
@@ -341,9 +341,9 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                       setViewYear(y);
                       setIsYearPickerOpen(false);
                     }}
-                    className={`py-1.5 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+                    className={`py-1.5 text-xs rounded-lg font-medium transition-all cursor-pointer ${
                       y === viewYear
-                        ? "bg-indigo text-white font-black shadow-xs"
+                        ? "bg-indigo text-white font-medium shadow-xs"
                         : "text-charcoal/80 hover:bg-indigo-50 hover:text-indigo"
                     }`}
                   >
@@ -354,10 +354,10 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
             ) : (
               <>
                 {/* Days of Week Header */}
-                <div className="grid grid-cols-7 text-center text-[10px] font-black uppercase tracking-wider text-charcoal/40">
+                <div className="grid grid-cols-7 text-center text-[12px] font-medium uppercase tracking-wider text-muted">
                   {sundaysOnly ? (
                     <>
-                      <span className="text-rose-600 font-extrabold bg-rose-50/80 rounded-md py-0.5 border border-rose-200">Su</span>
+                      <span className="text-rose-600 font-medium bg-rose-50/80 rounded-md py-0.5 border border-rose-200">Su</span>
                       <span className="text-charcoal/25 font-normal">Mo</span>
                       <span className="text-charcoal/25 font-normal">Tu</span>
                       <span className="text-charcoal/25 font-normal">We</span>
@@ -424,13 +424,13 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                         key={`day-${dayNum}`}
                         type="button"
                         onClick={() => handleSelectDay(dayNum)}
-                        className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer relative ${
+                        className={`py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer relative ${
                           isSelected
-                            ? "bg-indigo text-white font-black shadow-xs ring-2 ring-indigo-200 scale-105"
+                            ? "bg-indigo text-white font-medium shadow-xs ring-2 ring-indigo-200 scale-105"
                             : isToday
-                            ? "bg-amber-100 text-amber-950 font-black border border-amber-300 hover:bg-amber-200"
+                            ? "bg-amber-100 text-amber-950 font-medium border border-amber-300 hover:bg-amber-200"
                             : sundaysOnly
-                            ? "text-indigo-950 font-black bg-indigo-50/70 hover:bg-indigo hover:text-white border border-indigo-200/70"
+                            ? "text-indigo-950 font-medium bg-indigo-50/70 hover:bg-indigo hover:text-white border border-indigo-200/70"
                             : "text-charcoal hover:bg-indigo-50 hover:text-indigo"
                         }`}
                       >
@@ -453,14 +453,14 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                     <button
                       type="button"
                       onClick={handleSetRecentSunday}
-                      className="px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-[10px] font-bold text-indigo-900 border border-indigo-200 transition-colors cursor-pointer"
+                      className="px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-[12px] font-medium text-indigo-900 border border-indigo-200 transition-colors cursor-pointer"
                     >
                       Latest Sunday
                     </button>
                     <button
                       type="button"
                       onClick={handleSetNextSunday}
-                      className="px-2 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-[10px] font-bold text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                      className="px-2 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-[12px] font-medium text-amber-900 border border-amber-200 transition-colors cursor-pointer"
                     >
                       Next Sunday
                     </button>
@@ -470,14 +470,14 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                     <button
                       type="button"
                       onClick={handleSetToday}
-                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-indigo-50 text-[10px] font-bold text-indigo-900 border border-indigo-100 transition-colors cursor-pointer"
+                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-indigo-50 text-[12px] font-medium text-indigo-900 border border-indigo-100 transition-colors cursor-pointer"
                     >
                       Today
                     </button>
                     <button
                       type="button"
                       onClick={handleSetNextSunday}
-                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-amber-50 text-[10px] font-bold text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-amber-50 text-[12px] font-medium text-amber-900 border border-amber-200 transition-colors cursor-pointer"
                     >
                       Sunday
                     </button>
@@ -492,14 +492,14 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
                     onChange("");
                     setIsOpen(false);
                   }}
-                  className="text-[11px] font-semibold text-charcoal/40 hover:text-rose-500 px-1 cursor-pointer"
+                  className="text-[12px] font-medium text-muted hover:text-rose-500 px-1 cursor-pointer"
                 >
                   Clear
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="px-2.5 py-1 bg-indigo hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                  className="px-2.5 py-1 bg-indigo hover:bg-indigo-700 text-white rounded-lg text-xs font-medium flex items-center gap-1 shadow-xs cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>Done</span>

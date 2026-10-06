@@ -9,11 +9,12 @@ const group = (id: number, name: string) => ({
 
 async function prepare(page: Page, role: string, assigned: ReturnType<typeof group>[]) {
   const state = { assigned, fail: false, personalGroupRequests: 0 };
-  await page.addInitScript(() => {
+  await page.addInitScript(role => {
     sessionStorage.setItem('dpc_intro_shown', 'true');
     localStorage.setItem('chms_token', 'e30.' + btoa(JSON.stringify({ exp: 4102444800 })) + '.test');
     localStorage.setItem('dpc_theme_mode', 'dark');
-  });
+    localStorage.setItem(`dpc_help_welcome_v1:1:${role}`, 'seen');
+  }, role);
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/setup-status') return route.fulfill({ json: { hasUsers: true, hasAdmin: true } });

@@ -18,6 +18,17 @@ the text forms, without taking particles away from the letters.
 `starVariation` gives the text particles varied brightness. All additions
 default to the registry behavior when omitted.
 
+Rendering keeps the same particle targets, colors, sizes, glow, star counts,
+and animation sequence. Each distinct glowing dot is rasterized once into a
+sprite atlas, then reused instead of applying a shadow filter to every dot on
+every frame. Drift directions are precomputed, follow motion uses elapsed time,
+unchanged resize notifications do not resample the text, and animation frames
+pause while the window is hidden. Authentication still prepares during startup;
+the dashboard mounts at the exit so its effects do not compete with gathering.
+The sprite atlas is drawn in one WebGL batch when available, with a cached
+Canvas 2D fallback. GPU resources are released on unmount and rebuilt after a
+restored graphics context.
+
 Startup sequencing, local font preparation, responsive two-line composition,
 and the static reduced-motion fallback live in `../DPCLoadingScreen.tsx`.
 The wrapper allows roughly two seconds of scattered particles, then includes

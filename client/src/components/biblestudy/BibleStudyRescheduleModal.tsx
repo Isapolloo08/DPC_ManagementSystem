@@ -1,3 +1,5 @@
+import { CircleCheck as UICircleCheck } from "lucide-react";
+import { ModalPanel } from "../common/ModalPanel";
 import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { BibleStudyGroup, EventItem } from "../../types";
@@ -305,8 +307,8 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
       if (showToast) {
         showToast(
           targetIsRescheduled
-            ? `✓ Session for "${group.name}" moved to ${targetDayInfo.formattedDate} (${targetMeetingTimeCombined})!`
-            : `✓ "${group.name}" reverted back to regular weekly schedule.`,
+            ? `Session for"${group.name}" moved to ${targetDayInfo.formattedDate} (${targetMeetingTimeCombined})!`
+            : `"${group.name}" reverted back to regular weekly schedule.`,
           "success"
         );
       }
@@ -324,32 +326,32 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
 
   return createPortal(
     <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl border border-indigo-100 space-y-5 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+      <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl border border-indigo-100 space-y-5 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
         {/* Modal Header */}
-        <div className="flex items-start justify-between gap-3">
+        <div data-modal-header className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-900 border border-amber-300/50 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-900 border border-amber-300/50 flex items-center justify-center font-medium shadow-2xs">
               <CalendarClock className="w-6 h-6 text-amber-700" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-black text-lg text-charcoal tracking-tight">
+                <h3 className="font-semibold text-lg text-charcoal tracking-tight">
                   Reschedule Bible Study Session
                 </h3>
                 {group.is_rescheduled && (
-                  <span className="bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] px-2 py-0.5 rounded-full uppercase">
+                  <span className="bg-amber-100 text-amber-900 border border-amber-300 font-medium text-[12px] px-2 py-0.5 rounded-full uppercase">
                     Currently Rescheduled
                   </span>
                 )}
               </div>
-              <p className="text-xs text-charcoal/60 truncate max-w-md mt-0.5">
-                {group.name} • Facilitator: <span className="font-bold text-charcoal/80">{group.leader_name}</span>
+              <p className="text-xs text-muted truncate max-w-md mt-0.5">
+                {group.name} • Facilitator: <span className="font-medium text-charcoal/80">{group.leader_name}</span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-xl cursor-pointer transition-colors"
+            className="p-1.5 text-muted hover:text-charcoal hover:bg-gray-100 rounded-xl cursor-pointer transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -358,36 +360,36 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
         {/* Regular Schedule Reference Banner */}
         <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/70 text-xs flex items-center justify-between gap-3 flex-wrap">
           <div className="space-y-0.5">
-            <span className="text-[10px] font-black text-amber-900/60 uppercase tracking-wider block">
+            <span className="text-[12px] font-medium text-amber-900/60 uppercase tracking-wider block">
               Regular Schedule
             </span>
-            <div className="font-extrabold text-charcoal flex items-center gap-1.5">
+            <div className="font-medium text-charcoal flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-amber-700" />
               <span>Every {group.meeting_day} at {group.meeting_time}</span>
             </div>
           </div>
           <div className="text-left sm:text-right space-y-0.5">
-            <span className="text-[10px] font-black text-amber-900/60 uppercase tracking-wider block">
+            <span className="text-[12px] font-medium text-amber-900/60 uppercase tracking-wider block">
               Current Location
             </span>
-            <div className="font-extrabold text-charcoal flex items-center sm:justify-end gap-1.5">
+            <div className="font-medium text-charcoal flex items-center sm:justify-end gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-indigo-700" />
               <span>{group.location || "Fellowship Hall"}</span>
             </div>
           </div>
         </div>
 
-        <form onSubmit={(e) => handleSave(e, false)} className="space-y-5 text-xs">
+        <form data-guide="group-reschedule-form" onSubmit={(e) => handleSave(e, false)} className="space-y-5 text-xs">
           {/* 1. Reschedule Status Selector */}
           <div>
-            <label className="block font-black text-charcoal uppercase tracking-wider text-[11px] mb-2">
+            <label className="block font-medium text-charcoal uppercase tracking-wider text-[12px] mb-2">
               Reschedule Mode
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div data-guide="group-reschedule-kind" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div
                 onClick={() => setIsRescheduled(true)}
                 className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${isRescheduled
-                  ? "bg-amber-50/90 border-amber-400 ring-2 ring-amber-400/40 text-amber-950 font-bold shadow-2xs"
+                  ? "bg-amber-50/90 border-amber-400 ring-2 ring-amber-400/40 text-amber-950 font-medium shadow-2xs"
                   : "bg-white border-gray-200 text-charcoal/70 hover:border-gray-300"
                   }`}
               >
@@ -395,10 +397,10 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                   {isRescheduled && <div className="w-2.5 h-2.5 rounded-full bg-amber-600"></div>}
                 </div>
                 <div>
-                  <div className="text-xs font-black text-amber-950 flex items-center gap-1.5">
-                    <span>⚠️ Reschedule Next Session</span>
+                  <div className="text-xs font-medium text-amber-950 flex items-center gap-1.5">
+                    <span><AlertTriangle aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Reschedule Next Session</span>
                   </div>
-                  <div className="text-[11px] text-amber-800/80 font-medium mt-0.5 leading-relaxed">
+                  <div className="text-[12px] text-amber-800/80 font-medium mt-0.5 leading-relaxed">
                     Move next meeting to a new date, time slot, and check room availability.
                   </div>
                 </div>
@@ -407,7 +409,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
               <div
                 onClick={() => setIsRescheduled(false)}
                 className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${!isRescheduled
-                  ? "bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/40 text-emerald-950 font-bold shadow-2xs"
+                  ? "bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/40 text-emerald-950 font-medium shadow-2xs"
                   : "bg-white border-gray-200 text-charcoal/70 hover:border-gray-300"
                   }`}
               >
@@ -415,8 +417,8 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                   {!isRescheduled && <div className="w-2.5 h-2.5 rounded-full bg-emerald-600"></div>}
                 </div>
                 <div>
-                  <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
-                    <span>✓ Follow Regular Weekly Schedule</span>
+                  <div className="text-xs font-medium text-emerald-950 flex items-center gap-1.5">
+                    <span><Check aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Follow Regular Weekly Schedule</span>
                   </div>
 
                 </div>
@@ -432,15 +434,15 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                 <div className="flex items-center justify-between gap-2 flex-wrap border-b border-slate-200 pb-2.5">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-amber-600" />
-                    <span className="font-black text-charcoal text-xs">Pick Target Reschedule Date & Time</span>
+                    <span className="font-medium text-charcoal text-xs">Pick Target Reschedule Date & Time</span>
                   </div>
-                  <span className="text-[11px] font-extrabold bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[12px] font-medium bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full">
                     Day: {targetDayInfo.dayName}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
+                  <div data-guide="group-reschedule-date">
                     <DatePickerInput
                       label="New Session Date *"
                       required={isRescheduled}
@@ -477,9 +479,9 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-indigo" />
-                    <span className="font-black text-charcoal text-xs">Church Rooms Availability on {targetDayInfo.dayName}</span>
+                    <span className="font-medium text-charcoal text-xs">Church Rooms Availability on {targetDayInfo.dayName}</span>
                   </div>
-                  <span className="text-[10px] text-charcoal/60 font-bold">
+                  <span className="text-[12px] text-muted font-medium">
                     Click an open room to select
                   </span>
                 </div>
@@ -489,10 +491,10 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                   <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-950 flex items-start gap-2.5 animate-in fade-in">
                     <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                     <div className="text-xs leading-relaxed">
-                      <strong className="font-bold block">
+                      <strong className="font-medium block">
                         Room Overlap Conflict: "{activeTargetLocation}" is currently in use!
                       </strong>
-                      <span className="text-rose-900 text-[11px]">
+                      <span className="text-rose-900 text-[12px]">
                         Occupied by{" "}
                         <strong>{currentSelectedRoomConflict.name}</strong> ({currentSelectedRoomConflict.time}
                         {currentSelectedRoomConflict.leader ? ` • Leader: ${currentSelectedRoomConflict.leader}` : ""}). Please select an open room below.
@@ -500,12 +502,12 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                     </div>
                   </div>
                 ) : (
-                  <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 flex items-center justify-between text-xs font-semibold">
+                  <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 flex items-center justify-between text-xs font-medium">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       <span>Selected Room: <strong>{activeTargetLocation || "Fellowship Hall"}</strong> is clear with 0 conflicts!</span>
                     </div>
-                    <span className="text-[10px] bg-emerald-600 text-white font-black px-2 py-0.5 rounded-full uppercase">
+                    <span className="text-[12px] bg-emerald-600 text-white font-medium px-2 py-0.5 rounded-full uppercase">
                       Ready
                     </span>
                   </div>
@@ -514,9 +516,9 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                 {/* Available Rooms Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
                   {configuredRooms.length === 0 ? (
-                    <div className="col-span-full py-6 px-4 rounded-xl bg-gray-50 border border-gray-200 text-charcoal/60 text-center text-xs space-y-1">
-                      <p className="font-bold">No meeting rooms found in database</p>
-                      <p className="text-[11px]">Add rooms in Settings &gt; System Lookups or use a custom off-site venue below.</p>
+                    <div className="col-span-full py-6 px-4 rounded-xl bg-gray-50 border border-gray-200 text-muted text-center text-xs space-y-1">
+                      <p className="font-medium">No meeting rooms found in database</p>
+                      <p className="text-[12px]">Add rooms in Settings &gt; System Lookups or use a custom off-site venue below.</p>
                     </div>
                   ) : (
                     configuredRooms.map((roomName) => {
@@ -541,25 +543,24 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                             }`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-bold text-charcoal truncate">{roomName}</span>
+                            <span className="text-xs font-medium text-charcoal truncate">{roomName}</span>
                             {isSelected && <Check className="w-3.5 h-3.5 text-indigo shrink-0" />}
                           </div>
 
                           <div className="flex items-center gap-1.5">
                             {isConflict ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700">
+                              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-rose-700">
                                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
                                 In Use ({info?.occupiedBy[0]?.time})
                               </span>
                             ) : isBookedOtherTime ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800">
+                              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-800">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                 Free now (Booked {info?.occupiedBy[0]?.time})
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                🟢 Available / Open
+                              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><UICircleCheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Available / Open
                               </span>
                             )}
                           </div>
@@ -575,7 +576,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                     <button
                       type="button"
                       onClick={() => setIsCustomLocation(!isCustomLocation)}
-                      className="text-xs text-indigo font-bold hover:underline cursor-pointer flex items-center gap-1"
+                      className="text-xs text-indigo font-medium hover:underline cursor-pointer flex items-center gap-1"
                     >
                       <span>{isCustomLocation ? "← Choose from Church Rooms List" : "+ Use Custom Off-Site / Online Venue"}</span>
                     </button>
@@ -600,11 +601,11 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-charcoal/70" />
-                    <span className="font-black text-charcoal text-xs">
+                    <span className="font-medium text-charcoal text-xs">
                       Groups Scheduled on {targetDayInfo.dayName} ({groupsOnTargetDay.length})
                     </span>
                   </div>
-                  <span className="text-[10px] text-charcoal/50 font-bold">
+                  <span className="text-[12px] text-muted font-medium">
                     Check if your flock can coordinate or join
                   </span>
                 </div>
@@ -619,27 +620,27 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                           className="p-2.5 bg-white rounded-xl border border-gray-200/80 text-xs flex items-center justify-between gap-2 flex-wrap shadow-2xs hover:border-indigo-200 transition-colors"
                         >
                           <div className="space-y-0.5 min-w-[180px]">
-                            <div className="font-bold text-charcoal flex items-center gap-1.5">
+                            <div className="font-medium text-charcoal flex items-center gap-1.5">
                               <span className="truncate">{g.name}</span>
                               {g.is_rescheduled ? (
-                                <span className="text-[9px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded uppercase">
+                                <span className="text-[12px] font-medium bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded uppercase">
                                   Rescheduled
                                 </span>
                               ) : null}
                             </div>
-                            <div className="text-[10px] text-charcoal/60">
-                              Leader: <span className="font-semibold text-charcoal">{g.leader_name}</span> • {g.category || "General"}
+                            <div className="text-[12px] text-muted">
+                              Leader: <span className="font-medium text-charcoal">{g.leader_name}</span> • {g.category || "General"}
                             </div>
                           </div>
 
                           <div className="flex items-center gap-3 text-right">
                             <div className="space-y-0.5">
-                              <div className="font-extrabold text-indigo text-[11px] flex items-center gap-1">
+                              <div className="font-medium text-indigo text-[12px] flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-indigo-500" />
                                 <span>{displayTime}</span>
                               </div>
-                              <div className="text-[10px] text-charcoal/60 flex items-center gap-1 font-medium">
-                                <MapPin className="w-3 h-3 text-charcoal/40" />
+                              <div className="text-[12px] text-muted flex items-center gap-1 font-medium">
+                                <MapPin className="w-3 h-3 text-muted" />
                                 <span>{g.location || "Room TBD"}</span>
                               </div>
                             </div>
@@ -649,7 +650,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                     })}
                   </div>
                 ) : (
-                  <div className="p-3 bg-white rounded-xl border border-dashed border-gray-300 text-center text-xs text-charcoal/60">
+                  <div className="p-3 bg-white rounded-xl border border-dashed border-gray-300 text-center text-xs text-muted">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
                     <span>No other Bible Study groups scheduled on <strong>{targetDayInfo.dayName}</strong> — open schedule availability!</span>
                   </div>
@@ -658,7 +659,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
 
               {/* 4. Reason / Notice for Disciples */}
               <div>
-                <label className="block font-bold text-charcoal mb-1">
+                <label className="block font-medium text-charcoal mb-1">
                   Reason & Announcement Notice for Disciples *
                 </label>
                 <div className="flex flex-wrap gap-1 mb-2">
@@ -673,13 +674,13 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
                       key={chip}
                       type="button"
                       onClick={() => setRescheduleReason(chip)}
-                      className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-amber-100 hover:text-amber-950 border border-gray-200 text-[10px] font-bold text-charcoal/70 transition-colors cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-amber-100 hover:text-amber-950 border border-gray-200 text-[12px] font-medium text-charcoal/70 transition-colors cursor-pointer"
                     >
                       {chip}
                     </button>
                   ))}
                 </div>
-                <textarea
+                <textarea data-guide="group-reschedule-reason"
                   rows={2}
                   required={isRescheduled}
                   placeholder="e.g. 'Naurong po ang ating small group meeting sa Huwebes dahil may church leadership event. Kitakits po tayo sa Room 102 ng 6:30 PM!'..."
@@ -692,21 +693,21 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
           )}
 
           {/* Action Buttons */}
-          <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+          <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 rounded-xl bg-gray-100 font-bold text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-gray-100 font-medium text-xs text-charcoal hover:bg-gray-200 cursor-pointer"
               >
                 Cancel
               </button>
               {group.is_rescheduled ? (
-                <button
+                <button data-guide="group-reschedule-notify"
                   type="button"
                   onClick={() => handleSave(undefined, true)}
                   disabled={isSaving}
-                  className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 cursor-pointer"
+                  className="px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium text-xs border border-rose-200 cursor-pointer"
                   title="Clear reschedule and revert to regular weekly schedule"
                 >
                   Revert to Regular Schedule
@@ -714,10 +715,10 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
               ) : null}
             </div>
 
-            <button
+            <button data-guide="group-reschedule-save"
               type="submit"
               disabled={isSaving}
-              className="px-6 py-2.5 rounded-xl bg-amber-500  text-slate-950 font-black text-xs flex items-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              className="px-6 py-2.5 rounded-xl bg-amber-500  text-slate-950 font-medium text-xs flex items-center gap-2 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-50"
             >
               <Check className="w-4 h-4 text-slate-950" />
               <span>
@@ -730,7 +731,7 @@ export const BibleStudyRescheduleModal: React.FC<BibleStudyRescheduleModalProps>
             </button>
           </div>
         </form>
-      </div>
+      </ModalPanel>
     </div>,
     document.body
   );

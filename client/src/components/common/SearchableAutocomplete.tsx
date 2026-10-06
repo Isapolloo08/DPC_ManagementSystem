@@ -13,6 +13,7 @@ export interface SearchableAutocompleteProps {
   label: string;
   value: string;
   onChange: (val: string) => void;
+  onSelect?: (item: AutocompleteSuggestion) => void;
   placeholder?: string;
   suggestions: (string | AutocompleteSuggestion)[];
   required?: boolean;
@@ -46,6 +47,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
   label,
   value,
   onChange,
+  onSelect,
   placeholder = "Type or select...",
   suggestions,
   required = false,
@@ -62,6 +64,11 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Synchronize liveSuggestions when suggestions prop updates (e.g. loaded asynchronously)
+  useEffect(() => {
+    setLiveSuggestions(suggestions);
+  }, [suggestions]);
 
   // Normalize suggestions to structured items with precomputed search tokens
   const normalizedList = useMemo<AutocompleteSuggestion[]>(() => {
@@ -208,11 +215,20 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
   }, [isOpen, isManualMode]);
 
   const handleSelect = (item: AutocompleteSuggestion) => {
-    onChange(item.title);
+    if (onSelect) {
+      onSelect(item);
+    } else {
+      onChange(item.title);
+    }
     setIsOpen(false);
   };
 
   const handleConfirmCustom = () => {
+    if (onSelect) {
+      onSelect({ title: value.trim() });
+    } else {
+      onChange(value.trim());
+    }
     setIsOpen(false);
   };
 
@@ -227,7 +243,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
     <div ref={containerRef} className={`relative ${className}`}>
       {/* Label and 1-Click Manual Mode Switch */}
       <div className="flex items-center justify-between mb-1">
-        <label className="block font-bold text-[11px] text-charcoal/80 flex items-center gap-1.5">
+        <label className="block font-medium text-[12px] text-charcoal/80 flex items-center gap-1.5">
           {icon}
           <span>
             {label} {required && <span className="text-rose-500">*</span>}
@@ -243,7 +259,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
               if (next) setIsOpen(false);
               setTimeout(() => inputRef.current?.focus(), 50);
             }}
-            className={`text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all px-2 py-0.5 rounded-lg border ${
+            className={`text-[12px] font-medium flex items-center gap-1 cursor-pointer transition-all px-2 py-0.5 rounded-lg border ${
               isManualMode
                 ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300"
                 : "bg-white hover:bg-gray-50 text-indigo-800 border-gray-200 hover:border-indigo-300"
@@ -284,8 +300,23 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
               setIsOpen(true);
             }
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (onSelect && value.trim()) {
+                const matched = normalizedList.find((item) => cleanCompact(item.title) === cleanCompact(value));
+                if (matched) {
+                  handleSelect(matched);
+                } else if (filtered.length > 0 && isOpen) {
+                  handleSelect(filtered[0]);
+                } else {
+                  handleConfirmCustom();
+                }
+              }
+            }
+          }}
           placeholder={isManualMode ? `Type ${label.toLowerCase()} manually...` : placeholder}
-          className={`w-full px-3 py-2 pr-8 rounded-xl border text-xs font-semibold text-charcoal shadow-2xs placeholder:text-charcoal/40 transition-colors focus:outline-none ${
+          className={`w-full px-3 py-2 pr-8 rounded-xl border text-xs font-medium text-charcoal shadow-2xs placeholder:text-muted transition-colors focus:outline-none ${
             isManualMode
               ? "bg-amber-50/30 border-amber-300 focus:border-amber-500 focus:bg-white"
               : "bg-white border-gray-200 focus:border-indigo"
@@ -293,6 +324,16 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
         />
 
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {isManualMode && onSelect && value.trim() && (
+            <button
+              type="button"
+              onClick={() => handleConfirmCustom()}
+              className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-medium transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
+            >
+              <Check className="w-3 h-3" />
+              <span>Apply</span>
+            </button>
+          )}
           {value ? (
             <button
               type="button"
@@ -300,7 +341,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
                 onChange("");
                 inputRef.current?.focus();
               }}
-              className="p-1 text-charcoal/40 hover:text-charcoal cursor-pointer"
+              className="p-1 text-muted hover:text-charcoal cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -312,7 +353,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
                 setIsOpen(!isOpen);
                 inputRef.current?.focus();
               }}
-              className="p-1 text-charcoal/40 hover:text-indigo cursor-pointer"
+              className="p-1 text-muted hover:text-indigo cursor-pointer"
             >
               <ChevronDown
                 className={`w-3.5 h-3.5 transition-transform duration-200 ${
@@ -338,7 +379,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
           className="z-[130] bg-white rounded-2xl shadow-2xl border border-indigo-200 p-2 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150"
         >
           {/* Header with scope and quick manual action */}
-          <div className="px-1.5 py-0.5 flex items-center justify-between text-[10px] text-charcoal/50 font-bold border-b border-gray-100">
+          <div className="px-1.5 py-0.5 flex items-center justify-between text-[12px] text-muted font-medium border-b border-gray-100">
             <span>Suggestions</span>
             <span>{filtered.length} matching</span>
           </div>
@@ -351,13 +392,13 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
                 e.preventDefault();
                 handleConfirmCustom();
               }}
-              className="w-full text-left px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer"
+              className="w-full text-left px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200 text-xs font-medium flex items-center justify-between transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-1.5 truncate">
                 <PlusCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                 <span className="truncate">Use: <strong>"{value.trim()}"</strong></span>
               </div>
-              <span className="text-[9px] bg-amber-200 text-amber-950 px-1.5 py-0.2 rounded font-black shrink-0 ml-1">
+              <span className="text-[12px] bg-amber-200 text-amber-950 px-1.5 py-0.2 rounded font-medium shrink-0 ml-1">
                 Custom Entry
               </span>
             </button>
@@ -367,15 +408,14 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
           <div className="overflow-y-auto max-h-[175px] space-y-0.5 pr-0.5 custom-scrollbar">
             {filtered.length === 0 ? (
               <div className="py-4 px-3 text-center space-y-1.5">
-                <p className="text-xs text-charcoal/70 font-semibold">
-                  Custom entry: <span className="text-indigo font-bold">"{value}"</span>
+                <p className="text-xs text-charcoal/70 font-medium">
+                  Custom entry: <span className="text-indigo font-medium">"{value}"</span>
                 </p>
-                <p className="text-[10px] text-emerald-700 font-bold bg-emerald-50 py-0.5 px-2 rounded-md inline-block border border-emerald-200">
-                  ✓ Custom input will be saved
+                <p className="text-[12px] text-emerald-700 font-medium bg-emerald-50 py-0.5 px-2 rounded-md inline-block border border-emerald-200"><Check aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Custom input will be saved
                 </p>
               </div>
             ) : (
-              filtered.slice(0, 40).map((item, idx) => {
+              filtered.slice(0, 150).map((item, idx) => {
                 const isSelected = cleanCompact(value) === cleanCompact(item.title);
                 return (
                   <button
@@ -387,16 +427,16 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
                     }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
                       isSelected
-                        ? "bg-indigo text-white font-bold shadow-2xs"
+                        ? "bg-indigo text-white font-medium shadow-2xs"
                         : "hover:bg-indigo-50/80 text-charcoal font-medium hover:text-indigo-950"
                     }`}
                   >
                     <div className="truncate flex-1">
-                      <div className="truncate font-semibold">{item.title}</div>
+                      <div className="truncate font-medium">{item.title}</div>
                       {item.subtitle && (
                         <div
-                          className={`text-[10px] truncate ${
-                            isSelected ? "text-indigo-100" : "text-charcoal/50"
+                          className={`text-[12px] truncate ${
+                            isSelected ? "text-indigo-100" : "text-muted"
                           }`}
                         >
                           {item.subtitle}
@@ -407,7 +447,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       {item.category && (
                         <span
-                          className={`text-[9px] px-1.5 py-0.2 rounded font-black tracking-wide ${
+                          className={`text-[12px] px-1.5 py-0.2 rounded font-medium tracking-wide ${
                             isSelected
                               ? "bg-white/20 text-white"
                               : item.category.includes("Camarines") ||

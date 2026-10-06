@@ -15,7 +15,7 @@ export function ThemeSelector() {
         title="Auto: light from 6 AM to 6 PM; dark overnight (device time)"
         value={mode}
         onChange={(event) => setMode(event.target.value as ThemeMode)}
-        className="w-[62px] cursor-pointer rounded bg-transparent text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-amber"
+        className="w-[62px] cursor-pointer rounded bg-transparent text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-amber"
       >
         <option value="light">Light</option>
         <option value="dark">Dark</option>

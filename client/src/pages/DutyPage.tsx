@@ -1,8 +1,10 @@
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { useSocketEvent } from "../socket";
 import { DutyPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import { DutyTeam, SaturdayDutyScheduleItem, Member, Ministry } from "../types";
@@ -11,7 +13,7 @@ import {
   CalendarCheck, Users, ShieldCheck, CheckCircle2, Clock, Plus,
   Trash2, Edit, RefreshCw, ArrowLeftRight, Check, X,
   AlertCircle, ChevronRight, Phone, CheckSquare, Calendar,
-  Crown, UserPlus, Search, Filter, Award
+  UserCheck, UserPlus, Search, Filter, Award
 } from "lucide-react";
 
 export interface DutyChecklistItem {
@@ -40,13 +42,13 @@ const DEFAULT_DUTY_CHECKLIST: DutyChecklistItem[] = [
 const DEFAULT_DUTY_GUIDELINES: DutyGuidelineCard[] = [
   {
     id: "guide-1",
-    title: "⏰ Call Time & Attendance",
+    title: "Call Time & Attendance",
     desc: "Duty teams convene at the church premises every Saturday by 1:00 PM - 3:00 PM. Team Leaders coordinate attendance in advance.",
     color: "amber"
   },
   {
     id: "guide-2",
-    title: "🔄 Schedule Swaps",
+    title: "Schedule Swaps",
     desc: "If team members have personal conflicts on their designated Saturday, use the \"Swap Saturday Team\" button to trade dates with another team.",
     color: "indigo"
   },
@@ -350,7 +352,8 @@ export const DutyPage: React.FC = () => {
     loadDutyData();
   });
 
-  const loadDutyData = async () => {
+ const loadDutyData = async () => {
+    guideData.clearError();
     try {
       setLoading(true);
       const [teamsData, scheduleData, membersData, ministriesData] = await Promise.all([
@@ -371,6 +374,7 @@ export const DutyPage: React.FC = () => {
       }
     } catch (err) {
       console.error("Failed to load duty roster:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
     }
@@ -706,6 +710,8 @@ export const DutyPage: React.FC = () => {
   // Find this Saturday's item
   const thisSaturday = schedule[0] || null;
 
+  const guideData = useGuideDataState("duty-teams", { loading, count: teams.length, filtered: Boolean(activeScope), retry: loadDutyData });
+
   if (loading && teams.length === 0) {
     return <DutyPageSkeleton />;
   }
@@ -724,12 +730,12 @@ export const DutyPage: React.FC = () => {
 
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <CalendarCheck className="w-3.5 h-3.5 text-amber-300" />
               <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Saturday Duty Roster"}</span>
             </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
             Saturday Duty Roster & Rotating Teams
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
@@ -746,9 +752,9 @@ export const DutyPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-amber-300" : ""}`} />
           </button>
           {canManage && (
-            <button
+            <button data-guide="duty-new"
               onClick={handleOpenCreateTeam}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4 text-indigo-950" />
               <span>Create Team</span>
@@ -771,15 +777,15 @@ export const DutyPage: React.FC = () => {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
             <div className="space-y-3.5">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="bg-amber-400 text-indigo-950 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-xs animate-pulse">
+                <span className="bg-amber-400 text-indigo-950 font-medium text-[12px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-xs animate-pulse">
                   <Clock className="w-3.5 h-3.5 text-indigo-950" />
                   <span>THIS SATURDAY ON DUTY</span>
                 </span>
-                <span className="text-xs text-indigo-100 font-bold bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+                <span className="text-xs text-indigo-100 font-medium bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
                   {thisSaturday.date_formatted}
                 </span>
                 {thisSaturday.status === "completed" && (
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[12px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
                     <Check className="w-3 h-3" />
                     <span>Completed</span>
                   </span>
@@ -787,7 +793,7 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+                <h2 className="text-2xl sm:text-3xl font-semibold text-white flex items-center gap-3">
                   <span>{thisSaturday.team.name}</span>
                   <span
                     className="w-4 h-4 rounded-full ring-2 ring-white/60 shadow-md inline-block"
@@ -802,19 +808,19 @@ export const DutyPage: React.FC = () => {
               {/* Leader & Roster Preview */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 flex items-center gap-2 shadow-2xs">
-                  <Crown className="w-4 h-4 text-amber-300" />
-                  <span className="text-xs font-semibold">
-                    Leader: <strong className="text-white font-black">{thisSaturday.team.leader_name || "Unassigned"}</strong>
+                  <UserCheck className="w-4 h-4 text-amber-300" />
+                  <span className="text-xs font-medium">
+                    Leader: <strong className="text-white font-medium">{thisSaturday.team.leader_name || "Unassigned"}</strong>
                   </span>
                   {thisSaturday.team.leader_phone && (
-                    <span className="text-[11px] text-indigo-200 font-mono">({thisSaturday.team.leader_phone})</span>
+                    <span className="text-[12px] text-indigo-200 font-mono">({thisSaturday.team.leader_phone})</span>
                   )}
                 </div>
 
                 <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 flex items-center gap-2 shadow-2xs">
                   <Users className="w-4 h-4 text-amber-300" />
-                  <span className="text-xs font-semibold">
-                    Team Strength: <strong className="text-white font-black">{thisSaturday.team.members?.length || thisSaturday.team.members_count || 0} Members</strong>
+                  <span className="text-xs font-medium">
+                    Team Strength: <strong className="text-white font-medium">{thisSaturday.team.members?.length || thisSaturday.team.members_count || 0} Members</strong>
                   </span>
                 </div>
               </div>
@@ -822,14 +828,14 @@ export const DutyPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0">
-              <div className="text-xs text-amber-200 font-bold bg-white/10 border border-white/20 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs backdrop-blur-xs">
+              <div className="text-xs text-amber-200 font-medium bg-white/10 border border-white/20 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs backdrop-blur-xs">
                 <CheckCircle2 className="w-4 h-4 text-amber-300" />
                 <span>Active Rotation • {thisSaturday.date_formatted}</span>
               </div>
 
-              <button
+              <button data-guide="duty-swap"
                 onClick={() => handleOpenSwapModal(thisSaturday)}
-                className="flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 text-white font-bold text-xs py-2.5 px-4 rounded-2xl border border-white/20 transition-all active:scale-95 cursor-pointer shadow-xs"
+                className="flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 text-white font-medium text-xs py-2.5 px-4 rounded-2xl border border-white/20 transition-all active:scale-95 cursor-pointer shadow-xs"
               >
                 <ArrowLeftRight className="w-4 h-4 text-amber-300" />
                 <span>Swap Saturday Team</span>
@@ -840,16 +846,16 @@ export const DutyPage: React.FC = () => {
           {/* Member chips row */}
           {thisSaturday.team.members && thisSaturday.team.members.length > 0 && (
             <div className="mt-5 pt-4 border-t border-white/15 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">Duty Disciples:</span>
+              <span className="text-[12px] font-medium uppercase tracking-wider text-indigo-300">Duty Disciples:</span>
               {thisSaturday.team.members.map((m, idx) => (
                 <span
                   key={idx}
-                  className="bg-white/15 hover:bg-white/25 border border-white/15 px-3 py-1 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 shadow-2xs backdrop-blur-xs"
+                  className="bg-white/15 hover:bg-white/25 border border-white/15 px-3 py-1 rounded-xl text-xs font-medium text-white flex items-center gap-1.5 shadow-2xs backdrop-blur-xs"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                   <span>{m.first_name} {m.last_name}</span>
                   {m.team_role === "Team Leader" && (
-                    <span className="text-[9px] bg-amber-400 text-indigo-950 font-black px-1.5 py-0.2 rounded-md">LEAD</span>
+                    <span className="text-[12px] bg-amber-400 text-indigo-950 font-medium px-1.5 py-0.2 rounded-md">LEAD</span>
                   )}
                 </span>
               ))}
@@ -862,7 +868,8 @@ export const DutyPage: React.FC = () => {
       <div className="flex items-center bg-white/95 p-1.5 rounded-2xl border border-indigo-100/90 shadow-2xs w-fit gap-1.5">
         <button
           onClick={() => setActiveTab("teams")}
-          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "teams"
+          data-guide="duty-teams-tab"
+          className={`flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "teams"
             ? "bg-indigo-950 text-white shadow-xs"
             : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
             }`}
@@ -873,7 +880,8 @@ export const DutyPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab("schedule")}
-          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "schedule"
+          data-guide="duty-schedule-tab"
+          className={`flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "schedule"
             ? "bg-indigo-950 text-white shadow-xs"
             : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
             }`}
@@ -882,9 +890,9 @@ export const DutyPage: React.FC = () => {
           <span>Saturday Rotation Cycle ({schedule.length} Weeks)</span>
         </button>
 
-        <button
+        <button data-guide="duty-checklist-tab"
           onClick={() => setActiveTab("tasks")}
-          className={`flex items-center gap-2 text-xs font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "tasks"
+          className={`flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-xl transition-all cursor-pointer ${activeTab === "tasks"
             ? "bg-indigo-950 text-white shadow-xs"
             : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
             }`}
@@ -896,7 +904,7 @@ export const DutyPage: React.FC = () => {
 
       {/* TAB 1: TEAMS MANAGEMENT */}
       {activeTab === "teams" && (
-        <div className="space-y-4">
+        <div data-guide="duty-teams" className="space-y-4">
           {loading && teams.length === 0 ? (
             <CardGridSkeleton count={6} columns={3} />
           ) : (
@@ -915,8 +923,8 @@ export const DutyPage: React.FC = () => {
                           style={{ backgroundColor: team.color }}
                         ></span>
                         <div>
-                          <h3 className="font-black text-base text-indigo-950">{team.name}</h3>
-                          <span className="text-[10px] text-indigo-950 font-black bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
+                          <h3 className="font-semibold text-base text-indigo-950">{team.name}</h3>
+                          <span className="text-[12px] text-indigo-950 font-medium bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
                             Turn #{team.order_seq}
                           </span>
                         </div>
@@ -925,14 +933,14 @@ export const DutyPage: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleOpenEditTeam(team)}
-                          className="p-2 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+                          className="p-2 text-muted hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
                           title="Edit Team"
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDeleteTeam(team.id, team.name)}
-                          className="p-2 text-charcoal/50 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                          className="p-2 text-muted hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                           title="Delete Team"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -943,24 +951,24 @@ export const DutyPage: React.FC = () => {
                     {/* Leader Banner */}
                     <div className="mt-3.5 bg-ivory-light/70 p-3 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2.5">
-                        <Crown className="w-4 h-4 text-amber-500" />
+                        <UserCheck className="w-4 h-4 text-amber-500" />
                         <div>
-                          <span className="text-[10px] text-charcoal/50 block font-bold">Team Leader</span>
-                          <span className="font-black text-indigo-950">{team.leader_name || "Unassigned"}</span>
+                          <span className="text-[12px] text-muted block font-medium">Team Leader</span>
+                          <span className="font-medium text-indigo-950">{team.leader_name || "Unassigned"}</span>
                         </div>
                       </div>
                       {team.leader_phone && (
-                        <span className="text-[10px] text-indigo-900 font-mono font-bold">{team.leader_phone}</span>
+                        <span className="text-[12px] text-indigo-900 font-mono font-medium">{team.leader_phone}</span>
                       )}
                     </div>
 
                     {/* Member Roster Chips */}
                     <div className="mt-4 space-y-2.5">
-                      <div className="flex items-center justify-between text-xs font-black text-indigo-950">
+                      <div className="flex items-center justify-between text-xs font-medium text-indigo-950">
                         <span>Assigned Disciples ({team.members?.length || 0})</span>
                         <button
                           onClick={() => handleOpenAddMember(team)}
-                          className="text-indigo-950 hover:text-amber-600 text-[11px] flex items-center gap-1 font-black cursor-pointer transition-colors"
+                          className="text-indigo-950 hover:text-amber-600 text-[12px] flex items-center gap-1 font-medium cursor-pointer transition-colors"
                         >
                           <UserPlus className="w-3.5 h-3.5" />
                           <span>Add Member</span>
@@ -984,11 +992,11 @@ export const DutyPage: React.FC = () => {
                             >
                               <div className="flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                                <span className="font-bold text-indigo-950">
+                                <span className="font-medium text-indigo-950">
                                   {m.first_name} {m.last_name}
                                 </span>
                                 {m.team_role === "Team Leader" && (
-                                  <span className="text-[9px] bg-amber-100 text-amber-950 font-black px-2 py-0.2 rounded-md border border-amber-300">
+                                  <span className="text-[12px] bg-amber-100 text-amber-950 font-medium px-2 py-0.2 rounded-md border border-amber-300">
                                     Lead
                                   </span>
                                 )}
@@ -996,7 +1004,7 @@ export const DutyPage: React.FC = () => {
 
                               <button
                                 onClick={() => handleRemoveMember(team.id, m.member_id, `${m.first_name} ${m.last_name}`)}
-                                className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                                className="p-1 text-muted hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
                                 title="Remove from team"
                               >
                                 <X className="w-3.5 h-3.5" />
@@ -1005,11 +1013,11 @@ export const DutyPage: React.FC = () => {
                           ))}
                         </div>
                       ) : (
-                        <div className="p-4 rounded-2xl border border-dashed border-indigo-200 text-center text-xs text-charcoal/50">
+                        <div className="p-4 rounded-2xl border border-dashed border-indigo-200 text-center text-xs text-muted">
                           No members assigned yet.
                           <button
                             onClick={() => handleOpenAddMember(team)}
-                            className="block mx-auto mt-1 text-indigo-950 font-bold underline cursor-pointer"
+                            className="block mx-auto mt-1 text-indigo-950 font-medium underline cursor-pointer"
                           >
                             + Add first member
                           </button>
@@ -1019,8 +1027,8 @@ export const DutyPage: React.FC = () => {
                   </div>
 
                   {/* Team Footer Checklist Preview */}
-                  <div className="pt-3 border-t border-indigo-50 text-[11px] text-charcoal/60 line-clamp-2">
-                    <span className="font-bold text-charcoal/80">Duty Checklist:</span>{" "}
+                  <div className="pt-3 border-t border-indigo-50 text-[12px] text-muted line-clamp-2">
+                    <span className="font-medium text-charcoal/80">Duty Checklist:</span>{" "}
                     {team.tasks_checklist || "General Saturday sanctuary cleaning and preparations."}
                   </div>
                 </div>
@@ -1031,13 +1039,13 @@ export const DutyPage: React.FC = () => {
           {teams.length === 0 && !loading && (
             <div className="p-12 text-center bg-white rounded-3xl border border-indigo-100 shadow-sm">
               <Users className="w-12 h-12 text-charcoal/30 mx-auto mb-3" />
-              <h3 className="font-black text-indigo-950 text-base">No Duty Teams Created</h3>
-              <p className="text-xs text-charcoal/60 mt-1 max-w-sm mx-auto">
+              <h3 className="font-semibold text-indigo-950 text-base">No Duty Teams Created</h3>
+              <p className="text-xs text-muted mt-1 max-w-sm mx-auto">
                 Create Team 1, Team 2, and more to set up a seamless rotating Saturday duty cycle.
               </p>
-              <button
+              <button data-guide="duty-new"
                 onClick={handleOpenCreateTeam}
-                className="mt-4 bg-indigo-950 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs"
+                className="mt-4 bg-indigo-950 text-white font-medium text-xs px-5 py-2.5 rounded-xl shadow-xs"
               >
                 + Create Team 1
               </button>
@@ -1048,14 +1056,14 @@ export const DutyPage: React.FC = () => {
 
       {/* TAB 2: SATURDAY ROTATION CYCLE TIMELINE */}
       {activeTab === "schedule" && (
-        <div className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 shadow-sm space-y-4">
+        <div data-guide="duty-schedule" className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-indigo-50">
             <div>
-              <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+              <h2 className="text-base font-semibold text-indigo-950 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-indigo-700" />
                 <span>Upcoming Saturday Rotation Schedule</span>
               </h2>
-              <p className="text-xs text-charcoal/50">
+              <p className="text-xs text-muted">
                 Teams automatically cycle every Saturday ({teams.length}-week repeat interval).
               </p>
             </div>
@@ -1063,14 +1071,14 @@ export const DutyPage: React.FC = () => {
               {canManage && (
                 <button
                   onClick={handleResetScheduleOverrides}
-                  className="text-xs font-bold text-charcoal/60 hover:text-indigo-950 hover:bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  className="text-xs font-medium text-muted hover:text-indigo-950 hover:bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   title="Reset all manual swaps and date overrides back to automatic cycle"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Reset to Cycle</span>
                 </button>
               )}
-              <span className="text-xs font-black text-emerald-950 bg-emerald-100 border border-emerald-300 px-3.5 py-1 rounded-full">
+              <span className="text-xs font-medium text-emerald-950 bg-emerald-100 border border-emerald-300 px-3.5 py-1 rounded-full">
                 Cycle Active: {teams.length} Teams
               </span>
             </div>
@@ -1092,14 +1100,14 @@ export const DutyPage: React.FC = () => {
                 <div className="flex items-center gap-4">
                   {/* Week & Date badge */}
                   <div className="w-28 shrink-0">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-charcoal/50 block">
+                    <span className="text-[12px] font-medium uppercase tracking-wider text-muted block">
                       Week {item.week_number}
                     </span>
-                    <span className="text-xs font-black text-indigo-950 block">
+                    <span className="text-xs font-medium text-indigo-950 block">
                       {item.date_formatted}
                     </span>
                     {item.is_this_saturday && (
-                      <span className="text-[9px] bg-amber-400 text-indigo-950 font-black px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
+                      <span className="text-[12px] bg-amber-400 text-indigo-950 font-medium px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
                         This Saturday
                       </span>
                     )}
@@ -1114,45 +1122,45 @@ export const DutyPage: React.FC = () => {
                       ></span>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="font-black text-sm text-indigo-950">{item.team.name}</h4>
-                          <span className="text-[10px] text-charcoal/50 font-bold">
+                          <h4 className="font-semibold text-sm text-indigo-950">{item.team.name}</h4>
+                          <span className="text-[12px] text-muted font-medium">
                             ({item.team.members?.length || item.team.members_count || 0} Members)
                           </span>
                         </div>
-                        <span className="text-[11px] text-charcoal/60">
-                          Leader: <strong className="text-indigo-950 font-bold">{item.team.leader_name || "Assigned"}</strong>
+                        <span className="text-[12px] text-muted">
+                          Leader: <strong className="text-indigo-950 font-medium">{item.team.leader_name || "Assigned"}</strong>
                         </span>
                         {item.status === "swapped" && item.notes && (
-                          <p className="text-[10px] text-amber-800 font-semibold mt-0.5">
+                          <p className="text-[12px] text-amber-800 font-medium mt-0.5">
                             ⇄ {item.notes}
                           </p>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <span className="text-xs text-rose-600 font-bold">No team assigned</span>
+                    <span className="text-xs text-rose-600 font-medium">No team assigned</span>
                   )}
                 </div>
 
                 {/* Status & Actions */}
                 <div className="flex items-center gap-2 self-end md:self-center">
                   {item.status === "completed" ? (
-                    <span className="bg-emerald-100 text-emerald-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-emerald-300 shadow-2xs">
+                    <span className="bg-emerald-100 text-emerald-950 text-xs font-medium px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-emerald-300 shadow-2xs">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
                       <span>Completed</span>
                     </span>
                   ) : item.status === "swapped" ? (
-                    <span className="bg-amber-100 text-amber-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-amber-300 shadow-2xs">
+                    <span className="bg-amber-100 text-amber-950 text-xs font-medium px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-amber-300 shadow-2xs">
                       <ArrowLeftRight className="w-3.5 h-3.5 text-amber-700" />
                       <span>Swapped Turn</span>
                     </span>
                   ) : item.is_this_saturday ? (
-                    <span className="bg-indigo-100 text-indigo-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-300 shadow-2xs">
+                    <span className="bg-indigo-100 text-indigo-950 text-xs font-medium px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-300 shadow-2xs">
                       <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700" />
                       <span>Active This Saturday</span>
                     </span>
                   ) : item.is_next_saturday ? (
-                    <span className="bg-amber-50 text-amber-950 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-amber-200">
+                    <span className="bg-amber-50 text-amber-950 text-xs font-medium px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-amber-200">
                       <Clock className="w-3.5 h-3.5 text-amber-700" />
                       <span>Next in Turn</span>
                     </span>
@@ -1165,7 +1173,7 @@ export const DutyPage: React.FC = () => {
                   {canManage && item.status !== "completed" && (
                     <button
                       onClick={() => handleCompleteDuty(item)}
-                      className="p-2 hover:bg-emerald-50 rounded-xl text-charcoal/50 hover:text-emerald-700 transition-colors cursor-pointer"
+                      className="p-2 hover:bg-emerald-50 rounded-xl text-muted hover:text-emerald-700 transition-colors cursor-pointer"
                       title="Mark as completed"
                     >
                       <Check className="w-4 h-4" />
@@ -1174,7 +1182,7 @@ export const DutyPage: React.FC = () => {
 
                   <button
                     onClick={() => handleOpenSwapModal(item)}
-                    className="p-2 hover:bg-indigo-50 rounded-xl text-charcoal/50 hover:text-indigo-950 transition-colors cursor-pointer"
+                    className="p-2 hover:bg-indigo-50 rounded-xl text-muted hover:text-indigo-950 transition-colors cursor-pointer"
                     title="Swap with another Saturday"
                   >
                     <ArrowLeftRight className="w-4 h-4" />
@@ -1192,11 +1200,11 @@ export const DutyPage: React.FC = () => {
           {/* Action Header */}
           <div className="flex flex-wrap items-center justify-between gap-4 p-5 bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm">
             <div className="space-y-0.5">
-              <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+              <h2 className="text-base font-semibold text-indigo-950 flex items-center gap-2">
                 <CheckSquare className="w-5 h-5 text-indigo-700" />
                 <span>Saturday Duty Checklist & Ministry SOPs</span>
               </h2>
-              <p className="text-xs text-charcoal/60">
+              <p className="text-xs text-muted">
                 Standard cleaning procedures, equipment checks, and operational guidelines for scheduled teams
               </p>
             </div>
@@ -1205,22 +1213,22 @@ export const DutyPage: React.FC = () => {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <button
                   onClick={handleResetDutyDefaults}
-                  className="px-3.5 py-2 text-xs font-bold text-charcoal/60 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-2 text-xs font-medium text-muted hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
                   title="Restore default duty checklist and guidelines"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Reset Defaults</span>
                 </button>
-                <button
+                <button data-guide="duty-guideline-new"
                   onClick={handleOpenAddGuideline}
-                  className="px-3.5 py-2 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  className="px-3.5 py-2 text-xs font-medium text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Guideline Card</span>
                 </button>
-                <button
+                <button data-guide="duty-task-new"
                   onClick={handleOpenAddDutyTask}
-                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-900  rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
+                  className="px-4 py-2 text-xs font-medium text-white bg-indigo-900  rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Checklist Task</span>
@@ -1239,15 +1247,15 @@ export const DutyPage: React.FC = () => {
                       <CheckSquare className="w-4 h-4" />
                     </span>
                     <div>
-                      <h3 className="font-black text-sm text-indigo-950">Standard Saturday Cleaning Checklist</h3>
-                      <p className="text-[11px] text-charcoal/60">Follow this protocol each Saturday before Sunday service</p>
+                      <h3 className="font-semibold text-sm text-indigo-950">Standard Saturday Cleaning Checklist</h3>
+                      <p className="text-[12px] text-muted">Follow this protocol each Saturday before Sunday service</p>
                     </div>
                   </div>
 
                   {canManage && (
-                    <button
+                    <button data-guide="duty-task-new"
                       onClick={handleOpenAddDutyTask}
-                      className="text-[11px] font-bold text-indigo-800 hover:text-indigo-950 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                      className="text-[12px] font-medium text-indigo-800 hover:text-indigo-950 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add Task</span>
@@ -1274,16 +1282,16 @@ export const DutyPage: React.FC = () => {
                         )}
                         <div>
                           <span
-                            className={`font-black block leading-tight ${
-                              item.completed ? "line-through text-charcoal/40" : "text-indigo-950"
+                            className={`font-medium block leading-tight ${
+                              item.completed ? "line-through text-muted" : "text-indigo-950"
                             }`}
                           >
                             {item.task}
                           </span>
                           {item.desc && (
                             <span
-                              className={`text-[11px] mt-0.5 block leading-relaxed ${
-                                item.completed ? "line-through text-charcoal/30" : "text-charcoal/60"
+                              className={`text-[12px] mt-0.5 block leading-relaxed ${
+                                item.completed ? "line-through text-charcoal/30" : "text-muted"
                               }`}
                             >
                               {item.desc}
@@ -1299,14 +1307,14 @@ export const DutyPage: React.FC = () => {
                         >
                           <button
                             onClick={() => handleOpenEditDutyTask(item)}
-                            className="p-1 text-charcoal/40 hover:text-indigo-950 hover:bg-white rounded transition-colors"
+                            className="p-1 text-muted hover:text-indigo-950 hover:bg-white rounded transition-colors"
                             title="Edit task"
                           >
                             <Edit className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteDutyTask(item.id)}
-                            className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white rounded transition-colors"
+                            className="p-1 text-muted hover:text-rose-600 hover:bg-white rounded transition-colors"
                             title="Delete task"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1318,9 +1326,9 @@ export const DutyPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-100 flex items-center justify-between text-xs text-indigo-950 font-bold mt-4">
+              <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-100 flex items-center justify-between text-xs text-indigo-950 font-medium mt-4">
                 <span>Completed Tasks</span>
-                <span className="bg-white px-2.5 py-0.5 rounded-lg border border-indigo-200 text-indigo-900 font-black">
+                <span className="bg-white px-2.5 py-0.5 rounded-lg border border-indigo-200 text-indigo-900 font-medium">
                   {dutyChecklist.filter(t => t.completed).length} / {dutyChecklist.length}
                 </span>
               </div>
@@ -1335,15 +1343,15 @@ export const DutyPage: React.FC = () => {
                       <ShieldCheck className="w-4 h-4" />
                     </span>
                     <div>
-                      <h3 className="font-black text-sm text-indigo-950">Duty Team Best Practices</h3>
-                      <p className="text-[11px] text-charcoal/60">Guidelines for leaders and Saturday volunteers</p>
+                      <h3 className="font-semibold text-sm text-indigo-950">Duty Team Best Practices</h3>
+                      <p className="text-[12px] text-muted">Guidelines for leaders and Saturday volunteers</p>
                     </div>
                   </div>
 
                   {canManage && (
-                    <button
+                    <button data-guide="duty-guideline-new"
                       onClick={handleOpenAddGuideline}
-                      className="text-[11px] font-bold text-amber-900 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                      className="text-[12px] font-medium text-amber-900 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add Card</span>
@@ -1354,26 +1362,28 @@ export const DutyPage: React.FC = () => {
                 <div className="mt-3.5 space-y-3 text-xs">
                   {dutyGuidelines.map((card) => {
                     const theme = getDutyGuidelineTheme(card.color);
+                    const GuidelineIcon = card.id === "guide-1" ? Clock : card.id === "guide-2" ? ArrowLeftRight : CalendarCheck;
+                    const title = card.title.replace(/^\p{Extended_Pictographic}(?:\uFE0F)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F)?)*\s*/u, "");
                     return (
                       <div
                         key={card.id}
                         className={`p-4 rounded-2xl border transition-all relative group ${theme.bg} ${theme.border}`}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <span className={`font-black block mb-1 ${theme.title}`}>{card.title}</span>
+                          <span className={`font-medium inline-flex items-center gap-1.5 mb-1 ${theme.title}`}><GuidelineIcon aria-hidden="true" className="w-4 h-4 shrink-0" />{title}</span>
 
                           {canManage && (
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                               <button
                                 onClick={() => handleOpenEditGuideline(card)}
-                                className="p-1 text-charcoal/40 hover:text-indigo-950 hover:bg-white/80 rounded transition-colors"
+                                className="p-1 text-muted hover:text-indigo-950 hover:bg-white/80 rounded transition-colors"
                                 title="Edit guideline"
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteGuideline(card.id, card.title)}
-                                className="p-1 text-charcoal/40 hover:text-rose-600 hover:bg-white/80 rounded transition-colors"
+                                className="p-1 text-muted hover:text-rose-600 hover:bg-white/80 rounded transition-colors"
                                 title="Delete guideline"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1381,7 +1391,7 @@ export const DutyPage: React.FC = () => {
                             </div>
                           )}
                         </div>
-                        <p className={`text-[11px] leading-relaxed ${theme.desc}`}>{card.desc}</p>
+                        <p className={`text-[12px] leading-relaxed ${theme.desc}`}>{card.desc}</p>
                       </div>
                     );
                   })}
@@ -1389,11 +1399,11 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div className="p-4 rounded-2xl bg-indigo-950 text-white space-y-1.5 mt-4">
-                <div className="flex items-center gap-2 text-amber-300 text-xs font-black">
+                <div className="flex items-center gap-2 text-amber-300 text-xs font-medium">
                   <Award className="w-4 h-4" />
                   <span>Excellence in God's House</span>
                 </div>
-                <p className="text-[11px] text-indigo-100/80 leading-relaxed">
+                <p className="text-[12px] text-indigo-100/80 leading-relaxed">
                   "Whatever you do, work at it with all your heart, as working for the Lord, not for human masters." — Colossians 3:23
                 </p>
               </div>
@@ -1405,22 +1415,22 @@ export const DutyPage: React.FC = () => {
       {/* MODAL 1: Create / Edit Duty Team */}
       {isTeamModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
+          <ModalPanel data-modal-panel className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
                 <Users className="w-5 h-5 text-indigo" />
                 <span>{editingTeam ? "Edit Duty Team" : "Create New Duty Team"}</span>
               </h2>
-              <button onClick={() => setIsTeamModalOpen(false)} className="p-1 text-charcoal/50 hover:text-charcoal">
+              <button onClick={() => setIsTeamModalOpen(false)} className="p-1 text-muted hover:text-charcoal">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveTeam} className="space-y-4 text-xs">
+            <form data-guide="duty-team-form" onSubmit={handleSaveTeam} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Team Name *</label>
-                  <input
+                  <label className="block font-medium text-charcoal/70 mb-1">Team Name *</label>
+                  <input data-guide="duty-team-name"
                     type="text"
                     required
                     placeholder="e.g. Team 1, Team 2"
@@ -1430,7 +1440,7 @@ export const DutyPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1">Rotation Order (Seq)</label>
+                  <label className="block font-medium text-charcoal/70 mb-1">Rotation Order (Seq)</label>
                   <input
                     type="number"
                     min="1"
@@ -1443,8 +1453,8 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Assigned Team Leader</label>
-                <select
+                <label className="block font-medium text-charcoal/70 mb-1">Assigned Team Leader</label>
+                <select data-guide="duty-team-leader"
                   value={teamForm.leader_id}
                   onChange={(e) => setTeamForm({ ...teamForm, leader_id: e.target.value })}
                   className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
@@ -1459,7 +1469,7 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Team Color Tag</label>
+                <label className="block font-medium text-charcoal/70 mb-1">Team Color Tag</label>
                 <div className="flex items-center gap-2">
                   {["#2C3968", "#E07A5F", "#6E8B74", "#D9A441", "#8D5B4C", "#4A5568"].map((c) => (
                     <button
@@ -1476,13 +1486,13 @@ export const DutyPage: React.FC = () => {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block font-bold text-charcoal/70">
+                  <label className="block font-medium text-charcoal/70">
                     Assigned Team Members ({teamForm.selectedMemberIds.length})
                   </label>
-                  <button
+                  <button data-guide="duty-team-members"
                     type="button"
                     onClick={handleOpenSelectorForForm}
-                    className="flex items-center gap-1.5 text-indigo-950 hover:text-amber-600 bg-amber-400 hover:bg-amber-300 px-3 py-1 rounded-xl font-black text-[11px] transition-all cursor-pointer shadow-2xs active:scale-95"
+                    className="flex items-center gap-1.5 text-indigo-950 hover:text-amber-600 bg-amber-400 hover:bg-amber-300 px-3 py-1 rounded-xl font-medium text-[12px] transition-all cursor-pointer shadow-2xs active:scale-95"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     <span>+ Add Members</span>
@@ -1498,9 +1508,9 @@ export const DutyPage: React.FC = () => {
                         <div key={mId} className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-indigo-50 shadow-2xs">
                           <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                            <span className="font-bold text-indigo-950 text-xs">{member.first_name} {member.last_name}</span>
+                            <span className="font-medium text-indigo-950 text-xs">{member.first_name} {member.last_name}</span>
                             {member.ministry_name && (
-                              <span className="text-[10px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.5 rounded">
+                              <span className="text-[12px] bg-indigo-50 text-indigo-900 font-medium px-1.5 py-0.5 rounded">
                                 {member.ministry_name}
                               </span>
                             )}
@@ -1508,7 +1518,7 @@ export const DutyPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleRemoveMemberFromForm(mId)}
-                            className="text-charcoal/40 hover:text-rose-600 p-0.5 rounded cursor-pointer transition-colors"
+                            className="text-muted hover:text-rose-600 p-0.5 rounded cursor-pointer transition-colors"
                             title="Remove member"
                           >
                             <X className="w-3.5 h-3.5" />
@@ -1518,9 +1528,9 @@ export const DutyPage: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <div
+                  <div data-guide="duty-team-members"
                     onClick={handleOpenSelectorForForm}
-                    className="p-3 rounded-xl border border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 cursor-pointer text-center text-[11px] text-charcoal/60 transition-colors"
+                    className="p-3 rounded-xl border border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 cursor-pointer text-center text-[12px] text-muted transition-colors"
                   >
                     No disciples added yet. Click <strong className="text-indigo-950 underline">+ Add Members</strong> to select multiple disciples at once.
                   </div>
@@ -1528,8 +1538,8 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Duty Tasks / Checklist</label>
-                <textarea
+                <label className="block font-medium text-charcoal/70 mb-1">Duty Tasks / Checklist</label>
+                <textarea data-guide="duty-team-tasks"
                   rows={3}
                   value={teamForm.tasks_checklist}
                   onChange={(e) => setTeamForm({ ...teamForm, tasks_checklist: e.target.value })}
@@ -1538,23 +1548,23 @@ export const DutyPage: React.FC = () => {
                 ></textarea>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsTeamModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal hover:bg-gray-200 cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="duty-team-save"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md cursor-pointer active:scale-95"
+                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium shadow-md cursor-pointer active:scale-95"
                 >
                   {editingTeam ? "Save Changes" : "Create Team"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1562,15 +1572,15 @@ export const DutyPage: React.FC = () => {
       {/* MODAL 2: Multi-Member Selector Modal (Batch Add Disciples) */}
       {isMultiMemberSelectorOpen && createPortal(
         <div className="fixed inset-0 z-[110] bg-charcoal/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-indigo-50 shrink-0">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-indigo-50 shrink-0">
               <div>
-                <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+                <h2 className="text-base font-semibold text-indigo-950 flex items-center gap-2">
                   <Users className="w-5 h-5 text-indigo-600" />
                   <span>Select Team Members</span>
                 </h2>
-                <p className="text-xs text-charcoal/60 mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   {selectorTarget === "existing_team" && targetTeam
                     ? `Batch add disciples to ${targetTeam.name}`
                     : "Select multiple disciples to assign to this duty team"}
@@ -1578,7 +1588,7 @@ export const DutyPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsMultiMemberSelectorOpen(false)}
-                className="p-1.5 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+                className="p-1.5 text-muted hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1588,8 +1598,8 @@ export const DutyPage: React.FC = () => {
             <div className="space-y-3 shrink-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal/40" />
-                  <input
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                  <input data-guide="duty-member-search"
                     type="text"
                     placeholder="Search disciple name..."
                     value={selectorSearchQuery}
@@ -1599,7 +1609,7 @@ export const DutyPage: React.FC = () => {
                 </div>
 
                 <div className="relative">
-                  <Filter className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal/40 pointer-events-none" />
+                  <Filter className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                   <select
                     value={selectorMinistryFilter}
                     onChange={(e) => setSelectorMinistryFilter(e.target.value)}
@@ -1626,20 +1636,20 @@ export const DutyPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleSelectAllFiltered}
-                    className="text-[11px] font-bold text-indigo-950 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer active:scale-95"
+                    className="text-[12px] font-medium text-indigo-950 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer active:scale-95"
                   >
                     Select All Filtered ({filteredSelectorMembers.length})
                   </button>
                   <button
                     type="button"
                     onClick={handleClearSelection}
-                    className="text-[11px] font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer active:scale-95"
+                    className="text-[12px] font-medium text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer active:scale-95"
                   >
                     Clear Selection
                   </button>
                 </div>
 
-                <span className="font-black text-xs text-indigo-950 bg-amber-100 border border-amber-300 px-3 py-0.5 rounded-full shadow-2xs">
+                <span className="font-medium text-xs text-indigo-950 bg-amber-100 border border-amber-300 px-3 py-0.5 rounded-full shadow-2xs">
                   {selectorSelectedIds.size} Selected
                 </span>
               </div>
@@ -1668,27 +1678,27 @@ export const DutyPage: React.FC = () => {
                           onChange={() => { }} // handled by parent onClick
                           className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
-                        <div className="w-8 h-8 rounded-full bg-indigo-900 text-amber-300 font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                        <div className="w-8 h-8 rounded-full bg-indigo-900 text-amber-300 font-medium text-xs flex items-center justify-center shrink-0 shadow-2xs">
                           {member.first_name?.[0] || ""}{member.last_name?.[0] || ""}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-black text-xs text-indigo-950">
+                            <span className="font-medium text-xs text-indigo-950">
                               {member.first_name} {member.last_name}
                             </span>
                             {member.ministry_name && (
-                              <span className="text-[10px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-100/80 px-2 py-0.2 rounded-md">
+                              <span className="text-[12px] font-medium bg-indigo-50 text-indigo-900 border border-indigo-100/80 px-2 py-0.2 rounded-md">
                                 {member.ministry_name}
                               </span>
                             )}
                             {isAlreadyInTeam && (
-                              <span className="text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.2 rounded-md">
+                              <span className="text-[12px] font-medium bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.2 rounded-md">
                                 Already in Team
                               </span>
                             )}
                           </div>
                           {member.contact_phone && (
-                            <span className="text-[11px] text-charcoal/50 font-mono">
+                            <span className="text-[12px] text-muted font-mono">
                               {member.contact_phone}
                             </span>
                           )}
@@ -1697,48 +1707,48 @@ export const DutyPage: React.FC = () => {
 
                       <div className="shrink-0 text-xs">
                         {isSelected ? (
-                          <span className="flex items-center gap-1 font-bold text-indigo-700 bg-indigo-100/70 px-2.5 py-1 rounded-xl">
+                          <span className="flex items-center gap-1 font-medium text-indigo-700 bg-indigo-100/70 px-2.5 py-1 rounded-xl">
                             <Check className="w-3.5 h-3.5" />
                             <span>Selected</span>
                           </span>
                         ) : (
-                          <span className="text-[11px] text-charcoal/40 font-medium">Click to select</span>
+                          <span className="text-[12px] text-muted font-medium">Click to select</span>
                         )}
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <div className="p-8 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 text-xs text-charcoal/50">
+                <div className="p-8 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 text-xs text-muted">
                   No disciples match the current search / filter criteria.
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="pt-3 border-t border-indigo-50 flex items-center justify-between shrink-0">
-              <span className="text-xs text-charcoal/60">
+            <div data-modal-footer className="pt-3 border-t border-indigo-50 flex items-center justify-between shrink-0">
+              <span className="text-xs text-muted">
                 <strong>{selectorSelectedIds.size}</strong> disciples chosen
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsMultiMemberSelectorOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-xs text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-xs text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmSelector}
-                  className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>Confirm & Add ({selectorSelectedIds.size}) Disciples</span>
                 </button>
               </div>
             </div>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1746,26 +1756,26 @@ export const DutyPage: React.FC = () => {
       {/* MODAL 3: Swap Saturday Duty */}
       {isSwapModalOpen && swapItem1 && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h2 className="text-base font-black text-indigo-950 flex items-center gap-2">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-indigo-950 flex items-center gap-2">
                 <ArrowLeftRight className="w-5 h-5 text-indigo-700" />
                 <span>Swap Saturday Duty Turns</span>
               </h2>
               <button
                 onClick={() => !isSubmittingSwap && setIsSwapModalOpen(false)}
-                className="p-1.5 text-charcoal/50 hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+                className="p-1.5 text-muted hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleExecuteSwap} className="space-y-4 text-xs">
+            <form data-guide="duty-swap-form" onSubmit={handleExecuteSwap} className="space-y-4 text-xs">
               <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-1">
-                <span className="text-[10px] font-black uppercase text-indigo-600 block">Currently Selected Turn:</span>
+                <span className="text-[12px] font-medium uppercase text-indigo-600 block">Currently Selected Turn:</span>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-black text-indigo-950">{swapItem1.date_formatted}</span>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-full">
+                  <span className="text-sm font-medium text-indigo-950">{swapItem1.date_formatted}</span>
+                  <span className="text-[12px] font-medium text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-full">
                     Week {swapItem1.week_number}
                   </span>
                 </div>
@@ -1774,9 +1784,9 @@ export const DutyPage: React.FC = () => {
                     className="w-3 h-3 rounded-full shrink-0 shadow-2xs"
                     style={{ backgroundColor: swapItem1.team?.color || "#6366f1" }}
                   ></span>
-                  <span className="text-xs text-charcoal font-bold">{swapItem1.team?.name || "Unassigned"}</span>
+                  <span className="text-xs text-charcoal font-medium">{swapItem1.team?.name || "Unassigned"}</span>
                   {swapItem1.team?.leader_name && (
-                    <span className="text-[11px] text-charcoal/60">
+                    <span className="text-[12px] text-muted">
                       (Leader: {swapItem1.team.leader_name})
                     </span>
                   )}
@@ -1784,12 +1794,12 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-indigo-950 mb-1.5">Swap with which upcoming Saturday? *</label>
+                <label className="block font-medium text-indigo-950 mb-1.5">Swap with which upcoming Saturday? *</label>
                 <select
                   required
                   value={swapTargetDate}
                   onChange={(e) => setSwapTargetDate(e.target.value)}
-                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-indigo-100 focus:outline-none focus:border-indigo font-bold text-indigo-950 cursor-pointer text-xs"
+                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-indigo-100 focus:outline-none focus:border-indigo font-medium text-indigo-950 cursor-pointer text-xs"
                 >
                   <option value="">-- Choose Saturday to Swap With --</option>
                   {schedule
@@ -1808,7 +1818,7 @@ export const DutyPage: React.FC = () => {
                 if (!targetItem || !targetItem.team || !swapItem1.team) return null;
                 return (
                   <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 space-y-2.5">
-                    <span className="text-[10px] font-black uppercase text-amber-950 flex items-center gap-1.5">
+                    <span className="text-[12px] font-medium uppercase text-amber-950 flex items-center gap-1.5">
                       <ArrowLeftRight className="w-3.5 h-3.5 text-amber-700" />
                       <span>Swap Outcome Preview</span>
                     </span>
@@ -1816,62 +1826,62 @@ export const DutyPage: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       {/* Box 1 */}
                       <div className="bg-white/95 p-3 rounded-xl border border-amber-200/70 shadow-2xs space-y-1">
-                        <span className="text-[10px] text-charcoal/60 font-bold block">{swapItem1.date_formatted}</span>
+                        <span className="text-[12px] text-muted font-medium block">{swapItem1.date_formatted}</span>
                         <div className="flex items-center gap-1.5">
                           <span
                             className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: targetItem.team.color }}
                           ></span>
-                          <span className="font-black text-indigo-950 text-xs truncate">
+                          <span className="font-medium text-indigo-950 text-xs truncate">
                             {targetItem.team.name}
                           </span>
                         </div>
-                        <span className="text-[10px] text-emerald-800 font-bold block">New Assigned Team</span>
+                        <span className="text-[12px] text-emerald-800 font-medium block">New Assigned Team</span>
                       </div>
 
                       {/* Box 2 */}
                       <div className="bg-white/95 p-3 rounded-xl border border-amber-200/70 shadow-2xs space-y-1">
-                        <span className="text-[10px] text-charcoal/60 font-bold block">{targetItem.date_formatted}</span>
+                        <span className="text-[12px] text-muted font-medium block">{targetItem.date_formatted}</span>
                         <div className="flex items-center gap-1.5">
                           <span
                             className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: swapItem1.team.color }}
                           ></span>
-                          <span className="font-black text-indigo-950 text-xs truncate">
+                          <span className="font-medium text-indigo-950 text-xs truncate">
                             {swapItem1.team.name}
                           </span>
                         </div>
-                        <span className="text-[10px] text-emerald-800 font-bold block">New Assigned Team</span>
+                        <span className="text-[12px] text-emerald-800 font-medium block">New Assigned Team</span>
                       </div>
                     </div>
 
-                    <p className="text-[10px] text-charcoal/60 leading-tight">
+                    <p className="text-[12px] text-muted leading-tight">
                       This will safely swap team turn assignments for these two dates without modifying subsequent recurring cycles.
                     </p>
                   </div>
                 );
               })()}
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   disabled={isSubmittingSwap}
                   onClick={() => setIsSwapModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 disabled:opacity-50 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal hover:bg-gray-200 disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingSwap || !swapTargetDate}
-                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 disabled:opacity-50 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 disabled:opacity-50 text-white font-medium shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   {isSubmittingSwap && <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-300" />}
                   <span>{isSubmittingSwap ? "Swapping..." : "Confirm Swap"}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1879,27 +1889,27 @@ export const DutyPage: React.FC = () => {
       {/* MODAL 4: Create / Edit Duty Task */}
       {isDutyTaskModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div>
-                <h2 className="text-base font-black text-indigo-950">
+                <h2 className="text-base font-semibold text-indigo-950">
                   {editingDutyTask ? "Edit Cleaning Task" : "Add Cleaning Task"}
                 </h2>
-                <span className="text-[11px] text-charcoal/60">
+                <span className="text-[12px] text-muted">
                   Saturday church building cleaning task
                 </span>
               </div>
               <button
                 onClick={() => setIsDutyTaskModalOpen(false)}
-                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+                className="p-1.5 text-muted hover:text-charcoal hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveDutyTask} className="space-y-4 text-xs">
+            <form data-guide="duty-task-form" onSubmit={handleSaveDutyTask} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-charcoal mb-1">Task Title *</label>
+                <label className="block font-medium text-charcoal mb-1">Task Title *</label>
                 <input
                   type="text"
                   required
@@ -1911,7 +1921,7 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Description / Specifics</label>
+                <label className="block font-medium text-charcoal mb-1">Description / Specifics</label>
                 <textarea
                   rows={3}
                   placeholder="e.g. Clean altar, aisles, pews, and pulpit area."
@@ -1921,23 +1931,23 @@ export const DutyPage: React.FC = () => {
                 ></textarea>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsDutyTaskModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-medium shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   {editingDutyTask ? "Save Changes" : "Add Task"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1945,31 +1955,31 @@ export const DutyPage: React.FC = () => {
       {/* MODAL 5: Create / Edit Guideline Card */}
       {isGuidelineModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div>
-                <h2 className="text-base font-black text-indigo-950">
+                <h2 className="text-base font-semibold text-indigo-950">
                   {editingGuideline ? "Edit Guideline Card" : "Add Guideline Card"}
                 </h2>
-                <span className="text-[11px] text-charcoal/60">
+                <span className="text-[12px] text-muted">
                   Operational best practices for duty teams
                 </span>
               </div>
               <button
                 onClick={() => setIsGuidelineModalOpen(false)}
-                className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+                className="p-1.5 text-muted hover:text-charcoal hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveGuideline} className="space-y-4 text-xs">
+            <form data-guide="duty-guideline-form" onSubmit={handleSaveGuideline} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-charcoal mb-1">Card Title *</label>
+                <label className="block font-medium text-charcoal mb-1">Card Title *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. ⏰ Call Time & Attendance"
+                  placeholder="e.g.  Call Time & Attendance"
                   value={guidelineForm.title}
                   onChange={(e) => setGuidelineForm({ ...guidelineForm, title: e.target.value })}
                   className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
@@ -1977,7 +1987,7 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Color Theme</label>
+                <label className="block font-medium text-charcoal mb-1">Color Theme</label>
                 <div className="grid grid-cols-4 gap-2">
                   {[
                     { key: "amber", label: "Amber", bg: "bg-amber-50 text-amber-800 border-amber-200" },
@@ -1992,7 +2002,7 @@ export const DutyPage: React.FC = () => {
                       key={theme.key}
                       type="button"
                       onClick={() => setGuidelineForm({ ...guidelineForm, color: theme.key as any })}
-                      className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${theme.bg} ${
+                      className={`py-1.5 px-2 rounded-xl text-[12px] font-medium border transition-all cursor-pointer ${theme.bg} ${
                         guidelineForm.color === theme.key ? "ring-2 ring-indigo-950 scale-102 shadow-xs" : "opacity-60 hover:opacity-100"
                       }`}
                     >
@@ -2003,7 +2013,7 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Guideline Details *</label>
+                <label className="block font-medium text-charcoal mb-1">Guideline Details *</label>
                 <textarea
                   required
                   rows={4}
@@ -2014,23 +2024,23 @@ export const DutyPage: React.FC = () => {
                 ></textarea>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsGuidelineModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-bold text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-white font-medium shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   {editingGuideline ? "Save Changes" : "Add Guideline"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

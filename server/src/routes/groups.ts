@@ -5,7 +5,7 @@ import { emitRealtimeEvent } from "../socket";
 import { resolveTotalChapters } from "./studyTopics";
 import { notify } from "../services/notificationService";
 import { countConsecutiveAbsences } from "../utils/groupAttendanceIntelligence";
-import { MY_GROUP_SCOPE } from "../utils/myGroupScope";
+import { MY_GROUP_SCOPE, MY_GROUP_LEADER_SCOPE } from "../utils/myGroupScope";
 
 const router = Router();
 
@@ -1582,7 +1582,8 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
       records,
       present_member_ids,
       is_special,
-      special_reason
+      special_reason,
+      update_group_progress
     } = req.body;
 
     if (!session_date) {
@@ -1592,6 +1593,24 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
     const group = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [groupId]);
     if (!group) {
       return res.status(404).json({ error: "Small group not found" });
+    }
+
+    if (update_group_progress !== undefined && typeof update_group_progress !== "boolean") {
+      return res.status(400).json({ error: "update_group_progress must be a boolean" });
+    }
+    if (update_group_progress) {
+      if (typeof topic_title !== "string" || !topic_title.trim() || topic_title.length > 300 ||
+          typeof chapter !== "string" || !chapter.trim() || chapter.length > 120) {
+        return res.status(400).json({ error: "A book / study topic and chapter are required to update group progress." });
+      }
+      const role = req.user?.role_name;
+      if (!["Admin", "IT Admin", "Pastor", "Coordinator", "Leader"].includes(role || "")) {
+        return res.status(403).json({ error: "Only group facilitators can update study progress." });
+      }
+      if (role === "Leader") {
+        const assigned = await db.get(`SELECT g.id FROM bible_study_groups g WHERE g.id = $2 AND ${MY_GROUP_LEADER_SCOPE}`, [req.user!.id, groupId]);
+        if (!assigned) return res.status(403).json({ error: "This group is not assigned to you." });
+      }
     }
 
     // 1. Validate date is not in future (Asia/Manila time)
@@ -1638,6 +1657,17 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
 
     // 3. Upsert session record and attendance records inside a transaction
     await db.transaction(async (client) => {
+      // Serialize lesson updates with attendance so a failed save cannot advance progress.
+      const locked = await client.query("SELECT status FROM bible_study_groups WHERE id = $1 FOR UPDATE", [groupId]);
+      if (update_group_progress) {
+        if (locked.rows[0]?.status !== "active") {
+          throw Object.assign(new Error("Only active groups can update their study progress."), { status: 409 });
+        }
+        const newer = await client.query("SELECT 1 FROM bible_study_sessions WHERE group_id = $1 AND session_date > $2 LIMIT 1", [groupId, session_date]);
+        if (newer.rows.length) {
+          throw Object.assign(new Error("A newer session exists. Save this historical lesson without updating current group progress."), { status: 409 });
+        }
+      }
       await client.query(`
         INSERT INTO bible_study_sessions (group_id, session_date, topic_title, chapter, notes, is_special, special_reason, recorded_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1664,6 +1694,13 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
         [groupId]
       );
       const groupMembers = groupMembersRes.rows;
+
+      if (update_group_progress) {
+        await client.query(`UPDATE bible_study_groups
+          SET curriculum = $1, current_chapter = $2,
+              progress_stage = CASE WHEN curriculum IS DISTINCT FROM $1 THEN 'in_progress' ELSE progress_stage END
+          WHERE id = $3`, [topic_title.trim(), chapter.trim(), groupId]);
+      }
 
       if (Array.isArray(records) && records.length > 0) {
         for (const rec of records) {
@@ -1711,7 +1748,7 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
       "CREATE",
       "bible_study_attendance",
       groupId,
-      `Recorded Bible Study attendance session for ${group.name} on ${session_date}`
+      `Recorded Bible Study attendance session for ${group.name} on ${session_date}${update_group_progress ? `; updated study progress to ${topic_title.trim()} / ${chapter.trim()}` : ""}`
     );
 
     emitRealtimeEvent("attendance:changed", { action: "save_session", group_id: groupId, session_date });
@@ -1721,7 +1758,7 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
 
     res.json({ message: `✓ Attendance session for ${session_date} logged successfully!` });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

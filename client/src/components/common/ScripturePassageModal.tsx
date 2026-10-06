@@ -76,20 +76,20 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden">
+      <div data-modal-panel className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 bg-sky-50 flex items-center justify-between shrink-0">
+        <div data-modal-header className="px-6 py-4 border-b border-slate-100 bg-sky-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/20">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900">
+                <h2 className="text-lg font-semibold text-slate-900">
                   {currentChapter.book} {currentChapter.chapter}
                 </h2>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                <span className={`text-[12px] font-medium px-2 py-0.5 rounded-full ${
                   currentChapter.testament === "New Testament" 
                     ? "bg-amber-100 text-amber-800" 
                     : "bg-indigo-100 text-indigo-800"
@@ -114,7 +114,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
-              <span className="text-xs font-semibold text-slate-600 px-1.5 select-none">{fontSize}px</span>
+              <span className="text-xs font-medium text-slate-600 px-1.5 select-none">{fontSize}px</span>
               <button
                 type="button"
                 onClick={() => setFontSize(prev => Math.min(24, prev + 1))}
@@ -127,6 +127,9 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
 
             <button
               onClick={onClose}
+              type="button"
+              aria-label="Close passage reader"
+              data-guide="reading-close"
               className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
             >
               <X className="w-5 h-5" />
@@ -135,15 +138,15 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
         </div>
 
         {/* Chapter Selection Bar */}
-        <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-3 overflow-x-auto shrink-0">
+        <div data-guide="reading-chapters" className="px-6 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-3 overflow-x-auto shrink-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-bold text-slate-500 mr-1 select-none">Chapters:</span>
+            <span className="text-xs font-medium text-slate-500 mr-1 select-none">Chapters:</span>
             {dayReading.chapters.map((chap, idx) => (
               <button
                 key={`${chap.book}-${chap.chapter}`}
                 type="button"
                 onClick={() => setSelectedChapterIndex(idx)}
-                className={`px-3 py-1 text-xs font-bold rounded-xl transition-all ${
+                className={`px-3 py-1 text-xs font-medium rounded-xl transition-all ${
                   selectedChapterIndex === idx
                     ? "bg-sky-600 text-white shadow-xs scale-105"
                     : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
@@ -155,14 +158,14 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <span className="px-3 py-1 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-black rounded-xl flex items-center gap-1.5 shadow-2xs">
+            <span className="px-3 py-1 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium rounded-xl flex items-center gap-1.5 shadow-2xs">
               <BookOpen className="w-3.5 h-3.5 text-amber-600" /> New International Version (NIV)
             </span>
           </div>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto grow space-y-4 font-serif leading-relaxed text-slate-800">
+        <div className="p-6 overflow-y-auto grow space-y-4 font-sans leading-relaxed text-slate-800">
           {loading && (
             <div className="py-20 flex flex-col items-center justify-center gap-3 text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
@@ -176,7 +179,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
                 <BookOpen className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-sans font-bold text-slate-900 text-base">Passage: {currentChapter.book} Chapter {currentChapter.chapter} (NIV)</h3>
+                <h3 className="font-sans font-semibold text-slate-900 text-base">Passage: {currentChapter.book} Chapter {currentChapter.chapter} (NIV)</h3>
                 <p className="font-sans text-xs text-slate-500 mt-1">{fetchError}</p>
               </div>
 
@@ -185,7 +188,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
                   href={bibleGatewayNivUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-sans font-bold shadow-xs transition-all"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-sans font-medium shadow-xs transition-all"
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> Read NIV on BibleGateway
                 </a>
@@ -193,7 +196,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
                   href={youVersionNivUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-sans font-bold transition-all"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-sans font-medium transition-all"
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> Open in YouVersion (NIV)
                 </a>
@@ -204,7 +207,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
           {!loading && chapterContent && (
             <div className="space-y-4 max-w-2xl mx-auto" style={{ fontSize: `${fontSize}px` }}>
               <div className="text-center pb-4 border-b border-slate-100 font-sans">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight">
+                <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
                   {chapterContent.reference || `${currentChapter.book} ${currentChapter.chapter}`}
                 </h1>
                 <p className="text-xs text-slate-400 mt-0.5">
@@ -216,7 +219,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
                 <div className="space-y-3">
                   {chapterContent.verses.map((v) => (
                     <p key={v.verse} className="text-slate-800">
-                      <sup className="font-sans text-[10px] font-black text-sky-600 mr-1.5 select-none">
+                      <sup className="font-sans text-[12px] font-medium text-sky-600 mr-1.5 select-none">
                         {v.verse}
                       </sup>
                       {v.text.trim()}
@@ -233,13 +236,13 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <div data-modal-footer className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
             <button
               type="button"
               disabled={selectedChapterIndex <= 0}
               onClick={() => setSelectedChapterIndex(prev => Math.max(0, prev - 1))}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-all"
             >
               <ChevronLeft className="w-4 h-4" /> Prev Chapter
             </button>
@@ -248,7 +251,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
               type="button"
               disabled={selectedChapterIndex >= dayReading.chapters.length - 1}
               onClick={() => setSelectedChapterIndex(prev => Math.min(dayReading.chapters.length - 1, prev + 1))}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-all"
             >
               Next Chapter <ChevronRight className="w-4 h-4" />
             </button>
@@ -259,14 +262,14 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
               href={bibleGatewayNivUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition-colors shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" /> Read on BibleGateway (NIV)
             </a>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-medium transition-all shadow-xs"
             >
               Close
             </button>

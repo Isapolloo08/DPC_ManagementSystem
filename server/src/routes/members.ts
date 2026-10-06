@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { prepareMemberHousehold, saveMemberHouseholdRelationship, reflectHouseholdFamily, validateHouseholdParent, writeMemberWithParent } from "../utils/householdFamily";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { calculateAge } from "./ministries";
@@ -206,7 +207,7 @@ router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Requ
     if (search && typeof search === "string" && search.trim()) {
       params.push(`%${search.trim()}%`);
       const pIdx = params.length;
-      whereClause += ` AND (m.first_name ILIKE $${pIdx} OR m.last_name ILIKE $${pIdx} OR m.contact_email ILIKE $${pIdx} OR m.contact_phone ILIKE $${pIdx} OR m.address ILIKE $${pIdx} OR m.invited_by ILIKE $${pIdx})`;
+      whereClause += ` AND (m.first_name ILIKE $${pIdx} OR m.last_name ILIKE $${pIdx} OR (m.first_name || ' ' || m.last_name) ILIKE $${pIdx} OR m.contact_email ILIKE $${pIdx} OR m.contact_phone ILIKE $${pIdx} OR m.address ILIKE $${pIdx})`;
     }
 
     if (birthday_filter && typeof birthday_filter === "string") {
@@ -296,6 +297,8 @@ router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Requ
         bsMap.set(r.member_id, r);
       }
     }
+
+    await reflectHouseholdFamily(members);
 
     // Attach calculated age, aging-out flag, birthday calculation, and attendance health indicators
     let enriched = members.map(m => {
@@ -565,6 +568,15 @@ router.post("/auto-transition", authMiddleware, requireRoles("Admin", "Pastor", 
       emitRealtimeEvent("members:changed", { action: "auto_transition", count: transitionedCount });
       emitRealtimeEvent("reports:changed");
     }
+
+    res.json({
+      success: true,
+      message: transitionedCount > 0
+        ? `Successfully auto-transitioned ${transitionedCount} aging-out member(s) to their new ministries.`
+        : "No aging-out members needed transition at this time.",
+      count: transitionedCount,
+      transitioned_count: transitionedCount
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -913,6 +925,8 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
       `, [member.household_id, member.id]);
     }
 
+    await reflectHouseholdFamily([member]);
+
     // Fetch recent attendance
     const attendanceHistory = await db.all(`
       SELECT a.*, e.title as event_title, min.name as ministry_name
@@ -1148,138 +1162,161 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
       }
     }
 
-    let resolvedSpouseId = spouse_id || null;
-    let resolvedSpouseName = spouse_name || null;
+    const { result, resolvedSpouseId, savedHouseholdId } = await db.transaction(async client => {
+      const savedHouseholdId = req.body.household_registration
+        ? await prepareMemberHousehold(client, req.body.household_registration, { first_name: first_name.trim(), last_name: last_name.trim(), address, contact_phone })
+        : (household_id ? Number(household_id) : null);
+      validateHouseholdParent(req.body.household_parent, savedHouseholdId);
+      let resolvedSpouseId = spouse_id || null;
+      let resolvedSpouseName = spouse_name || null;
 
-    // If a partner record was supplied to be created simultaneously
-    if (partner_record && partner_record.first_name && partner_record.last_name) {
-      const partnerRes = await db.run(`
+      // If a partner record was supplied to be created simultaneously
+      if (partner_record && partner_record.first_name && partner_record.last_name) {
+        const partnerRes = await client.query(`
+          INSERT INTO members (
+            first_name, last_name, birthdate, gender, contact_email, contact_phone,
+            household_id, ministry_id, status, medical_notes, grade_level,
+            address, guardian_names, guardian_phone, invited_by, school_name,
+            program_major, class_schedule, occupation, hobbies, previous_church,
+            facebook_account, family_details, application_date, civil_status, spouse_name
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, $9, $10, $11,
+            $12, $13, $14, $15, $16,
+            $17, $18, $19, $20, $21,
+            $22, $23, $24, $25, $26
+          )
+          RETURNING id
+        `, [
+          partner_record.first_name,
+          partner_record.last_name,
+          partner_record.birthdate || birthdate,
+          partner_record.gender || (gender === "Male" ? "Female" : "Male"),
+          partner_record.contact_email || null,
+          partner_record.contact_phone || null,
+          savedHouseholdId || partner_record.household_id || null,
+          targetMinistryId,
+          "active",
+          partner_record.medical_notes || null,
+          null,
+          partner_record.address || address || null,
+          null,
+          null,
+          (partner_record.invited_by ?? invited_by)?.trim() || null,
+          null,
+          null,
+          null,
+          partner_record.occupation || null,
+          partner_record.hobbies || null,
+          partner_record.previous_church || previous_church || null,
+          partner_record.facebook_account || null,
+          partner_record.family_details || family_details || null,
+          partner_record.application_date || application_date || null,
+          "Married",
+          `${first_name} ${last_name}`
+        ]);
+
+        resolvedSpouseId = partnerRes.rows[0].id;
+        resolvedSpouseName = `${partner_record.first_name} ${partner_record.last_name}`;
+      }
+
+      const resolvedIsBaptized = is_baptized !== undefined ? Boolean(is_baptized) : (baptism_status === "baptized");
+      const resolvedBaptismStatus = baptism_status || (resolvedIsBaptized ? "baptized" : "not_baptized");
+
+      const result = await writeMemberWithParent(`
         INSERT INTO members (
           first_name, last_name, birthdate, gender, contact_email, contact_phone,
           household_id, ministry_id, status, medical_notes, grade_level,
           address, guardian_names, guardian_phone, invited_by, school_name,
           program_major, class_schedule, occupation, hobbies, previous_church,
-          facebook_account, family_details, application_date, civil_status, spouse_name
+          facebook_account, family_details, application_date, civil_status, spouse_name, spouse_id,
+          is_baptized, baptism_status, baptism_date, baptism_notes
         ) VALUES (
           $1, $2, $3, $4, $5, $6,
           $7, $8, $9, $10, $11,
           $12, $13, $14, $15, $16,
           $17, $18, $19, $20, $21,
-          $22, $23, $24, $25, $26
+          $22, $23, $24, $25, $26, $27,
+          $28, $29, $30, $31
         )
         RETURNING id
       `, [
-        partner_record.first_name,
-        partner_record.last_name,
-        partner_record.birthdate || birthdate,
-        partner_record.gender || (gender === "Male" ? "Female" : "Male"),
-        partner_record.contact_email || null,
-        partner_record.contact_phone || null,
-        partner_record.household_id || household_id || null,
-        targetMinistryId,
-        "active",
-        partner_record.medical_notes || null,
-        null,
-        partner_record.address || address || null,
-        null,
-        null,
-        partner_record.invited_by || invited_by || null,
-        null,
-        null,
-        null,
-        partner_record.occupation || null,
-        partner_record.hobbies || null,
-        partner_record.previous_church || previous_church || null,
-        partner_record.facebook_account || null,
-        partner_record.family_details || family_details || null,
-        partner_record.application_date || application_date || null,
-        "Married",
-        `${first_name} ${last_name}`
-      ]);
+        first_name?.trim(),
+        last_name?.trim(),
+        birthdate,
+        gender || null,
+        contact_email?.trim() || null,
+        contact_phone?.trim() || null,
+        savedHouseholdId,
+        targetMinistryId ? Number(targetMinistryId) : null,
+        status || "active",
+        medical_notes?.trim() || null,
+        grade_level?.trim() || null,
+        address?.trim() || null,
+        guardian_names?.trim() || null,
+        guardian_phone?.trim() || null,
+        invited_by?.trim() || null,
+        school_name?.trim() || null,
+        program_major?.trim() || null,
+        class_schedule?.trim() || null,
+        occupation?.trim() || null,
+        hobbies?.trim() || null,
+        previous_church?.trim() || null,
+        facebook_account?.trim() || null,
+        family_details?.trim() || null,
+        application_date || null,
+        civil_status || "Single",
+        resolvedSpouseName || null,
+        resolvedSpouseId || null,
+        resolvedIsBaptized,
+        resolvedBaptismStatus,
+        baptism_date || null,
+        baptism_notes?.trim() || null
+      ], savedHouseholdId, req.body.household_parent, undefined, client);
 
-      resolvedSpouseId = partnerRes.lastInsertRowid;
-      resolvedSpouseName = `${partner_record.first_name} ${partner_record.last_name}`;
-    }
+      const newId = result.lastInsertRowid;
+      if (req.body.household_registration) {
+        await saveMemberHouseholdRelationship(client, savedHouseholdId, req.body.household_registration, {
+          id: newId, first_name: first_name.trim(), last_name: last_name.trim()
+        });
+      }
 
-    const resolvedIsBaptized = is_baptized !== undefined ? Boolean(is_baptized) : (baptism_status === "baptized");
-    const resolvedBaptismStatus = baptism_status || (resolvedIsBaptized ? "baptized" : "not_baptized");
+      // Reciprocally update spouse if spouse_id was linked
+      if (resolvedSpouseId) {
+        if (req.body.household_registration) {
+          const spouse = (await client.query("SELECT household_id FROM members WHERE id = $1 FOR UPDATE", [resolvedSpouseId])).rows[0];
+          if (!spouse || (spouse.household_id && Number(spouse.household_id) !== savedHouseholdId)) {
+            throw Object.assign(new Error("The selected spouse belongs to another household or no longer exists"), { status: 400 });
+          }
+        }
+        await client.query(`
+          UPDATE members
+          SET spouse_id = $1,
+              spouse_name = $2,
+              civil_status = 'Married',
+              household_id = CASE WHEN $4::boolean THEN $5::integer ELSE household_id END
+          WHERE id = $3
+        `, [newId, `${first_name} ${last_name}`, resolvedSpouseId, !!req.body.household_registration, savedHouseholdId]);
+      }
 
-    const result = await db.run(`
-      INSERT INTO members (
-        first_name, last_name, birthdate, gender, contact_email, contact_phone,
-        household_id, ministry_id, status, medical_notes, grade_level,
-        address, guardian_names, guardian_phone, invited_by, school_name,
-        program_major, class_schedule, occupation, hobbies, previous_church,
-        facebook_account, family_details, application_date, civil_status, spouse_name, spouse_id,
-        is_baptized, baptism_status, baptism_date, baptism_notes
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21,
-        $22, $23, $24, $25, $26, $27,
-        $28, $29, $30, $31
-      )
-      RETURNING id
-    `, [
-      first_name?.trim(),
-      last_name?.trim(),
-      birthdate,
-      gender || null,
-      contact_email?.trim() || null,
-      contact_phone?.trim() || null,
-      household_id ? Number(household_id) : null,
-      targetMinistryId ? Number(targetMinistryId) : null,
-      status || "active",
-      medical_notes?.trim() || null,
-      grade_level?.trim() || null,
-      address?.trim() || null,
-      guardian_names?.trim() || null,
-      guardian_phone?.trim() || null,
-      invited_by?.trim() || null,
-      school_name?.trim() || null,
-      program_major?.trim() || null,
-      class_schedule?.trim() || null,
-      occupation?.trim() || null,
-      hobbies?.trim() || null,
-      previous_church?.trim() || null,
-      facebook_account?.trim() || null,
-      family_details?.trim() || null,
-      application_date || null,
-      civil_status || "Single",
-      resolvedSpouseName || null,
-      resolvedSpouseId || null,
-      resolvedIsBaptized,
-      resolvedBaptismStatus,
-      baptism_date || null,
-      baptism_notes?.trim() || null
-    ]);
-
+      return { result, resolvedSpouseId, savedHouseholdId };
+    });
     const newId = result.lastInsertRowid;
-
-    // Reciprocally update spouse if spouse_id was linked
-    if (resolvedSpouseId) {
-      await db.run(`
-        UPDATE members 
-        SET spouse_id = $1, 
-            spouse_name = $2, 
-            civil_status = 'Married'
-        WHERE id = $3
-      `, [newId, `${first_name} ${last_name}`, resolvedSpouseId]);
-    }
 
     await logAuditAction(req.user?.id || null, "CREATE", "members", newId, `Created member ${first_name} ${last_name}`);
 
+    if (req.body.household_parent || req.body.household_registration) emitRealtimeEvent("households:changed", { action: "update", id: savedHouseholdId });
     emitRealtimeEvent("members:changed", { action: "create", id: newId });
 
     res.status(201).json({
       id: newId,
       message: "Member created successfully",
       ministry_id: targetMinistryId,
-      spouse_id: resolvedSpouseId
+      spouse_id: resolvedSpouseId,
+      household_id: savedHouseholdId
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -1366,173 +1403,198 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
       }
     }
 
-    let resolvedSpouseId = spouse_id !== undefined ? (spouse_id ? Number(spouse_id) : null) : currentMember.spouse_id;
-    let resolvedSpouseName = spouse_name !== undefined ? (spouse_name?.trim() || null) : currentMember.spouse_name;
+    const { resolvedSpouseId, savedHouseholdId } = await db.transaction(async client => {
+      const savedHouseholdId = req.body.household_registration
+        ? await prepareMemberHousehold(client, req.body.household_registration, { id: Number(id), household_id: currentMember.household_id, previous_name: `${currentMember.first_name} ${currentMember.last_name}`, first_name: effectiveFirstName, last_name: effectiveLastName, address: address ?? currentMember.address, contact_phone: contact_phone ?? currentMember.contact_phone })
+        : (household_id === undefined ? currentMember.household_id : (household_id ? Number(household_id) : null));
+      validateHouseholdParent(req.body.household_parent, savedHouseholdId);
+      let resolvedSpouseId = spouse_id !== undefined ? (spouse_id ? Number(spouse_id) : null) : currentMember.spouse_id;
+      let resolvedSpouseName = spouse_name !== undefined ? (spouse_name?.trim() || null) : currentMember.spouse_name;
 
-    // Handle new partner registration during edit
-    const { partner_record } = req.body;
-    if (civil_status === "Married" && partner_record && partner_record.first_name?.trim()) {
-      const juniorAdultMinistry = await db.get(
-        "SELECT id FROM ministries WHERE LOWER(name) LIKE '%junior%' LIMIT 1"
-      );
-      const targetPartnerMinistryId = juniorAdultMinistry?.id || ministry_id || null;
+      // Handle new partner registration during edit
+      const { partner_record } = req.body;
+      if (civil_status === "Married" && partner_record && partner_record.first_name?.trim()) {
+        const juniorAdultMinistry = await db.get(
+          "SELECT id FROM ministries WHERE LOWER(name) LIKE '%junior%' LIMIT 1"
+        );
+        const targetPartnerMinistryId = juniorAdultMinistry?.id || ministry_id || null;
 
-      const partnerRes = await db.run(`
-        INSERT INTO members (
-          first_name, last_name, birthdate, gender, contact_email, contact_phone,
-          household_id, ministry_id, status, medical_notes, grade_level,
-          address, guardian_names, guardian_phone, invited_by, school_name,
-          program_major, class_schedule, occupation, hobbies, previous_church,
-          facebook_account, family_details, application_date, civil_status, spouse_name, spouse_id
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11,
-          $12, $13, $14, $15, $16,
-          $17, $18, $19, $20, $21,
-          $22, $23, $24, $25, $26, $27
-        )
-        RETURNING id
-      `, [
-        partner_record.first_name.trim(),
-        partner_record.last_name?.trim() || effectiveLastName,
-        partner_record.birthdate || birthdate || "1990-01-01",
-        partner_record.gender || (gender === "Male" ? "Female" : "Male"),
-        partner_record.contact_email?.trim() || null,
-        partner_record.contact_phone?.trim() || null,
-        household_id ? Number(household_id) : null,
-        targetPartnerMinistryId ? Number(targetPartnerMinistryId) : null,
-        "active",
-        partner_record.medical_notes?.trim() || null,
-        null,
-        partner_record.address?.trim() || (address?.trim() || null),
-        null,
-        null,
-        partner_record.invited_by?.trim() || (invited_by?.trim() || null),
-        null,
-        null,
-        null,
-        partner_record.occupation?.trim() || null,
-        partner_record.hobbies?.trim() || null,
-        partner_record.previous_church?.trim() || (previous_church?.trim() || null),
-        partner_record.facebook_account?.trim() || null,
-        partner_record.family_details?.trim() || (family_details?.trim() || null),
-        partner_record.application_date || application_date || null,
-        "Married",
-        `${effectiveFirstName} ${effectiveLastName}`,
-        Number(id)
-      ]);
+        const partnerRes = await client.query(`
+          INSERT INTO members (
+            first_name, last_name, birthdate, gender, contact_email, contact_phone,
+            household_id, ministry_id, status, medical_notes, grade_level,
+            address, guardian_names, guardian_phone, invited_by, school_name,
+            program_major, class_schedule, occupation, hobbies, previous_church,
+            facebook_account, family_details, application_date, civil_status, spouse_name, spouse_id
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, $9, $10, $11,
+            $12, $13, $14, $15, $16,
+            $17, $18, $19, $20, $21,
+            $22, $23, $24, $25, $26, $27
+          )
+          RETURNING id
+        `, [
+          partner_record.first_name.trim(),
+          partner_record.last_name?.trim() || effectiveLastName,
+          partner_record.birthdate || birthdate || "1990-01-01",
+          partner_record.gender || (gender === "Male" ? "Female" : "Male"),
+          partner_record.contact_email?.trim() || null,
+          partner_record.contact_phone?.trim() || null,
+          savedHouseholdId,
+          targetPartnerMinistryId ? Number(targetPartnerMinistryId) : null,
+          "active",
+          partner_record.medical_notes?.trim() || null,
+          null,
+          partner_record.address?.trim() || (address?.trim() || null),
+          null,
+          null,
+          (partner_record.invited_by ?? invited_by)?.trim() || null,
+          null,
+          null,
+          null,
+          partner_record.occupation?.trim() || null,
+          partner_record.hobbies?.trim() || null,
+          partner_record.previous_church?.trim() || (previous_church?.trim() || null),
+          partner_record.facebook_account?.trim() || null,
+          partner_record.family_details?.trim() || (family_details?.trim() || null),
+          partner_record.application_date || application_date || null,
+          "Married",
+          `${effectiveFirstName} ${effectiveLastName}`,
+          Number(id)
+        ]);
 
-      resolvedSpouseId = partnerRes.lastInsertRowid;
-      resolvedSpouseName = `${partner_record.first_name} ${partner_record.last_name || effectiveLastName}`;
-    }
-
-    const valOrCurrent = (val: any, current: any, isString = true) => {
-      if (val === undefined) return current;
-      if (val === null) return null;
-      if (isString && typeof val === "string") {
-        const trimmed = val.trim();
-        return trimmed === "" ? null : trimmed;
+        resolvedSpouseId = partnerRes.rows[0].id;
+        resolvedSpouseName = `${partner_record.first_name} ${partner_record.last_name || effectiveLastName}`;
       }
-      return val;
-    };
 
-    const resolvedIsBaptized = is_baptized !== undefined ? Boolean(is_baptized) : (baptism_status === "baptized" ? true : currentMember.is_baptized);
-    const resolvedBaptismStatus = valOrCurrent(baptism_status, currentMember.baptism_status) || (resolvedIsBaptized ? "baptized" : "not_baptized");
+      const valOrCurrent = (val: any, current: any, isString = true) => {
+        if (val === undefined) return current;
+        if (val === null) return null;
+        if (isString && typeof val === "string") {
+          const trimmed = val.trim();
+          return trimmed === "" ? null : trimmed;
+        }
+        return val;
+      };
 
-    await db.run(`
-      UPDATE members
-      SET first_name = $1,
-          last_name = $2,
-          birthdate = $3,
-          gender = $4,
-          contact_email = $5,
-          contact_phone = $6,
-          household_id = $7,
-          ministry_id = $8,
-          status = $9,
-          medical_notes = $10,
-          grade_level = $11,
-          address = $12,
-          guardian_names = $13,
-          guardian_phone = $14,
-          invited_by = $15,
-          school_name = $16,
-          program_major = $17,
-          class_schedule = $18,
-          occupation = $19,
-          hobbies = $20,
-          previous_church = $21,
-          facebook_account = $22,
-          family_details = $23,
-          application_date = $24,
-          civil_status = $25,
-          spouse_name = $26,
-          spouse_id = $27,
-          is_baptized = $28,
-          baptism_status = $29,
-          baptism_date = $30,
-          baptism_notes = $31
-      WHERE id = $32
-    `, [
-      effectiveFirstName,
-      effectiveLastName,
-      valOrCurrent(birthdate, currentMember.birthdate, false),
-      valOrCurrent(gender, currentMember.gender),
-      valOrCurrent(contact_email, currentMember.contact_email),
-      valOrCurrent(contact_phone, currentMember.contact_phone),
-      household_id !== undefined ? (household_id ? Number(household_id) : null) : currentMember.household_id,
-      ministry_id !== undefined ? (ministry_id ? Number(ministry_id) : null) : currentMember.ministry_id,
-      valOrCurrent(status, currentMember.status) || "active",
-      valOrCurrent(medical_notes, currentMember.medical_notes),
-      valOrCurrent(grade_level, currentMember.grade_level),
-      valOrCurrent(address, currentMember.address),
-      valOrCurrent(guardian_names, currentMember.guardian_names),
-      valOrCurrent(guardian_phone, currentMember.guardian_phone),
-      valOrCurrent(invited_by, currentMember.invited_by),
-      valOrCurrent(school_name, currentMember.school_name),
-      valOrCurrent(program_major, currentMember.program_major),
-      valOrCurrent(class_schedule, currentMember.class_schedule),
-      valOrCurrent(occupation, currentMember.occupation),
-      valOrCurrent(hobbies, currentMember.hobbies),
-      valOrCurrent(previous_church, currentMember.previous_church),
-      valOrCurrent(facebook_account, currentMember.facebook_account),
-      valOrCurrent(family_details, currentMember.family_details),
-      valOrCurrent(application_date, currentMember.application_date, false),
-      valOrCurrent(civil_status, currentMember.civil_status) || "Single",
-      resolvedSpouseName,
-      resolvedSpouseId,
-      resolvedIsBaptized,
-      resolvedBaptismStatus,
-      valOrCurrent(baptism_date, currentMember.baptism_date, false),
-      valOrCurrent(baptism_notes, currentMember.baptism_notes),
-      id
-    ]);
+      const resolvedIsBaptized = is_baptized !== undefined ? Boolean(is_baptized) : (baptism_status === "baptized" ? true : currentMember.is_baptized);
+      const resolvedBaptismStatus = valOrCurrent(baptism_status, currentMember.baptism_status) || (resolvedIsBaptized ? "baptized" : "not_baptized");
 
-    // Reciprocally update or unlink spouse
-    if (currentMember.spouse_id && currentMember.spouse_id !== resolvedSpouseId) {
-      await db.run(
-        "UPDATE members SET spouse_id = NULL, spouse_name = NULL, civil_status = 'Single' WHERE id = $1 AND spouse_id = $2",
-        [currentMember.spouse_id, id]
-      );
-    }
+      await writeMemberWithParent(`
+        UPDATE members
+        SET first_name = $1,
+            last_name = $2,
+            birthdate = $3,
+            gender = $4,
+            contact_email = $5,
+            contact_phone = $6,
+            household_id = $7,
+            ministry_id = $8,
+            status = $9,
+            medical_notes = $10,
+            grade_level = $11,
+            address = $12,
+            guardian_names = $13,
+            guardian_phone = $14,
+            invited_by = $15,
+            school_name = $16,
+            program_major = $17,
+            class_schedule = $18,
+            occupation = $19,
+            hobbies = $20,
+            previous_church = $21,
+            facebook_account = $22,
+            family_details = $23,
+            application_date = $24,
+            civil_status = $25,
+            spouse_name = $26,
+            spouse_id = $27,
+            is_baptized = $28,
+            baptism_status = $29,
+            baptism_date = $30,
+            baptism_notes = $31
+        WHERE id = $32
+      `, [
+        effectiveFirstName,
+        effectiveLastName,
+        valOrCurrent(birthdate, currentMember.birthdate, false),
+        valOrCurrent(gender, currentMember.gender),
+        valOrCurrent(contact_email, currentMember.contact_email),
+        valOrCurrent(contact_phone, currentMember.contact_phone),
+        savedHouseholdId,
+        ministry_id !== undefined ? (ministry_id ? Number(ministry_id) : null) : currentMember.ministry_id,
+        valOrCurrent(status, currentMember.status) || "active",
+        valOrCurrent(medical_notes, currentMember.medical_notes),
+        valOrCurrent(grade_level, currentMember.grade_level),
+        valOrCurrent(address, currentMember.address),
+        valOrCurrent(guardian_names, currentMember.guardian_names),
+        valOrCurrent(guardian_phone, currentMember.guardian_phone),
+        valOrCurrent(invited_by, currentMember.invited_by),
+        valOrCurrent(school_name, currentMember.school_name),
+        valOrCurrent(program_major, currentMember.program_major),
+        valOrCurrent(class_schedule, currentMember.class_schedule),
+        valOrCurrent(occupation, currentMember.occupation),
+        valOrCurrent(hobbies, currentMember.hobbies),
+        valOrCurrent(previous_church, currentMember.previous_church),
+        valOrCurrent(facebook_account, currentMember.facebook_account),
+        valOrCurrent(family_details, currentMember.family_details),
+        valOrCurrent(application_date, currentMember.application_date, false),
+        valOrCurrent(civil_status, currentMember.civil_status) || "Single",
+        resolvedSpouseName,
+        resolvedSpouseId,
+        resolvedIsBaptized,
+        resolvedBaptismStatus,
+        valOrCurrent(baptism_date, currentMember.baptism_date, false),
+        valOrCurrent(baptism_notes, currentMember.baptism_notes),
+        id
+      ], savedHouseholdId, req.body.household_parent, currentMember, client);
 
-    if (resolvedSpouseId) {
-      await db.run(`
-        UPDATE members 
-        SET spouse_id = $1, 
-            spouse_name = $2, 
-            civil_status = 'Married'
-        WHERE id = $3
-      `, [id, `${effectiveFirstName} ${effectiveLastName}`, resolvedSpouseId]);
-    }
+      if (req.body.household_registration) {
+        await saveMemberHouseholdRelationship(client, savedHouseholdId, req.body.household_registration, {
+          id: Number(id), first_name: effectiveFirstName, last_name: effectiveLastName,
+          previous_name: `${currentMember.first_name} ${currentMember.last_name}`
+        });
+      }
+
+      // Reciprocally update or unlink spouse
+      if (currentMember.spouse_id && currentMember.spouse_id !== resolvedSpouseId) {
+        await client.query(
+          "UPDATE members SET spouse_id = NULL, spouse_name = NULL, civil_status = 'Single' WHERE id = $1 AND spouse_id = $2",
+          [currentMember.spouse_id, id]
+        );
+      }
+
+      if (resolvedSpouseId) {
+        if (req.body.household_registration) {
+          const spouse = (await client.query("SELECT household_id FROM members WHERE id = $1 FOR UPDATE", [resolvedSpouseId])).rows[0];
+          if (!spouse || (spouse.household_id && Number(spouse.household_id) !== Number(savedHouseholdId))) {
+            throw Object.assign(new Error("The selected spouse belongs to another household or no longer exists"), { status: 400 });
+          }
+        }
+        await client.query(`
+          UPDATE members
+          SET spouse_id = $1,
+              spouse_name = $2,
+              civil_status = 'Married',
+              household_id = CASE WHEN $4::boolean THEN $5::integer ELSE household_id END
+          WHERE id = $3
+        `, [id, `${effectiveFirstName} ${effectiveLastName}`, resolvedSpouseId, !!req.body.household_registration, savedHouseholdId]);
+      }
+
+      return { resolvedSpouseId, savedHouseholdId };
+    });
 
     await logAuditAction(req.user?.id || null, "UPDATE", "members", Number(id), `Updated member #${id}`);
 
+    if (req.body.household_registration || req.body.household_parent || (currentMember.household_id && (effectiveFirstName !== currentMember.first_name || effectiveLastName !== currentMember.last_name))) {
+      emitRealtimeEvent("households:changed", { action: "update", id: Number(savedHouseholdId || currentMember.household_id) });
+    }
     emitRealtimeEvent("members:changed", { action: "update", id: Number(id) });
 
-    res.json({ message: "Member updated successfully" });
+    res.json({ message: "Member updated successfully", household_id: savedHouseholdId });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

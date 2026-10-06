@@ -67,7 +67,20 @@ body.dpc-startup-active > div:not(#root) {
   animation: dpc-startup-logo-in 650ms ease-out both;
 }
 
-.dpc-startup__meteor {
+.dpc-startup__meteor-layer {
+  position: absolute;
+  left: calc(50% - 24px);
+  top: calc(50% - 164px);
+  width: calc(50vw + 180px);
+  height: 188px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.dpc-startup__meteor-layer[data-active="true"] { visibility: visible; }
+.dpc-startup__meteor-layer canvas { display: block; width: 100%; height: 100%; }
+
+.dpc-startup__meteor--fallback {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -81,7 +94,7 @@ body.dpc-startup-active > div:not(#root) {
   animation: dpc-startup-meteor 1200ms cubic-bezier(0.42, 0, 0.58, 1) both;
 }
 
-.dpc-startup__meteor::before {
+.dpc-startup__meteor--fallback::before {
   content: "";
   position: absolute;
   left: 0;

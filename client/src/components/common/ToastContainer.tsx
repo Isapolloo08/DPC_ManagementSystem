@@ -71,11 +71,11 @@ const ToastCard: React.FC<ToastCardProps> = ({ toast, onUndo, onDismiss }) => {
             {style.icon}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs sm:text-sm font-semibold text-slate-100 truncate">
+            <p className="text-xs sm:text-sm font-medium text-slate-100 truncate">
               {toast.message}
             </p>
             {toast.description && (
-              <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
+              <p className="text-[12px] sm:text-xs text-slate-400 truncate mt-0.5">
                 {toast.description}
               </p>
             )}
@@ -92,12 +92,12 @@ const ToastCard: React.FC<ToastCardProps> = ({ toast, onUndo, onDismiss }) => {
                 e.preventDefault();
                 onUndo(toast.id);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer ring-1 ring-amber-300/50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer ring-1 ring-amber-300/50"
               title="Cancel deletion and restore item"
             >
               <RotateCcw className="w-3.5 h-3.5 text-indigo-950 stroke-[2.5]" />
               <span>{toast.undoLabel || "Undo"}</span>
-              <span className="ml-0.5 px-1 py-0.2 bg-indigo-950/20 rounded text-[10px] font-bold">
+              <span className="ml-0.5 px-1 py-0.2 bg-indigo-950/20 rounded text-[12px] font-medium">
                 {secondsLeft}s
               </span>
             </button>

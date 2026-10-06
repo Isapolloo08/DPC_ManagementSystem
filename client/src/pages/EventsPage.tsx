@@ -1,7 +1,9 @@
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { 
   EventItem, BirthdayCelebrant, SaturdayDutyScheduleItem, 
   SundayDutyScheduleItem, BibleStudyGroup, Ministry 
@@ -12,13 +14,18 @@ import {
   Layers, LayoutGrid, List, X, AlertCircle,
   Cake, Gift, PartyPopper, Send, Check, Utensils, CalendarCheck,
   BookOpen, ShieldCheck, Droplets, ChevronRight as ChevronRightIcon,
-  Crown, Phone, ExternalLink, Tag, ChevronDown, ChevronUp, Sun, UserCheck
+  Phone, ExternalLink, Tag, ChevronDown, ChevronUp, Sun, UserCheck
 } from "lucide-react";
 import { DateTimePickerInput } from "../components/common/DateTimePickerInput";
 import { useSocketEvent } from "../socket";
 import { EventsPageSkeleton } from "../components/common/SkeletonLoader";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
 import { EventAttendanceModal } from "../components/common/EventAttendanceModal";
+import "./EventsPage.css";
+import { Dialog } from "../components/common/Dialog";
+import { Button } from "../components/common/Button";
+import { calendarScheduleKey, groupCalendarSegments } from "../utils/calendarScheduleGroups";
+import { formatDateToYMD } from "../utils/scheduleHelper";
 
 // Dynamic default dates helper for "Now" & "Now + 2 Hours"
 const getNowIsoLocal = (): string => {
@@ -156,6 +163,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
   // Inspector & Modals state
   const [selectedActivity, setSelectedActivity] = useState<UnifiedActivity | null>(null);
+  const [selectedScheduleKey, setSelectedScheduleKey] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [attendanceModalEvent, setAttendanceModalEvent] = useState<EventItem | null>(null);
   const [selectedBirthday, setSelectedBirthday] = useState<BirthdayCelebrant | null>(null);
@@ -277,12 +285,13 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   };
 
   const loadAllMasterData = async () => {
+    guideData.clearError();
     try {
       setLoading(true);
       const ministryScope = isRestricted && allowedMinistries.length > 0 ? allowedMinistries[0].id : undefined;
 
       const [eventsRes, dutyRes, dishRes, groupsRes, bdaysRes] = await Promise.all([
-        api.getEvents({ ministry_id: ministryScope }).catch(() => []),
+        api.getEvents({ ministry_id: ministryScope }).catch(err => { guideData.reportError(err); return []; }),
         api.getDutySchedule({ ministry_id: ministryScope, count: 20 }).catch(() => ({ schedule: [] })),
         api.getDishwashingSchedule({ count: 20 }).catch(() => ({ schedule: [] })),
         api.getGroups({ ministry_id: ministryScope }).catch(() => []),
@@ -296,6 +305,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       setBirthdays(bdaysRes?.celebrants || []);
     } catch (err) {
       console.error("Failed to load unified master events:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
     }
@@ -388,7 +398,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   const handleOpenBirthdayModal = (celebrant: BirthdayCelebrant) => {
     setSelectedBirthday(celebrant);
     setGreetingMessage(
-      `Happy ${celebrant.turning_age}th Birthday, ${celebrant.first_name}! 🎂 "The Lord bless you and keep you; the Lord make His face shine upon you and be gracious to you!" (Numbers 6:24-25). Wishing you God's richest peace and blessings!`
+      `Happy ${celebrant.turning_age}th Birthday, ${celebrant.first_name}!"The Lord bless you and keep you; the Lord make His face shine upon you and be gracious to you!"(Numbers 6:24-25). Wishing you God's richest peace and blessings!`
     );
     setGreetingSuccess(false);
   };
@@ -521,18 +531,22 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       "Saturday": 6, "Sat": 6
     };
 
-    // Generate weekly recurring instances for Bible Study groups within display range (e.g. Aug - Oct 2026)
+    // Generate recurring sessions for the displayed month, including grid padding days.
+    const displayYear = currentDate.getFullYear();
+    const displayMonth = currentDate.getMonth();
+    const firstDay = new Date(displayYear, displayMonth, 1);
+    const startDate = new Date(displayYear, displayMonth, 1 - firstDay.getDay());
+    const monthDays = new Date(displayYear, displayMonth + 1, 0).getDate();
+    const gridDays = Math.ceil((firstDay.getDay() + monthDays) / 7) * 7;
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + gridDays - 1);
     bibleStudyGroups.forEach(group => {
       const weekday = dayNameToWeekday[group.meeting_day];
       if (weekday === undefined) return;
 
-      // Generate dates for August, September, October 2026 (or matching month)
-      const startDate = new Date(2026, 6, 1); // July 1, 2026
-      const endDate = new Date(2026, 10, 30);  // Nov 30, 2026
-
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         if (d.getDay() === weekday) {
-          const dateStr = d.toISOString().split("T")[0];
+          const dateStr = formatDateToYMD(d);
 
           list.push({
             id: `bs-${group.id}-${dateStr}`,
@@ -565,7 +579,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       list.push({
         id: `birthday-${b.id}-${dateStr}`,
         type: "birthday",
-        title: `🎂 Birthday: ${b.first_name} ${b.last_name}`,
+        title: `Birthday: ${b.first_name} ${b.last_name}`,
         date_str: dateStr,
         time_formatted: "All Day",
         location: "Church Fellowship",
@@ -580,7 +594,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
     });
 
     return list;
-  }, [events, saturdayDuties, dishwashingDuties, bibleStudyGroups, birthdays]);
+  }, [events, saturdayDuties, dishwashingDuties, bibleStudyGroups, birthdays, currentDate]);
 
   // Filtered Unified Activities
   const filteredActivities = useMemo(() => {
@@ -813,6 +827,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   }, [year, month, filteredActivities]);
 
   // Chronological upcoming activities list (sorted by date)
+  const groupedCalendarWeeks = useMemo(() => calendarWeeks.map(week => groupCalendarSegments(week.multiDaySegments)), [calendarWeeks]);
+  const selectedScheduleActivities = selectedScheduleKey ? filteredActivities.filter(activity => activity.is_multiday && calendarScheduleKey(activity) === selectedScheduleKey) : [];
   const upcomingActivitiesList = useMemo(() => {
     return [...filteredActivities].sort((a, b) => {
       const dateDiff = new Date(a.date_str).getTime() - new Date(b.date_str).getTime();
@@ -822,7 +838,9 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   }, [filteredActivities]);
 
   // Set default active activity in inspector
-  const activeInspectorItem = selectedActivity || upcomingActivitiesList[0] || null;
+  const activeInspectorItem = (selectedActivity && filteredActivities.find(activity => activity.id === selectedActivity.id))
+    || filteredActivities.find(activity => isActivityOnDate(activity, `${year}-${String(month + 1).padStart(2, "0")}-01`)
+      || activity.date_str.startsWith(`${year}-${String(month + 1).padStart(2, "0")}-`)) || null;
   const canCreate = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
   // Activity Type Counts
@@ -837,49 +855,40 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
     };
   }, [allUnifiedActivities]);
 
+  const guideData = useGuideDataState("calendar-events", { loading, count: filteredActivities.length, filtered: true, retry: loadAllMasterData });
+
   if (loading && allUnifiedActivities.length === 0) {
     return <EventsPageSkeleton />;
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="church-calendar space-y-5 animate-fade-in">
       {/* ========================================================================= */}
       {/* 1. PAGE HERO HEADER */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-white/10 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        {/* Glow ambient spots */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="calendar-toolbar flex flex-col md:flex-row md:items-center justify-between gap-4">
 
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-white/10 backdrop-blur-md text-amber-300 ring-1 ring-white/20 shadow-inner">
+            <span className="calendar-title-icon p-2.5 rounded-xl">
               <CalendarIcon className="w-5 h-5" />
             </span>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
-              Calendar
+            <h1 className="calendar-title text-2xl font-semibold tracking-tight">
+              Church calendar
             </h1>
-            <span className="bg-amber-400/20 text-amber-300 border border-amber-300/30 text-xs font-black px-3 py-1 rounded-full shadow-inner flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-              {filteredActivities.length} Scheduled
-            </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-            Unified church operations: Ministry Events, Saturday Cleanliness Duties, Sunday Dishwashing Rotations, Bible Study Groups, and Pastoral Birthdays.
+          <p className="calendar-subtitle text-sm leading-relaxed">
+            Gatherings, serving schedules, and milestones in one place.
           </p>
         </div>
 
         {/* Top Actions & View Mode Switcher */}
         <div className="relative z-10 flex flex-wrap items-center gap-3 shrink-0">
-          <div className="flex items-center bg-white/10 backdrop-blur-md p-1 rounded-2xl border border-white/15 shadow-inner">
-            <button
+          <div className="calendar-view-switch flex items-center p-1 rounded-xl" aria-label="Calendar view">
+            <button data-guide="calendar-view"
+              aria-pressed={viewMode === "calendar"}
               onClick={() => setViewMode("calendar")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                 viewMode === "calendar" 
                   ? "bg-amber-400 text-slate-950 shadow-md scale-100" 
                   : "text-slate-300 hover:text-white"
@@ -888,23 +897,24 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               <LayoutGrid className="w-3.5 h-3.5" />
               <span>Calendar</span>
             </button>
-            <button
+            <button data-guide="calendar-agenda"
+              aria-pressed={viewMode === "agenda"}
               onClick={() => setViewMode("agenda")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                 viewMode === "agenda" 
                   ? "bg-amber-400 text-slate-950 shadow-md scale-100" 
                   : "text-slate-300 hover:text-white"
               }`}
             >
               <List className="w-3.5 h-3.5" />
-              <span>Agenda Timeline</span>
+              <span>Agenda</span>
             </button>
           </div>
 
           {onNavigate && (
             <button
               onClick={() => onNavigate("sundaycycle")}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-amber-300 font-bold px-4 py-2.5 rounded-2xl text-xs border border-white/20 backdrop-blur-md transition-all active:scale-95 cursor-pointer shadow-xs hover:border-amber-300/40"
+              className="calendar-secondary-action flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium"
             >
               <Sun className="w-4 h-4 text-amber-300" />
               <span>Events & Celebrations</span>
@@ -920,7 +930,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   handleOpenCreateModal();
                 }
               }}
-              className="flex items-center gap-2 bg-amber-400 hover:brightness-105 text-slate-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-lg hover:shadow-amber-400/20 transition-all active:scale-95 cursor-pointer"
+              className="calendar-primary-action flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium"
             >
               <Plus className="w-4 h-4 text-slate-950" />
               <span>Add Event / Celebration</span>
@@ -932,12 +942,13 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       {/* ========================================================================= */}
       {/* 2. FILTER CONTROLS BAR: CATEGORY PILLS + SCOPE + SEARCH */}
       {/* ========================================================================= */}
-      <div className="bg-white/95 backdrop-blur-md p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-3.5">
+      <div className="calendar-filters p-4 rounded-2xl space-y-3.5">
         {/* Row 1: Activity Category Filters */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div data-guide="calendar-kinds" className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           <button
             onClick={() => setFilterType("all")}
-            className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+            aria-pressed={filterType === "all"}
+            className={`px-3.5 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
               filterType === "all"
                 ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-900/20"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
@@ -949,7 +960,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
           <button
             onClick={() => setFilterType("church_event")}
-            className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+            aria-pressed={filterType === "church_event"}
+            className={`px-3.5 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
               filterType === "church_event"
                 ? "bg-indigo-900 text-white shadow-md ring-2 ring-indigo-900/20"
                 : "bg-indigo-50 text-indigo-900 hover:bg-indigo-100 border border-indigo-100"
@@ -961,7 +973,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
           <button
             onClick={() => setFilterType("saturday_duty")}
-            className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+            aria-pressed={filterType === "saturday_duty"}
+            className={`px-3.5 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
               filterType === "saturday_duty"
                 ? "bg-amber-600 text-white shadow-md ring-2 ring-amber-600/20"
                 : "bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200/80"
@@ -973,7 +986,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
           <button
             onClick={() => setFilterType("dishwashing")}
-            className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+            aria-pressed={filterType === "dishwashing"}
+            className={`px-3.5 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
               filterType === "dishwashing"
                 ? "bg-teal-700 text-white shadow-md ring-2 ring-teal-700/20"
                 : "bg-teal-50 text-teal-900 hover:bg-teal-100 border border-teal-200/80"
@@ -985,7 +999,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
           <button
             onClick={() => setFilterType("bible_study")}
-            className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+            aria-pressed={filterType === "bible_study"}
+            className={`px-3.5 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
               filterType === "bible_study"
                 ? "bg-purple-700 text-white shadow-md ring-2 ring-purple-700/20"
                 : "bg-purple-50 text-purple-900 hover:bg-purple-100 border border-purple-200/80"
@@ -997,7 +1012,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
           <button
             onClick={() => setFilterType("birthday")}
-            className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+            aria-pressed={filterType === "birthday"}
+            className={`px-3.5 py-2 rounded-2xl text-xs font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
               filterType === "birthday"
                 ? "bg-rose-600 text-white shadow-md ring-2 ring-rose-600/20"
                 : "bg-rose-50 text-rose-900 hover:bg-rose-100 border border-rose-200/80"
@@ -1012,12 +1028,13 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
           <div className="flex items-center gap-2 w-full md:w-auto">
             <Layers className="w-4 h-4 text-slate-400 shrink-0" />
-            <span className="text-xs font-bold text-slate-600">Ministry Scope:</span>
-            <select
+            <span className="text-xs font-medium text-slate-600">Ministry Scope:</span>
+            <select data-guide="calendar-ministry"
+              aria-label="Ministry scope"
               value={filterMinistry}
               onChange={(e) => setFilterMinistry(e.target.value)}
               disabled={isRestricted && allowedMinistries.length <= 1}
-              className="bg-slate-50 px-3.5 py-1.5 rounded-xl text-xs border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 cursor-pointer disabled:opacity-90 disabled:cursor-not-allowed"
+              className="bg-slate-50 px-3.5 py-1.5 rounded-xl text-xs border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-slate-800 cursor-pointer disabled:opacity-90 disabled:cursor-not-allowed"
             >
               {!isRestricted && <option value="">All Church Ministries</option>}
               {allowedMinistries.map((m) => (
@@ -1028,7 +1045,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
           <div className="relative w-full md:w-80">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
+            <input data-guide="calendar-search"
+              aria-label="Search activities"
               type="text"
               placeholder="Search title, team, leader, location..."
               value={searchQuery}
@@ -1038,6 +1056,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
+                aria-label="Clear activity search"
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
               >
                 <X className="w-3.5 h-3.5" />
@@ -1050,37 +1069,35 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       {/* ========================================================================= */}
       {/* 3. MAIN 2-COLUMN LAYOUT: CALENDAR/AGENDA (LEFT) + ACTIVITY INSPECTOR (RIGHT) */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="calendar-workspace grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* LEFT COLUMN: CALENDAR OR AGENDA VIEW */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-6">
           {viewMode === "calendar" ? (
-            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
+            <div className="calendar-surface rounded-2xl overflow-hidden">
               {/* Calendar Month Navigation Header */}
-              <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between">
+              <div className="calendar-month-header p-4 sm:p-5 flex flex-wrap gap-3 items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-2xl bg-white/10 text-amber-300 shadow-inner">
-                    <CalendarIcon className="w-5 h-5" />
-                  </div>
                   <div>
-                    <h2 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+                    <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
                       <span>{monthNames[month]} {year}</span>
                     </h2>
-                    <p className="text-[11px] text-slate-300">Click any activity badge to inspect complete details on the right</p>
+                    <p className="calendar-subtitle text-xs mt-1">Select an activity to view its details</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={jumpToday}
-                    className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/20 transition-all cursor-pointer shadow-2xs"
+                    className="calendar-secondary-action px-3.5 py-2 text-xs font-medium rounded-lg"
                   >
                     Today
                   </button>
-                  <div className="flex items-center bg-white/10 rounded-xl p-0.5 border border-white/20">
+                  <div className="calendar-month-arrows flex items-center rounded-lg p-0.5">
                     <button
                       onClick={prevMonth}
                       className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors cursor-pointer"
                       title="Previous Month"
+                      aria-label="Previous month"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -1088,6 +1105,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                       onClick={nextMonth}
                       className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors cursor-pointer"
                       title="Next Month"
+                      aria-label="Next month"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -1096,20 +1114,21 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               </div>
 
               {/* Weekday Column Headers */}
-              <div className="grid grid-cols-7 bg-slate-50/80 border-b border-slate-200 text-center py-2.5 text-xs font-black uppercase text-[10px] tracking-wider text-slate-500">
-                <span className="text-rose-600 font-black">Sun</span>
+              <div className="calendar-grid-scroll" role="region" aria-label="Monthly calendar" tabIndex={0}>
+              <div className="calendar-weekdays grid grid-cols-7 text-center py-3 text-xs font-medium uppercase tracking-wider">
+                <span className="text-rose-600 font-medium">Sun</span>
                 <span>Mon</span>
                 <span>Tue</span>
                 <span>Wed</span>
                 <span>Thu</span>
                 <span>Fri</span>
-                <span className="text-slate-800 font-black">Sat</span>
+                <span className="text-slate-800 font-medium">Sat</span>
               </div>
 
               {/* 35/42 Days Grid Cells Organized into Clean 2-Tier Weekly Rows */}
-              <div className="divide-y divide-slate-100">
+              <div className="calendar-weeks divide-y divide-slate-100">
                 {calendarWeeks.map((week) => (
-                  <div key={week.weekNumber} className="relative min-h-[120px] sm:min-h-[140px] flex flex-col justify-start">
+                  <div key={week.weekNumber} className="calendar-week relative min-h-[120px] sm:min-h-[132px] flex flex-col justify-start">
                     {/* Background Day Cell Columns Grid */}
                     <div className="absolute inset-0 grid grid-cols-7 divide-x divide-slate-100 pointer-events-none">
                       {week.days.map((day, dIdx) => (
@@ -1131,6 +1150,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                       {week.days.map((day, dIdx) => (
                         <div key={dIdx} className="p-1 flex items-center justify-between">
                           <button
+                            aria-label={`${formatDateDisplay(day.dateStr)}${day.isToday ? ', today' : ''}, ${day.activitiesCount} activities`}
+                            aria-current={day.isToday ? "date" : undefined}
                             onClick={(e) => {
                               const allDayActs = filteredActivities.filter(a => isActivityOnDate(a, day.dateStr));
                               if (allDayActs.length > 0) {
@@ -1143,9 +1164,9 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                                 }
                               }
                             }}
-                            className={`text-xs font-bold inline-flex items-center justify-center w-6 h-6 rounded-full transition-all cursor-pointer ${
+                            className={`text-xs font-medium inline-flex items-center justify-center w-6 h-6 rounded-full transition-all cursor-pointer ${
                               day.isToday
-                                ? "bg-amber-400 text-slate-950 font-black shadow-md ring-2 ring-amber-300"
+                                ? "bg-amber-400 text-slate-950 font-medium shadow-md ring-2 ring-amber-300"
                                 : day.isCurrentMonth
                                 ? "text-slate-800 hover:bg-slate-200"
                                 : "text-slate-400 hover:bg-slate-200"
@@ -1157,7 +1178,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                           {day.activitiesCount > 0 && (
                             <button
                               onClick={(e) => handleOpenDayPopover(e, day.dateStr)}
-                              className="text-[9px] font-black text-slate-600 hover:text-indigo-950 bg-slate-100 hover:bg-indigo-100 border border-slate-200/70 px-1.5 py-0.5 rounded-full cursor-pointer transition-colors shadow-2xs"
+                              className="text-[12px] font-medium text-slate-600 hover:text-indigo-950 bg-slate-100 hover:bg-indigo-100 border border-slate-200/70 px-1.5 py-0.5 rounded-full cursor-pointer transition-colors shadow-2xs"
                               title="Click to view all activities on this date"
                             >
                               {day.activitiesCount}
@@ -1167,40 +1188,44 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                       ))}
                     </div>
 
-                    {/* TIER 1: SPANNING MULTI-DAY BARS (Max 2 Spanning Bars Per Week Row) */}
+                    {/* One bar for each full schedule; matching events share that bar. */}
                     {week.multiDaySegments.length > 0 && (
                       <div className="relative z-10 grid grid-cols-7 gap-y-1 px-1.5 py-1 pointer-events-auto">
-                        {week.multiDaySegments.slice(0, 2).map((segment) => {
-                          const isSelected = activeInspectorItem?.id === segment.activity.id;
+                        {groupedCalendarWeeks[week.weekNumber].map(({ key, segment, activities }) => {
+                          const isSelected = activities.some(activity => activity === activeInspectorItem);
 
                           return (
-                            <div
-                              key={segment.id}
-                              onClick={() => setSelectedActivity(segment.activity)}
+                            <button type="button"
+                              key={key}
+                              data-schedule-count={activities.length}
+                              aria-pressed={isSelected}
+                              data-kind={segment.activity.type}
+                              data-selected={isSelected}
+                              aria-haspopup={activities.length > 1 ? "dialog" : undefined}
+                              onClick={() => activities.length > 1 ? setSelectedScheduleKey(key) : setSelectedActivity(segment.activity)}
                               style={{
                                 gridColumnStart: segment.startCol,
                                 gridColumnEnd: segment.endCol + 1,
-                                backgroundColor: segment.activity.badge_color
                               }}
-                              className={`h-[26px] text-white text-[11px] font-extrabold px-3 flex items-center justify-between shadow-2xs transition-all hover:brightness-110 cursor-pointer truncate ${
+                              className={`calendar-activity calendar-span h-[28px] text-[12px] font-medium px-3 flex items-center justify-between transition-all cursor-pointer truncate ${
                                 segment.isStartOfEvent ? "rounded-l-xl" : "rounded-l-none pl-2 border-l-2 border-dashed border-white/40"
                               } ${
                                 segment.isEndOfEvent ? "rounded-r-xl" : "rounded-r-none pr-2 border-r-2 border-dashed border-white/40"
                               } ${isSelected ? "ring-2 ring-amber-400 ring-offset-1 z-20 shadow-md" : ""}`}
-                              title={`${segment.activity.title} (${segment.activity.time_formatted})`}
+                              title={`${activities.length > 1 ? `${activities.length} activities` : segment.activity.title}: ${formatDateDisplay(segment.activity.date_str)} – ${formatDateDisplay(segment.activity.end_date_str || '')} (${segment.activity.time_formatted})`}
                             >
                               <div className="flex items-center gap-1.5 truncate min-w-0">
                                 {segment.isStartOfEvent && <CalendarIcon className="w-3.5 h-3.5 shrink-0 text-amber-300" />}
-                                {!segment.isStartOfEvent && <span className="text-[10px] opacity-75 font-mono">↳</span>}
-                                <span className="truncate">{segment.activity.title}</span>
+                                {!segment.isStartOfEvent && <span className="text-[12px] opacity-75 font-mono">↳</span>}
+                                <span className="truncate">{activities.length > 1 ? `${activities.length} activities · View all` : segment.activity.title}</span>
                               </div>
 
-                              <span className="text-[8px] font-black bg-black/30 px-2 py-0.5 rounded-md text-white/95 shrink-0 ml-2 uppercase tracking-tighter">
+                              <span className="text-[12px] font-medium bg-black/30 px-2 py-0.5 rounded-md text-white/95 shrink-0 ml-2 uppercase tracking-tighter">
                                 {segment.isStartOfEvent && segment.isEndOfEvent
                                   ? `${segment.spanLength} Days Range`
                                   : (segment.isStartOfEvent ? "Starts" : (segment.isEndOfEvent ? "Ends" : "Ongoing"))}
                               </span>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -1210,13 +1235,11 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                     <div className="relative z-10 grid grid-cols-7 gap-1 p-1.5 flex-1 pointer-events-auto">
                       {week.days.map((day, dIdx) => {
                         const dayActivities = week.dailyActivitiesMap[dIdx] || [];
-                        const visibleMultiCount = week.multiDaySegments.slice(0, 2).filter(
-                          seg => (dIdx + 1) >= seg.startCol && (dIdx + 1) <= seg.endCol
+                        const visibleMultiCount = groupedCalendarWeeks[week.weekNumber].filter(
+                          ({ segment }) => (dIdx + 1) >= segment.startCol && (dIdx + 1) <= segment.endCol
                         ).length;
                         const maxSingleToShow = Math.max(0, 2 - visibleMultiCount);
                         const visibleSingle = dayActivities.slice(0, maxSingleToShow);
-                        const totalVisibleOnDay = visibleMultiCount + visibleSingle.length;
-                        const hiddenCountOnDay = day.activitiesCount - totalVisibleOnDay;
 
                         return (
                           <div key={dIdx} className="space-y-1 min-w-0 flex flex-col justify-start">
@@ -1224,11 +1247,13 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                               const isSelected = activeInspectorItem?.id === act.id;
 
                               return (
-                                <div
+                                <button type="button" data-guide="calendar-inspect"
                                   key={act.id}
+                                  aria-pressed={isSelected}
+                                  data-kind={act.type}
+                                  data-selected={isSelected}
                                   onClick={() => setSelectedActivity(act)}
-                                  style={{ backgroundColor: act.badge_color }}
-                                  className={`rounded-lg px-2 py-1 text-white text-[10px] font-extrabold shadow-2xs transition-all hover:brightness-110 cursor-pointer flex items-center gap-1 truncate ${
+                                  className={`calendar-activity w-full text-left rounded-md px-2 py-1.5 text-[12px] font-medium transition-all cursor-pointer flex items-center gap-1 truncate ${
                                     isSelected ? "ring-2 ring-amber-400 ring-offset-1 z-20 shadow-md" : ""
                                   }`}
                                   title={`${act.title} (${act.time_formatted})`}
@@ -1238,26 +1263,23 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                                   {act.type === "dishwashing" && <Utensils className="w-3 h-3 shrink-0 text-teal-200" />}
                                   {act.type === "bible_study" && <BookOpen className="w-3 h-3 shrink-0 text-purple-200" />}
                                   {act.type === "birthday" && <Cake className="w-3 h-3 shrink-0 text-rose-200" />}
-                                  <span className="truncate">{act.title.replace("Saturday Duty: ", "").replace("Dishwashing: ", "").replace("Bible Study: ", "").replace("🎂 Birthday: ", "")}</span>
-                                </div>
+                                  <span className="truncate">{act.title.replace("Saturday Duty: ", "").replace("Dishwashing: ", "").replace("Bible Study: ", "").replace("Birthday:", "")}</span>
+                                </button>
                               );
                             })}
-
-                            {hiddenCountOnDay > 0 && (
-                              <button
-                                onClick={(e) => handleOpenDayPopover(e, day.dateStr)}
-                                className="w-full text-[9px] font-black text-indigo-700 hover:text-indigo-950 bg-indigo-50/90 hover:bg-indigo-100 border border-indigo-200/70 py-0.5 px-1 rounded-md text-center cursor-pointer transition-colors shadow-2xs flex items-center justify-center gap-0.5"
-                                title={`Click to view all ${day.activitiesCount} events on this date`}
-                              >
-                                +{hiddenCountOnDay} more
-                              </button>
-                            )}
+                            {dayActivities.length > visibleSingle.length && <button type="button"
+                              className="calendar-week-more rounded-md px-1 py-1 text-xs"
+                              onClick={event => handleOpenDayPopover(event, day.dateStr)}>
+                              +{dayActivities.length - visibleSingle.length} more
+                            </button>}
                           </div>
                         );
                       })}
                     </div>
+
                   </div>
                 ))}
+              </div>
               </div>
             </div>
           ) : (
@@ -1266,8 +1288,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               {upcomingActivitiesList.length === 0 ? (
                 <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs text-slate-400 space-y-2">
                   <CalendarIcon className="w-10 h-10 mx-auto text-slate-300" />
-                  <p className="font-bold text-slate-600">No activities found matching your filters.</p>
-                  <p className="text-[11px]">Try selecting "All Activities" or clearing your search query.</p>
+                  <p className="font-medium text-slate-600">No activities found matching your filters.</p>
+                  <p className="text-[12px]">Try selecting "All Activities" or clearing your search query.</p>
                 </div>
               ) : (
                 upcomingActivitiesList.map((act) => {
@@ -1278,7 +1300,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   const isMulti = Boolean(act.is_multiday && act.end_date_str && act.end_date_str > act.date_str);
 
                   return (
-                    <div
+                    <div data-guide="calendar-inspect"
                       key={act.id}
                       onClick={() => setSelectedActivity(act)}
                       className={`bg-white rounded-3xl p-4 sm:p-5 border shadow-2xs hover:border-indigo-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer ${
@@ -1290,18 +1312,18 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                         <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col justify-center items-center shrink-0 p-1">
                           {isMulti && act.end_date_str ? (
                             <>
-                              <span className="text-[8px] font-black uppercase text-rose-600 leading-none">
+                              <span className="text-[12px] font-medium uppercase text-rose-600 leading-none">
                                 {monthName}
                               </span>
-                              <span className="text-xs font-black text-slate-900 leading-tight mt-0.5">
+                              <span className="text-xs font-medium text-slate-900 leading-tight mt-0.5">
                                 {act.date_str.split("-")[2]} → {act.end_date_str.split("-")[2]}
                               </span>
-                              <span className="text-[7px] font-bold text-slate-400 uppercase">Multi-Day</span>
+                              <span className="text-[7px] font-medium text-slate-400 uppercase">Multi-Day</span>
                             </>
                           ) : (
                             <>
-                              <span className="text-[9px] font-black uppercase text-rose-600 leading-none">{monthName}</span>
-                              <span className="text-lg font-black text-slate-900 leading-tight">{dayNum}</span>
+                              <span className="text-[12px] font-medium uppercase text-rose-600 leading-none">{monthName}</span>
+                              <span className="text-lg font-medium text-slate-900 leading-tight">{dayNum}</span>
                             </>
                           )}
                         </div>
@@ -1309,17 +1331,17 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                         <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span
-                              className="text-[9px] font-black px-2 py-0.5 rounded-md text-white uppercase tracking-wide"
+                              className="text-[12px] font-medium px-2 py-0.5 rounded-md text-white uppercase tracking-wide"
                               style={{ backgroundColor: act.badge_color }}
                             >
                               {act.type.replace("_", " ")}
                             </span>
                             {isMulti && (
-                              <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wide">
+                              <span className="text-[12px] font-medium px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wide">
                                 Multi-Day Range
                               </span>
                             )}
-                            <h3 className="text-sm font-black text-slate-900 truncate">{act.title}</h3>
+                            <h3 className="text-sm font-semibold text-slate-900 truncate">{act.title}</h3>
                           </div>
 
                           <p className="text-xs text-slate-500 line-clamp-1">{act.description}</p>
@@ -1342,7 +1364,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                               <>
                                 <span>•</span>
                                 <span className="flex items-center gap-1 font-medium">
-                                  <Crown className="w-3.5 h-3.5 text-amber-500" />
+                                  <UserCheck className="w-3.5 h-3.5 text-amber-500" />
                                   Lead: {act.leader_name}
                                 </span>
                               </>
@@ -1360,7 +1382,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                                 e.stopPropagation();
                                 setAttendanceModalEvent(act.raw_data);
                               }}
-                              className="bg-purple-900 hover:bg-purple-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                              className="bg-purple-900 hover:bg-purple-800 text-white font-medium px-3 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                               title="Mark Present / Event Attendance"
                             >
                               <UserCheck className="w-3.5 h-3.5 text-purple-300" />
@@ -1371,7 +1393,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                                 e.stopPropagation();
                                 handleRsvp(act.raw_data.id);
                               }}
-                              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-medium px-3.5 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>RSVP ({act.rsvp_count || 0})</span>
@@ -1384,7 +1406,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                               e.stopPropagation();
                               handleOpenBirthdayModal(act.raw_data);
                             }}
-                            className="bg-rose-500 hover:bg-rose-600 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                            className="bg-rose-500 hover:bg-rose-600 text-white font-medium px-3 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                           >
                             <Gift className="w-3.5 h-3.5" />
                             <span>Send Blessing</span>
@@ -1403,22 +1425,22 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
         </div>
 
         {/* RIGHT COLUMN: UNIFIED ACTIVITY INSPECTOR & DETAILS PANEL */}
-        <div className="lg:col-span-5 xl:col-span-4 space-y-6">
+        <div className="calendar-details-column lg:col-span-5 xl:col-span-4 space-y-6">
           {/* INSPECTOR CONTAINER */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-5">
+          <div className="calendar-details rounded-2xl p-5 space-y-5">
             <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <span className="p-2.5 rounded-2xl bg-indigo-950 text-amber-300 shadow-sm">
+                <span className="calendar-title-icon p-2.5 rounded-xl">
                   <CalendarIcon className="w-4 h-4" />
                 </span>
                 <div>
-                  <h3 className="font-black text-sm text-slate-900">Activity Inspector</h3>
-                  <p className="text-[11px] text-slate-400">Detailed schedule, roster & actions</p>
+                  <h3 data-guide="calendar-details" className="font-semibold text-sm text-slate-900">Activity details</h3>
+                  <p className="text-xs text-slate-400 mt-1">Schedule, people & next steps</p>
                 </div>
               </div>
               {activeInspectorItem && (
                 <span
-                  className="text-[10px] font-black px-2.5 py-0.5 rounded-full text-white uppercase shadow-2xs"
+                  className="text-[12px] font-medium px-2.5 py-0.5 rounded-full text-white uppercase shadow-2xs"
                   style={{ backgroundColor: activeInspectorItem.badge_color }}
                 >
                   {activeInspectorItem.type.replace("_", " ")}
@@ -1430,7 +1452,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               <div className="space-y-4 text-xs">
                 {/* Title & Classification */}
                 <div>
-                  <h4 className="text-base font-black text-slate-900 leading-snug">
+                  <h4 className="text-base font-semibold text-slate-900 leading-snug">
                     {activeInspectorItem.title}
                   </h4>
                   <p className="text-slate-600 mt-1.5 leading-relaxed">
@@ -1442,16 +1464,16 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
                   {activeInspectorItem.is_multiday && activeInspectorItem.end_date_str ? (
                     <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 font-black text-slate-900 text-xs flex-wrap">
+                      <div className="flex items-center gap-2 font-medium text-slate-900 text-xs flex-wrap">
                         <CalendarIcon className="w-4 h-4 text-indigo-600 shrink-0" />
                         <span>
                           {formatDateDisplay(activeInspectorItem.date_str)} – {formatDateDisplay(activeInspectorItem.end_date_str)}
                         </span>
-                        <span className="text-[9px] bg-amber-100 text-amber-900 font-black px-2 py-0.5 rounded-md uppercase tracking-wider ml-auto">
+                        <span className="text-[12px] bg-amber-100 text-amber-900 font-medium px-2 py-0.5 rounded-md uppercase tracking-wider ml-auto">
                           Multi-Day Range
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-slate-600 font-semibold text-[11px] pl-6">
+                      <div className="flex items-center gap-2 text-slate-600 font-medium text-[12px] pl-6">
                         <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                         <span>
                           {formatTime12h(activeInspectorItem.start_time_iso)} (Start) to {formatTime12h(activeInspectorItem.end_time_iso)} (End)
@@ -1460,11 +1482,11 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 font-black text-slate-900 text-xs">
+                      <div className="flex items-center gap-2 font-medium text-slate-900 text-xs">
                         <CalendarIcon className="w-4 h-4 text-indigo-600 shrink-0" />
                         <span>{formatDateDisplay(activeInspectorItem.date_str)}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-slate-600 font-semibold text-[11px] pl-6">
+                      <div className="flex items-center gap-2 text-slate-600 font-medium text-[12px] pl-6">
                         <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                         <span>{activeInspectorItem.time_formatted}</span>
                       </div>
@@ -1475,14 +1497,14 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                     {activeInspectorItem.location && (
                       <div className="flex items-center gap-2 text-slate-700 font-medium">
                         <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Location: <strong className="text-slate-900 font-bold">{activeInspectorItem.location}</strong></span>
+                        <span>Location: <strong className="text-slate-900 font-medium">{activeInspectorItem.location}</strong></span>
                       </div>
                     )}
 
                     {activeInspectorItem.ministry_name && (
                       <div className="flex items-center gap-2 text-slate-700 font-medium">
                         <Tag className="w-4 h-4 text-indigo-600 shrink-0" />
-                        <span>Ministry / Unit: <strong className="text-slate-900 font-bold">{activeInspectorItem.ministry_name}</strong></span>
+                        <span>Ministry / Unit: <strong className="text-slate-900 font-medium">{activeInspectorItem.ministry_name}</strong></span>
                       </div>
                     )}
                   </div>
@@ -1493,16 +1515,16 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 {(activeInspectorItem.type === "saturday_duty" || activeInspectorItem.type === "dishwashing" || activeInspectorItem.type === "bible_study") && activeInspectorItem.leader_name && (
                   <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <Crown className="w-4 h-4 text-amber-500 shrink-0" />
+                      <UserCheck className="w-4 h-4 text-amber-500 shrink-0" />
                       <div>
-                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Point Person / Leader</span>
-                        <span className="font-black text-slate-900">{activeInspectorItem.leader_name}</span>
+                        <span className="text-[12px] text-slate-400 font-medium block uppercase">Point Person / Leader</span>
+                        <span className="font-medium text-slate-900">{activeInspectorItem.leader_name}</span>
                       </div>
                     </div>
                     {activeInspectorItem.leader_phone && (
                       <a 
                         href={`tel:${activeInspectorItem.leader_phone}`}
-                        className="text-[11px] text-indigo-900 font-mono font-bold bg-indigo-100/70 hover:bg-indigo-200 px-2 py-1 rounded-lg flex items-center gap-1 transition-colors"
+                        className="text-[12px] text-indigo-900 font-mono font-medium bg-indigo-100/70 hover:bg-indigo-200 px-2 py-1 rounded-lg flex items-center gap-1 transition-colors"
                       >
                         <Phone className="w-3 h-3" />
                         <span>{activeInspectorItem.leader_phone}</span>
@@ -1514,8 +1536,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 {/* 2. Tasks / Checklist Preview */}
                 {activeInspectorItem.checklist && (
                   <div className="p-3.5 rounded-2xl bg-teal-50/40 border border-teal-100">
-                    <span className="text-[10px] font-black uppercase text-teal-900 block mb-1">Responsibilities / Checklist</span>
-                    <p className="text-[11px] text-teal-950/80 leading-relaxed font-medium">
+                    <span className="text-[12px] font-medium uppercase text-teal-900 block mb-1">Responsibilities / Checklist</span>
+                    <p className="text-[12px] text-teal-950/80 leading-relaxed font-medium">
                       {activeInspectorItem.checklist}
                     </p>
                   </div>
@@ -1527,14 +1549,14 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                     <>
                       <button
                         onClick={() => setAttendanceModalEvent(activeInspectorItem.raw_data)}
-                        className="w-full bg-purple-900  text-white font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className="w-full bg-purple-900  text-white font-medium py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
                       >
                         <UserCheck className="w-4 h-4 text-purple-300" />
                         <span>Event Attendance & Check-In</span>
                       </button>
                       <button
                         onClick={() => handleRsvp(activeInspectorItem.raw_data.id)}
-                        className="w-full bg-amber-400 hover:brightness-105 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className="w-full bg-amber-400 hover:brightness-105 text-slate-950 font-medium py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>RSVP ({activeInspectorItem.rsvp_count || 0})</span>
@@ -1545,7 +1567,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   {activeInspectorItem.type === "birthday" && (
                     <button
                       onClick={() => handleOpenBirthdayModal(activeInspectorItem.raw_data)}
-                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
                     >
                       <Gift className="w-4 h-4" />
                       <span>Send Birthday Blessing</span>
@@ -1553,21 +1575,21 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   )}
 
                   {activeInspectorItem.type === "saturday_duty" && (
-                    <div className="text-slate-500 text-[11px] flex items-center gap-1.5 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-200 w-full justify-center">
+                    <div className="text-slate-500 text-[12px] flex items-center gap-1.5 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-200 w-full justify-center">
                       <ShieldCheck className="w-4 h-4 text-amber-600" />
                       <span>Saturday Cleaning: <strong>{activeInspectorItem.members_count || 0}</strong> disciples assigned</span>
                     </div>
                   )}
 
                   {activeInspectorItem.type === "dishwashing" && (
-                    <div className="text-slate-500 text-[11px] flex items-center gap-1.5 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-200 w-full justify-center">
+                    <div className="text-slate-500 text-[12px] flex items-center gap-1.5 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-200 w-full justify-center">
                       <Droplets className="w-4 h-4 text-teal-600" />
                       <span>Kitchen Roster: <strong>{activeInspectorItem.members_count || 5}</strong> volunteers active</span>
                     </div>
                   )}
 
                   {activeInspectorItem.type === "bible_study" && (
-                    <div className="text-slate-500 text-[11px] flex items-center gap-1.5 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-200 w-full justify-center">
+                    <div className="text-slate-500 text-[12px] flex items-center gap-1.5 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-200 w-full justify-center">
                       <BookOpen className="w-4 h-4 text-purple-600" />
                       <span>Discipleship Group: <strong>{activeInspectorItem.members_count || 0}</strong> disciples enrolled</span>
                     </div>
@@ -1577,8 +1599,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
             ) : (
               <div className="p-8 text-center text-xs text-slate-400 space-y-2">
                 <CalendarIcon className="w-8 h-8 mx-auto text-slate-300" />
-                <p className="font-bold text-slate-600">No activity selected</p>
-                <p className="text-[11px]">Click any event badge on the calendar to view its details here.</p>
+                <p className="font-medium text-slate-600">No activity selected</p>
+                <p className="text-[12px]">Click any event badge on the calendar to view its details here.</p>
               </div>
             )}
           </div>
@@ -1588,9 +1610,9 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       {/* CREATE EVENT MODAL */}
       {isCreateModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-indigo-600" />
                 <span>Schedule New Ministry Event</span>
               </h2>
@@ -1601,7 +1623,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
             <form onSubmit={handleCreateEvent} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Event Title *</label>
+                <label className="block font-medium text-slate-700 mb-1">Event Title *</label>
                 <input
                   type="text"
                   required
@@ -1613,7 +1635,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Host Ministry</label>
+                <label className="block font-medium text-slate-700 mb-1">Host Ministry</label>
                 <select
                   value={formData.ministry_id}
                   onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
@@ -1647,7 +1669,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Location / Venue *</label>
+                <label className="block font-medium text-slate-700 mb-1">Location / Venue *</label>
                 <select
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
@@ -1664,7 +1686,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Description & Details</label>
+                <label className="block font-medium text-slate-700 mb-1">Description & Details</label>
                 <textarea
                   rows={3}
                   placeholder="Provide instructions, speaker details, or reminders..."
@@ -1674,23 +1696,23 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 ></textarea>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-600 hover:bg-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold shadow-md cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-md cursor-pointer"
                 >
                   Publish Event
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1698,9 +1720,9 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       {/* SEND BIRTHDAY BLESSING MODAL */}
       {selectedBirthday && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                 <Cake className="w-5 h-5 text-rose-500" />
                 <span>Send Birthday Blessing to {selectedBirthday.first_name}</span>
               </h2>
@@ -1711,12 +1733,12 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
             <div className="space-y-4 text-xs">
               <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100 text-slate-800">
-                <span className="font-bold block text-rose-950">Pastoral Care Milestone</span>
+                <span className="font-medium block text-rose-950">Pastoral Care Milestone</span>
                 <span>{selectedBirthday.first_name} {selectedBirthday.last_name} ({selectedBirthday.ministry_name || "General Member"}) turning {selectedBirthday.turning_age} years old on {selectedBirthday.birth_month}/{selectedBirthday.birth_day}.</span>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Pastoral Blessing Message</label>
+                <label className="block font-medium text-slate-700 mb-1">Pastoral Blessing Message</label>
                 <textarea
                   rows={4}
                   value={greetingMessage}
@@ -1726,7 +1748,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
               </div>
 
               {greetingSuccess && (
-                <div className="p-3 bg-emerald-50 text-emerald-900 font-bold rounded-xl border border-emerald-200 flex items-center gap-2">
+                <div className="p-3 bg-emerald-50 text-emerald-900 font-medium rounded-xl border border-emerald-200 flex items-center gap-2">
                   <Check className="w-4 h-4 text-emerald-600" />
                   <span>Blessing broadcasted to church wall!</span>
                 </div>
@@ -1736,7 +1758,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => setSelectedBirthday(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-600 hover:bg-slate-200 cursor-pointer"
                 >
                   Close
                 </button>
@@ -1744,19 +1766,31 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   type="button"
                   disabled={sendingGreeting || greetingSuccess}
                   onClick={handleSendBirthdayGreeting}
-                  className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>{sendingGreeting ? "Sending..." : "Post Blessing"}</span>
                 </button>
               </div>
             </div>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
 
       {/* FLOATING GOOGLE-CALENDAR STYLE DAY POPOVER */}
+      {selectedScheduleActivities.length > 0 && <Dialog title="Activities with this schedule" onClose={() => setSelectedScheduleKey(null)}
+        description={`${formatDateDisplay(selectedScheduleActivities[0].date_str)} – ${formatDateDisplay(selectedScheduleActivities[0].end_date_str || '')} · ${selectedScheduleActivities[0].time_formatted}`}
+        footer={<Button onClick={() => setSelectedScheduleKey(null)}>Close</Button>}>
+        <div className="space-y-2">
+          {selectedScheduleActivities.map(activity => <button key={activity.id} type="button"
+            data-guide="calendar-inspect" className="ui-input text-left hover:bg-indigo-50"
+            onClick={() => { setSelectedActivity(activity); setSelectedScheduleKey(null); }}>
+            <span className="block text-sm font-medium text-charcoal break-words">{activity.title}</span>
+            <span className="block text-xs text-muted mt-1">{activity.type.replace(/_/g, ' ')}{activity.location ? ` · ${activity.location}` : ''}</span>
+          </button>)}
+        </div>
+      </Dialog>}
       {dayPopover && createPortal(
         <div 
           className="fixed inset-0 z-[120]"
@@ -1773,7 +1807,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
           >
             {/* Popover Header */}
             <div className="flex items-center justify-between pb-1 px-1">
-              <h3 className="text-sm font-black text-slate-900 tracking-tight">
+              <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
                 {formatDateDisplay(dayPopover.dateStr)}
               </h3>
               <button
@@ -1791,7 +1825,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 const isMulti = Boolean(act.is_multiday && act.end_date_str && act.end_date_str > act.date_str);
 
                 return (
-                  <div
+                  <div data-guide="calendar-inspect"
                     key={act.id}
                     onClick={() => {
                       setSelectedActivity(act);
@@ -1802,7 +1836,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                       borderColor: `${act.badge_color}35`
                     }}
                     className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 hover:brightness-95 hover:scale-[1.01] shadow-2xs ${
-                      isSelected ? "ring-2 ring-amber-400 ring-offset-1 font-black" : ""
+                      isSelected ? "ring-2 ring-amber-400 ring-offset-1 font-medium" : ""
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0 truncate">
@@ -1816,17 +1850,17 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                       {act.type === "bible_study" && <BookOpen className="w-3.5 h-3.5 shrink-0 text-purple-700" />}
                       {act.type === "birthday" && <Cake className="w-3.5 h-3.5 shrink-0 text-rose-600" />}
 
-                      <span className="text-xs font-bold text-slate-900 truncate">
-                        {act.title.replace("Saturday Duty: ", "").replace("Dishwashing: ", "").replace("Bible Study: ", "").replace("🎂 Birthday: ", "")}
+                      <span className="text-xs font-medium text-slate-900 truncate">
+                        {act.title.replace("Saturday Duty: ", "").replace("Dishwashing: ", "").replace("Bible Study: ", "").replace("Birthday:", "")}
                       </span>
                     </div>
 
                     {isMulti ? (
-                      <span className="text-[8px] font-black uppercase bg-amber-200/60 text-amber-950 px-1.5 py-0.5 rounded shrink-0">
+                      <span className="text-[12px] font-medium uppercase bg-amber-200/60 text-amber-950 px-1.5 py-0.5 rounded shrink-0">
                         Multi-Day
                       </span>
                     ) : (
-                      <span className="text-[9px] font-semibold text-slate-500 shrink-0">
+                      <span className="text-[12px] font-medium text-slate-500 shrink-0">
                         {act.time_formatted.split(" - ")[0]}
                       </span>
                     )}
@@ -1843,7 +1877,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                     setDayPopover(null);
                     handleOpenCreateModal(d);
                   }}
-                  className="w-full py-1.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-[11px] flex items-center justify-center gap-1.5 border border-slate-200 transition-colors cursor-pointer"
+                  className="w-full py-1.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium text-[12px] flex items-center justify-center gap-1.5 border border-slate-200 transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-slate-600" />
                   <span>Add Event on this Day</span>
@@ -1877,4 +1911,3 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
     </div>
   );
 };
-

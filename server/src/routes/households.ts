@@ -3,8 +3,22 @@ import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { calculateAge } from "./ministries";
 import { emitRealtimeEvent } from "../socket";
+import { linkHouseholdFamily, validateFamilyMembers } from "../utils/householdFamily";
 
 const router = Router();
+
+const parentFields = ["father_name", "mother_name", "guardian_name"] as const;
+function validateParents(body: any, current: any = {}): string | null {
+  const names: string[] = [];
+  for (const field of parentFields) {
+    const value = body[field] === undefined ? current[field] : body[field];
+    if (value != null && (typeof value !== "string" || value.trim().length > 255)) {
+      return "Parent/guardian names must be text with at most 255 characters";
+    }
+    if (value?.trim()) names.push(value.trim().replace(/\s+/g, " ").toLowerCase());
+  }
+  return new Set(names).size !== names.length ? "Please assign a different person to each parent/guardian role" : null;
+}
 
 // List households with member summaries (Optimized: 0 N+1 roundtrips)
 router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: Request, res: Response) => {
@@ -32,7 +46,7 @@ router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), 
     }
 
     let query = `
-      SELECT id, name, address, primary_contact_phone, created_at
+      SELECT id, name, address, primary_contact_phone, father_name, mother_name, guardian_name, family_members, created_at
       FROM households
       ${whereClause}
       ORDER BY name ASC
@@ -52,7 +66,7 @@ router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), 
     let allMembers: any[] = [];
     if (householdIds.length > 0) {
       allMembers = await db.all(`
-        SELECT m.id, m.household_id, m.first_name, m.last_name, m.birthdate, m.gender, min.name as ministry_name, min.color as ministry_color
+        SELECT m.id, m.household_id, m.first_name, m.last_name, m.birthdate, m.gender, m.contact_phone, min.name as ministry_name, min.color as ministry_color
         FROM members m
         LEFT JOIN ministries min ON m.ministry_id = min.id
         WHERE m.household_id = ANY($1)
@@ -135,7 +149,10 @@ router.get("/:id", async (req: Request, res: Response) => {
 // Create household
 router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
-    const { name, address, primary_contact_phone } = req.body;
+    const { name, address, primary_contact_phone, father_name, mother_name, guardian_name } = req.body;
+    const parentError = validateParents(req.body);
+    if (parentError) return res.status(400).json({ error: parentError });
+    const family = validateFamilyMembers(req.body.family_members);
     if (!name?.trim()) {
       return res.status(400).json({ error: "Household name is required" });
     }
@@ -145,20 +162,23 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
       return res.status(400).json({ error: "A household with this name already exists" });
     }
 
-    const result = await db.run(`
-      INSERT INTO households (name, address, primary_contact_phone)
-      VALUES ($1, $2, $3)
-      RETURNING id
-    `, [name.trim(), address || null, primary_contact_phone || null]);
-
-    const newId = result.lastInsertRowid;
+    const newId = await db.transaction(async client => {
+      const result = await client.query(`
+        INSERT INTO households (name, address, primary_contact_phone, father_name, mother_name, guardian_name)
+        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+      `, [name.trim(), address || null, primary_contact_phone || null, father_name?.trim() || null, mother_name?.trim() || null, guardian_name?.trim() || null]);
+      const id = result.rows[0].id;
+      await linkHouseholdFamily(client, id, family);
+      if (family) await client.query("UPDATE households SET family_members = $1::jsonb WHERE id = $2", [JSON.stringify(family), id]);
+      return id;
+    });
     await logAuditAction(req.user?.id || null, "CREATE", "households", newId, `Created household: ${name}`);
     emitRealtimeEvent("households:changed", { action: "create", id: newId });
     emitRealtimeEvent("members:changed");
 
     res.status(201).json({ id: newId, message: "Household created successfully" });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -167,6 +187,12 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
   try {
     const { name, address, primary_contact_phone } = req.body;
     const id = req.params.id;
+    const current = await db.get("SELECT * FROM households WHERE id = $1", [id]);
+    if (!current) return res.status(404).json({ error: "Household not found" });
+    const parentError = validateParents(req.body, current);
+    if (parentError) return res.status(400).json({ error: parentError });
+    const parents = parentFields.map(field => req.body[field] === undefined ? current[field] : req.body[field]?.trim() || null);
+    const family = validateFamilyMembers(req.body.family_members);
 
     if (name) {
       if (!name.trim()) {
@@ -178,20 +204,28 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
       }
     }
 
-    await db.run(`
+    await db.transaction(async client => {
+      await client.query("SELECT id FROM households WHERE id = $1 FOR UPDATE", [id]);
+      await linkHouseholdFamily(client, Number(id), family);
+      await client.query(`
       UPDATE households
       SET name = COALESCE($1, name),
           address = COALESCE($2, address),
-          primary_contact_phone = COALESCE($3, primary_contact_phone)
-      WHERE id = $4
-    `, [name?.trim() || null, address, primary_contact_phone, id]);
+          primary_contact_phone = COALESCE($3, primary_contact_phone),
+          father_name = $4,
+          mother_name = $5,
+          guardian_name = $6,
+          family_members = COALESCE($7::jsonb, family_members)
+      WHERE id = $8
+    `, [name?.trim() || null, address, primary_contact_phone, ...parents, family === undefined ? null : JSON.stringify(family), id]);
+    });
 
     await logAuditAction(req.user?.id || null, "UPDATE", "households", Number(id), `Updated household #${id}`);
     emitRealtimeEvent("households:changed", { action: "update", id: Number(id) });
     emitRealtimeEvent("members:changed");
     res.json({ message: "Household updated successfully" });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

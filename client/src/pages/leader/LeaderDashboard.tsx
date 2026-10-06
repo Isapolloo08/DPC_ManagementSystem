@@ -1,3 +1,4 @@
+import { CalendarClock as UICalendarClock } from "lucide-react";
 import React, { useState, useMemo } from "react";
 import { BibleStudyGroup, BibleStudyMember, StudyTopic, SundayDutyScheduleItem } from "../../types";
 import {
@@ -98,7 +99,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
     return (
       <div className="p-8 bg-sky-50 rounded-3xl border border-sky-200 text-slate-800 space-y-3 text-center">
         <Users className="w-10 h-10 mx-auto text-sky-600" />
-        <h3 className="font-black text-lg text-slate-900">No Life Group Selected</h3>
+        <h3 className="font-semibold text-lg text-slate-900">No Life Group Selected</h3>
         <p className="text-xs text-slate-600 max-w-md mx-auto">
           Please select or assign a small group from the switcher above to view discipleship health, roll-call, and rosters.
         </p>
@@ -120,23 +121,23 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
 
         <div className="relative z-10 space-y-3 max-w-2xl">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[12px] font-medium uppercase tracking-wider backdrop-blur-md">
               <BookOpen className="w-3.5 h-3.5 text-amber-300" />
               <span>Small Group Ministry Directory</span>
             </div>
-            <span className="text-[11px] bg-white/10 border border-white/15 text-slate-200 font-bold px-3 py-1 rounded-full backdrop-blur-md">
+            <span className="text-[12px] bg-white/10 border border-white/15 text-slate-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
               January 2026 - Present
             </span>
-            <span className="text-[11px] bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-bold px-3 py-1 rounded-full backdrop-blur-md">
+            <span className="text-[12px] bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
               Facilitator: {activeGroup.leader_name || "Sis April Cruz"}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-white/20 flex items-center justify-center font-black text-amber-300 shadow-inner">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-white/20 flex items-center justify-center font-medium text-amber-300 shadow-inner">
               <Users className="w-6 h-6" />
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
               {activeGroup.name}
             </h2>
           </div>
@@ -146,11 +147,11 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           </p>
 
           <div className="flex items-center gap-3 flex-wrap pt-1">
-            <div className="flex items-center gap-2 bg-white/10 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs text-white font-semibold backdrop-blur-md">
+            <div className="flex items-center gap-2 bg-white/10 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs text-white font-medium backdrop-blur-md">
               <Calendar className="w-3.5 h-3.5 text-amber-300" />
               <span>Every {activeGroup.meeting_day} - {activeGroup.meeting_time || "5:00 PM - 6:30 PM"}</span>
             </div>
-            <div className="flex items-center gap-2 bg-white/10 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs text-white font-semibold backdrop-blur-md">
+            <div className="flex items-center gap-2 bg-white/10 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs text-white font-medium backdrop-blur-md">
               <MapPin className="w-3.5 h-3.5 text-emerald-300" />
               <span>{activeGroup.location || "Fellowship Room 2 / Upper Chapel"}</span>
             </div>
@@ -160,7 +161,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               <button
                 type="button"
                 onClick={onOpenReschedule}
-                className="flex items-center gap-1.5 bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border border-amber-400/40 px-3 py-1.5 rounded-xl text-xs font-bold transition-all backdrop-blur-md cursor-pointer hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border border-amber-400/40 px-3 py-1.5 rounded-xl text-xs font-medium transition-all backdrop-blur-md cursor-pointer hover:scale-105 active:scale-95"
               >
                 <CalendarClock className="w-3.5 h-3.5 text-amber-300" />
                 <span>{activeGroup.is_rescheduled ? "Modify Reschedule / Rooms" : "Reschedule & Check Rooms"}</span>
@@ -174,17 +175,17 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <div className="text-xs font-black text-amber-200 flex items-center gap-2">
-                    <span>⚡ Session Rescheduled</span>
+                  <div className="text-xs font-medium text-amber-200 flex items-center gap-2">
+                    <span><UICalendarClock aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Session Rescheduled</span>
                     {activeGroup.rescheduled_date && (
-                      <span className="bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full text-[10px] font-black">
+                      <span className="bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full text-[12px] font-medium">
                         {new Date(activeGroup.rescheduled_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-amber-100/90 font-medium">
-                    Time: <span className="font-bold text-white">{activeGroup.rescheduled_time || activeGroup.meeting_time}</span>
-                    {activeGroup.location && <> • Room: <span className="font-bold text-white">{activeGroup.location}</span></>}
+                  <p className="text-[12px] text-amber-100/90 font-medium">
+                    Time: <span className="font-medium text-white">{activeGroup.rescheduled_time || activeGroup.meeting_time}</span>
+                    {activeGroup.location && <> • Room: <span className="font-medium text-white">{activeGroup.location}</span></>}
                     {activeGroup.reschedule_reason && <> • Reason: <span className="italic">"{activeGroup.reschedule_reason}"</span></>}
                   </p>
                 </div>
@@ -193,7 +194,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                 <button
                   type="button"
                   onClick={onOpenReschedule}
-                  className="shrink-0 px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-black rounded-xl transition-all cursor-pointer shadow-xs"
+                  className="shrink-0 px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[12px] font-medium rounded-xl transition-all cursor-pointer shadow-xs"
                 >
                   Manage
                 </button>
@@ -208,28 +209,28 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               if (onOpenRollCall) onOpenRollCall();
               else onNavigateTab("biblestudy");
             }}
-            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-3 rounded-2xl text-xs shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-3 rounded-2xl text-xs shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer"
           >
             <ClipboardCheck className="w-4 h-4 text-indigo-950" />
             <span>Take Weekly Roll-Call</span>
           </button>
 
-          <button
+          <button data-guide="my-group-bulletin"
             onClick={() => {
               if (onOpenBulletin) onOpenBulletin();
             }}
-            className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
           >
             <Send className="w-4 h-4 text-amber-300" />
             <span>Send Group Bulletin</span>
           </button>
 
           <div className="bg-white/5 border border-white/10 rounded-2xl p-2.5 flex items-center justify-between text-xs text-slate-300">
-            <div className="flex items-center gap-2 font-bold text-[11px]">
+            <div className="flex items-center gap-2 font-medium text-[12px]">
               <Clock className="w-3.5 h-3.5 text-amber-400" />
               <span>Weekly Session Arriving Soon</span>
             </div>
-            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-black text-[10px] px-2 py-0.5 rounded-full uppercase">
+            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-medium text-[12px] px-2 py-0.5 rounded-full uppercase">
               In 2D
             </span>
           </div>
@@ -241,17 +242,17 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         {/* Card 1: GROUP CAPACITY */}
         <div className="bg-white p-5 rounded-3xl border border-indigo-100/80 shadow-2xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-black text-charcoal/60 uppercase tracking-wider">Group Capacity</span>
+            <span className="text-[12px] font-medium text-muted uppercase tracking-wider">Group Capacity</span>
             <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-black text-charcoal">
-                {enrolledCount} <span className="text-sm font-bold text-charcoal/50">/ {maxCapacity}</span>
+              <h3 className="text-2xl font-semibold text-charcoal">
+                {enrolledCount} <span className="text-sm font-medium text-muted">/ {maxCapacity}</span>
               </h3>
-              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${capacityTheme.bg} ${capacityTheme.text}`}>
+              <span className={`text-[12px] font-medium px-2 py-0.5 rounded-full border ${capacityTheme.bg} ${capacityTheme.text}`}>
                 {capacityPercent >= 100 ? "At Max Capacity" : `${capacityPercent}% Full`}
               </span>
             </div>
@@ -262,7 +263,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               ></div>
             </div>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-charcoal/60 font-bold border-t border-gray-100 pt-2">
+          <div className="flex items-center justify-between text-[12px] text-muted font-medium border-t border-gray-100 pt-2">
             <span>Waitlist: 0</span>
             <span className={capacityTheme.text}>In-Group: {capacityPercent}% full</span>
           </div>
@@ -274,43 +275,43 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           className="bg-white p-5 rounded-3xl border border-indigo-100/80 shadow-2xs flex flex-col justify-between space-y-3 cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-98"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-black text-charcoal/60 uppercase tracking-wider">Recent Attendance</span>
+            <span className="text-[12px] font-medium text-muted uppercase tracking-wider">Recent Attendance</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-black text-charcoal">Monitor</h3>
-              <span className="text-[11px] font-extrabold text-emerald-600 flex items-center gap-0.5">
+              <h3 className="text-2xl font-semibold text-charcoal">Monitor</h3>
+              <span className="text-[12px] font-medium text-emerald-600 flex items-center gap-0.5">
                 <TrendingUp className="w-3.5 h-3.5" /> View Logs
               </span>
             </div>
-            <p className="text-[11px] text-charcoal/50 font-bold mt-1">Check past sessions & absentee counts →</p>
+            <p className="text-[12px] text-muted font-medium mt-1">Check past sessions & absentee counts →</p>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-charcoal/60 font-bold border-t border-gray-100 pt-2">
+          <div className="flex items-center justify-between text-[12px] text-muted font-medium border-t border-gray-100 pt-2">
             <span>{enrolledCount} active disciples</span>
-            <span className="text-emerald-700 font-extrabold">Open Monitor ↗</span>
+            <span className="text-emerald-700 font-medium">Open Monitor ↗</span>
           </div>
         </div>
 
         {/* Card 3: DISCIPLESHIP CURRICULUM */}
         <div className="bg-white p-5 rounded-3xl border border-indigo-100/80 shadow-2xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-black text-charcoal/60 uppercase tracking-wider">Discipleship Curriculum</span>
+            <span className="text-[12px] font-medium text-muted uppercase tracking-wider">Discipleship Curriculum</span>
             <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
               <BookOpen className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <h3 className="text-2xl font-black text-indigo">
-              Ch. {currentChapterNum} <span className="text-sm font-bold text-charcoal/50">of {totalChapters}</span>
+            <h3 className="text-2xl font-semibold text-indigo">
+              Ch. {currentChapterNum} <span className="text-sm font-medium text-muted">of {totalChapters}</span>
             </h3>
-            <p className="text-[11px] text-charcoal/60 font-bold truncate mt-1">
+            <p className="text-[12px] text-muted font-medium truncate mt-1">
               {activeGroup.curriculum || "Faith Foundations"}
             </p>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-charcoal/60 font-bold border-t border-gray-100 pt-2">
+          <div className="flex items-center justify-between text-[12px] text-muted font-medium border-t border-gray-100 pt-2">
             <span>Faith Foundations</span>
             <span className="text-indigo">All tracks</span>
           </div>
@@ -319,21 +320,21 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         {/* Card 4: NEXT ROTATION DUTY */}
         <div className="bg-white p-5 rounded-3xl border border-indigo-100/80 shadow-2xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-black text-charcoal/60 uppercase tracking-wider">Next Rotation Duty</span>
+            <span className="text-[12px] font-medium text-muted uppercase tracking-wider">Next Rotation Duty</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
               <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-black text-charcoal">{nextDuty?.date || "No upcoming duty"}</h3>
-              <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full uppercase">
+              <h3 className="text-2xl font-semibold text-charcoal">{nextDuty?.date || "No upcoming duty"}</h3>
+              <span className="bg-amber-400 text-slate-950 font-medium text-[12px] px-2 py-0.5 rounded-full uppercase">
                 {nextDuty ? "Assigned" : "Not scheduled"}
               </span>
             </div>
-            <p className="text-[11px] text-amber-900 font-bold mt-1">Sunday Dishwashing Roster</p>
+            <p className="text-[12px] text-amber-900 font-medium mt-1">Sunday Dishwashing Roster</p>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-charcoal/60 font-bold border-t border-gray-100 pt-2">
+          <div className="flex items-center justify-between text-[12px] text-muted font-medium border-t border-gray-100 pt-2">
             <span>Sunday Dishwashing</span>
             <span className="text-charcoal/70">{activeGroup.name}</span>
           </div>
@@ -345,9 +346,9 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-4 bg-amber-500 rounded-full"></span>
-            <h3 className="text-sm font-black text-charcoal uppercase tracking-wider">Leader Command Quick Actions</h3>
+            <h3 className="text-sm font-semibold text-charcoal uppercase tracking-wider">Leader Command Quick Actions</h3>
           </div>
-          <span className="text-[11px] text-charcoal/50 font-bold">Instant small group shepherd controls • Real-time sync</span>
+          <span className="text-[12px] text-muted font-medium">Instant small group shepherd controls • Real-time sync</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -362,12 +363,12 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               <ChevronRight className="w-4 h-4 text-amber-600 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <h4 className="text-sm font-black text-charcoal group-hover:text-amber-800 transition-colors">Take Roll-Call</h4>
-              <p className="text-[11px] text-charcoal/60 mt-1 leading-relaxed">
+              <h4 className="text-sm font-semibold text-charcoal group-hover:text-amber-800 transition-colors">Take Roll-Call</h4>
+              <p className="text-[12px] text-muted mt-1 leading-relaxed">
                 Mark attendance, track absentee check-ins & record session notes for {activeGroup.meeting_day}.
               </p>
             </div>
-            <span className="text-[11px] font-black text-amber-700 flex items-center gap-1 group-hover:underline">
+            <span className="text-[12px] font-medium text-amber-700 flex items-center gap-1 group-hover:underline">
               Open Session Wizard →
             </span>
           </div>
@@ -383,12 +384,12 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               <ChevronRight className="w-4 h-4 text-teal-600 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <h4 className="text-sm font-black text-charcoal group-hover:text-teal-800 transition-colors">Manage Disciples</h4>
-              <p className="text-[11px] text-charcoal/60 mt-1 leading-relaxed">
+              <h4 className="text-sm font-semibold text-charcoal group-hover:text-teal-800 transition-colors">Manage Disciples</h4>
+              <p className="text-[12px] text-muted mt-1 leading-relaxed">
                 Access member profiles, family ties, emergency hotlines, and spiritual milestones.
               </p>
             </div>
-            <span className="text-[11px] font-black text-teal-700 flex items-center gap-1 group-hover:underline">
+            <span className="text-[12px] font-medium text-teal-700 flex items-center gap-1 group-hover:underline">
               {enrolledCount} Active Disciples →
             </span>
           </div>
@@ -404,12 +405,12 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               <ChevronRight className="w-4 h-4 text-indigo-600 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <h4 className="text-sm font-black text-charcoal group-hover:text-indigo transition-colors">Curriculum Topics</h4>
-              <p className="text-[11px] text-charcoal/60 mt-1 leading-relaxed">
+              <h4 className="text-sm font-semibold text-charcoal group-hover:text-indigo transition-colors">Curriculum Topics</h4>
+              <p className="text-[12px] text-muted mt-1 leading-relaxed">
                 Leader lesson plans, commentary downloads, and discussion starters.
               </p>
             </div>
-            <span className="text-[11px] font-black text-indigo flex items-center gap-1 group-hover:underline">
+            <span className="text-[12px] font-medium text-indigo flex items-center gap-1 group-hover:underline">
               Explore {totalChapters} Chapters →
             </span>
           </div>
@@ -425,12 +426,12 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               <ChevronRight className="w-4 h-4 text-purple-600 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <h4 className="text-sm font-black text-charcoal group-hover:text-purple-800 transition-colors">Daily Bible Reading</h4>
-              <p className="text-[11px] text-charcoal/60 mt-1 leading-relaxed">
+              <h4 className="text-sm font-semibold text-charcoal group-hover:text-purple-800 transition-colors">Daily Bible Reading</h4>
+              <p className="text-[12px] text-muted mt-1 leading-relaxed">
                 Track scripture reading sync, biblical group companion recipes and daily passages.
               </p>
             </div>
-            <span className="text-[11px] font-black text-purple-700 flex items-center gap-1 group-hover:underline">
+            <span className="text-[12px] font-medium text-purple-700 flex items-center gap-1 group-hover:underline">
               Day 104 - 1 Cor 13 →
             </span>
           </div>
@@ -441,12 +442,12 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
       <div className="bg-white p-6 rounded-3xl border border-indigo-100/80 shadow-2xs space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-medium">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-charcoal">Designated Sunday Dishwashing Rotations</h3>
-              <p className="text-xs text-charcoal/60">
+              <h3 className="text-base font-semibold text-charcoal">Designated Sunday Dishwashing Rotations</h3>
+              <p className="text-xs text-muted">
                 Quarterly Sunday fellowship meal dishwashing roster for DPC Faith Center Church small groups.
               </p>
             </div>
@@ -455,7 +456,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setDutyFilter(dutyFilter === "Sunday Dishwashing" ? "all" : "Sunday Dishwashing")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${dutyFilter === "Sunday Dishwashing"
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${dutyFilter === "Sunday Dishwashing"
                 ? "bg-amber-500 text-white shadow-xs"
                 : "bg-ivory-light text-charcoal/70 hover:bg-gray-100 border border-gray-200"
                 }`}
@@ -464,7 +465,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             </button>
             <button
               onClick={() => setHighlightMyGroup(!highlightMyGroup)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${highlightMyGroup
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${highlightMyGroup
                 ? "bg-amber-100 text-amber-900 border border-amber-300"
                 : "bg-ivory-light text-charcoal/70 hover:bg-gray-100 border border-gray-200"
                 }`}
@@ -473,7 +474,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             </button>
             <button
               onClick={onOpenSwapShift}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-gray-50 text-indigo border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white hover:bg-gray-50 text-indigo border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
             >
               <ArrowLeftRight className="w-3.5 h-3.5" />
               <span>Request Shift Swap</span>
@@ -483,7 +484,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
 
         {nextDuty && (
           <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 space-y-1">
-            <h4 className="text-sm font-black text-amber-950">Sunday Dishwashing Duty • {nextDuty.date}</h4>
+            <h4 className="text-sm font-semibold text-amber-950">Sunday Dishwashing Duty • {nextDuty.date}</h4>
             <p className="text-xs text-amber-900">Assigned: {activeGroup.name} • {nextDuty.checklist}</p>
           </div>
         )}
@@ -494,7 +495,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         {/* Duty Rotation Table */}
         <div className="overflow-x-auto rounded-2xl border border-gray-200">
           <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50 text-[10px] font-black text-charcoal/60 uppercase tracking-wider border-b border-gray-200">
+            <thead className="bg-gray-50 text-[12px] font-medium text-muted uppercase tracking-wider border-b border-gray-200">
               <tr>
                 <th className="py-3 px-4">Rotation Date</th>
                 <th className="py-3 px-4">Assigned Group / Ministry</th>
@@ -510,25 +511,25 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                   <tr
                     key={item.id}
                     className={`transition-colors ${isCurrentActive
-                      ? "bg-amber-50/80 border-l-4 border-l-amber-500 font-semibold text-amber-950"
+                      ? "bg-amber-50/80 border-l-4 border-l-amber-500 font-medium text-amber-950"
                       : "hover:bg-gray-50/80 text-charcoal"
                       }`}
                   >
-                    <td className="py-3.5 px-4 whitespace-nowrap font-bold">
+                    <td className="py-3.5 px-4 whitespace-nowrap font-medium">
                       {item.date}
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2">
                         <span>{item.group_name}</span>
                         {isCurrentActive && (
-                          <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded uppercase">
+                          <span className="bg-amber-500 text-slate-950 text-[12px] font-medium px-1.5 py-0.2 rounded uppercase">
                             Your Turn
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo border border-indigo-200">
+                      <span className="px-2.5 py-1 rounded-full text-[12px] font-medium bg-indigo-50 text-indigo border border-indigo-200">
                         {item.category}
                       </span>
                     </td>
@@ -537,17 +538,17 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                     </td>
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       {item.status === "completed" && (
-                        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px]">
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[12px]">
                           <CheckCircle2 className="w-3 h-3" /> Completed
                         </span>
                       )}
                       {item.status === "active" && (
-                        <span className="inline-flex items-center gap-1 text-amber-950 font-black bg-amber-400 border border-amber-500 px-2.5 py-0.5 rounded-full text-[10px] animate-pulse">
+                        <span className="inline-flex items-center gap-1 text-amber-950 font-medium bg-amber-400 border border-amber-500 px-2.5 py-0.5 rounded-full text-[12px] animate-pulse">
                           <Clock className="w-3 h-3" /> On duty
                         </span>
                       )}
                       {item.status === "scheduled" && (
-                        <span className="inline-flex items-center gap-1 text-charcoal/60 font-bold bg-gray-100 px-2.5 py-0.5 rounded-full text-[10px]">
+                        <span className="inline-flex items-center gap-1 text-muted font-medium bg-gray-100 px-2.5 py-0.5 rounded-full text-[12px]">
                           Scheduled
                         </span>
                       )}
@@ -559,11 +560,11 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           </table>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-charcoal/60 pt-1">
+        <div className="flex items-center justify-between text-xs text-muted pt-1">
           <span>Showing {filteredDuties.length} assignments for this group</span>
           <button
             onClick={() => onNavigateTab("duty")}
-            className="text-indigo font-bold hover:underline cursor-pointer flex items-center gap-1"
+            className="text-indigo font-medium hover:underline cursor-pointer flex items-center gap-1"
           >
             <span>View Full Roster Matrix</span>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -577,14 +578,14 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         <div className="lg:col-span-7 bg-white p-6 rounded-3xl border border-indigo-100/80 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-medium">
                 <Users className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm sm:text-base font-black text-charcoal">
+                <h3 className="text-sm sm:text-base font-semibold text-charcoal">
                   Group Disciples Roster ({enrolledCount})
                 </h3>
-                <p className="text-[11px] text-charcoal/50">
+                <p className="text-[12px] text-muted">
                   Assigned members in {activeGroup.name}
                 </p>
               </div>
@@ -593,13 +594,13 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { }}
-                className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-medium text-xs transition-colors cursor-pointer"
               >
                 Import
               </button>
-              <button
+              <button data-guide="my-group-add"
                 onClick={onOpenAddDisciple}
-                className="flex items-center gap-1 bg-slate-950 hover:bg-slate-900 text-white font-black px-3.5 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-1 bg-slate-950 hover:bg-slate-900 text-white font-medium px-3.5 py-1.5 rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 text-amber-300" />
                 <span>+ Add Disciple</span>
@@ -615,37 +616,37 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                 return (
                   <div key={idx} className="py-3 flex items-center justify-between gap-3 group hover:bg-gray-50/50 rounded-xl px-2 transition-colors">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-indigo-950 text-amber-300 font-bold flex items-center justify-center text-xs shrink-0 shadow-inner">
+                      <div className="w-10 h-10 rounded-full bg-indigo-950 text-amber-300 font-medium flex items-center justify-center text-xs shrink-0 shadow-inner">
                         {initials}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-xs font-black text-charcoal group-hover:text-indigo transition-colors truncate">
+                          <h4 className="text-xs font-semibold text-charcoal group-hover:text-indigo transition-colors truncate">
                             {name}
                           </h4>
-                          <span className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 font-bold px-2 py-0.2 rounded-full">
+                          <span className="text-[12px] bg-teal-50 text-teal-800 border border-teal-200 font-medium px-2 py-0.2 rounded-full">
                             {idx === 0 ? "Life Group Peer" : "Baptized Faithful"}
                           </span>
                         </div>
-                        <div className="text-[11px] text-charcoal/50 mt-0.5">
+                        <div className="text-[12px] text-muted mt-0.5">
                           {m.contact_phone || "Contact via Shepherd"}
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[12px] font-medium px-2.5 py-0.5 rounded-full">
                         4/4 Attended • 100%
                       </span>
                       <button
-                        className="p-1.5 text-charcoal/50 hover:text-indigo hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors"
+                        className="p-1.5 text-muted hover:text-indigo hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors"
                         title="Call Disciple"
                       >
                         <Phone className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onNavigateTab("members")}
-                        className="p-1.5 text-charcoal/40 hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer"
+                        className="p-1.5 text-muted hover:text-charcoal hover:bg-gray-100 rounded-lg cursor-pointer"
                       >
                         <MoreVertical className="w-3.5 h-3.5" />
                       </button>
@@ -654,12 +655,12 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                 );
               })
             ) : (
-              <div className="text-center py-8 text-charcoal/50 space-y-2">
+              <div className="text-center py-8 text-muted space-y-2">
                 <Users className="w-8 h-8 mx-auto text-charcoal/30" />
-                <p className="text-xs font-bold">No disciples enrolled yet in this life group.</p>
-                <button
+                <p className="text-xs font-medium">No disciples enrolled yet in this life group.</p>
+                <button data-guide="my-group-add"
                   onClick={onOpenAddDisciple}
-                  className="text-xs text-indigo font-bold underline cursor-pointer"
+                  className="text-xs text-indigo font-medium underline cursor-pointer"
                 >
                   Assign members now
                 </button>
@@ -667,11 +668,11 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             )}
           </div>
 
-          <div className="flex items-center justify-between text-xs text-charcoal/60 pt-2 border-t border-gray-100">
+          <div className="flex items-center justify-between text-xs text-muted pt-2 border-t border-gray-100">
             <span>Total {enrolledCount} active disciples • 0 on wait search</span>
             <button
               onClick={() => onNavigateTab("members")}
-              className="text-indigo font-bold hover:underline cursor-pointer flex items-center gap-1"
+              className="text-indigo font-medium hover:underline cursor-pointer flex items-center gap-1"
             >
               <span>View All Profiles</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -685,21 +686,21 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           <div className="bg-white p-6 rounded-3xl border border-indigo-100/80 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center font-bold">
+                <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center font-medium">
                   <BookOpen className="w-4 h-4" />
                 </div>
-                <h3 className="text-sm font-black text-charcoal">Active Curriculum</h3>
+                <h3 className="text-sm font-semibold text-charcoal">Active Curriculum</h3>
               </div>
-              <span className="text-[10px] font-black bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full uppercase">
+              <span className="text-[12px] font-medium bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full uppercase">
                 Term 2
               </span>
             </div>
 
             <div>
-              <div className="text-[10px] text-teal-700 font-extrabold uppercase tracking-wider mb-0.5">
+              <div className="text-[12px] text-teal-700 font-medium uppercase tracking-wider mb-0.5">
                 Main Track • Week {currentChapterNum} of {totalChapters}
               </div>
-              <h4 className="text-base font-black text-charcoal leading-snug">
+              <h4 className="text-base font-semibold text-charcoal leading-snug">
                 {activeGroup.curriculum || "Walking in Covenant: The Book of Ezekiel"}
               </h4>
               <p className="text-xs text-charcoal/70 mt-1 leading-relaxed">
@@ -708,9 +709,9 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             </div>
 
             <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px] font-bold text-charcoal/70">
+              <div className="flex items-center justify-between text-[12px] font-medium text-charcoal/70">
                 <span>Course Progress</span>
-                <span className="text-teal-700 font-black">{courseProgressPercent}% Completed</span>
+                <span className="text-teal-700 font-medium">{courseProgressPercent}% Completed</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                 <div
@@ -721,11 +722,11 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             </div>
 
             <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-black text-amber-950">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-950">
                 <BookOpen className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>Leader Discussion Starter ({activeGroup.meeting_day})</span>
               </div>
-              <p className="text-[11px] text-amber-900 leading-relaxed italic">
+              <p className="text-[12px] text-amber-900 leading-relaxed italic">
                 "How does Ezekiel 37:1-14 challenge our spiritual despairing? How does God's breath of salvation re-animate depths of total surrender?"
               </p>
             </div>
@@ -733,14 +734,14 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => { }}
-                className="flex-1 py-2 px-3 rounded-xl bg-ivory-light hover:bg-gray-100 border border-gray-200 text-charcoal text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 py-2 px-3 rounded-xl bg-ivory-light hover:bg-gray-100 border border-gray-200 text-charcoal text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Leader Discussion PDF</span>
               </button>
               <button
                 onClick={() => onNavigateTab("biblestudy")}
-                className="flex-1 py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-900 text-amber-300 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 transition-all"
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-900 text-amber-300 text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 transition-all"
               >
                 <BookmarkCheck className="w-3.5 h-3.5" />
                 <span>Open Study Guide</span>
@@ -752,34 +753,34 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
           <div className="bg-white p-6 rounded-3xl border border-indigo-100/80 shadow-2xs space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo flex items-center justify-center font-bold">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo flex items-center justify-center font-medium">
                   <MessageSquare className="w-4 h-4" />
                 </div>
-                <h3 className="text-sm font-black text-charcoal">Shepherd Notes & Discussion Goal</h3>
+                <h3 className="text-sm font-semibold text-charcoal">Shepherd Notes & Discussion Goal</h3>
               </div>
-              <span className="text-[10px] font-black bg-indigo-50 text-indigo border border-indigo-200 px-2 py-0.5 rounded-full">
+              <span className="text-[12px] font-medium bg-indigo-50 text-indigo border border-indigo-200 px-2 py-0.5 rounded-full">
                 Weekly Focus
               </span>
             </div>
 
             <div className="p-3.5 bg-gray-50/80 rounded-2xl border border-gray-100 text-xs space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-bold text-charcoal">
-                <span className="flex items-center gap-1.5 text-indigo-900 font-extrabold">
+              <div className="flex items-center justify-between text-[12px] font-medium text-charcoal">
+                <span className="flex items-center gap-1.5 text-indigo-900 font-medium">
                   <BookmarkCheck className="w-3.5 h-3.5 text-indigo-700" />
                   Fellowship Objective
                 </span>
-                <span className="text-charcoal/50">Next: {activeGroup.meeting_day}</span>
+                <span className="text-muted">Next: {activeGroup.meeting_day}</span>
               </div>
-              <p className="text-[11px] text-charcoal/70 leading-relaxed">
+              <p className="text-[12px] text-charcoal/70 leading-relaxed">
                 Encourage deep transparency among disciples, ensure everyone has their study passages prepared, and follow up with absentees.
               </p>
             </div>
 
-            <button
+            <button data-guide="my-group-bulletin"
               onClick={() => {
                 if (onOpenBulletin) onOpenBulletin();
               }}
-              className="w-full py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo font-black text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              className="w-full py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo font-medium text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Broadcast Bulletin to Disciples</span>

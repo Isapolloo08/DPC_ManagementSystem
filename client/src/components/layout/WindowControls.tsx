@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Minus, Square, Copy, X } from "lucide-react";
+import { isGuideSandbox } from "../help/sandbox/runtime";
 
 interface WindowControlsProps {
   className?: string;
@@ -13,10 +14,10 @@ export const WindowControls: React.FC<WindowControlsProps> = ({
   closeButtonClassName = "w-12 sm:w-13 h-8 sm:h-9 flex items-center justify-center text-white/90 hover:text-white hover:bg-red-600 active:bg-red-700 transition-colors duration-150 cursor-pointer group"
 }) => {
   const [isMaximized, setIsMaximized] = useState(false);
-  const isElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.isElectron);
+  const isElectron = !isGuideSandbox() && typeof window !== "undefined" && Boolean(window.electronAPI?.isElectron);
 
   useEffect(() => {
-    if (!window.electronAPI) return;
+    if (isGuideSandbox() || !window.electronAPI) return;
 
     window.electronAPI.isMaximized?.().then((max) => {
       setIsMaximized(Boolean(max));

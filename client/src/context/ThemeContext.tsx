@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 type ResolvedTheme = 'light' | 'dark';
@@ -26,15 +26,53 @@ const ThemeContext = createContext<{
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, updateMode] = useState<ThemeMode>(readMode);
   const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(mode));
+  const appliedTheme = useRef(resolvedTheme);
+  const activeTransition = useRef<ViewTransition | null>(null);
+  const themeVersion = useRef(0);
 
   useLayoutEffect(() => {
     const apply = () => {
       const resolved = resolveTheme(mode);
-      document.documentElement.classList.toggle('dark', resolved === 'dark');
-      document.documentElement.dataset.theme = resolved;
-      document.documentElement.dataset.themeMode = mode;
-      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#2C3968');
-      setResolvedTheme(resolved);
+      const root = document.documentElement;
+      root.dataset.themeMode = mode;
+      const applyPalette = () => {
+        root.classList.toggle('dark', resolved === 'dark');
+        root.dataset.theme = resolved;
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#2C3968');
+        setResolvedTheme(resolved);
+      };
+      if (appliedTheme.current === resolved) {
+        if (!activeTransition.current) applyPalette();
+        return;
+      }
+      appliedTheme.current = resolved;
+      const version = ++themeVersion.current;
+      activeTransition.current?.skipTransition();
+      activeTransition.current = null;
+
+      // Component hover/layout transitions have different timings. Settle their
+      // colors together, then crossfade the entire page (including portals).
+      root.dataset.themeTransition = '';
+      void root.offsetWidth;
+      const commit = () => {
+        if (version !== themeVersion.current) return;
+        applyPalette();
+      };
+      if (typeof document.startViewTransition !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        commit();
+        void root.offsetWidth;
+        delete root.dataset.themeTransition;
+        return;
+      }
+      const transition = document.startViewTransition(commit);
+      activeTransition.current = transition;
+      // A hidden tab or a rapid second switch can skip snapshot capture.
+      void transition.ready.catch(() => {});
+      void transition.finished.finally(() => {
+        if (activeTransition.current !== transition) return;
+        activeTransition.current = null;
+        delete root.dataset.themeTransition;
+      }).catch(() => {});
     };
     let timer: number | undefined;
     const refresh = () => {
@@ -58,6 +96,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', refresh);
     };
   }, [mode]);
+
+  useEffect(() => () => {
+    ++themeVersion.current;
+    activeTransition.current?.skipTransition();
+    activeTransition.current = null;
+    delete document.documentElement.dataset.themeTransition;
+  }, []);
 
   useEffect(() => {
     const sync = (event: StorageEvent) => {

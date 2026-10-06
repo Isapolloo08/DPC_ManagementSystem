@@ -1,7 +1,10 @@
+import { CalendarDays as UICalendarDays, Check as UICheck, MapPin as UIMapPin, RefreshCw as UIRefreshCw } from "lucide-react";
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { RecurringSundayEvent, RecurringSundayEventsResponse, EventItem, Ministry } from "../types";
 import { useSocketEvent } from "../socket";
 import {
@@ -11,6 +14,7 @@ import {
   ShieldCheck, Flame, RefreshCw, Layers, Check, ChevronRight,
   Repeat, CalendarDays, Bell, Tag
 } from "lucide-react";
+import "./SundayEventsCyclePage.css";
 
 interface FormState {
   is_annual_recurring: boolean;
@@ -124,6 +128,7 @@ export const SundayEventsCyclePage: React.FC = () => {
   };
 
   const loadAllEvents = async () => {
+    guideData.clearError();
     try {
       setLoading(true);
       const [cycleRes, eventsRes] = await Promise.all([
@@ -134,6 +139,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       setRegularEvents(eventsRes || []);
     } catch (err) {
       console.error("Failed to load events and celebrations:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
     }
@@ -475,45 +481,36 @@ export const SundayEventsCyclePage: React.FC = () => {
   });
 
   const totalCount = filteredRecurring.length + filteredOneTime.length;
+  const guideData = useGuideDataState("celebrations", { loading, count: totalCount, filtered: recurringEvents.length + regularEvents.length > 0 || Boolean(searchQuery), retry: loadAllEvents });
   const syncedCount = recurringEvents.filter(e => e.is_synced_to_calendar).length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
+    <div className="celebrations-page space-y-5 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
 
       {/* ==================================================== */}
       {/* TOP HERO BANNER & YEAR SELECTOR */}
       {/* ==================================================== */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="celebrations-toolbar">
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
-              <Sun className="w-3.5 h-3.5 text-amber-300" />
-              <span>Events & Celebrations Management</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight">
+            <h1 className="text-2xl font-semibold text-indigo-950 tracking-tight">
               Events and Celebrations
             </h1>
-            <p className="text-xs sm:text-sm text-indigo-100/80 max-w-2xl leading-relaxed">
-              Create, organize, and schedule church gatherings. Easily configure any event as either a <strong>One-Time Scheduled Event</strong> or an <strong>Annual Recurring Celebration</strong> with automatic liturgical cycle projection.
+            <p className="text-sm text-muted max-w-xl leading-relaxed">
+              Plan church gatherings and annual milestones, year after year.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
             {/* Year Switcher Pills */}
-            <div className="flex items-center bg-black/20 p-1 rounded-2xl border border-white/15 backdrop-blur-md">
+            <div data-guide="celebration-year" className="celebrations-segment flex items-center p-1 rounded-xl" aria-label="Select year">
               {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((yr) => (
                 <button
                   key={yr}
+                  aria-pressed={selectedYear === yr}
                   onClick={() => setSelectedYear(yr)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${selectedYear === yr
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${selectedYear === yr
                       ? "bg-amber-400 text-indigo-950 shadow-md scale-105"
                       : "text-white/80 hover:text-white hover:bg-white/10"
                     }`}
@@ -524,9 +521,9 @@ export const SundayEventsCyclePage: React.FC = () => {
             </div>
 
             {isAdminOrCoordinator && (
-              <button
+              <button data-guide="celebration-new"
                 onClick={handleOpenAdd}
-                className="flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-500 text-indigo-950 font-black px-4 py-2.5 rounded-2xl text-xs shadow-lg transition-all active:scale-95 cursor-pointer"
+                className="celebrations-add flex items-center justify-center gap-2 font-medium px-4 py-2.5 rounded-xl text-xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Event / Celebration</span>
@@ -539,39 +536,38 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* ==================================================== */}
       {/* 12-MONTH VISUAL ROADMAP STRIP */}
       {/* ==================================================== */}
-      <div className="bg-white/95 rounded-3xl p-5 border border-indigo-100/90 shadow-sm space-y-4">
+      <section className="celebrations-overview rounded-2xl p-4 sm:p-5 space-y-4" aria-label="Year at a glance">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-black text-sm text-indigo-950">
-                {selectedYear} 12-Month Master Calendar Overview
+              <h3 className="font-semibold text-sm text-indigo-950">
+                {selectedYear} at a glance
               </h3>
-              <p className="text-[11px] text-charcoal/50">
-                Visual roadmap showing annual Sunday celebrations and scheduled gatherings
+              <p className="text-[12px] text-muted">
+                Annual celebrations and scheduled events across the year
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs flex-wrap">
-            <span className="bg-amber-50 text-amber-900 font-bold px-2.5 py-1 rounded-xl border border-amber-200 flex items-center gap-1.5">
+          <div className="celebrations-totals flex items-center gap-3 text-xs flex-wrap">
+            <span className="bg-amber-50 text-amber-900 font-medium px-2.5 py-1 rounded-xl border border-amber-200 flex items-center gap-1.5">
               <Repeat className="w-3.5 h-3.5 text-amber-600" />
               <span>{recurringEvents.length} Annual Celebrations</span>
             </span>
-            <span className="bg-indigo-50 text-indigo-950 font-bold px-2.5 py-1 rounded-xl border border-indigo-200 flex items-center gap-1.5">
+            <span className="bg-indigo-50 text-indigo-950 font-medium px-2.5 py-1 rounded-xl border border-indigo-200 flex items-center gap-1.5">
               <CalendarDays className="w-3.5 h-3.5 text-indigo-600" />
               <span>{yearRegularEvents.length} Scheduled Events</span>
             </span>
-            <span className="bg-emerald-50 text-emerald-800 font-bold px-2.5 py-1 rounded-xl border border-emerald-200">
-              ✓ {syncedCount} Synced
+            <span className="bg-emerald-50 text-emerald-800 font-medium px-2.5 py-1 rounded-xl border border-emerald-200"><UICheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {syncedCount} Synced
             </span>
           </div>
         </div>
 
         {/* 12 Months Horizontal Scroll Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 pt-1">
+        <div className="celebrations-months grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
           {MONTH_NAMES.map((mName, idx) => {
             const mNum = idx + 1;
             const monthRecurring = recurringEvents.filter((e) => e.month === mNum);
@@ -585,7 +581,8 @@ export const SundayEventsCyclePage: React.FC = () => {
             return (
               <div
                 key={mNum}
-                className={`p-3 rounded-2xl border transition-all flex flex-col justify-between space-y-2 ${isCurrentMonth
+                data-current-month={isCurrentMonth}
+                className={`celebrations-month p-3 rounded-xl border transition-all flex flex-col space-y-2 ${isCurrentMonth
                     ? "bg-amber-50/50 border-amber-400 ring-2 ring-amber-400/20 shadow-xs"
                     : monthItemCount > 0
                       ? "bg-ivory-light/60 border-indigo-100 hover:border-amber-300"
@@ -593,33 +590,33 @@ export const SundayEventsCyclePage: React.FC = () => {
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className={`text-[11px] font-black uppercase tracking-wider ${isCurrentMonth ? "text-amber-800" : "text-indigo-950"}`}>
-                    {mName.slice(0, 3)}
+                  <span className={`text-[12px] font-medium uppercase tracking-wider ${isCurrentMonth ? "text-amber-800" : "text-indigo-950"}`}>
+                    {mName}
                   </span>
                   {monthItemCount > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-indigo-950 text-white text-[10px] font-black flex items-center justify-center">
+                    <span className="w-5 h-5 rounded-full bg-indigo-950 text-white text-[12px] font-medium flex items-center justify-center">
                       {monthItemCount}
                     </span>
                   )}
                 </div>
 
                 {monthItemCount > 0 ? (
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-0.5 custom-scrollbar">
                     {/* Recurring Celebrations */}
                     {monthRecurring.map((me) => (
                       <div
                         key={`rec-${me.id}`}
-                        className="p-1.5 rounded-lg bg-amber-50/70 border border-amber-200/80 shadow-2xs text-[10px] leading-tight"
+                        className="celebrations-month-entry p-2 rounded-lg text-xs leading-tight"
                         title={`[Annual] ${me.title} — ${me.projected_formatted}`}
                       >
-                        <div className="font-bold text-amber-950 truncate flex items-center gap-1">
+                        <div className="font-medium text-amber-950 truncate flex items-center gap-1">
                           <Repeat className="w-2.5 h-2.5 text-amber-600 shrink-0" />
                           <span className="truncate">{me.title}</span>
                         </div>
-                        <div className="text-[9px] text-amber-800/70 flex items-center justify-between mt-0.5">
+                        <div className="text-[12px] text-amber-800/70 flex items-center justify-between mt-0.5">
                           <span>{me.projected_formatted?.split(",")[0]}</span>
                           {me.is_synced_to_calendar && (
-                            <span className="text-emerald-700 font-bold">✓ Cal</span>
+                            <span className="text-emerald-700 font-medium"><UICheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Cal</span>
                           )}
                         </div>
                       </div>
@@ -632,42 +629,43 @@ export const SundayEventsCyclePage: React.FC = () => {
                       return (
                         <div
                           key={`one-${oe.id}`}
-                          className="p-1.5 rounded-lg bg-white border border-indigo-100 shadow-2xs text-[10px] leading-tight"
+                          className="celebrations-month-entry p-2 rounded-lg text-xs leading-tight"
                           title={`[Event] ${oe.title} — ${formattedDay}`}
                         >
-                          <div className="font-bold text-indigo-950 truncate flex items-center gap-1">
+                          <div className="font-medium text-indigo-950 truncate flex items-center gap-1">
                             <CalendarDays className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
                             <span className="truncate">{oe.title}</span>
                           </div>
-                          <div className="text-[9px] text-charcoal/50 flex items-center justify-between mt-0.5">
+                          <div className="text-[12px] text-muted flex items-center justify-between mt-0.5">
                             <span>{formattedDay}</span>
-                            <span className="text-indigo-600 font-semibold">{oe.location ? "📍" : ""}</span>
+                            <span className="text-indigo-600 font-medium">{oe.location ? <><UIMapPin aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></> : ""}</span>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="text-[10px] text-charcoal/40 italic py-1">No events scheduled</div>
+                  <div className="text-[12px] text-muted italic py-1">No events scheduled</div>
                 )}
               </div>
             );
           })}
         </div>
-      </div>
+      </section>
 
       {/* ==================================================== */}
       {/* FILTER & SEARCH CONTROLS */}
       {/* ==================================================== */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 bg-white/95 p-4 rounded-3xl border border-indigo-100/90 shadow-sm">
+      <div className="celebrations-filters flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 p-4 rounded-2xl">
 
         {/* Event Type & Quarter Filter Chips */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Type Filter */}
-          <div className="flex items-center gap-1 bg-ivory-light p-1 rounded-2xl border border-indigo-100/80">
+          <div data-guide="celebration-type-filter" className="celebrations-segment flex items-center gap-1 p-1 rounded-xl">
             <button
               onClick={() => setSelectedTypeFilter("all")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${selectedTypeFilter === "all"
+              aria-pressed={selectedTypeFilter === "all"}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${selectedTypeFilter === "all"
                   ? "bg-indigo-950 text-white shadow-xs"
                   : "text-charcoal/70 hover:text-charcoal hover:bg-white"
                 }`}
@@ -676,7 +674,8 @@ export const SundayEventsCyclePage: React.FC = () => {
             </button>
             <button
               onClick={() => setSelectedTypeFilter("recurring")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${selectedTypeFilter === "recurring"
+              aria-pressed={selectedTypeFilter === "recurring"}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${selectedTypeFilter === "recurring"
                   ? "bg-amber-500 text-indigo-950 shadow-xs"
                   : "text-charcoal/70 hover:text-charcoal hover:bg-white"
                 }`}
@@ -686,7 +685,8 @@ export const SundayEventsCyclePage: React.FC = () => {
             </button>
             <button
               onClick={() => setSelectedTypeFilter("one_time")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${selectedTypeFilter === "one_time"
+              aria-pressed={selectedTypeFilter === "one_time"}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${selectedTypeFilter === "one_time"
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "text-charcoal/70 hover:text-charcoal hover:bg-white"
                 }`}
@@ -697,7 +697,7 @@ export const SundayEventsCyclePage: React.FC = () => {
           </div>
 
           {/* Quarter Filter Chips */}
-          <div className="flex items-center gap-1 bg-ivory-light p-1 rounded-2xl border border-indigo-100/80">
+          <div className="celebrations-segment flex items-center gap-1 p-1 rounded-xl" aria-label="Filter by quarter">
             {[
               { id: "all", label: "All Year" },
               { id: "Q1", label: "Q1" },
@@ -707,8 +707,9 @@ export const SundayEventsCyclePage: React.FC = () => {
             ].map((tab) => (
               <button
                 key={tab.id}
+                aria-pressed={selectedQuarter === tab.id}
                 onClick={() => setSelectedQuarter(tab.id as any)}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${selectedQuarter === tab.id
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${selectedQuarter === tab.id
                     ? "bg-indigo-950 text-white shadow-xs"
                     : "text-charcoal/70 hover:text-charcoal hover:bg-white"
                   }`}
@@ -720,10 +721,11 @@ export const SundayEventsCyclePage: React.FC = () => {
         </div>
 
         {/* Search & Ministry Filter */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="relative">
-            <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
+        <div className="celebrations-search flex items-center gap-2.5 flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+            <input data-guide="celebration-search"
+              aria-label="Search events and celebrations"
               type="text"
               placeholder="Search events, theme, location..."
               value={searchQuery}
@@ -733,6 +735,7 @@ export const SundayEventsCyclePage: React.FC = () => {
           </div>
 
           <select
+            aria-label="Filter by ministry"
             value={selectedMinistryFilter}
             onChange={(e) => setSelectedMinistryFilter(e.target.value)}
             className="text-xs px-3 py-2 rounded-xl bg-ivory-light border border-indigo-100 font-medium text-charcoal focus:outline-hidden"
@@ -749,26 +752,32 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* ==================================================== */}
       {/* EVENTS & CELEBRATIONS CARDS GRID */}
       {/* ==================================================== */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-indigo-950">Events in {selectedYear} <span className="text-muted font-normal ml-2">{totalCount} results</span></h2>
+        {(searchQuery || selectedQuarter !== "all" || selectedTypeFilter !== "all" || selectedMinistryFilter !== "all") && <button type="button"
+          className="text-xs text-indigo-700 font-medium px-3 py-2 rounded-lg hover:bg-indigo-50"
+          onClick={() => { setSearchQuery(""); setSelectedQuarter("all"); setSelectedTypeFilter("all"); setSelectedMinistryFilter("all"); }}>Clear filters</button>}
+      </div>
       {loading ? (
         <div className="py-16 text-center space-y-3">
           <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mx-auto" />
-          <p className="text-xs font-bold text-charcoal/60">Loading events and celebrations...</p>
+          <p className="text-xs font-medium text-muted">Loading events and celebrations...</p>
         </div>
       ) : totalCount === 0 ? (
         <div className="bg-white/95 rounded-3xl p-12 border border-indigo-100/90 text-center space-y-3 shadow-sm">
           <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200 shadow-2xs">
             <Calendar className="w-7 h-7" />
           </div>
-          <h4 className="text-sm font-black text-indigo-950">No Events or Celebrations Found</h4>
-          <p className="text-xs text-charcoal/60 max-w-md mx-auto">
+          <h4 className="text-sm font-semibold text-indigo-950">No Events or Celebrations Found</h4>
+          <p className="text-xs text-muted max-w-md mx-auto">
             {searchQuery
               ? `No entries matching "${searchQuery}".`
               : "No events or celebrations match your selected filters."}
           </p>
           {isAdminOrCoordinator && (
-            <button
+            <button data-guide="celebration-new"
               onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-950 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-indigo-900 cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-950 text-white rounded-xl text-xs font-medium shadow-xs hover:bg-indigo-900 cursor-pointer"
             >
               <Plus className="w-4 h-4 text-amber-400" />
               <span>Create Event or Celebration</span>
@@ -782,55 +791,50 @@ export const SundayEventsCyclePage: React.FC = () => {
           {filteredRecurring.map((evt) => (
             <div
               key={`recurring-${evt.id}`}
-              className="group bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col justify-between"
+              className="celebration-card group rounded-2xl overflow-hidden flex flex-col justify-between"
             >
               {/* Top Accent Strip */}
               <div
-                className="h-2.5 w-full transition-all"
+                className="celebration-card-accent h-1 w-full"
                 style={{ backgroundColor: evt.color || "#2C3968" }}
               />
 
               <div className="p-5 sm:p-6 space-y-4">
 
                 {/* Event Header & Recurrence Badge */}
-                <div className="flex items-start justify-between gap-3">
+                <div className="celebration-card-heading flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold shadow-md shrink-0"
-                      style={{ backgroundColor: evt.color || "#2C3968" }}
+                      className="celebration-card-icon w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                     >
                       {getEventIcon(evt.icon)}
                     </div>
                     <div>
-                      <div className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 mb-1">
+                      <div className="inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 mb-1">
                         <Repeat className="w-3 h-3" />
                         <span>Annual Celebration</span>
                       </div>
-                      <h3 className="text-base font-black text-indigo-950 leading-snug group-hover:text-amber-600 transition-colors">
+                      <h3 className="text-base font-semibold text-indigo-950 leading-snug group-hover:text-amber-600 transition-colors">
                         {evt.title}
                       </h3>
                     </div>
                   </div>
 
                   {evt.is_synced_to_calendar ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2 py-0.5 rounded-lg shrink-0">
+                    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2 py-0.5 rounded-lg shrink-0">
                       <Check className="w-3 h-3 text-emerald-600" />
                       <span>Scheduled</span>
                     </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-charcoal/50 bg-gray-100 px-2 py-0.5 rounded-lg shrink-0">
-                      Annual Cycle
-                    </span>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Projected Sunday Date Card */}
-                <div className="p-3 bg-amber-50/60 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 text-indigo-950 font-black">
+                <div className="celebration-date p-3 rounded-xl flex flex-wrap gap-2 items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-indigo-950 font-medium">
                     <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>Target: <strong>{evt.projected_formatted}</strong></span>
                   </div>
-                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/60 px-2 py-0.5 rounded-lg border border-amber-200">
+                  <span className="text-[12px] font-medium text-amber-800 bg-amber-100/60 px-2 py-0.5 rounded-lg border border-amber-200">
                     {getWeekPatternLabel(evt.week_pattern)}
                   </span>
                 </div>
@@ -847,14 +851,14 @@ export const SundayEventsCyclePage: React.FC = () => {
                   {evt.program_highlights && (
                     <div className="flex items-start gap-2 text-charcoal/80">
                       <Award className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                      <span className="text-[11px] line-clamp-2">
+                      <span className="text-[12px] line-clamp-2">
                         <strong>Highlights:</strong> {evt.program_highlights}
                       </span>
                     </div>
                   )}
 
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-950 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200">
+                    <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-indigo-950 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200">
                       <Users className="w-3.5 h-3.5 text-indigo-600" />
                       <span>{evt.target_ministry_name || evt.db_ministry_name || "Church-wide"}</span>
                     </span>
@@ -864,13 +868,13 @@ export const SundayEventsCyclePage: React.FC = () => {
               </div>
 
               {/* Bottom Actions Toolbar */}
-              <div className="px-5 py-3.5 bg-ivory-light/80 border-t border-indigo-50 flex items-center justify-between gap-2">
+              <div className="celebration-actions px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
                 {isAdminOrCoordinator ? (
                   <>
-                    <button
+                    <button data-guide="celebration-sync"
                       onClick={() => handleOpenSyncModal(evt)}
                       disabled={evt.is_synced_to_calendar}
-                      className={`text-xs font-black px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${evt.is_synced_to_calendar
+                      className={`text-xs font-medium px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${evt.is_synced_to_calendar
                           ? "bg-emerald-100 text-emerald-800 border border-emerald-300 opacity-80 cursor-default"
                           : "bg-indigo-950 hover:bg-indigo-900 text-white shadow-xs"
                         }`}
@@ -906,7 +910,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                     </div>
                   </>
                 ) : (
-                  <span className="text-[11px] font-medium text-charcoal/50">
+                  <span className="text-[12px] font-medium text-muted">
                     Annual celebration scheduled every {getWeekPatternLabel(evt.week_pattern)}
                   </span>
                 )}
@@ -931,38 +935,37 @@ export const SundayEventsCyclePage: React.FC = () => {
             return (
               <div
                 key={`one_time-${evt.id}`}
-                className="group bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 overflow-hidden flex flex-col justify-between"
+                className="celebration-card group rounded-2xl overflow-hidden flex flex-col justify-between"
               >
                 {/* Top Accent Strip */}
                 <div
-                  className="h-2.5 w-full transition-all bg-indigo-600"
+                  className="celebration-card-accent h-1 w-full"
                   style={{ backgroundColor: evt.ministry_color || "#2C3968" }}
                 />
 
                 <div className="p-5 sm:p-6 space-y-4">
 
                   {/* Event Header & One-time Badge */}
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="celebration-card-heading flex flex-wrap items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div
-                        className="w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold shadow-md shrink-0 bg-indigo-950"
-                        style={{ backgroundColor: evt.ministry_color || "#2C3968" }}
+                        className="celebration-card-icon w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                       >
                         <CalendarDays className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 mb-1">
+                        <div className="inline-flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 mb-1">
                           <Clock className="w-3 h-3" />
                           <span>One-Time Event</span>
                         </div>
-                        <h3 className="text-base font-black text-indigo-950 leading-snug group-hover:text-indigo-600 transition-colors">
+                        <h3 className="text-base font-semibold text-indigo-950 leading-snug group-hover:text-indigo-600 transition-colors">
                           {evt.title}
                         </h3>
                       </div>
                     </div>
 
                     {evt.rsvp_count !== undefined && evt.rsvp_count > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-indigo-800 bg-indigo-100/80 border border-indigo-300 px-2 py-0.5 rounded-lg shrink-0">
+                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-indigo-800 bg-indigo-100/80 border border-indigo-300 px-2 py-0.5 rounded-lg shrink-0">
                         <Users className="w-3 h-3 text-indigo-600" />
                         <span>{evt.rsvp_count} RSVP</span>
                       </span>
@@ -970,12 +973,12 @@ export const SundayEventsCyclePage: React.FC = () => {
                   </div>
 
                   {/* Scheduled Date & Time Card */}
-                  <div className="p-3 bg-indigo-50/40 rounded-2xl border border-indigo-50 space-y-1.5 text-xs">
-                    <div className="flex items-center gap-2 text-indigo-950 font-black">
+                  <div className="celebration-date p-3 rounded-xl space-y-1.5 text-xs">
+                    <div className="flex items-center gap-2 text-indigo-950 font-medium">
                       <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
                       <span>{dateFormatted}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-charcoal/70 font-medium text-[11px]">
+                    <div className="flex items-center gap-2 text-charcoal/70 font-medium text-[12px]">
                       <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>{startTimeFormatted} – {endTimeFormatted}</span>
                     </div>
@@ -985,7 +988,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                   {evt.location && (
                     <div className="flex items-center gap-2 text-xs text-charcoal/80 bg-gray-50/80 p-2.5 rounded-xl border border-gray-100">
                       <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
-                      <span className="font-semibold truncate">{evt.location}</span>
+                      <span className="font-medium truncate">{evt.location}</span>
                     </div>
                   )}
 
@@ -998,13 +1001,13 @@ export const SundayEventsCyclePage: React.FC = () => {
 
                   {/* Ministry Info */}
                   <div className="pt-2 border-t border-indigo-50 flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-950 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200">
+                    <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-indigo-950 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200">
                       <Users className="w-3.5 h-3.5 text-indigo-600" />
                       <span>{evt.ministry_name || "Church-wide Gathering"}</span>
                     </span>
 
                     {evt.creator_name && (
-                      <span className="text-[10px] text-charcoal/50">
+                      <span className="text-[12px] text-muted">
                         By {evt.creator_name}
                       </span>
                     )}
@@ -1013,10 +1016,10 @@ export const SundayEventsCyclePage: React.FC = () => {
                 </div>
 
                 {/* Bottom Actions Toolbar */}
-                <div className="px-5 py-3.5 bg-ivory-light/80 border-t border-indigo-50 flex items-center justify-between gap-2">
+                <div className="celebration-actions px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
                   {isAdminOrCoordinator ? (
                     <>
-                      <div className="text-[11px] font-bold text-charcoal/60">
+                      <div className="text-[12px] font-medium text-muted">
                         Scheduled Gathering
                       </div>
 
@@ -1038,7 +1041,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                       </div>
                     </>
                   ) : (
-                    <span className="text-[11px] font-medium text-charcoal/50">
+                    <span className="text-[12px] font-medium text-muted">
                       Church event at {evt.location || "Sanctuary"}
                     </span>
                   )}
@@ -1056,15 +1059,15 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* ==================================================== */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-xl w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 overflow-hidden">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-xl w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 overflow-hidden">
 
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 bg-indigo-950 text-white flex items-start justify-between gap-4">
+            <div data-modal-header className="p-5 sm:p-6 bg-indigo-950 text-white flex items-start justify-between gap-4">
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-amber-200 text-[10px] font-black uppercase tracking-wider mb-1">
-                  {formData.is_annual_recurring ? "🔄 Annual Celebration" : "📅 One-Time Event"}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-amber-200 text-[12px] font-medium uppercase tracking-wider mb-1">
+                  {formData.is_annual_recurring ? <><UIRefreshCw aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Annual Celebration</> : <><UICalendarDays aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> One-Time Event</>}
                 </div>
-                <h3 className="text-lg font-black">
+                <h3 className="text-lg font-semibold">
                   {editingItem ? "Edit Event / Celebration" : "Create Event / Celebration"}
                 </h3>
                 <p className="text-xs text-indigo-100/80 mt-0.5">
@@ -1079,16 +1082,16 @@ export const SundayEventsCyclePage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            <form data-guide="celebration-form" onSubmit={handleSave} className="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
 
               {/* ==================================================== */}
               {/* RECURRENCE TYPE SELECTOR (TOGGLE / RADIO) */}
               {/* ==================================================== */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-black text-indigo-950">
+                <label className="block text-xs font-medium text-indigo-950">
                   Event Category & Recurrence Type *
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div data-guide="celebration-kind" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {/* Option 1: Annual Recurring Celebration */}
                   <button
                     type="button"
@@ -1099,7 +1102,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                       }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="flex items-center gap-1.5 text-xs font-black text-amber-950">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-amber-950">
                         <Repeat className="w-4 h-4 text-amber-600" />
                         <span>Annual Recurring Celebration</span>
                       </span>
@@ -1107,7 +1110,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                         <CheckCircle2 className="w-4 h-4 text-amber-600" />
                       )}
                     </div>
-                    <p className="text-[11px] text-charcoal/70 leading-relaxed">
+                    <p className="text-[12px] text-charcoal/70 leading-relaxed">
                       Repeats every year on a designated Sunday (e.g. Anniversary, Mother's Day, Water Baptism, Christmas).
                     </p>
                   </button>
@@ -1122,7 +1125,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                       }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="flex items-center gap-1.5 text-xs font-black text-indigo-950">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-indigo-950">
                         <CalendarDays className="w-4 h-4 text-indigo-600" />
                         <span>One-Time Scheduled Event</span>
                       </span>
@@ -1130,7 +1133,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                         <CheckCircle2 className="w-4 h-4 text-indigo-600" />
                       )}
                     </div>
-                    <p className="text-[11px] text-charcoal/70 leading-relaxed">
+                    <p className="text-[12px] text-charcoal/70 leading-relaxed">
                       A specific church activity with a set date, time, and sanctuary venue (e.g. Fellowship, Seminar, Outreach).
                     </p>
                   </button>
@@ -1139,10 +1142,10 @@ export const SundayEventsCyclePage: React.FC = () => {
 
               {/* Title Field */}
               <div>
-                <label className="block text-xs font-bold text-charcoal mb-1">
+                <label className="block text-xs font-medium text-charcoal mb-1">
                   {formData.is_annual_recurring ? "Celebration Title *" : "Event Title *"}
                 </label>
-                <input
+                <input data-guide="celebration-title"
                   type="text"
                   required
                   placeholder={
@@ -1163,7 +1166,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                 <div className="space-y-3.5 p-4 rounded-2xl bg-amber-50/40 border border-amber-200/60 animate-in fade-in duration-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-xs font-bold text-amber-950 mb-1">
+                      <label className="block text-xs font-medium text-amber-950 mb-1">
                         Month of the Year *
                       </label>
                       <select
@@ -1178,7 +1181,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-amber-950 mb-1">
+                      <label className="block text-xs font-medium text-amber-950 mb-1">
                         Sunday Rule Pattern *
                       </label>
                       <select
@@ -1197,12 +1200,12 @@ export const SundayEventsCyclePage: React.FC = () => {
 
                   {/* Sanctuary / Venue / Meeting Room */}
                   <div>
-                    <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-medium text-amber-950 mb-1 flex items-center justify-between">
                       <span>Sanctuary / Venue / Meeting Room *</span>
-                      <span className="text-[10px] font-medium text-charcoal/50">From Settings / Custom</span>
+                      <span className="text-[12px] font-medium text-muted">From Settings / Custom</span>
                     </label>
                     <div className="space-y-2">
-                      <select
+                      <select data-guide="celebration-location"
                         value={
                           roomLocations.includes(formData.location) && !isCustomLocation
                             ? formData.location
@@ -1224,19 +1227,18 @@ export const SundayEventsCyclePage: React.FC = () => {
                       >
                         <optgroup label="Meeting Rooms & Venues (Settings)">
                           {roomLocations.map((loc) => (
-                            <option key={loc} value={loc}>
-                              📍 {loc}
+                            <option key={loc} value={loc}> {loc}
                             </option>
                           ))}
                         </optgroup>
                         <optgroup label="Custom / Other">
-                          <option value="__custom__">✏️ Other / Type Custom Venue Manually...</option>
+                          <option value="__custom__"> Other / Type Custom Venue Manually...</option>
                         </optgroup>
                       </select>
 
                       {isCustomLocation && (
                         <div className="animate-in fade-in duration-150">
-                          <input
+                          <input data-guide="celebration-location"
                             type="text"
                             required
                             autoFocus
@@ -1245,7 +1247,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                             onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                             className="w-full text-xs p-2.5 rounded-xl border border-amber-400 bg-amber-50/50 focus:outline-hidden focus:ring-2 focus:ring-amber-400/20 text-charcoal font-medium"
                           />
-                          <p className="text-[10px] text-charcoal/50 mt-1">
+                          <p className="text-[12px] text-muted mt-1">
                             Type any custom sanctuary, room, or external meeting location.
                           </p>
                         </div>
@@ -1254,7 +1256,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-charcoal mb-1">
+                    <label className="block text-xs font-medium text-charcoal mb-1">
                       Program Highlights & Special Elements
                     </label>
                     <input
@@ -1272,7 +1274,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                 /* ==================================================== */
                 <div className="space-y-3.5 p-4 rounded-2xl bg-indigo-50/40 border border-indigo-200/60 animate-in fade-in duration-200">
                   <div>
-                    <label className="block text-xs font-bold text-indigo-950 mb-1">
+                    <label className="block text-xs font-medium text-indigo-950 mb-1">
                       Event Date *
                     </label>
                     <input
@@ -1286,7 +1288,7 @@ export const SundayEventsCyclePage: React.FC = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-xs font-bold text-indigo-950 mb-1">
+                      <label className="block text-xs font-medium text-indigo-950 mb-1">
                         Start Time *
                       </label>
                       <input
@@ -1299,7 +1301,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-indigo-950 mb-1">
+                      <label className="block text-xs font-medium text-indigo-950 mb-1">
                         End Time *
                       </label>
                       <input
@@ -1313,12 +1315,12 @@ export const SundayEventsCyclePage: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-indigo-950 mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-medium text-indigo-950 mb-1 flex items-center justify-between">
                       <span>Sanctuary / Venue / Meeting Room *</span>
-                      <span className="text-[10px] font-medium text-charcoal/50">From Settings / Custom</span>
+                      <span className="text-[12px] font-medium text-muted">From Settings / Custom</span>
                     </label>
                     <div className="space-y-2">
-                      <select
+                      <select data-guide="celebration-location"
                         value={
                           roomLocations.includes(formData.location) && !isCustomLocation
                             ? formData.location
@@ -1340,19 +1342,18 @@ export const SundayEventsCyclePage: React.FC = () => {
                       >
                         <optgroup label="Meeting Rooms & Venues (Settings)">
                           {roomLocations.map((loc) => (
-                            <option key={loc} value={loc}>
-                              📍 {loc}
+                            <option key={loc} value={loc}> {loc}
                             </option>
                           ))}
                         </optgroup>
                         <optgroup label="Custom / Other">
-                          <option value="__custom__">✏️ Other / Type Custom Venue Manually...</option>
+                          <option value="__custom__"> Other / Type Custom Venue Manually...</option>
                         </optgroup>
                       </select>
 
                       {isCustomLocation && (
                         <div className="animate-in fade-in duration-150">
-                          <input
+                          <input data-guide="celebration-location"
                             type="text"
                             required
                             autoFocus
@@ -1361,7 +1362,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                             onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                             className="w-full text-xs p-2.5 rounded-xl border border-amber-400 bg-amber-50/50 focus:outline-hidden focus:ring-2 focus:ring-amber-400/20 text-charcoal font-medium"
                           />
-                          <p className="text-[10px] text-charcoal/50 mt-1">
+                          <p className="text-[12px] text-muted mt-1">
                             Type any custom sanctuary, room, or external meeting location.
                           </p>
                         </div>
@@ -1373,7 +1374,7 @@ export const SundayEventsCyclePage: React.FC = () => {
 
               {/* Target Ministry / Department */}
               <div>
-                <label className="block text-xs font-bold text-charcoal mb-1">
+                <label className="block text-xs font-medium text-charcoal mb-1">
                   Target Ministry / Department
                 </label>
                 <select
@@ -1406,7 +1407,7 @@ export const SundayEventsCyclePage: React.FC = () => {
 
               {/* Description & Pastoral Purpose */}
               <div>
-                <label className="block text-xs font-bold text-charcoal mb-1">
+                <label className="block text-xs font-medium text-charcoal mb-1">
                   Description & Event Details
                 </label>
                 <textarea
@@ -1419,24 +1420,24 @@ export const SundayEventsCyclePage: React.FC = () => {
               </div>
 
               {/* Modal Buttons */}
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-charcoal/70 hover:bg-gray-100 cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="celebration-save"
                   type="submit"
-                  className="px-5 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                  className="px-5 py-2 bg-indigo-900 hover:bg-indigo-950 text-white font-medium text-xs rounded-xl shadow-xs transition-all cursor-pointer"
                 >
                   {editingItem ? "Save Changes" : formData.is_annual_recurring ? "Create Annual Celebration" : "Create Scheduled Event"}
                 </button>
               </div>
 
             </form>
-          </div>
+          </ModalPanel>
         </div>
       )}
 
@@ -1445,18 +1446,18 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* ==================================================== */}
       {syncingEvent && (
         <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-md w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 p-6 space-y-4">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 p-6 space-y-4">
 
-            <div className="flex items-start justify-between gap-3 pb-3 border-b border-indigo-50">
+            <div data-modal-header className="flex items-start justify-between gap-3 pb-3 border-b border-indigo-50">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm text-indigo-950">
+                  <h3 className="font-semibold text-sm text-indigo-950">
                     Schedule on Church Calendar
                   </h3>
-                  <p className="text-[11px] text-charcoal/60">
+                  <p className="text-[12px] text-muted">
                     Target Date: <strong>{syncingEvent.projected_formatted}</strong>
                   </p>
                 </div>
@@ -1464,7 +1465,7 @@ export const SundayEventsCyclePage: React.FC = () => {
 
               <button
                 onClick={() => setSyncingEvent(null)}
-                className="p-1 rounded-lg hover:bg-gray-100 text-charcoal/50 cursor-pointer"
+                className="p-1 rounded-lg hover:bg-gray-100 text-muted cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1472,13 +1473,13 @@ export const SundayEventsCyclePage: React.FC = () => {
 
             <div className="space-y-3 text-xs">
               <div className="p-3 bg-ivory-light/80 rounded-2xl border border-indigo-50 space-y-1">
-                <div className="font-bold text-indigo-950">{syncingEvent.title}</div>
-                <div className="text-[11px] text-charcoal/70">{syncingEvent.theme_tagline}</div>
+                <div className="font-medium text-indigo-950">{syncingEvent.title}</div>
+                <div className="text-[12px] text-charcoal/70">{syncingEvent.theme_tagline}</div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-charcoal mb-1">Start Time</label>
+                  <label className="block text-[12px] font-medium text-charcoal mb-1">Start Time</label>
                   <input
                     type="time"
                     value={syncStartTime}
@@ -1487,7 +1488,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-charcoal mb-1">End Time</label>
+                  <label className="block text-[12px] font-medium text-charcoal mb-1">End Time</label>
                   <input
                     type="time"
                     value={syncEndTime}
@@ -1498,9 +1499,9 @@ export const SundayEventsCyclePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-charcoal mb-1 flex items-center justify-between">
+                <label className="block text-[12px] font-medium text-charcoal mb-1 flex items-center justify-between">
                   <span>Sanctuary / Venue / Meeting Room</span>
-                  <span className="text-[10px] text-charcoal/50">From Settings / Custom</span>
+                  <span className="text-[12px] text-muted">From Settings / Custom</span>
                 </label>
                 <div className="space-y-2">
                   <select
@@ -1525,13 +1526,12 @@ export const SundayEventsCyclePage: React.FC = () => {
                   >
                     <optgroup label="Meeting Rooms (Settings)">
                       {roomLocations.map((loc) => (
-                        <option key={loc} value={loc}>
-                          📍 {loc}
+                        <option key={loc} value={loc}> {loc}
                         </option>
                       ))}
                     </optgroup>
                     <optgroup label="Custom">
-                      <option value="__custom__">✏️ Other / Type Custom Venue...</option>
+                      <option value="__custom__"> Other / Type Custom Venue...</option>
                     </optgroup>
                   </select>
 
@@ -1550,23 +1550,23 @@ export const SundayEventsCyclePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+            <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
               <button
                 onClick={() => setSyncingEvent(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-charcoal/70 hover:bg-gray-100 cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-medium text-charcoal/70 hover:bg-gray-100 cursor-pointer"
               >
                 Cancel
               </button>
-              <button
+              <button data-guide="celebration-sync-save"
                 onClick={handleScheduleToCalendar}
                 disabled={isSyncing}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
               >
                 {isSyncing ? "Scheduling..." : "Confirm & Schedule"}
               </button>
             </div>
 
-          </div>
+          </ModalPanel>
         </div>
       )}
 

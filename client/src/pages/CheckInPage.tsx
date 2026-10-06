@@ -1,9 +1,12 @@
+import { AlertTriangle as UIAlertTriangle, CircleX as UICircleX } from "lucide-react";
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { ChurchLogo } from "../components/common/ChurchLogo";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { Member, AttendanceRecord, Ministry, AttendanceRosterItem } from "../types";
 import {
   UserCheck, ShieldCheck, Tag, AlertCircle,
@@ -287,20 +290,22 @@ export const CheckInPage: React.FC = () => {
     loadAttendanceData(false);
   }, [serviceDate]);
 
-  const loadAttendanceData = async (isInitial = false) => {
+ const loadAttendanceData = async (isInitial = false) => {
+    guideData.clearError();
     try {
       if (isInitial) {
         setLoading(true);
       }
       const ministryParam = coordinatorMinistryId ? coordinatorMinistryId : undefined;
       const [rosterList, checkinsList] = await Promise.all([
-        api.getAttendanceRoster({ ministry_id: ministryParam, date: serviceDate }).catch(() => []),
+        api.getAttendanceRoster({ ministry_id: ministryParam, date: serviceDate }).catch(err => { guideData.reportError(err); return []; }),
         api.getTodayAttendance(ministryParam, serviceDate).catch(() => [])
       ]);
       setRoster(rosterList);
       setActiveCheckins(checkinsList);
     } catch (err: any) {
       console.error("Failed to load attendance data:", err);
+      guideData.reportError(err);
       showToast(err.message || "Failed to load attendance", "error");
     } finally {
       if (isInitial) {
@@ -422,7 +427,7 @@ export const CheckInPage: React.FC = () => {
         });
       }
 
-      showToast(`✓ ${item.first_name} ${item.last_name} marked present!`);
+      showToast(`${item.first_name} ${item.last_name} marked present!`);
       loadAttendanceData();
     } catch (err: any) {
       showToast(err.message || "Failed to mark present", "error");
@@ -488,7 +493,7 @@ export const CheckInPage: React.FC = () => {
         target_date: serviceDate
       });
 
-      showToast(`✓ ${absentModalMember.first_name} marked as ${absentStatusType === "absent" ? "Absent" : "Excused"} today!`);
+      showToast(`${absentModalMember.first_name} marked as ${absentStatusType === "absent" ? "Absent" : "Excused"} today!`);
       setAbsentModalMember(null);
       setAbsentCustomNotes("");
       loadAttendanceData();
@@ -544,7 +549,7 @@ export const CheckInPage: React.FC = () => {
         member_ids: memberIds,
         service_name: `${serviceName} (Household: ${householdName})`
       });
-      showToast(`✓ Checked in all ${memberIds.length} members of the ${householdName} family!`);
+      showToast(`Checked in all ${memberIds.length} members of the ${householdName} family!`);
       loadAttendanceData(false);
     } catch (err: any) {
       showToast(err.message || "Failed to check in household", "error");
@@ -583,7 +588,7 @@ export const CheckInPage: React.FC = () => {
         notes: `Sunday Guest Check-In: ${guestNotes || "First-time visitor"}`
       });
 
-      showToast(`✓ Registered & checked in guest ${guestFirstName} ${guestLastName}!`);
+      showToast(`Registered & checked in guest ${guestFirstName} ${guestLastName}!`);
       setIsGuestModalOpen(false);
       setGuestFirstName("");
       setGuestLastName("");
@@ -611,7 +616,7 @@ export const CheckInPage: React.FC = () => {
         security_code: checkoutCodeInput
       });
 
-      showToast(`✓ ${checkoutRecord.first_name} checked out safely!`);
+      showToast(`${checkoutRecord.first_name} checked out safely!`);
       setCheckoutRecord(null);
       setCheckoutCodeInput("");
       loadAttendanceData(false);
@@ -632,7 +637,7 @@ export const CheckInPage: React.FC = () => {
         member_id: record.member_id,
         force: true
       });
-      showToast(`✓ ${record.first_name} checked out safely by usher verification!`);
+      showToast(`${record.first_name} checked out safely by usher verification!`);
       setCheckoutRecord(null);
       setCheckoutCodeInput("");
       loadAttendanceData(false);
@@ -730,6 +735,8 @@ export const CheckInPage: React.FC = () => {
   const checkedOutCount = roster.filter(r => isMinorMinistry(r.ministry_name) && r.checked_out_at !== null).length;
   const unmarkedCount = totalRosterCount - presentCount - absentCount - excusedCount;
 
+  const guideData = useGuideDataState("attendance-roster", { loading, count: roster.length, filtered: Boolean(coordinatorMinistryId), retry: () => loadAttendanceData(true) });
+
   if (loading && roster.length === 0) {
     return <CheckInPageSkeleton />;
   }
@@ -739,7 +746,7 @@ export const CheckInPage: React.FC = () => {
 
       {/* Toast Banner */}
       {toastMsg && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-xs font-bold text-white border animate-in slide-in-from-bottom-4 ${toastMsg.type === "success" ? "bg-emerald-900 border-emerald-700" : "bg-rose-900 border-rose-700"
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-xs font-medium text-white border animate-in slide-in-from-bottom-4 ${toastMsg.type === "success" ? "bg-emerald-900 border-emerald-700" : "bg-rose-900 border-rose-700"
           }`}>
           {toastMsg.type === "success" ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
           <span>{toastMsg.text}</span>
@@ -752,7 +759,8 @@ export const CheckInPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveAttendanceTab("sunday")}
-            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+            data-guide="attendance-sunday"
+            className={`px-4 py-2 rounded-xl font-medium text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
               activeAttendanceTab === "sunday"
                 ? "bg-indigo text-white shadow-sm"
                 : "text-charcoal/70 hover:text-charcoal hover:bg-white/60"
@@ -761,10 +769,10 @@ export const CheckInPage: React.FC = () => {
             <ChurchLogo className="w-4 h-4 text-amber" />
             <span>Sunday Worship Check-In</span>
           </button>
-          <button
+          <button data-guide="attendance-event"
             type="button"
             onClick={() => setActiveAttendanceTab("event")}
-            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl font-medium text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
               activeAttendanceTab === "event"
                 ? "bg-indigo text-white shadow-sm"
                 : "text-charcoal/70 hover:text-charcoal hover:bg-white/60"
@@ -776,8 +784,8 @@ export const CheckInPage: React.FC = () => {
         </div>
 
         {activeAttendanceTab === "sunday" && (
-          <div className="text-xs font-semibold text-stone-500 bg-white py-1.5 px-3.5 rounded-xl border border-stone-200/80 shadow-2xs">
-            Sunday Worship Service • <span className="font-bold text-charcoal">{formatDateDisplay(serviceDate)}</span>
+          <div className="text-xs font-medium text-stone-500 bg-white py-1.5 px-3.5 rounded-xl border border-stone-200/80 shadow-2xs">
+            Sunday Worship Service • <span className="font-medium text-charcoal">{formatDateDisplay(serviceDate)}</span>
           </div>
         )}
       </div>
@@ -787,7 +795,7 @@ export const CheckInPage: React.FC = () => {
       ) : (
         <>
       {/* TOP HERO: Sunday Service & Attendance Overview */}
-      <div className="relative z-30 rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
+      <div className="relative rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
         {/* Background decorative elements isolated with overflow-hidden */}
         <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
           <img
@@ -801,11 +809,11 @@ export const CheckInPage: React.FC = () => {
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <ChurchLogo className="w-3.5 h-3.5 text-amber-400" />
               <span>Sunday Divine Worship & Kids Attendance Kiosk</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
               Worship Service Attendance
             </h1>
             <p className="text-xs text-indigo-200/90 max-w-xl leading-relaxed">
@@ -830,23 +838,24 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsDateMenuOpen(!isDateMenuOpen)}
+                data-guide="attendance-service"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-white cursor-pointer active:scale-95"
               >
                 <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="font-black text-xs tracking-tight">
+                <span className="font-medium text-xs tracking-tight">
                   {formatDateDisplay(serviceDate)}
                 </span>
 
                 {serviceDate === upcomingSundayStr ? (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-500/30 text-purple-200 border border-purple-400/40 hidden sm:inline-block">
+                  <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/30 text-purple-200 border border-purple-400/40 hidden sm:inline-block">
                     Upcoming (Locked)
                   </span>
                 ) : serviceDate === latestSundayStr ? (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 hidden sm:inline-block">
+                  <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 hidden sm:inline-block">
                     {isTodaySunday ? "Today's Service" : "Latest Service"}
                   </span>
                 ) : (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-white/15 text-indigo-200 hidden sm:inline-block">
+                  <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-white/15 text-indigo-200 hidden sm:inline-block">
                     Past Sunday
                   </span>
                 )}
@@ -872,7 +881,7 @@ export const CheckInPage: React.FC = () => {
                 <div className="absolute top-full left-0 sm:left-auto sm:right-0 md:left-0 mt-2 z-50 w-72 sm:w-84 bg-slate-950 border border-slate-700 rounded-2xl shadow-2xl ring-1 ring-white/10 p-3.5 text-white animate-in fade-in zoom-in-95 duration-150">
                   {/* Section 1: Upcoming & Latest Highlights */}
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase font-black tracking-wider text-slate-400 px-1">
+                    <div className="text-[12px] uppercase font-medium tracking-wider text-slate-400 px-1">
                       Services
                     </div>
 
@@ -893,11 +902,11 @@ export const CheckInPage: React.FC = () => {
                           <Clock className="w-4 h-4" />
                         </div>
                         <div>
-                          <div className="text-xs font-bold text-white">{formatDateDisplay(upcomingSundayStr)}</div>
-                          <div className="text-[10px] text-purple-300 font-medium">Upcoming Sunday (Preview Only)</div>
+                          <div className="text-xs font-medium text-white">{formatDateDisplay(upcomingSundayStr)}</div>
+                          <div className="text-[12px] text-purple-300 font-medium">Upcoming Sunday (Preview Only)</div>
                         </div>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/30 text-purple-200 font-black border border-purple-400/40">
+                      <span className="text-[12px] px-2 py-0.5 rounded-md bg-purple-500/30 text-purple-200 font-medium border border-purple-400/40">
                         Locked
                       </span>
                     </button>
@@ -919,13 +928,13 @@ export const CheckInPage: React.FC = () => {
                           <CheckCircle2 className="w-4 h-4" />
                         </div>
                         <div>
-                          <div className="text-xs font-bold text-white">{formatDateDisplay(latestSundayStr)}</div>
-                          <div className="text-[10px] text-emerald-300 font-medium">
+                          <div className="text-xs font-medium text-white">{formatDateDisplay(latestSundayStr)}</div>
+                          <div className="text-[12px] text-emerald-300 font-medium">
                             {isTodaySunday ? "Today's Sunday Service" : "Latest Sunday Service"}
                           </div>
                         </div>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 font-black border border-emerald-400/40">
+                      <span className="text-[12px] px-2 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 font-medium border border-emerald-400/40">
                         Active
                       </span>
                     </button>
@@ -933,7 +942,7 @@ export const CheckInPage: React.FC = () => {
 
                   {/* Section 2: Recent Sundays (Last 4 Weeks) */}
                   <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
-                    <div className="text-[10px] uppercase font-black tracking-wider text-slate-400 px-1">
+                    <div className="text-[12px] uppercase font-medium tracking-wider text-slate-400 px-1">
                       Recent Past Services
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -945,7 +954,7 @@ export const CheckInPage: React.FC = () => {
                             setServiceDate(s.date);
                             setIsDateMenuOpen(false);
                           }}
-                          className={`p-2.5 rounded-xl text-xs font-bold text-left transition-all flex items-center justify-between cursor-pointer ${serviceDate === s.date
+                          className={`p-2.5 rounded-xl text-xs font-medium text-left transition-all flex items-center justify-between cursor-pointer ${serviceDate === s.date
                             ? "bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400"
                             : "bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700"
                             }`}
@@ -959,9 +968,9 @@ export const CheckInPage: React.FC = () => {
 
                   {/* Section 3: Jump to Any Past Sunday Archive */}
                   <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
-                    <div className="text-[10px] uppercase font-black tracking-wider text-slate-400 px-1 flex items-center justify-between">
+                    <div className="text-[12px] uppercase font-medium tracking-wider text-slate-400 px-1 flex items-center justify-between">
                       <span>Jump to Any Past Sunday</span>
-                      <span className="text-[9px] text-slate-400 font-normal lowercase">(snaps to sunday)</span>
+                      <span className="text-[12px] text-slate-400 font-normal lowercase">(snaps to sunday)</span>
                     </div>
                     <div className="relative flex items-center">
                       <input
@@ -969,7 +978,7 @@ export const CheckInPage: React.FC = () => {
                         max={upcomingSundayStr}
                         value={serviceDate}
                         onChange={(e) => snapToSunday(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 hover:border-slate-500 focus:border-amber-400 text-white text-xs font-semibold px-3 py-2 rounded-xl outline-none transition-all cursor-pointer [color-scheme:dark]"
+                        className="w-full bg-slate-900 border border-slate-700 hover:border-slate-500 focus:border-amber-400 text-white text-xs font-medium px-3 py-2 rounded-xl outline-none transition-all cursor-pointer [color-scheme:dark]"
                       />
                     </div>
                   </div>
@@ -977,7 +986,7 @@ export const CheckInPage: React.FC = () => {
               )}
             </div>
 
-            <button
+            <button data-guide="attendance-guest"
               onClick={() => {
                 if (isUpcomingFuture) {
                   showToast("Guest check-in is disabled for upcoming future dates.", "error");
@@ -986,8 +995,8 @@ export const CheckInPage: React.FC = () => {
                 setIsGuestModalOpen(true);
               }}
               disabled={isUpcomingFuture}
-              className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 ${isUpcomingFuture
-                ? "bg-white/10 text-white/40 cursor-not-allowed border border-white/10"
+              className={`px-3.5 py-2 rounded-xl text-xs font-medium shadow-md transition-all flex items-center gap-1.5 ${isUpcomingFuture
+                ? "bg-white/10 text-white/70 cursor-not-allowed border border-white/10"
                 : "bg-amber-500 hover:bg-amber-500 text-charcoal active:scale-95 cursor-pointer"
                 }`}
               title={isUpcomingFuture ? "Check-in disabled for upcoming Sunday" : "Check In Guest"}
@@ -1010,48 +1019,48 @@ export const CheckInPage: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/10">
           <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider">Present Today</span>
+              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Present Today</span>
               <UserCheck className="w-4 h-4 text-emerald-400" />
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl font-medium text-white mt-1">
               {presentCount} <span className="text-xs font-normal text-indigo-300">/ {totalRosterCount}</span>
             </div>
-            <div className="text-[10px] text-emerald-300 font-bold mt-0.5">{attendanceRate}% Turnout</div>
+            <div className="text-[12px] text-emerald-300 font-medium mt-0.5">{attendanceRate}% Turnout</div>
           </div>
 
           <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider">Absent / Excused</span>
+              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Absent / Excused</span>
               <UserX className="w-4 h-4 text-rose-400" />
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl font-medium text-white mt-1">
               {absentCount + excusedCount}
             </div>
-            <div className="text-[10px] text-rose-300 mt-0.5">
+            <div className="text-[12px] text-rose-300 mt-0.5">
               {absentCount} Absent • {excusedCount} Excused
             </div>
           </div>
 
           <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider">Kids In Sunday School</span>
+              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Kids In Sunday School</span>
               <Tag className="w-4 h-4 text-amber-400" />
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl font-medium text-white mt-1">
               {kidsCheckedIn.length}
             </div>
-            <div className="text-[10px] text-indigo-200 mt-0.5">Kinder & Elementary in session</div>
+            <div className="text-[12px] text-indigo-200 mt-0.5">Kinder & Elementary in session</div>
           </div>
 
           <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider">Kids Checked Out</span>
+              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Kids Checked Out</span>
               <ShieldCheck className="w-4 h-4 text-emerald-300" />
             </div>
-            <div className="text-2xl font-black text-white mt-1">
+            <div className="text-2xl font-medium text-white mt-1">
               {checkedOutCount}
             </div>
-            <div className="text-[10px] text-indigo-200 mt-0.5">Safe pickup verified</div>
+            <div className="text-[12px] text-indigo-200 mt-0.5">Safe pickup verified</div>
           </div>
         </div>
       </div>
@@ -1072,7 +1081,7 @@ export const CheckInPage: React.FC = () => {
             </button>
           )}
 
-          <div
+          <div data-guide="attendance-scope"
             ref={ministryScrollRef}
             onMouseDown={handleMinistryMouseDown}
             onMouseMove={handleMinistryMouseMove}
@@ -1082,10 +1091,10 @@ export const CheckInPage: React.FC = () => {
             className={`flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none select-none w-full ${isMinistryDragging ? "cursor-grabbing" : "cursor-grab"}`}
           >
             {coordinatorMinistryId ? (
-              <div className="bg-indigo-50 border border-indigo-200 text-indigo-950 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 shadow-2xs">
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-950 px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shrink-0 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 <span>{user?.ministries && user.ministries.length > 0 ? user.ministries[0].name : "Youth"} Ministry Attendance</span>
-                <span className="text-[10px] text-indigo-600 font-semibold">(Assigned Scope)</span>
+                <span className="text-[12px] text-indigo-600 font-medium">(Assigned Scope)</span>
               </div>
             ) : (
               <>
@@ -1095,7 +1104,7 @@ export const CheckInPage: React.FC = () => {
                     onClick={() => {
                       if (!hasMinistryDragged) setFilterMinistry("all");
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${filterMinistry === "all"
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${filterMinistry === "all"
                       ? "bg-indigo text-white shadow-xs"
                       : "bg-gray-100 hover:bg-gray-200 text-charcoal/80"
                       }`}
@@ -1114,14 +1123,14 @@ export const CheckInPage: React.FC = () => {
                       onClick={() => {
                         if (!hasMinistryDragged) setFilterMinistry(String(m.id));
                       }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${isSelected
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${isSelected
                         ? "bg-indigo text-white shadow-xs"
                         : "bg-gray-100 hover:bg-gray-200 text-charcoal/80"
                         }`}
                     >
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color || "#2C3968" }}></span>
                       <span>{m.name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${isSelected ? "bg-white/20 text-white" : "bg-white text-charcoal/70 shadow-2xs"}`}>
+                      <span className={`text-[12px] px-1.5 py-0.2 rounded-md ${isSelected ? "bg-white/20 text-white" : "bg-white text-charcoal/70 shadow-2xs"}`}>
                         {presentForMin}/{countForMin}
                       </span>
                     </button>
@@ -1147,7 +1156,7 @@ export const CheckInPage: React.FC = () => {
         {isFastMode ? (
           /* When in Batch Roll Call Mode: Show contextual banner instead of confusing status filters & misplaced search */
           <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-center gap-2 text-indigo-950 font-bold bg-indigo-50/80 border border-indigo-100 px-3 py-2 rounded-2xl flex-1">
+            <div className="flex items-center gap-2 text-indigo-950 font-medium bg-indigo-50/80 border border-indigo-100 px-3 py-2 rounded-2xl flex-1">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
               <span>
                 Batch Roll Call Active • Showing all {batchScopeList.length} members in current ministry scope. Use the search bar inside the roll call toolbar below to find members.
@@ -1159,7 +1168,7 @@ export const CheckInPage: React.FC = () => {
                 setIsFastMode(false);
                 setSelectedMemberIds(new Set());
               }}
-              className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal/80 font-bold text-xs transition-all cursor-pointer shrink-0"
+              className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal/80 font-medium text-xs transition-all cursor-pointer shrink-0"
             >
               Exit Batch Mode
             </button>
@@ -1168,13 +1177,13 @@ export const CheckInPage: React.FC = () => {
           /* Normal Mode: Responsive Status Pills + Clean Search & Household */
           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-2 border-t border-gray-100">
             {/* Status Quick Filter Chips - Wraps gracefully so nothing is cut off */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-[11px] font-black text-charcoal/50 uppercase tracking-wider shrink-0 mr-1">Status:</span>
+            <div data-guide="attendance-status-filter" className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-[12px] font-medium text-muted uppercase tracking-wider shrink-0 mr-1">Status:</span>
 
               <button
                 type="button"
                 onClick={() => setStatusFilter("all")}
-                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all shrink-0 cursor-pointer ${statusFilter === "all"
+                className={`px-2.5 py-1 rounded-lg font-medium text-xs transition-all shrink-0 cursor-pointer ${statusFilter === "all"
                   ? "bg-charcoal text-white shadow-xs"
                   : "bg-gray-100 hover:bg-gray-200 text-charcoal/70"
                   }`}
@@ -1185,7 +1194,7 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStatusFilter("present")}
-                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "present"
+                className={`px-2.5 py-1 rounded-lg font-medium text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "present"
                   ? "bg-emerald-600 text-white shadow-xs"
                   : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
                   }`}
@@ -1197,7 +1206,7 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStatusFilter("absent")}
-                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "absent"
+                className={`px-2.5 py-1 rounded-lg font-medium text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "absent"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200"
                   }`}
@@ -1209,7 +1218,7 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStatusFilter("excused")}
-                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "excused"
+                className={`px-2.5 py-1 rounded-lg font-medium text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "excused"
                   ? "bg-amber-600 text-white shadow-xs"
                   : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
                   }`}
@@ -1221,7 +1230,7 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStatusFilter("kids_checked_in")}
-                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "kids_checked_in"
+                className={`px-2.5 py-1 rounded-lg font-medium text-xs transition-all shrink-0 flex items-center gap-1 cursor-pointer ${statusFilter === "kids_checked_in"
                   ? "bg-indigo-600 text-white shadow-xs"
                   : "bg-indigo-50 text-indigo-800 hover:bg-indigo-100 border border-indigo-200"
                   }`}
@@ -1233,9 +1242,9 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStatusFilter("unmarked")}
-                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all shrink-0 cursor-pointer ${statusFilter === "unmarked"
+                className={`px-2.5 py-1 rounded-lg font-medium text-xs transition-all shrink-0 cursor-pointer ${statusFilter === "unmarked"
                   ? "bg-gray-600 text-white shadow-xs"
-                  : "bg-gray-100 hover:bg-gray-200 text-charcoal/60"
+                  : "bg-gray-100 hover:bg-gray-200 text-muted"
                   }`}
               >
                 Unmarked ({unmarkedCount})
@@ -1245,10 +1254,11 @@ export const CheckInPage: React.FC = () => {
             {/* Search & Household Filters */}
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto min-w-0">
               <div className="relative flex-1 sm:w-64 min-w-[180px]">
-                <Search className="w-3.5 h-3.5 text-charcoal/40 absolute left-3 top-2.5" />
+                <Search className="w-3.5 h-3.5 text-muted absolute left-3 top-2.5" />
                 <input
                   type="text"
                   placeholder="Search member, family, tag..."
+                  data-guide="attendance-search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition-all"
@@ -1257,7 +1267,7 @@ export const CheckInPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-2 text-charcoal/40 hover:text-charcoal cursor-pointer"
+                    className="absolute right-2.5 top-2 text-muted hover:text-charcoal cursor-pointer"
                     title="Clear search"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1265,7 +1275,7 @@ export const CheckInPage: React.FC = () => {
                 )}
               </div>
 
-              <select
+              <select data-guide="attendance-batch-household"
                 value={selectedHousehold}
                 onChange={(e) => setSelectedHousehold(e.target.value)}
                 className="px-2.5 py-1.5 rounded-xl border border-gray-200 text-xs bg-white text-charcoal/80 focus:ring-2 focus:ring-indigo/20 outline-none font-medium cursor-pointer shrink-0"
@@ -1289,8 +1299,8 @@ export const CheckInPage: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-sm text-white">Upcoming Sunday Service Preview</span>
-                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                <span className="font-medium text-sm text-white">Upcoming Sunday Service Preview</span>
+                <span className="text-[12px] uppercase font-medium px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40">
                   Opens on {formatDateDisplay(serviceDate)}
                 </span>
               </div>
@@ -1302,7 +1312,7 @@ export const CheckInPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setServiceDate(latestSundayStr)}
-            className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border border-white/10"
+            className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border border-white/10"
           >
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>Switch to Active Service</span>
@@ -1319,23 +1329,23 @@ export const CheckInPage: React.FC = () => {
           {/* Top Directory Header */}
           <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gray-50/50">
             <div className="flex items-center gap-2.5">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold shadow-xs transition-colors ${isFastMode ? "bg-slate-900 text-amber-300" : "bg-indigo-50 text-indigo"
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-medium shadow-xs transition-colors ${isFastMode ? "bg-slate-900 text-amber-300" : "bg-indigo-50 text-indigo"
                 }`}>
                 {isFastMode ? <ListChecks className="w-5 h-5" /> : <UserCheck className="w-5 h-5" />}
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="font-black text-sm sm:text-base text-charcoal flex items-center gap-1.5">
+                  <h2 className="font-semibold text-sm sm:text-base text-charcoal flex items-center gap-1.5">
                     <span>Sunday Service Attendance Directory</span>
-                    <span className="text-xs font-normal text-charcoal/50">({filteredRoster.length} members shown)</span>
+                    <span className="text-xs font-normal text-muted">({filteredRoster.length} members shown)</span>
                   </h2>
                   {isFastMode && (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-400 text-slate-950 shadow-2xs">
+                    <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-amber-400 text-slate-950 shadow-2xs">
                       Batch Mode Active
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-charcoal/50">
+                <p className="text-[12px] text-muted">
                   {isFastMode
                     ? "Batch Roll Call: Select absent members (unselected are marked Present) or select present attendees."
                     : "Quickly mark attendance: Check-In (Present), Check-Out, Absent Today, or Excused (Sick/Travel)."}
@@ -1343,10 +1353,11 @@ export const CheckInPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div data-guide="attendance-status-filter" className="flex items-center gap-2.5 flex-wrap">
               {/* Toggle Batch Roll Call Button */}
-              <button
+              <button data-guide="attendance-batch"
                 type="button"
+                aria-expanded={isFastMode}
                 disabled={isUpcomingFuture}
                 onClick={() => {
                   if (isUpcomingFuture) return;
@@ -1356,7 +1367,7 @@ export const CheckInPage: React.FC = () => {
                   setIsFastMode(!isFastMode);
                   setSelectedMemberIds(new Set());
                 }}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${isUpcomingFuture
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 shadow-xs ${isUpcomingFuture
                   ? "bg-gray-100 text-charcoal/30 border border-gray-200 cursor-not-allowed"
                   : isFastMode
                     ? "bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 cursor-pointer active:scale-95"
@@ -1371,13 +1382,13 @@ export const CheckInPage: React.FC = () => {
               <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
 
               <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                <span className="font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                <span className="font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
                   {presentCount} Present
                 </span>
-                <span className="font-bold text-rose-800 bg-rose-50 px-2.5 py-1 rounded-xl border border-rose-200">
+                <span className="font-medium text-rose-800 bg-rose-50 px-2.5 py-1 rounded-xl border border-rose-200">
                   {absentCount} Absent
                 </span>
-                <span className="font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
+                <span className="font-medium text-amber-800 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
                   {excusedCount} Excused
                 </span>
               </div>
@@ -1390,19 +1401,19 @@ export const CheckInPage: React.FC = () => {
               
               {/* Row 1: Mode Selection (Full-Width 3-Column Grid) */}
               <div className="space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <span className="text-[12px] font-medium uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" /> Roll Call Method:
                 </span>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
 
                   {/* Mode A: Select Absent (Unselected = Present) */}
-                  <button
+                  <button data-guide="attendance-method-absent"
                     type="button"
                     onClick={() => {
                       setFastModeType("absent_rest_present");
                       setSelectedMemberIds(new Set());
                     }}
-                    className={`p-3 rounded-2xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "absent_rest_present"
+                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "absent_rest_present"
                       ? "bg-rose-600 text-white shadow-md ring-2 ring-rose-400"
                       : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
                       }`}
@@ -1411,19 +1422,19 @@ export const CheckInPage: React.FC = () => {
                       <UserX className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <div className="font-bold leading-tight">Mark Absentees (Exception)</div>
-                      <div className="text-[10px] text-white/80 font-normal mt-0.5">Unselected = Present by Default</div>
+                      <div className="font-medium leading-tight">Mark Absentees (Exception)</div>
+                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Unselected = Present by Default</div>
                     </div>
                   </button>
 
                   {/* Mode B: Select Present (Unselected = Absent) */}
-                  <button
+                  <button data-guide="attendance-method-present"
                     type="button"
                     onClick={() => {
                       setFastModeType("present_rest_absent");
                       setSelectedMemberIds(new Set());
                     }}
-                    className={`p-3 rounded-2xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "present_rest_absent"
+                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "present_rest_absent"
                       ? "bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400"
                       : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
                       }`}
@@ -1432,19 +1443,19 @@ export const CheckInPage: React.FC = () => {
                       <UserCheck className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <div className="font-bold leading-tight">Mark Present Attendees</div>
-                      <div className="text-[10px] text-white/80 font-normal mt-0.5">Unselected = Absent by Default</div>
+                      <div className="font-medium leading-tight">Mark Present Attendees</div>
+                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Unselected = Absent by Default</div>
                     </div>
                   </button>
 
                   {/* Mode C: Present Only */}
-                  <button
+                  <button data-guide="attendance-method-selected"
                     type="button"
                     onClick={() => {
                       setFastModeType("present_only");
                       setSelectedMemberIds(new Set());
                     }}
-                    className={`p-3 rounded-2xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "present_only"
+                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "present_only"
                       ? "bg-sky-600 text-white shadow-md ring-2 ring-sky-400"
                       : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
                       }`}
@@ -1453,8 +1464,8 @@ export const CheckInPage: React.FC = () => {
                       <CheckSquare className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                      <div className="font-bold leading-tight">Mark Selected Present Only</div>
-                      <div className="text-[10px] text-white/80 font-normal mt-0.5">Keep unselected unchanged</div>
+                      <div className="font-medium leading-tight">Mark Selected Present Only</div>
+                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Keep unselected unchanged</div>
                     </div>
                   </button>
 
@@ -1471,6 +1482,7 @@ export const CheckInPage: React.FC = () => {
                     <input
                       type="text"
                       placeholder="Search member in roll call..."
+                      data-guide="attendance-search"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full pl-8 pr-7 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-400 text-xs focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 outline-none transition-all"
@@ -1487,7 +1499,7 @@ export const CheckInPage: React.FC = () => {
                     )}
                   </div>
 
-                  <select
+                  <select data-guide="attendance-batch-household"
                     value={selectedHousehold}
                     onChange={(e) => setSelectedHousehold(e.target.value)}
                     className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 outline-none font-medium cursor-pointer shrink-0"
@@ -1501,11 +1513,11 @@ export const CheckInPage: React.FC = () => {
 
                 {/* Selection Helpers & Active Filter Tag */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-1 bg-white/10 p-1 rounded-xl border border-white/15">
+                  <div data-guide="attendance-selection-tools" className="flex items-center gap-1 bg-white/10 p-1 rounded-xl border border-white/15">
                     <button
                       type="button"
                       onClick={() => selectAllFiltered(filteredRoster)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-white hover:bg-white/15 transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-white hover:bg-white/15 transition-all cursor-pointer"
                       title="Select all members currently in list"
                     >
                       Select All ({filteredRoster.length})
@@ -1514,14 +1526,14 @@ export const CheckInPage: React.FC = () => {
                       type="button"
                       onClick={() => clearSelection()}
                       disabled={selectedMemberIds.size === 0}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-white/15 disabled:opacity-40 transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/15 disabled:opacity-40 transition-all cursor-pointer"
                     >
                       Clear ({selectedMemberIds.size})
                     </button>
                     <button
                       type="button"
                       onClick={() => invertSelection(filteredRoster)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-white/15 transition-all cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/15 transition-all cursor-pointer"
                       title="Invert current check selection"
                     >
                       Invert
@@ -1560,17 +1572,17 @@ export const CheckInPage: React.FC = () => {
                       )}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-amber-300 shrink-0">
+                  <span className="text-[12px] font-mono text-amber-300 shrink-0">
                     {selectedMemberIds.size} of {batchScopeList.length} in scope selected
                   </span>
                 </div>
 
                 {/* Primary Save Button */}
-                <button
+                <button data-guide="attendance-batch-save"
                   type="button"
                   onClick={() => handleApplyBatchAttendance(batchScopeList)}
                   disabled={batchSubmitting || batchScopeList.length === 0}
-                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-medium text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
                 >
                   {batchSubmitting ? (
                     <>
@@ -1599,7 +1611,7 @@ export const CheckInPage: React.FC = () => {
           <div className="overflow-x-auto min-h-[160px]">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-100 text-charcoal/60 font-bold uppercase text-[10px] tracking-wider">
+                <tr className="bg-gray-50/80 border-b border-gray-100 text-muted font-medium uppercase text-[12px] tracking-wider">
                   {isFastMode && (
                     <th className="py-3 px-4 w-12 text-center">
                       <input
@@ -1624,12 +1636,12 @@ export const CheckInPage: React.FC = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody data-guide="attendance-roster" className="divide-y divide-gray-100">
                 {filteredRoster.length === 0 ? (
                   <tr>
-                    <td colSpan={isFastMode ? 7 : 6} className="py-12 text-center text-charcoal/50">
+                    <td colSpan={isFastMode ? 7 : 6} className="py-12 text-center text-muted">
                       <AlertCircle className="w-8 h-8 text-charcoal/30 mx-auto mb-2" />
-                      <p className="font-bold text-xs">No members found matching your search and filter criteria.</p>
+                      <p className="font-medium text-xs">No members found matching your search and filter criteria.</p>
                     </td>
                   </tr>
                 ) : (
@@ -1691,7 +1703,7 @@ export const CheckInPage: React.FC = () => {
                         {/* Member Name */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs border shrink-0 ${isFastMode && isSelectedInBatch
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-medium text-xs border shrink-0 ${isFastMode && isSelectedInBatch
                               ? fastModeType === "absent_rest_present"
                                 ? "bg-rose-200 text-rose-950 border-rose-400"
                                 : "bg-emerald-200 text-emerald-950 border-emerald-400"
@@ -1706,17 +1718,16 @@ export const CheckInPage: React.FC = () => {
                               {item.first_name?.[0] || ""}{item.last_name?.[0] || ""}
                             </div>
                             <div>
-                              <div className="font-bold text-charcoal flex items-center gap-1.5">
+                              <div className="font-medium text-charcoal flex items-center gap-1.5">
                                 <span>{item.first_name} {item.last_name}</span>
                                 {item.member_status === "Visitor" && (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                  <span className="px-1.5 py-0.2 rounded text-[12px] font-medium bg-amber-100 text-amber-900 border border-amber-300">
                                     GUEST
                                   </span>
                                 )}
                               </div>
                               {item.medical_notes && (
-                                <p className="text-[10px] text-rose-600 font-semibold truncate max-w-xs">
-                                  ⚠️ {item.medical_notes}
+                                <p className="text-[12px] text-rose-600 font-medium truncate max-w-xs"><UIAlertTriangle aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {item.medical_notes}
                                 </p>
                               )}
                             </div>
@@ -1726,7 +1737,7 @@ export const CheckInPage: React.FC = () => {
                         {/* Ministry */}
                         <td className="py-3.5 px-4">
                           <span
-                            className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-white shadow-2xs inline-block"
+                            className="px-2.5 py-1 rounded-lg text-[12px] font-medium text-white shadow-2xs inline-block"
                             style={{ backgroundColor: item.ministry_color || "#2C3968" }}
                           >
                             {item.ministry_name}
@@ -1737,11 +1748,11 @@ export const CheckInPage: React.FC = () => {
                         <td className="py-3.5 px-4">
                           {item.household_name ? (
                             <div className="flex items-center gap-1.5">
-                              <Home className="w-3.5 h-3.5 text-charcoal/40 shrink-0" />
-                              <span className="font-bold text-charcoal">{item.household_name} Family</span>
+                              <Home className="w-3.5 h-3.5 text-muted shrink-0" />
+                              <span className="font-medium text-charcoal">{item.household_name} Family</span>
                             </div>
                           ) : (
-                            <span className="text-charcoal/40 italic text-[11px]">Individual</span>
+                            <span className="text-muted italic text-[12px]">Individual</span>
                           )}
                         </td>
 
@@ -1760,16 +1771,16 @@ export const CheckInPage: React.FC = () => {
                                   checked_in_at: item.checked_in_at || new Date().toISOString()
                                 });
                               }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-950 font-mono font-black text-[11px] shadow-2xs cursor-pointer transition-colors"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-950 font-mono font-medium text-[12px] shadow-2xs cursor-pointer transition-colors"
                               title="Click to view & reprint security badge"
                             >
                               <Tag className="w-3 h-3 text-amber-600" />
                               <span>{item.security_code}</span>
                             </button>
                           ) : isMinor ? (
-                            <span className="text-[10px] text-charcoal/40 italic">Generated on check-in</span>
+                            <span className="text-[12px] text-muted italic">Generated on check-in</span>
                           ) : (
-                            <span className="text-[10px] text-charcoal/40">—</span>
+                            <span className="text-[12px] text-muted">—</span>
                           )}
                         </td>
 
@@ -1778,20 +1789,20 @@ export const CheckInPage: React.FC = () => {
                           {isPresent ? (
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1.5">
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-950 border border-emerald-300 flex items-center gap-1">
+                                <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-emerald-100 text-emerald-950 border border-emerald-300 flex items-center gap-1">
                                   <CheckCircle2 className="w-3 h-3 text-emerald-700" />
                                   <span>Present</span>
                                 </span>
                                 {isCheckedOut && (
-                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-950 border border-sky-300 flex items-center gap-1">
+                                  <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-sky-100 text-sky-950 border border-sky-300 flex items-center gap-1">
                                     <ShieldCheck className="w-3 h-3 text-sky-700" />
                                     <span>Checked Out</span>
                                   </span>
                                 )}
                               </div>
                               {item.checked_in_at && (
-                                <p className="text-[10px] text-charcoal/50 flex items-center gap-1">
-                                  <Clock className="w-2.5 h-2.5 text-charcoal/40" />
+                                <p className="text-[12px] text-muted flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5 text-muted" />
                                   In: {new Date(item.checked_in_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                   {item.checked_out_at && ` • Out: ${new Date(item.checked_out_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
                                 </p>
@@ -1799,30 +1810,30 @@ export const CheckInPage: React.FC = () => {
                             </div>
                           ) : isAbsent ? (
                             <div className="space-y-0.5">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-950 border border-rose-300 inline-flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-rose-100 text-rose-950 border border-rose-300 inline-flex items-center gap-1">
                                 <UserX className="w-3 h-3 text-rose-700" />
                                 <span>Absent Today</span>
                               </span>
                               {item.attendance_notes && (
-                                <p className="text-[10px] text-rose-800 font-medium truncate max-w-xs">
+                                <p className="text-[12px] text-rose-800 font-medium truncate max-w-xs">
                                   {item.attendance_notes.replace("[ABSENT]", "").trim()}
                                 </p>
                               )}
                             </div>
                           ) : isExcused ? (
                             <div className="space-y-0.5">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-950 border border-amber-300 inline-flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-amber-100 text-amber-950 border border-amber-300 inline-flex items-center gap-1">
                                 <HelpCircle className="w-3 h-3 text-amber-700" />
                                 <span>Excused</span>
                               </span>
                               {item.attendance_notes && (
-                                <p className="text-[10px] text-amber-800 font-medium truncate max-w-xs">
+                                <p className="text-[12px] text-amber-800 font-medium truncate max-w-xs">
                                   {item.attendance_notes.replace("[EXCUSED]", "").trim()}
                                 </p>
                               )}
                             </div>
                           ) : (
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-charcoal/60">
+                            <span className="inline-block px-2 py-0.5 rounded text-[12px] font-medium bg-gray-100 text-muted">
                               Unmarked
                             </span>
                           )}
@@ -1833,38 +1844,38 @@ export const CheckInPage: React.FC = () => {
                           {isFastMode ? (
                             <div className="flex items-center justify-end">
                               {rollCallTarget === "mark_absent" && (
-                                <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold border flex items-center gap-1 shadow-2xs bg-rose-50 text-rose-800 border-rose-200">
+                                <span className="px-2.5 py-1 rounded-xl text-[12px] font-medium border flex items-center gap-1 shadow-2xs bg-rose-50 text-rose-800 border-rose-200">
                                   <UserX className="w-3 h-3 text-rose-600" />
                                   <span>Will Mark Absent</span>
                                 </span>
                               )}
                               {rollCallTarget === "default_present" && (
-                                <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold border flex items-center gap-1 shadow-2xs bg-emerald-50 text-emerald-800 border-emerald-200">
+                                <span className="px-2.5 py-1 rounded-xl text-[12px] font-medium border flex items-center gap-1 shadow-2xs bg-emerald-50 text-emerald-800 border-emerald-200">
                                   <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
                                   <span>Will Mark Present (Default)</span>
                                 </span>
                               )}
                               {rollCallTarget === "mark_present" && (
-                                <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold border flex items-center gap-1 shadow-2xs bg-emerald-50 text-emerald-800 border-emerald-200">
+                                <span className="px-2.5 py-1 rounded-xl text-[12px] font-medium border flex items-center gap-1 shadow-2xs bg-emerald-50 text-emerald-800 border-emerald-200">
                                   <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
                                   <span>Will Mark Present</span>
                                 </span>
                               )}
                               {rollCallTarget === "default_absent" && (
-                                <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold border flex items-center gap-1 shadow-2xs bg-rose-50 text-rose-800 border-rose-200">
+                                <span className="px-2.5 py-1 rounded-xl text-[12px] font-medium border flex items-center gap-1 shadow-2xs bg-rose-50 text-rose-800 border-rose-200">
                                   <UserX className="w-3 h-3 text-rose-600" />
                                   <span>Will Mark Absent (Default)</span>
                                 </span>
                               )}
                               {rollCallTarget === "unchanged" && (
-                                <span className="px-2.5 py-1 rounded-xl text-[11px] font-medium border flex items-center gap-1 bg-gray-50 text-charcoal/50 border-gray-200">
+                                <span className="px-2.5 py-1 rounded-xl text-[12px] font-medium border flex items-center gap-1 bg-gray-50 text-muted border-gray-200">
                                   <span>Unchanged</span>
                                 </span>
                               )}
                             </div>
                           ) : isUpcomingFuture ? (
                             <div className="flex items-center justify-end">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-semibold border border-slate-200">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-medium border border-slate-200">
                                 <Clock className="w-3.5 h-3.5 text-slate-400" />
                                 <span>Opens on Sunday</span>
                               </span>
@@ -1877,11 +1888,11 @@ export const CheckInPage: React.FC = () => {
                                 <>
                                   {/* Checkout button for minors if not yet checked out */}
                                   {isMinor && !item.checked_out_at && (
-                                    <button
+                                    <button data-guide="attendance-checkout"
                                       onClick={() => {
                                         setCheckoutRecord(item);
                                       }}
-                                      className="px-2.5 py-1.5 rounded-xl bg-sky-600  text-white text-xs font-black shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                                      className="px-2.5 py-1.5 rounded-xl bg-sky-600  text-white text-xs font-medium shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95"
                                       title="Perform safe child release / check out"
                                     >
                                       <KeyRound className="w-3.5 h-3.5" />
@@ -1893,7 +1904,7 @@ export const CheckInPage: React.FC = () => {
                                   <button
                                     onClick={() => handleUndoAttendance(item)}
                                     disabled={isChecking}
-                                    className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-rose-50 hover:text-rose-700 text-charcoal/70 text-xs font-bold transition-all cursor-pointer"
+                                    className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-rose-50 hover:text-rose-700 text-charcoal/70 text-xs font-medium transition-all cursor-pointer"
                                     title="Undo attendance mark"
                                   >
                                     <span>Undo</span>
@@ -1902,10 +1913,10 @@ export const CheckInPage: React.FC = () => {
                               ) : isAbsent || isExcused ? (
                                 <>
                                   {/* If marked absent/excused, option to switch to present if arrived */}
-                                  <button
+                                  <button data-guide="attendance-present"
                                     onClick={() => handleMarkPresent(item)}
                                     disabled={isChecking}
-                                    className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-2xs transition-all flex items-center gap-1 cursor-pointer active:scale-95 disabled:opacity-50"
+                                    className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium shadow-2xs transition-all flex items-center gap-1 cursor-pointer active:scale-95 disabled:opacity-50"
                                   >
                                     <Check className="w-3.5 h-3.5" />
                                     <span>Mark Present</span>
@@ -1914,7 +1925,7 @@ export const CheckInPage: React.FC = () => {
                                   <button
                                     onClick={() => handleUndoAttendance(item)}
                                     disabled={isChecking}
-                                    className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal/70 text-xs font-bold transition-all cursor-pointer"
+                                    className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal/70 text-xs font-medium transition-all cursor-pointer"
                                     title="Undo mark"
                                   >
                                     Undo
@@ -1924,20 +1935,20 @@ export const CheckInPage: React.FC = () => {
                                 /* When Unmarked */
                                 <div className="flex items-center gap-1">
                                   {/* 1. Mark Present */}
-                                  <button
+                                  <button data-guide="attendance-present"
                                     onClick={() => handleMarkPresent(item)}
                                     disabled={isChecking}
-                                    className="px-3 py-1.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-black shadow-2xs hover:shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95 disabled:opacity-50"
+                                    className="px-3 py-1.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-medium shadow-2xs hover:shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95 disabled:opacity-50"
                                   >
                                     <Check className="w-3.5 h-3.5 text-amber-300" />
                                     <span>{isMinor ? "Check In" : "Present"}</span>
                                   </button>
 
                                   {/* 2. Quick Mark Absent */}
-                                  <button
+                                  <button data-guide="attendance-absent"
                                     onClick={() => handleQuickMarkAbsent(item)}
                                     disabled={isChecking}
-                                    className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 disabled:opacity-50"
+                                    className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-medium transition-all flex items-center gap-1 cursor-pointer active:scale-95 disabled:opacity-50"
                                     title="Quick mark as Absent today"
                                   >
                                     <UserX className="w-3 h-3" />
@@ -1945,10 +1956,10 @@ export const CheckInPage: React.FC = () => {
                                   </button>
 
                                   {/* 3. Mark Excused with Reason */}
-                                  <button
+                                  <button data-guide="attendance-excused"
                                     onClick={() => handleOpenAbsentModal(item, "excused")}
                                     disabled={isChecking}
-                                    className="px-2 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-all cursor-pointer"
+                                    className="px-2 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-medium transition-all cursor-pointer"
                                     title="Mark as Excused (Sick, Out of Town, etc.)"
                                   >
                                     <span>Excused...</span>
@@ -1972,7 +1983,7 @@ export const CheckInPage: React.FC = () => {
       {isFastMode && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl bg-slate-950/95 text-white backdrop-blur-md p-3 sm:p-4 rounded-3xl shadow-2xl border border-slate-700/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 animate-in slide-in-from-bottom-6">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${fastModeType === "absent_rest_present"
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-medium shrink-0 ${fastModeType === "absent_rest_present"
               ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
               : fastModeType === "present_rest_absent"
                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
@@ -1987,7 +1998,7 @@ export const CheckInPage: React.FC = () => {
               )}
             </div>
             <div>
-              <div className="text-xs font-bold flex items-center gap-2">
+              <div className="text-xs font-medium flex items-center gap-2">
                 <span>
                   {fastModeType === "absent_rest_present"
                     ? "Absence Selection Active"
@@ -1995,22 +2006,22 @@ export const CheckInPage: React.FC = () => {
                       ? "Presence Selection Active"
                       : "Selective Check-In Active"}
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300">
+                <span className="text-[12px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300">
                   {batchScopeList.length} Members in Scope
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300">
+              <p className="text-[12px] text-slate-300">
                 {fastModeType === "absent_rest_present" ? (
                   <>
-                    <strong className="text-rose-400 font-bold">{selectedMemberIds.size} Absent</strong> • <strong className="text-emerald-400 font-bold">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Present</strong>
+                    <strong className="text-rose-400 font-medium">{selectedMemberIds.size} Absent</strong> • <strong className="text-emerald-400 font-medium">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Present</strong>
                   </>
                 ) : fastModeType === "present_rest_absent" ? (
                   <>
-                    <strong className="text-emerald-400 font-bold">{selectedMemberIds.size} Present</strong> • <strong className="text-rose-400 font-bold">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Absent</strong>
+                    <strong className="text-emerald-400 font-medium">{selectedMemberIds.size} Present</strong> • <strong className="text-rose-400 font-medium">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Absent</strong>
                   </>
                 ) : (
                   <>
-                    <strong className="text-sky-400 font-bold">{selectedMemberIds.size} Selected Present</strong>
+                    <strong className="text-sky-400 font-medium">{selectedMemberIds.size} Selected Present</strong>
                   </>
                 )}
               </p>
@@ -2021,16 +2032,16 @@ export const CheckInPage: React.FC = () => {
             <button
               type="button"
               onClick={() => clearSelection()}
-              className="px-3 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             >
               Reset
             </button>
 
-            <button
+            <button data-guide="attendance-batch-save"
               type="button"
               onClick={() => handleApplyBatchAttendance(batchScopeList)}
               disabled={batchSubmitting || batchScopeList.length === 0}
-              className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
+              className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-medium text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
             >
               {batchSubmitting ? (
                 <>
@@ -2051,25 +2062,25 @@ export const CheckInPage: React.FC = () => {
       {/* MODAL: MARK ABSENT / EXCUSED WITH REASON */}
       {absentModalMember && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 border border-amber-100">
-            <div className="flex items-center justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 border border-amber-100">
+            <div data-modal-header className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold ${absentStatusType === "absent" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center font-medium ${absentStatusType === "absent" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
                   }`}>
                   {absentStatusType === "absent" ? <UserX className="w-5 h-5" /> : <HelpCircle className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="font-black text-sm text-charcoal">
+                  <h3 className="font-semibold text-sm text-charcoal">
                     Mark {absentStatusType === "absent" ? "Absent" : "Excused"} Today
                   </h3>
-                  <p className="text-[11px] text-charcoal/50">
+                  <p className="text-[12px] text-muted">
                     {absentModalMember.first_name} {absentModalMember.last_name} • {absentModalMember.ministry_name}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setAbsentModalMember(null)}
-                className="p-1 text-charcoal/40 hover:text-charcoal cursor-pointer rounded-lg"
+                className="p-1 text-muted hover:text-charcoal cursor-pointer rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2080,24 +2091,22 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setAbsentStatusType("absent")}
-                className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${absentStatusType === "absent" ? "bg-white text-rose-700 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                className={`flex-1 py-1.5 rounded-lg font-medium text-xs transition-all cursor-pointer ${absentStatusType === "absent" ? "bg-white text-rose-700 shadow-2xs" : "text-muted hover:text-charcoal"
                   }`}
-              >
-                🔴 Mark Absent
+              ><UICircleX aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Mark Absent
               </button>
               <button
                 type="button"
                 onClick={() => setAbsentStatusType("excused")}
-                className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${absentStatusType === "excused" ? "bg-white text-amber-800 shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                className={`flex-1 py-1.5 rounded-lg font-medium text-xs transition-all cursor-pointer ${absentStatusType === "excused" ? "bg-white text-amber-800 shadow-2xs" : "text-muted hover:text-charcoal"
                   }`}
-              >
-                🟡 Mark Excused
+              ><Clock aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Mark Excused
               </button>
             </div>
 
-            <form onSubmit={handleSaveAbsentOrExcused} className="space-y-3.5 text-xs">
+            <form data-guide="attendance-reason-form" onSubmit={handleSaveAbsentOrExcused} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-charcoal/80 mb-1.5">Preset Reason / Notice:</label>
+                <label className="block font-medium text-charcoal/80 mb-1.5">Preset Reason / Notice:</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     "Sick / Not Feeling Well",
@@ -2111,7 +2120,7 @@ export const CheckInPage: React.FC = () => {
                       key={reason}
                       type="button"
                       onClick={() => setAbsentPresetReason(reason)}
-                      className={`p-2 rounded-xl text-[11px] font-bold text-left border transition-all cursor-pointer ${absentPresetReason === reason
+                      className={`p-2 rounded-xl text-[12px] font-medium text-left border transition-all cursor-pointer ${absentPresetReason === reason
                         ? "bg-indigo-50 border-indigo-400 text-indigo-950 ring-1 ring-indigo-400"
                         : "bg-white border-gray-200 text-charcoal/80 hover:bg-gray-50"
                         }`}
@@ -2123,7 +2132,7 @@ export const CheckInPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/80 mb-1">Additional Notes (Optional):</label>
+                <label className="block font-medium text-charcoal/80 mb-1">Additional Notes (Optional):</label>
                 <input
                   type="text"
                   placeholder="e.g. Advised by mother Maria Santos"
@@ -2133,25 +2142,25 @@ export const CheckInPage: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <div data-modal-footer className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setAbsentModalMember(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/60 hover:bg-gray-100 cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-muted hover:bg-gray-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className={`px-4 py-2 rounded-xl text-white text-xs font-black shadow-md transition-all cursor-pointer ${absentStatusType === "absent" ? "bg-rose-600 hover:bg-rose-700" : "bg-amber-600 hover:bg-amber-700"
+                  className={`px-4 py-2 rounded-xl text-white text-xs font-medium shadow-md transition-all cursor-pointer ${absentStatusType === "absent" ? "bg-rose-600 hover:bg-rose-700" : "bg-amber-600 hover:bg-amber-700"
                     }`}
                 >
                   Confirm {absentStatusType === "absent" ? "Absent" : "Excused"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -2159,26 +2168,26 @@ export const CheckInPage: React.FC = () => {
       {/* QUICK GUEST CHECK-IN MODAL */}
       {isGuestModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div data-modal-header className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center font-medium">
                   <UserPlus className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm text-charcoal">Quick Guest / Visitor Check-In</h3>
-                  <p className="text-[11px] text-charcoal/50">Register first-time attendee for Sunday Service</p>
+                  <h3 className="font-semibold text-sm text-charcoal">Quick Guest / Visitor Check-In</h3>
+                  <p className="text-[12px] text-muted">Register first-time attendee for Sunday Service</p>
                 </div>
               </div>
-              <button onClick={() => setIsGuestModalOpen(false)} className="p-1.5 text-charcoal/40 hover:text-charcoal rounded-lg cursor-pointer">
+              <button onClick={() => setIsGuestModalOpen(false)} className="p-1.5 text-muted hover:text-charcoal rounded-lg cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAndCheckInGuest} className="space-y-3 text-xs">
+            <form data-guide="attendance-guest-form" onSubmit={handleCreateAndCheckInGuest} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold text-charcoal mb-1">First Name *</label>
+                  <label className="block font-medium text-charcoal mb-1">First Name *</label>
                   <input
                     type="text"
                     required
@@ -2189,7 +2198,7 @@ export const CheckInPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-charcoal mb-1">Last Name *</label>
+                  <label className="block font-medium text-charcoal mb-1">Last Name *</label>
                   <input
                     type="text"
                     required
@@ -2202,7 +2211,7 @@ export const CheckInPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Ministry Assignment *</label>
+                <label className="block font-medium text-charcoal mb-1">Ministry Assignment *</label>
                 <select
                   value={guestMinistryId}
                   onChange={(e) => setGuestMinistryId(Number(e.target.value))}
@@ -2216,7 +2225,7 @@ export const CheckInPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Contact Phone (Optional)</label>
+                <label className="block font-medium text-charcoal mb-1">Contact Phone (Optional)</label>
                 <input
                   type="text"
                   placeholder="+63 912 345 6789"
@@ -2227,7 +2236,7 @@ export const CheckInPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal mb-1">Notes / Invited By</label>
+                <label className="block font-medium text-charcoal mb-1">Notes / Invited By</label>
                 <input
                   type="text"
                   placeholder="e.g. Invited by Santos Family"
@@ -2237,25 +2246,25 @@ export const CheckInPage: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <div data-modal-footer className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsGuestModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/60 hover:bg-gray-100 cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-muted hover:bg-gray-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={guestSubmitting}
-                  className="px-4 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-medium shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-3.5 h-3.5 text-amber-300" />
                   <span>{guestSubmitting ? "Registering..." : "Register & Mark Present"}</span>
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -2263,50 +2272,50 @@ export const CheckInPage: React.FC = () => {
       {/* PRINTABLE SECURITY TAG MODAL (Kinder & Elementary) */}
       {issuedBadge && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center animate-in zoom-in-95">
-            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center mx-auto shadow-inner">
+          <ModalPanel className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center animate-in zoom-in-95">
+            <div data-modal-header className="space-y-4"><div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center mx-auto shadow-inner">
               <ShieldCheck className="w-7 h-7 text-amber-600" />
             </div>
 
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+              <span className="text-[12px] font-medium uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                 Sunday Minor Security Tag
               </span>
-              <h3 className="text-xl font-black text-charcoal mt-1">{issuedBadge.member_name}</h3>
-              <p className="text-xs text-charcoal/60 font-semibold">{issuedBadge.ministry_name}</p>
-            </div>
+              <h3 className="text-xl font-semibold text-charcoal mt-1">{issuedBadge.member_name}</h3>
+              <p className="text-xs text-muted font-medium">{issuedBadge.ministry_name}</p>
+            </div></div>
 
             {/* Claim Tag Box */}
             <div className="p-4 rounded-2xl bg-indigo-950 text-white space-y-1 shadow-md">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Parent Claim Code</span>
-              <div className="text-3xl font-black font-mono tracking-widest text-amber-400">
+              <span className="text-[12px] font-medium uppercase tracking-wider text-amber-300">Parent Claim Code</span>
+              <div className="text-3xl font-medium font-mono tracking-widest text-amber-400">
                 {issuedBadge.security_code}
               </div>
-              <p className="text-[10px] text-indigo-200">Keep this code to safely claim your child after service</p>
+              <p className="text-[12px] text-indigo-200">Keep this code to safely claim your child after service</p>
             </div>
 
             {issuedBadge.medical_notes && (
               <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs text-left">
-                <span className="font-bold">Medical Alert:</span> {issuedBadge.medical_notes}
+                <span className="font-medium">Medical Alert:</span> {issuedBadge.medical_notes}
               </div>
             )}
 
-            <div className="flex gap-2 pt-2">
+            <div data-modal-footer className="flex gap-2 pt-2">
               <button
                 onClick={() => window.print()}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-charcoal hover:bg-gray-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-medium text-charcoal hover:bg-gray-50 flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Print Tag</span>
               </button>
               <button
                 onClick={() => setIssuedBadge(null)}
-                className="flex-1 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-bold shadow-md cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-medium shadow-md cursor-pointer"
               >
                 Done
               </button>
             </div>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -2314,26 +2323,26 @@ export const CheckInPage: React.FC = () => {
       {/* CHECK-OUT SECURITY CODE MODAL */}
       {checkoutRecord && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div data-modal-header className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-5 h-5 text-indigo" />
                 <div>
-                  <h3 className="font-bold text-sm text-charcoal">Child Pickup & Check-Out</h3>
-                  <p className="text-[10px] text-charcoal/50">Verify claim code or confirm in-person release</p>
+                  <h3 className="font-semibold text-sm text-charcoal">Child Pickup & Check-Out</h3>
+                  <p className="text-[12px] text-muted">Verify claim code or confirm in-person release</p>
                 </div>
               </div>
-              <button onClick={() => { setCheckoutRecord(null); setCheckoutError(""); }} className="p-1 text-charcoal/40 hover:text-charcoal cursor-pointer">
+              <button onClick={() => { setCheckoutRecord(null); setCheckoutError(""); }} className="p-1 text-muted hover:text-charcoal cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-100 text-xs text-indigo-950 space-y-1">
               <p>
-                Child: <strong className="font-black text-indigo-950">{checkoutRecord.first_name} {checkoutRecord.last_name}</strong>
+                Child: <strong className="font-medium text-indigo-950">{checkoutRecord.first_name} {checkoutRecord.last_name}</strong>
               </p>
               {"household_name" in checkoutRecord && checkoutRecord.household_name && (
-                <p className="text-[11px] text-charcoal/60">Family: {checkoutRecord.household_name} Family</p>
+                <p className="text-[12px] text-muted">Family: {checkoutRecord.household_name} Family</p>
               )}
             </div>
 
@@ -2343,30 +2352,30 @@ export const CheckInPage: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handlePerformCheckout} className="space-y-3">
+            <form data-guide="attendance-checkout-form" onSubmit={handlePerformCheckout} className="space-y-3">
               <div>
-                <label className="block text-[11px] font-bold text-charcoal/70 mb-1">Enter Matching Parent Security Code:</label>
+                <label className="block text-[12px] font-medium text-charcoal/70 mb-1">Enter Matching Parent Security Code:</label>
                 <input
                   type="text"
                   placeholder="e.g. KND-7482"
                   value={checkoutCodeInput}
                   onChange={(e) => setCheckoutCodeInput(e.target.value.toUpperCase())}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-center font-mono font-bold text-base uppercase tracking-wider outline-none focus:border-indigo"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-center font-mono font-medium text-base uppercase tracking-wider outline-none focus:border-indigo"
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div data-modal-footer className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => { setCheckoutRecord(null); setCheckoutError(""); }}
-                  className="flex-1 py-2 rounded-xl text-xs font-bold text-charcoal/60 hover:bg-gray-100 cursor-pointer"
+                  className="flex-1 py-2 rounded-xl text-xs font-medium text-muted hover:bg-gray-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={checkoutSubmitting}
-                  className="flex-1 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white text-xs font-medium shadow-md cursor-pointer disabled:opacity-50"
                 >
                   {checkoutSubmitting ? "Verifying..." : "Verify Code"}
                 </button>
@@ -2378,14 +2387,14 @@ export const CheckInPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleDirectCheckout(checkoutRecord)}
-                className="w-full py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                className="w-full py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 title="Use if parent is physically recognized without code"
               >
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 <span>Parent In-Person Present (Direct Release)</span>
               </button>
             </div>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

@@ -12,7 +12,7 @@
     "build:client": "npm --prefix client run build",
     "build:server": "npm --prefix server run build",
     "build": "npm run build:client && npm run build:server",
-    "electron:start": "concurrently -k -n \"SERVER,CLIENT,ELECTRON\" -c \"blue.bold,green.bold,magenta.bold\" \"npm run dev:server\" \"npm run dev:client\" \"wait-on tcp:3000 && cross-env NODE_ENV=development electron .\"",
+    "electron:start": "concurrently -k -s \"command-ELECTRON\" -n \"SERVER,CLIENT,ELECTRON\" -c \"blue.bold,green.bold,magenta.bold\" \"npm run dev:server\" \"npm run dev:client\" \"wait-on tcp:3000 && cross-env NODE_ENV=development electron .\"",
     "electron:preview": "npm run build && cross-env NODE_ENV=production electron .",
     "electron:build": "npm run build && electron-builder",
     "electron:build:dir": "npm run build && electron-builder --dir",

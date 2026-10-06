@@ -1,7 +1,7 @@
 // The primary leader is stored as name/contact in the existing schema.
 // Prefer the saved contact; use an exact name only for legacy rows without one.
 // Assistant member IDs and enrollment IDs refer to members, never users.
-export const MY_GROUP_SCOPE = `EXISTS (
+export const MY_GROUP_LEADER_SCOPE = `EXISTS (
   SELECT 1 FROM users account
   LEFT JOIN members linked ON linked.user_id = account.id
   WHERE account.id = $1 AND (
@@ -50,10 +50,12 @@ export const MY_GROUP_SCOPE = `EXISTS (
         )
       )
     )
-    OR EXISTS (
-      SELECT 1 FROM bible_study_members enrollment
-      WHERE enrollment.group_id = g.id AND enrollment.member_id = linked.id
-        AND COALESCE(enrollment.status, 'active') = 'active'
-    )
   )
 )`;
+
+export const MY_GROUP_SCOPE = `(${MY_GROUP_LEADER_SCOPE} OR EXISTS (
+  SELECT 1 FROM members linked
+  JOIN bible_study_members enrollment ON enrollment.member_id = linked.id
+  WHERE linked.user_id = $1 AND enrollment.group_id = g.id
+    AND COALESCE(enrollment.status, 'active') = 'active'
+))`;

@@ -23,6 +23,7 @@ test('login, dashboard, session reload, member search, calendar, and logout', as
     await page.getByRole('button', { name: signIn }).click();
     expect((await loginResponse).status()).toBe(200);
     expect((await dashboardResponse).status()).toBe(200);
+    await page.getByRole('dialog').getByRole('button', { name: 'Skip for now' }).click();
     await expect(page.getByRole('heading', { name: /^Welcome back,/ })).toBeVisible();
     await testInfo.attach('DPC dashboard', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
   });
@@ -74,7 +75,7 @@ test('login, dashboard, session reload, member search, calendar, and logout', as
     const eventsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/events');
     await page.getByTitle('Calendar', { exact: true }).click();
     expect((await eventsResponse).status()).toBe(200);
-    await expect(page.getByRole('heading', { name: 'Calendar', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Church calendar', exact: true })).toBeVisible();
     const month = page.getByRole('heading', { name: /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/ });
     const initialMonth = await month.innerText();
     await page.getByTitle('Next Month', { exact: true }).click();

@@ -1,4 +1,5 @@
 import React from "react";
+import { ModalPanel } from "./ModalPanel";
 import { createPortal } from "react-dom";
 import { 
   AlertTriangle, Trash2, Award, CheckCircle2, 
@@ -51,7 +52,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <AlertTriangle className="w-6 h-6 text-amber-600" />,
           iconBg: "bg-amber-100 ring-8 ring-amber-50",
           badgeColor: "bg-amber-100 text-amber-900 border-amber-200",
-          btnColor: "bg-amber-500  text-indigo-950 font-black shadow-amber-200",
+          btnColor: "bg-amber-500  text-indigo-950 font-medium shadow-amber-200",
           accentBorder: "border-amber-100"
         };
       case "promotion":
@@ -59,7 +60,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           icon: <Award className="w-6 h-6 text-amber-400" />,
           iconBg: "bg-indigo-950 ring-8 ring-indigo-50",
           badgeColor: "bg-amber-100 text-amber-950 border-amber-300",
-          btnColor: "bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black shadow-amber-200",
+          btnColor: "bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium shadow-amber-200",
           accentBorder: "border-amber-200/80"
         };
       case "success":
@@ -94,18 +95,20 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 z-[120] bg-charcoal/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div 
+      <ModalPanel
         className={`bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border ${config.accentBorder} space-y-5 animate-in zoom-in-95 duration-150 relative overflow-hidden`}
       >
+        <div data-modal-header>
         {/* Subtle decorative background glow */}
         <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10"></div>
         <div className="absolute bottom-0 left-0 w-36 h-36 bg-indigo-600/5 rounded-full blur-2xl pointer-events-none -ml-10 -mb-10"></div>
 
         {/* Close icon button */}
         <button
+          aria-label="Close confirmation"
           onClick={onClose}
           disabled={isLoading}
-          className="absolute top-4 right-4 p-1.5 rounded-xl text-charcoal/40 hover:text-charcoal/80 hover:bg-gray-100 transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-1.5 rounded-xl text-muted hover:text-charcoal/80 hover:bg-gray-100 transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
@@ -117,23 +120,24 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           </div>
 
           <div className="space-y-1.5 px-2">
-            <h3 className="text-lg font-black text-indigo-950 tracking-tight">
+            <h3 className="text-lg font-semibold text-indigo-950 tracking-tight">
               {title}
             </h3>
-            <div className="text-xs text-charcoal/70 leading-relaxed font-normal">
-              {description}
-            </div>
           </div>
+        </div>
+        </div>
+        <div className="text-center px-2 text-xs text-charcoal/70 leading-relaxed font-normal">
+          {description}
         </div>
 
         {/* Action Buttons Footer */}
-        <div className="flex items-center gap-2.5 pt-2">
+        <div data-modal-footer className="flex items-center gap-2.5 pt-2">
           {cancelText && (
             <button
               type="button"
               onClick={onClose}
               disabled={isLoading}
-              className="flex-1 py-2.5 px-4 rounded-2xl border border-gray-200 hover:bg-gray-100/80 text-charcoal font-bold text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              className="flex-1 py-2.5 px-4 rounded-2xl border border-gray-200 hover:bg-gray-100/80 text-charcoal font-medium text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
             >
               {cancelText}
             </button>
@@ -143,7 +147,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className={`flex-1 py-2.5 px-4 rounded-2xl font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${config.btnColor}`}
+            className={`flex-1 py-2.5 px-4 rounded-2xl font-medium text-xs shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${config.btnColor}`}
           >
             {isLoading ? (
               <>
@@ -155,7 +159,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             )}
           </button>
         </div>
-      </div>
+      </ModalPanel>
     </div>,
     document.body
   );

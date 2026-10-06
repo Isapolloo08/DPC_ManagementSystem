@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChurchLogo } from "./common/ChurchLogo";
 import ParticleText from "./ParticleText/ParticleText";
+import { StartupShootingStar } from "./StartupShootingStar";
 import "./DPCLoadingScreen.css";
 
 const TITLE = "DPC Church Management System";
@@ -45,8 +46,11 @@ function markIntroAsShown(): void {
   } catch {}
 }
 
-/** Keeps the real application mounted while playing one intro per app launch/session. */
-export function DPCLoadingScreen({ children, ready }: { children: ReactNode; ready: boolean }) {
+/** Auth prepares in parallel; the workspace mounts as the original intro exits. */
+export function DPCLoadingScreen({ children, ready }: {
+  children: ReactNode | ((showWorkspace: boolean) => ReactNode);
+  ready: boolean;
+}) {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const compact = useMediaQuery("(max-width: 640px)");
   const [phase, setPhase] = useState<"intro" | "exiting" | "complete">(() =>
@@ -197,7 +201,7 @@ export function DPCLoadingScreen({ children, ready }: { children: ReactNode; rea
         inert={showing}
         aria-hidden={showing || undefined}
       >
-        {children}
+        {typeof children === "function" ? children(phase !== "intro") : children}
       </div>
       {showing && (
         <div
@@ -209,7 +213,7 @@ export function DPCLoadingScreen({ children, ready }: { children: ReactNode; rea
           <span className="sr-only">Loading {TITLE}</span>
           <div ref={compositionRef} className="dpc-startup__composition" aria-hidden="true">
             <div className="dpc-startup__brand">
-              {meteorVisible && !reducedMotion && <span className="dpc-startup__meteor" />}
+              {titleMode === "particles" && !reducedMotion && <StartupShootingStar active={meteorVisible} duration={METEOR_MS} />}
               <ChurchLogo
                 variant="plain"
                 alt=""

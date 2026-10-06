@@ -1,0 +1,106 @@
+/* Keep the usual dashboard sky, but remove it throughout model focus/close. */
+.church-dashboard-sky {
+  --church-star-color: var(--dashboard-ink);
+  position: fixed; top: 0; left: 0; right: 0; height: clamp(220px, 48vh, 520px);
+  z-index: 56; pointer-events: none; overflow: hidden;
+  clip-path: inset(0 0 0 var(--sky-workspace-left, 0px));
+  mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
+}
+.church-dashboard-sky[hidden] { display: none; }
+.church-dashboard-sky[hidden] * { animation-play-state: paused !important; }
+.church-sky-enter { position: absolute; inset: 0; }
+.church-dashboard-sky .church-stars { transition: opacity 500ms ease; }
+.church-star-belt { position: absolute; inset: 0 auto 0 0; width: 200%; display: flex; }
+.church-star-belt[data-layer="far"] { opacity: .7; }
+.church-star-tile { position: relative; width: 50%; height: 100%; flex: 0 0 50%; }
+.church-dashboard-sky .church-star-tile i:nth-child(n + 129) { display: none; }
+.church-dashboard-sky .church-meteor { width: 110px; }
+@keyframes church-sky-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* Four composited twinkles instead of hundreds of independently animated dots. */
+  .dark .church-dashboard-sky .church-stars i { animation: none; }
+  .dark .church-dashboard-sky .church-star-tile { animation: church-star-field-twinkle 7s ease-in-out -2s infinite alternate; }
+  .dark .church-dashboard-sky .church-star-tile:nth-child(2) { animation-delay: -5s; }
+  .dark .church-dashboard-sky .church-star-belt[data-layer="near"] .church-star-tile { animation-duration: 9s; }
+  .dark .church-star-belt { animation: church-sky-drift 220s linear -90s infinite; }
+  .dark .church-star-belt[data-layer="near"] { animation-duration: 150s; animation-delay: -40s; }
+}
+@keyframes church-star-field-twinkle { from { opacity: .6; } to { opacity: 1; } }
+
+/* Keep the source in the same grid cell while its duplicate travels to the viewport. */
+.church-overview[data-church-visible="true"] .church-building-scene { opacity: 0; pointer-events: none; }
+.church-overview[data-church-visible="true"] .church-building-scene * { animation-play-state: paused; }
+.church-overview[data-church-focused="true"] .church-building-position { transform: none; }
+.church-overview[data-church-focused="true"] .overview-heading > div,
+.church-overview[data-church-focused="true"] .overview-summary { opacity: 1; filter: none; }
+.church-overview::before { display: none; }
+
+/* No root stacking context: the focused model and panel sit above the backdrop. */
+.church-focus-overlay {
+  --hero-shadow: rgb(var(--surface-ivory-dark) / .8);
+  --hero-building-filter: saturate(.9);
+  display: contents; pointer-events: none;
+}
+.church-focus-overlay[data-time-of-day="morning"] { --hero-building-filter: brightness(1.04) saturate(.95) sepia(.04); }
+.church-focus-overlay[data-time-of-day="evening"] { --hero-building-filter: brightness(.98) saturate(.9) sepia(.06); }
+.church-focus-overlay[data-time-of-day="night"] { --hero-building-filter: brightness(.9) saturate(.75); }
+.dark .church-focus-overlay { --hero-shadow: rgb(var(--ink-slate-900) / .3); }
+.church-focus-backdrop {
+  position: fixed; inset: 0;
+  z-index: 55; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+  background: rgb(var(--surface-ivory-light) / .18);
+  opacity: 0; transition: opacity 240ms ease; pointer-events: none;
+}
+.church-focus-overlay[data-entered="true"] .church-focus-backdrop { opacity: 1; }
+.church-focus-visual {
+  position: fixed; z-index: 60; left: var(--focus-left); top: var(--focus-top);
+  width: var(--focus-width); height: var(--focus-height); pointer-events: auto;
+  transform-origin: top left;
+  /* Rasterize the filtered art once, then move/scale its compositor layer. */
+  will-change: transform;
+  transform: translate3d(var(--focus-origin-x), var(--focus-origin-y), 0) scale(var(--focus-origin-scale));
+  transition: transform 360ms cubic-bezier(.22, 1, .36, 1);
+}
+.church-focus-overlay[data-entered="true"] .church-focus-visual { transform: translate3d(0, 0, 0) scale(1); }
+.church-focus-overlay .church-building-scene { display: block; position: relative; width: 100%; height: 100%; }
+.church-focus-overlay .church-building-position { width: 100%; height: 100%; transform: none; transition: none; }
+.church-focus-overlay .church-building-reveal { width: 100%; height: 100%; transform: none; animation: none; }
+.church-focus-overlay .church-building-shadow { bottom: -12px; background: var(--hero-shadow); }
+.church-focus-overlay .church-building-button { border-radius: 20px; }
+.church-focus-overlay .church-cloud { animation: none; }
+.church-focus-overlay button { cursor: pointer; }
+.church-focus-overlay button:focus-visible { outline: 2px solid rgb(var(--ink-amber-600)); outline-offset: 4px; }
+.church-focus-overlay .church-cross-halo { opacity: .4; }
+.dark .church-focus-overlay .church-cross-halo { opacity: .65; }
+.dark .church-focus-overlay .church-window-light { opacity: .3; }
+.church-focus-overlay .church-focus-panel {
+  position: fixed; z-index: 61; left: var(--focus-panel-left); top: var(--focus-panel-top);
+  width: var(--focus-panel-width); max-height: var(--focus-panel-max-height);
+  margin: 0; right: auto; overflow-y: auto; pointer-events: auto;
+  /* The panel is opaque; a second live backdrop blur adds no visible detail. */
+  backdrop-filter: none;
+  transition: opacity 200ms ease, transform 240ms cubic-bezier(.22, 1, .36, 1), visibility 0s 240ms;
+}
+.church-focus-overlay[data-entered="true"] .church-focus-panel {
+  opacity: 1; visibility: visible; transform: translateY(0); transition-delay: 0s;
+}
+.church-celestial svg { transition: none; }
+.church-sun { opacity: .85; transform: translateY(0); animation: none; }
+.church-moon { opacity: 0; transform: translateY(44px); animation: none; }
+.dark .church-moon { opacity: .85; transform: translateY(0); animation: none; }
+.dark .church-sun { opacity: 0; transform: translateY(44px); animation: none; }
+@media (max-width: 767px) {
+  .church-overview[data-church-visible="true"] .church-building-scene { display: none; }
+  .church-dashboard-sky .church-star-tile i { display: block; }
+  .church-dashboard-sky .church-star-tile i:nth-child(n + 65) { display: none; }
+  .church-focus-overlay .church-celestial { width: 28px; height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .church-focus-visual { transition: none; }
+  .church-dashboard-sky { transition: none; }
+  .church-focus-backdrop, .church-dashboard-sky .church-stars { transition-duration: 120ms; }
+  .church-focus-overlay .church-focus-panel { transform: none; transition: opacity 120ms ease, visibility 0s 120ms; }
+}

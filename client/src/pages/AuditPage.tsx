@@ -1,5 +1,7 @@
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { AuditLog } from "../types";
 import { AuditPageSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import { useSocketEvent } from "../socket";
@@ -38,7 +40,8 @@ export const AuditPage: React.FC = () => {
   // Real-time synchronization
   useSocketEvent("audit:changed", () => loadAudit(false));
 
-  const loadAudit = async (isInitial = false) => {
+ const loadAudit = async (isInitial = false) => {
+    guideData.clearError();
     try {
       if (isInitial) {
         setLoading(true);
@@ -50,6 +53,7 @@ export const AuditPage: React.FC = () => {
       setLastSynced(new Date());
     } catch (err) {
       console.error("Audit log error:", err);
+      guideData.reportError(err);
     } finally {
       if (isInitial) {
         setLoading(false);
@@ -200,7 +204,7 @@ export const AuditPage: React.FC = () => {
     const act = (action || "").toUpperCase();
     if (act.includes("CREATE")) {
       return (
-        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
+        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-900 border border-emerald-300 font-medium px-2.5 py-0.5 rounded-full text-[12px] shadow-2xs">
           <PlusCircle className="w-3 h-3 text-emerald-600" />
           <span>CREATE</span>
         </span>
@@ -208,7 +212,7 @@ export const AuditPage: React.FC = () => {
     }
     if (act.includes("UPDATE")) {
       return (
-        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-950 border border-amber-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
+        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-950 border border-amber-300 font-medium px-2.5 py-0.5 rounded-full text-[12px] shadow-2xs">
           <Edit3 className="w-3 h-3 text-amber-600" />
           <span>UPDATE</span>
         </span>
@@ -216,7 +220,7 @@ export const AuditPage: React.FC = () => {
     }
     if (act.includes("DELETE")) {
       return (
-        <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-950 border border-rose-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
+        <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-950 border border-rose-300 font-medium px-2.5 py-0.5 rounded-full text-[12px] shadow-2xs">
           <Trash2 className="w-3 h-3 text-rose-600" />
           <span>DELETE</span>
         </span>
@@ -224,7 +228,7 @@ export const AuditPage: React.FC = () => {
     }
     if (act.includes("CHECK_IN") || act.includes("CHECKIN")) {
       return (
-        <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-950 border border-indigo-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
+        <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-950 border border-indigo-300 font-medium px-2.5 py-0.5 rounded-full text-[12px] shadow-2xs">
           <UserCheck className="w-3 h-3 text-indigo-600" />
           <span>CHECK IN</span>
         </span>
@@ -232,14 +236,14 @@ export const AuditPage: React.FC = () => {
     }
     if (act.includes("CHECK_OUT") || act.includes("CHECKOUT")) {
       return (
-        <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-950 border border-purple-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
+        <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-950 border border-purple-300 font-medium px-2.5 py-0.5 rounded-full text-[12px] shadow-2xs">
           <LogOut className="w-3 h-3 text-purple-600" />
           <span>CHECK OUT</span>
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 border border-slate-300 font-bold px-2.5 py-0.5 rounded-full text-[10px] shadow-2xs">
+      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 border border-slate-300 font-medium px-2.5 py-0.5 rounded-full text-[12px] shadow-2xs">
         <Activity className="w-3 h-3 text-slate-600" />
         <span>{action}</span>
       </span>
@@ -257,7 +261,7 @@ export const AuditPage: React.FC = () => {
     else if (tbl.includes("DUTY")) style = "bg-indigo-50 text-indigo-950 border-indigo-200";
 
     return (
-      <span className={`inline-flex items-center gap-1 font-mono text-[11px] font-bold px-2 py-0.5 rounded-md border shadow-2xs uppercase ${style}`}>
+      <span className={`inline-flex items-center gap-1 font-mono text-[12px] font-medium px-2 py-0.5 rounded-md border shadow-2xs uppercase ${style}`}>
         <Database className="w-3 h-3 opacity-60" />
         <span>{table || "SYSTEM"}</span>
         {id && <span className="opacity-80">#{id}</span>}
@@ -284,6 +288,8 @@ export const AuditPage: React.FC = () => {
     return "bg-slate-100 text-slate-800 border-slate-300";
   };
 
+  const guideData = useGuideDataState("audit", { loading, count: filteredLogs.length, filtered: Boolean(searchQuery || selectedAction !== "ALL" || selectedEntity !== "ALL" || selectedTimeframe !== "ALL"), retry: () => loadAudit(true) });
+
   if (loading && logs.length === 0) {
     return <AuditPageSkeleton />;
   }
@@ -303,16 +309,16 @@ export const AuditPage: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
                 <Shield className="w-3.5 h-3.5 text-amber-300" />
                 <span>Administrative Audit Trail</span>
               </div>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold inline-flex items-center gap-1 backdrop-blur-md">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[12px] font-medium inline-flex items-center gap-1 backdrop-blur-md">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 Live Sync Active
               </span>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight">
+            <h1 className="text-2xl lg:text-3xl font-semibold text-white tracking-tight">
               Security & Audit Trail
             </h1>
             <p className="text-xs sm:text-sm text-slate-300/90 font-medium max-w-2xl leading-relaxed">
@@ -322,10 +328,10 @@ export const AuditPage: React.FC = () => {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-            <button
+            <button data-guide="audit-export"
               onClick={exportToCSV}
               disabled={filteredLogs.length === 0}
-              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-2xs hover:shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-2xs hover:shadow-xs transition-all cursor-pointer disabled:opacity-50"
               title="Export filtered records to CSV"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
@@ -335,7 +341,7 @@ export const AuditPage: React.FC = () => {
             <button
               onClick={() => loadAudit(false)}
               disabled={refreshing}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-98 disabled:opacity-50"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-98 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-indigo-950 ${refreshing ? "animate-spin" : ""}`} />
               <span>{refreshing ? "Syncing..." : "Refresh Ledger"}</span>
@@ -348,41 +354,41 @@ export const AuditPage: React.FC = () => {
           {/* Total Events */}
           <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-indigo-900">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Total Audit Events</span>
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted">Total Audit Events</span>
               <Activity className="w-4 h-4 text-indigo" />
             </div>
-            <p className="text-2xl font-black text-indigo tracking-tight">{stats.total.toLocaleString()}</p>
-            <p className="text-[10px] text-charcoal/50">Comprehensive system events</p>
+            <p className="text-2xl font-medium text-indigo tracking-tight">{stats.total.toLocaleString()}</p>
+            <p className="text-[12px] text-muted">Comprehensive system events</p>
           </div>
 
           {/* Operations Breakdown */}
           <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-emerald-950">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Create / Insert</span>
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted">Create / Insert</span>
               <PlusCircle className="w-4 h-4 text-emerald-600" />
             </div>
-            <p className="text-2xl font-black text-emerald-700 tracking-tight">{stats.creates.toLocaleString()}</p>
-            <p className="text-[10px] text-charcoal/50">{((stats.creates / (stats.total || 1)) * 100).toFixed(0)}% of total mutations</p>
+            <p className="text-2xl font-medium text-emerald-700 tracking-tight">{stats.creates.toLocaleString()}</p>
+            <p className="text-[12px] text-muted">{((stats.creates / (stats.total || 1)) * 100).toFixed(0)}% of total mutations</p>
           </div>
 
           {/* Record Modifications */}
           <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-amber-950">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Updates & Edits</span>
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted">Updates & Edits</span>
               <Edit3 className="w-4 h-4 text-amber-600" />
             </div>
-            <p className="text-2xl font-black text-amber-700 tracking-tight">{stats.updates.toLocaleString()}</p>
-            <p className="text-[10px] text-charcoal/50">{((stats.updates / (stats.total || 1)) * 100).toFixed(0)}% record modifications</p>
+            <p className="text-2xl font-medium text-amber-700 tracking-tight">{stats.updates.toLocaleString()}</p>
+            <p className="text-[12px] text-muted">{((stats.updates / (stats.total || 1)) * 100).toFixed(0)}% record modifications</p>
           </div>
 
           {/* Active Operators */}
           <div className="p-4 rounded-2xl bg-purple-50 border border-purple-100/80 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-purple-950">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal/60">Active Operators</span>
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted">Active Operators</span>
               <User className="w-4 h-4 text-purple-600" />
             </div>
-            <p className="text-2xl font-black text-purple-700 tracking-tight">{stats.uniqueOperators}</p>
-            <p className="text-[10px] text-charcoal/50">Distinct staff & admins recorded</p>
+            <p className="text-2xl font-medium text-purple-700 tracking-tight">{stats.uniqueOperators}</p>
+            <p className="text-[12px] text-muted">Distinct staff & admins recorded</p>
           </div>
         </div>
       </div>
@@ -392,8 +398,8 @@ export const AuditPage: React.FC = () => {
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           {/* Search Bar */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
-            <input
+            <Search className="w-4 h-4 text-muted absolute left-3.5 top-3" />
+            <input data-guide="audit-search"
               type="text"
               placeholder="Search by operator, action, table, or keywords..."
               value={searchQuery}
@@ -411,8 +417,8 @@ export const AuditPage: React.FC = () => {
           </div>
 
           {/* Timeframe Quick Filter */}
-          <div className="flex items-center gap-1.5 bg-gray-100/80 p-1 rounded-xl border border-gray-200 text-xs font-bold shrink-0">
-            <span className="text-[10px] uppercase text-charcoal/50 px-2 flex items-center gap-1">
+          <div data-guide="audit-time" className="flex items-center gap-1.5 bg-gray-100/80 p-1 rounded-xl border border-gray-200 text-xs font-medium shrink-0">
+            <span className="text-[12px] uppercase text-muted px-2 flex items-center gap-1">
               <Calendar className="w-3 h-3" />
               Time:
             </span>
@@ -426,7 +432,7 @@ export const AuditPage: React.FC = () => {
                 key={t.value}
                 onClick={() => setSelectedTimeframe(t.value)}
                 className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                  selectedTimeframe === t.value ? "bg-white text-indigo shadow-2xs" : "text-charcoal/60 hover:text-charcoal"
+                  selectedTimeframe === t.value ? "bg-white text-indigo shadow-2xs" : "text-muted hover:text-charcoal"
                 }`}
               >
                 {t.label}
@@ -435,9 +441,9 @@ export const AuditPage: React.FC = () => {
           </div>
 
           {/* Sort Order Toggle */}
-          <button
+          <button data-guide="audit-sort"
             onClick={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
-            className="flex items-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-200 text-charcoal font-bold px-3 py-2 rounded-xl text-xs shadow-2xs cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-200 text-charcoal font-medium px-3 py-2 rounded-xl text-xs shadow-2xs cursor-pointer shrink-0"
             title={`Sort by Date: ${sortOrder === "desc" ? "Newest First" : "Oldest First"}`}
           >
             <ArrowUpDown className="w-3.5 h-3.5 text-indigo" />
@@ -448,8 +454,8 @@ export const AuditPage: React.FC = () => {
         {/* Secondary Filter Row: Action & Entity Badges */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-gray-100 text-xs">
           {/* Action Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase text-charcoal/50 mr-1 flex items-center gap-1">
+          <div data-guide="audit-actions" className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[12px] font-medium uppercase text-muted mr-1 flex items-center gap-1">
               <Filter className="w-3 h-3" />
               Action:
             </span>
@@ -457,7 +463,7 @@ export const AuditPage: React.FC = () => {
               <button
                 key={act}
                 onClick={() => setSelectedAction(act)}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                className={`px-2.5 py-0.5 rounded-full text-[12px] font-medium border transition-all cursor-pointer ${
                   selectedAction === act
                     ? "bg-indigo text-white border-indigo shadow-xs"
                     : "bg-white text-charcoal/70 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
@@ -471,11 +477,11 @@ export const AuditPage: React.FC = () => {
           {/* Entity Dropdown Filter */}
           {uniqueEntities.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase text-charcoal/50">Entity:</span>
+              <span className="text-[12px] font-medium uppercase text-muted">Entity:</span>
               <select
                 value={selectedEntity}
                 onChange={(e) => setSelectedEntity(e.target.value)}
-                className="bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-bold text-charcoal focus:outline-none focus:border-indigo shadow-2xs cursor-pointer"
+                className="bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-medium text-charcoal focus:outline-none focus:border-indigo shadow-2xs cursor-pointer"
               >
                 <option value="ALL">All Entities ({uniqueEntities.length})</option>
                 {uniqueEntities.map((e) => (
@@ -491,7 +497,7 @@ export const AuditPage: React.FC = () => {
           {hasActiveFilters && (
             <button
               onClick={clearAllFilters}
-              className="text-[11px] font-bold text-rose hover:text-rose-700 hover:underline flex items-center gap-1 cursor-pointer ml-auto"
+              className="text-[12px] font-medium text-rose hover:text-rose-700 hover:underline flex items-center gap-1 cursor-pointer ml-auto"
             >
               <X className="w-3 h-3" />
               <span>Clear Filters ({filteredLogs.length} matching)</span>
@@ -507,8 +513,8 @@ export const AuditPage: React.FC = () => {
         ) : filteredLogs.length === 0 ? (
           <div className="text-center py-16 px-4 space-y-3">
             <ShieldAlert className="w-12 h-12 text-charcoal/20 mx-auto" />
-            <h3 className="text-base font-bold text-charcoal">No matching audit records found</h3>
-            <p className="text-xs text-charcoal/50 max-w-sm mx-auto">
+            <h3 className="text-base font-semibold text-charcoal">No matching audit records found</h3>
+            <p className="text-xs text-muted max-w-sm mx-auto">
               {hasActiveFilters
                 ? "Try adjusting your search query, action filters, or timeframe selection."
                 : "No administrative operations have been recorded in the database yet."}
@@ -516,7 +522,7 @@ export const AuditPage: React.FC = () => {
             {hasActiveFilters && (
               <button
                 onClick={clearAllFilters}
-                className="px-3.5 py-1.5 bg-indigo-50 text-indigo font-bold rounded-xl text-xs hover:bg-indigo-100 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 bg-indigo-50 text-indigo font-medium rounded-xl text-xs hover:bg-indigo-100 transition-colors cursor-pointer"
               >
                 Reset All Filters
               </button>
@@ -527,7 +533,7 @@ export const AuditPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-indigo-100/80 bg-indigo-50/50 text-charcoal font-black uppercase tracking-wider text-[10px]">
+                  <tr className="border-b border-indigo-100/80 bg-indigo-50/50 text-charcoal font-medium uppercase tracking-wider text-[12px]">
                     <th className="py-3.5 px-5">Timestamp</th>
                     <th className="py-3.5 px-4">Operator</th>
                     <th className="py-3.5 px-4">Action</th>
@@ -540,7 +546,7 @@ export const AuditPage: React.FC = () => {
                   {paginatedLogs.map((log) => {
                     const logDate = new Date(log.created_at);
                     return (
-                      <tr
+                      <tr data-guide="audit-inspect"
                         key={log.id}
                         onClick={() => setInspectLog(log)}
                         className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
@@ -548,10 +554,10 @@ export const AuditPage: React.FC = () => {
                         {/* Timestamp */}
                         <td className="py-3.5 px-5 text-charcoal/80 whitespace-nowrap">
                           <div className="flex flex-col">
-                            <span className="font-bold text-charcoal text-[11px]">
+                            <span className="font-medium text-charcoal text-[12px]">
                               {logDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                             </span>
-                            <span className="text-[10px] text-charcoal/50 font-medium">
+                            <span className="text-[12px] text-muted font-medium">
                               {logDate.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
                             </span>
                           </div>
@@ -560,13 +566,13 @@ export const AuditPage: React.FC = () => {
                         {/* Operator User */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-indigo/10 text-indigo font-black text-[11px] flex items-center justify-center shrink-0 border border-indigo/20 shadow-2xs">
+                            <div className="w-7 h-7 rounded-lg bg-indigo/10 text-indigo font-medium text-[12px] flex items-center justify-center shrink-0 border border-indigo/20 shadow-2xs">
                               {getInitials(log.user_name)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-charcoal truncate text-xs">{log.user_name || "System Admin"}</p>
+                              <p className="font-medium text-charcoal truncate text-xs">{log.user_name || "System Admin"}</p>
                               <span
-                                className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded border shadow-2xs inline-block ${getRoleBadgeStyle(
+                                className={`text-[12px] font-medium uppercase px-1.5 py-0.2 rounded border shadow-2xs inline-block ${getRoleBadgeStyle(
                                   log.role_name
                                 )}`}
                               >
@@ -589,13 +595,13 @@ export const AuditPage: React.FC = () => {
 
                         {/* Inspect Button */}
                         <td className="py-3.5 px-4 text-center">
-                          <button
+                          <button data-guide="audit-inspect"
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setInspectLog(log);
                             }}
-                            className="p-1.5 rounded-lg text-charcoal/40 group-hover:text-indigo group-hover:bg-indigo-50 transition-all cursor-pointer"
+                            className="p-1.5 rounded-lg text-muted group-hover:text-indigo group-hover:bg-indigo-50 transition-all cursor-pointer"
                             title="Inspect log details"
                           >
                             <Eye className="w-4 h-4" />
@@ -618,11 +624,11 @@ export const AuditPage: React.FC = () => {
                 </span>
 
                 <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-charcoal/50 text-[11px]">Per page:</span>
+                  <span className="text-muted text-[12px]">Per page:</span>
                   <select
                     value={pageSize}
                     onChange={(e) => setPageSize(Number(e.target.value))}
-                    className="bg-white border border-gray-200 rounded-lg px-2 py-0.5 text-xs font-bold text-charcoal focus:outline-none focus:border-indigo"
+                    className="bg-white border border-gray-200 rounded-lg px-2 py-0.5 text-xs font-medium text-charcoal focus:outline-none focus:border-indigo"
                   >
                     <option value={15}>15</option>
                     <option value={30}>30</option>
@@ -643,7 +649,7 @@ export const AuditPage: React.FC = () => {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
 
-                <span className="px-3 py-1 font-bold text-xs text-indigo">
+                <span className="px-3 py-1 font-medium text-xs text-indigo">
                   Page {currentPage} of {totalPages}
                 </span>
 
@@ -664,9 +670,9 @@ export const AuditPage: React.FC = () => {
       {/* 6. INSPECT AUDIT DETAIL MODAL */}
       {inspectLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-indigo-950/70 backdrop-blur-md overflow-y-auto animate-fade-in">
-          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-indigo-100 p-6 sm:p-8 space-y-5 animate-scale-up my-auto">
+          <ModalPanel className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-indigo-100 p-6 sm:p-8 space-y-5 animate-scale-up my-auto">
             {/* Close Button */}
-            <button
+            <div data-modal-header className="space-y-5"><button
               type="button"
               onClick={() => setInspectLog(null)}
               className="absolute top-4 right-4 p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
@@ -682,31 +688,31 @@ export const AuditPage: React.FC = () => {
                   <ShieldCheck className="w-5 h-5" />
                 </span>
                 <div>
-                  <h3 className="text-lg font-black text-charcoal">Audit Transaction #{inspectLog.id}</h3>
-                  <p className="text-[11px] text-charcoal/60">Immutable Security Ledger Verification</p>
+                  <h3 data-guide="audit-details" className="text-lg font-semibold text-charcoal">Audit Transaction #{inspectLog.id}</h3>
+                  <p className="text-[12px] text-muted">Immutable Security Ledger Verification</p>
                 </div>
               </div>
-            </div>
+            </div></div>
 
             {/* Info Grid */}
             <div className="bg-gray-50/80 rounded-2xl p-4 border border-gray-200/80 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3 pb-3 border-b border-gray-200/60">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-charcoal/50 block mb-0.5">Action Executed</span>
+                  <span className="text-[12px] font-medium uppercase text-muted block mb-0.5">Action Executed</span>
                   {getActionBadge(inspectLog.action)}
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-charcoal/50 block mb-0.5">Target Entity</span>
+                  <span className="text-[12px] font-medium uppercase text-muted block mb-0.5">Target Entity</span>
                   {getEntityBadge(inspectLog.target_table, inspectLog.target_id)}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pb-3 border-b border-gray-200/60">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-charcoal/50 block mb-0.5">Operator Name</span>
-                  <p className="font-bold text-charcoal">{inspectLog.user_name || "System"}</p>
+                  <span className="text-[12px] font-medium uppercase text-muted block mb-0.5">Operator Name</span>
+                  <p className="font-medium text-charcoal">{inspectLog.user_name || "System"}</p>
                   <span
-                    className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded border shadow-2xs inline-block mt-1 ${getRoleBadgeStyle(
+                    className={`text-[12px] font-medium uppercase px-1.5 py-0.2 rounded border shadow-2xs inline-block mt-1 ${getRoleBadgeStyle(
                       inspectLog.role_name
                     )}`}
                   >
@@ -714,39 +720,39 @@ export const AuditPage: React.FC = () => {
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-charcoal/50 block mb-0.5">Operator Email</span>
+                  <span className="text-[12px] font-medium uppercase text-muted block mb-0.5">Operator Email</span>
                   <p className="font-medium text-charcoal/80 truncate">{inspectLog.user_email || "N/A"}</p>
                 </div>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold uppercase text-charcoal/50 block mb-0.5">Exact Timestamp</span>
-                <p className="font-mono text-[11px] text-indigo font-bold">
+                <span className="text-[12px] font-medium uppercase text-muted block mb-0.5">Exact Timestamp</span>
+                <p className="font-mono text-[12px] text-indigo font-medium">
                   {new Date(inspectLog.created_at).toLocaleString([], { dateStyle: "full", timeStyle: "medium" })}
                 </p>
-                <p className="text-[10px] text-charcoal/40 font-mono mt-0.5">
+                <p className="text-[12px] text-muted font-mono mt-0.5">
                   ISO: {new Date(inspectLog.created_at).toISOString()}
                 </p>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold uppercase text-charcoal/50 block mb-1">Details & Description</span>
+                <span className="text-[12px] font-medium uppercase text-muted block mb-1">Details & Description</span>
                 <div className="bg-white p-3 rounded-xl border border-gray-200 font-sans text-xs text-charcoal leading-relaxed shadow-2xs">
                   {inspectLog.details || "No additional description metadata was provided for this event."}
                 </div>
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div data-modal-footer className="pt-2 flex justify-end">
               <button
                 type="button"
                 onClick={() => setInspectLog(null)}
-                className="px-5 py-2.5 bg-indigo hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-indigo hover:bg-indigo-700 text-white font-medium rounded-xl text-xs shadow-md transition-all cursor-pointer"
               >
                 Done
               </button>
             </div>
-          </div>
+          </ModalPanel>
         </div>
       )}
     </div>

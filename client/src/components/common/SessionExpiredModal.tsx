@@ -1,4 +1,5 @@
 import React from "react";
+import { ModalPanel } from "./ModalPanel";
 import { createPortal } from "react-dom";
 import { Clock, LogIn, ShieldAlert, ShieldCheck } from "lucide-react";
 
@@ -21,7 +22,8 @@ export const SessionExpiredModal: React.FC<SessionExpiredModalProps> = ({
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-scale-up text-center">
+      <ModalPanel className="relative w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-scale-up text-center">
+        <div data-modal-header>
         {/* Subtle decorative top background gradient */}
         <div className="absolute top-0 left-0 right-0 h-2 bg-amber-500" />
 
@@ -34,15 +36,16 @@ export const SessionExpiredModal: React.FC<SessionExpiredModalProps> = ({
         </div>
 
         {/* Badge */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200/80 text-amber-900 text-[11px] font-bold tracking-wide uppercase mb-2.5">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200/80 text-amber-900 text-[12px] font-medium tracking-wide uppercase mb-2.5">
           <ShieldCheck className="w-3 h-3 text-amber-600" />
           <span>Session Timeout Notice</span>
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-black text-slate-900 tracking-tight mb-2">
+        <h2 className="text-xl font-semibold text-slate-900 tracking-tight mb-2">
           Your Session Has Expired
         </h2>
+        </div>
 
         {/* Description */}
         <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-6">
@@ -54,15 +57,17 @@ export const SessionExpiredModal: React.FC<SessionExpiredModalProps> = ({
         </p>
 
         {/* Primary Action Button */}
+        <div data-modal-footer>
         <button
           type="button"
           onClick={onGoToLogin}
-          className="w-full py-3.5 px-5 rounded-2xl bg-indigo-950  text-white font-black text-sm shadow-lg shadow-indigo-950/20 hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+          className="w-full py-3.5 px-5 rounded-2xl bg-indigo-950  text-white font-medium text-sm shadow-lg shadow-indigo-950/20 hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
         >
           <LogIn className="w-4 h-4" />
           <span>Go to Login Page</span>
         </button>
-      </div>
+        </div>
+      </ModalPanel>
     </div>,
     document.body
   );

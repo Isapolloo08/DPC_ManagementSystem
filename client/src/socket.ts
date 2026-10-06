@@ -1,6 +1,7 @@
 import { io, Socket } from "socket.io-client";
 import { useEffect, useState, useRef } from "react";
 import { normalizeServerUrl } from "./api";
+import { isGuideSandbox } from "./components/help/sandbox/runtime";
 
 export const getSocketUrl = () => {
   if (typeof window !== "undefined") {
@@ -33,6 +34,7 @@ export const socket: Socket = io(SOCKET_URL, {
 });
 
 export function setSocketAuthToken(token: string | null): void {
+  if (isGuideSandbox()) return;
   if (!token) {
     socket.disconnect();
     socket.auth = {};

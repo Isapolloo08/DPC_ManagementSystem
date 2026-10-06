@@ -3,7 +3,10 @@ import { test, expect } from '@playwright/test';
 // Appearance tests isolate the browser from the church database.
 test.use({ timezoneId: 'Asia/Manila' });
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => sessionStorage.setItem('dpc_intro_shown', 'true'));
+  await page.addInitScript(() => {
+    sessionStorage.setItem('dpc_intro_shown', 'true');
+    localStorage.setItem('dpc_help_welcome_v1:1:Admin', 'seen');
+  });
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     await route.fulfill({ status: /\/(auth\/setup-status|auth\/me|ministries)$/.test(path) ? 200 : 404, json: path.endsWith('/auth/setup-status')
@@ -34,6 +37,76 @@ test('manual modes change surfaces, persist after reload, and ignore time of day
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 247, 242)');
   await page.reload();
   await expect(selector).toHaveValue('light');
+});
+
+test('theme surfaces settle together behind one shared fade in both directions', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('dpc_theme_mode', 'light'));
+  await page.goto('/');
+  const selector = page.getByRole('combobox', { name: 'Appearance' });
+  await expect(selector).toBeVisible();
+  await page.evaluate(() => {
+    const start = document.startViewTransition.bind(document);
+    document.startViewTransition = (update) => {
+      const transition = start(update);
+      void transition.ready.then(() => {
+        // Hold the visual fade so assertions observe the middle of the switch.
+        const fade = document.getAnimations().find((animation) =>
+          animation instanceof CSSAnimation && animation.animationName === 'theme-fade-in');
+        if (fade) fade.pause();
+      }).catch(() => {});
+      return transition;
+    };
+  });
+  for (const mode of ['dark', 'light']) {
+    await selector.selectOption(mode);
+    await expect.poll(() => page.evaluate(() => document.getAnimations().filter((animation) =>
+      animation instanceof CSSAnimation && animation.animationName === 'theme-fade-in' && animation.playState === 'paused').length)).toBe(1);
+    await expect(page.locator('body')).toHaveCSS('background-color', mode === 'dark' ? 'rgb(15, 23, 42)' : 'rgb(250, 247, 242)');
+    await expect(page.getByRole('heading', { name: 'Sign In to Your Portal' })).toHaveCSS('color', mode === 'dark' ? 'rgb(226, 232, 240)' : 'rgb(41, 37, 32)');
+    await expect(page.getByPlaceholder('e.g. admin or admin@church.org')).toHaveCSS('background-color', mode === 'dark' ? 'rgb(30, 41, 59)' : 'rgb(255, 255, 255)');
+    expect(await page.evaluate(() => document.getAnimations().filter((animation) =>
+      animation instanceof CSSTransition && /color|shadow|fill|stroke/.test(animation.transitionProperty)).length)).toBe(0);
+    await page.evaluate(() => document.getAnimations().forEach((animation) => {
+      if (animation instanceof CSSAnimation && animation.animationName === 'theme-fade-in') animation.finish();
+    }));
+    await expect(page.locator('html')).not.toHaveAttribute('data-theme-transition');
+    // Normal input interactions regain their original transition after the fade.
+    await expect(page.getByPlaceholder('e.g. admin or admin@church.org')).toHaveCSS('transition-duration', '0.3s');
+  }
+});
+
+for (const fallback of ['reduced motion', 'unsupported browser']) {
+  test(`theme switches all surfaces immediately with ${fallback}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('dpc_theme_mode', 'light'));
+    if (fallback === 'reduced motion') await page.emulateMedia({ reducedMotion: 'reduce' });
+    else await page.addInitScript(() => { document.startViewTransition = undefined as any; });
+    await page.goto('/');
+    for (const mode of ['dark', 'light']) {
+      await page.getByRole('combobox', { name: 'Appearance' }).selectOption(mode);
+      // No polling: surfaces with and without component transitions must settle
+      // in the same update, even when the page-wide animation is unavailable.
+      const appearance = await page.evaluate(() => ({
+        background: getComputedStyle(document.body).backgroundColor,
+        input: getComputedStyle(document.querySelector('input')!).backgroundColor,
+        colorTransitions: document.getAnimations().filter((animation) =>
+          animation instanceof CSSTransition && /color/.test(animation.transitionProperty)).length,
+      }));
+      expect(appearance.background).toBe(mode === 'dark' ? 'rgb(15, 23, 42)' : 'rgb(250, 247, 242)');
+      expect(appearance.input).toBe(mode === 'dark' ? 'rgb(30, 41, 59)' : 'rgb(255, 255, 255)');
+      expect(appearance.colorTransitions).toBe(0);
+      await expect(page.locator('html')).not.toHaveAttribute('data-theme-transition');
+    }
+  });
+}
+
+test('rapid appearance changes finish on the latest choice', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('dpc_theme_mode', 'light'));
+  await page.goto('/');
+  const selector = page.getByRole('combobox', { name: 'Appearance' });
+  for (const mode of ['dark', 'light', 'dark', 'light', 'dark']) await selector.selectOption(mode);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme-transition');
+  await expect(page.getByPlaceholder('e.g. admin or admin@church.org')).toHaveCSS('background-color', 'rgb(30, 41, 59)');
 });
 
 for (const boundary of [
@@ -120,7 +193,8 @@ test('authenticated shell and portal dialogs follow the chosen appearance', asyn
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.keyboard.press('Control+p');
   await expect(page.getByRole('heading', { name: /System Configuration/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Close', exact: true }).filter({ hasText: /^Close$/ })).toHaveCSS('background-color', 'rgb(30, 41, 59)');
+  // The secondary Close action uses slate-200, which maps to slate-700 in dark mode.
+  await expect(page.getByRole('button', { name: 'Close', exact: true }).filter({ hasText: /^Close$/ })).toHaveCSS('background-color', 'rgb(51, 65, 85)');
   await page.screenshot({ path: 'test-results/theme-shell-dark.png', fullPage: true });
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 247, 242)');

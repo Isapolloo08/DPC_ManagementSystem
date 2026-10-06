@@ -1,3 +1,4 @@
+import { AlertTriangle as UIAlertTriangle } from "lucide-react";
 /**
  * SessionDatePicker.tsx
  * Accessible, session-based meeting date picker for Small Group Weekly Roll-Call Attendance.
@@ -93,27 +94,27 @@ export const SessionDatePickerCompactRow: React.FC<{
       return (
         <div className="space-y-3 p-3.5 bg-amber-50/90 rounded-2xl border border-amber-200 animate-in fade-in text-xs shrink-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 font-black text-amber-950">
+            <div className="flex items-center gap-1.5 font-medium text-amber-950">
               <BookmarkCheck className="w-4 h-4 text-amber-600" />
               <span>Special / Rescheduled Session</span>
             </div>
             <button
               type="button"
               onClick={() => onSpecialChange(false, sessions[0]?.date || "", "")}
-              className="text-[11px] font-bold text-indigo hover:text-indigo-800 flex items-center gap-1 cursor-pointer transition-colors"
+              className="text-[12px] font-medium text-indigo hover:text-indigo-800 flex items-center gap-1 cursor-pointer transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to regular schedule</span>
             </button>
           </div>
 
-          <p className="text-[11px] text-amber-900/80">
+          <p className="text-[12px] text-amber-900/80">
             Record attendance for make-up meetings, holiday shift schedules, or special fellowship gatherings.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
             <div>
-              <label className="block font-bold text-charcoal/80 mb-1">Session Date *</label>
+              <label className="block font-medium text-charcoal/80 mb-1">Session Date *</label>
               <DatePickerInput
                 value={value || specialDate}
                 onChange={(val) => {
@@ -125,7 +126,7 @@ export const SessionDatePickerCompactRow: React.FC<{
             </div>
 
             <div>
-              <label className="block font-bold text-charcoal/80 mb-1">
+              <label className="block font-medium text-charcoal/80 mb-1">
                 Reason for Special Session *
               </label>
               <input
@@ -134,7 +135,7 @@ export const SessionDatePickerCompactRow: React.FC<{
                 placeholder="e.g. Makeup class, Holiday shift"
                 value={specialReason}
                 onChange={(e) => onSpecialChange(true, value || specialDate, e.target.value)}
-                className="w-full bg-white px-3 py-2 rounded-xl border border-amber-300 text-charcoal font-semibold text-xs focus:outline-none focus:border-indigo shadow-2xs"
+                className="w-full bg-white px-3 py-2 rounded-xl border border-amber-300 text-charcoal font-medium text-xs focus:outline-none focus:border-indigo shadow-2xs"
               />
             </div>
           </div>
@@ -145,11 +146,11 @@ export const SessionDatePickerCompactRow: React.FC<{
     return (
       <div className="space-y-1 text-xs shrink-0">
         <div className="flex items-center justify-between">
-          <label className="block font-black text-charcoal">
+          <label className="block font-medium text-charcoal">
             Meeting Session Date
           </label>
           {groupScheduleText && (
-            <span className="text-[10px] text-charcoal/50 font-semibold truncate max-w-[220px]">
+            <span className="text-[12px] text-muted font-medium truncate max-w-[220px]">
               {groupScheduleText}
             </span>
           )}
@@ -157,12 +158,12 @@ export const SessionDatePickerCompactRow: React.FC<{
 
         {sessions.length === 0 ? (
           <div className="p-3.5 bg-gray-50 rounded-2xl border border-dashed border-gray-200 text-center space-y-1.5">
-            <Info className="w-4 h-4 text-charcoal/40 mx-auto" />
-            <p className="font-bold text-charcoal/80 text-[11px]">No weekly schedule configured</p>
+            <Info className="w-4 h-4 text-muted mx-auto" />
+            <p className="font-medium text-charcoal/80 text-[12px]">No weekly schedule configured</p>
             <button
               type="button"
               onClick={() => onSpecialChange(true, new Date().toISOString().split("T")[0], "Special Meeting")}
-              className="inline-flex items-center gap-1 px-3 py-1 bg-indigo text-white rounded-xl font-bold text-xs shadow-2xs hover:bg-indigo-700 cursor-pointer transition-all"
+              className="inline-flex items-center gap-1 px-3 py-1 bg-indigo text-white rounded-xl font-medium text-xs shadow-2xs hover:bg-indigo-700 cursor-pointer transition-all"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ Add special session</span>
@@ -177,23 +178,23 @@ export const SessionDatePickerCompactRow: React.FC<{
           >
             {/* Left: Calendar Icon + Date / Status */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-indigo text-white flex items-center justify-center font-black shrink-0 shadow-xs">
+              <div className="w-8 h-8 rounded-xl bg-indigo text-white flex items-center justify-center font-medium shrink-0 shadow-xs">
                 <Calendar className="w-4 h-4" />
               </div>
 
               <div className="truncate">
-                <div className="font-black text-xs text-charcoal flex items-center gap-1.5">
+                <div className="font-medium text-xs text-charcoal flex items-center gap-1.5">
                   <span>{selectedSession?.formattedDate || value}</span>
                   {selectedSession?.isLatest && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-indigo-100 text-indigo-900">
+                    <span className="px-1.5 py-0.2 rounded-full text-[12px] font-medium uppercase bg-indigo-100 text-indigo-900">
                       Latest
                     </span>
                   )}
                 </div>
-                <div className="text-[10px] text-charcoal/55 font-medium truncate">
+                <div className="text-[12px] text-charcoal/55 font-medium truncate">
                   {selectedSession?.isLogged
-                    ? `✓ Attendance Logged${selectedSession.loggedSession?.chapter ? ` (${selectedSession.loggedSession.chapter})` : ""}`
-                    : "⚠️ Missing attendance record"}
+                    ? `Attendance Logged${selectedSession.loggedSession?.chapter ? ` (${selectedSession.loggedSession.chapter})` : ""}`
+                    : <><UIAlertTriangle aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Missing attendance record</>}
                 </div>
               </div>
             </div>
@@ -201,12 +202,12 @@ export const SessionDatePickerCompactRow: React.FC<{
             {/* Right: Status Badge + Change Button */}
             <div className="flex items-center gap-2 shrink-0">
               {selectedSession?.isLogged ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-800 border border-emerald-200">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase bg-emerald-50 text-emerald-800 border border-emerald-200">
                   <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                   <span>Logged</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-50 text-amber-900 border border-amber-200">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase bg-amber-50 text-amber-900 border border-amber-200">
                   <Clock className="w-3 h-3 text-amber-500" />
                   <span>Missing</span>
                 </span>
@@ -220,7 +221,7 @@ export const SessionDatePickerCompactRow: React.FC<{
                 aria-controls="session-flyout-panel"
                 aria-label="Change session meeting date"
                 onClick={onToggleFlyout}
-                className="flex items-center gap-1 text-[11px] font-black text-indigo bg-white px-2.5 py-1.5 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 shadow-2xs cursor-pointer active:scale-95 transition-all"
+                className="flex items-center gap-1 text-[12px] font-medium text-indigo bg-white px-2.5 py-1.5 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 shadow-2xs cursor-pointer active:scale-95 transition-all"
               >
                 <span>Change</span>
                 <ChevronRight
@@ -538,11 +539,11 @@ export const SessionFlyoutPanel: React.FC<{
             </div>
 
             <div className="truncate">
-              <div className="font-black text-xs flex items-center gap-1.5">
+              <div className="font-medium text-xs flex items-center gap-1.5">
                 <span>{session.formattedDate}</span>
                 {session.loggedSession?.chapter && (
                   <span
-                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded truncate ${isSelected
+                    className={`text-[12px] font-medium px-1.5 py-0.2 rounded truncate ${isSelected
                       ? "bg-white/20 text-white"
                       : "bg-gray-100 text-charcoal/70"
                       }`}
@@ -553,7 +554,7 @@ export const SessionFlyoutPanel: React.FC<{
               </div>
               {session.loggedSession?.notes && (
                 <p
-                  className={`text-[10px] truncate max-w-[140px] ${isSelected ? "text-white/70" : "text-charcoal/50"
+                  className={`text-[12px] truncate max-w-[140px] ${isSelected ? "text-white/70" : "text-muted"
                     }`}
                 >
                   "{session.loggedSession.notes}"
@@ -566,8 +567,8 @@ export const SessionFlyoutPanel: React.FC<{
           <div className="flex items-center gap-1 shrink-0">
             {session.isLatest && (
               <span
-                className={`px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${isSelected
-                  ? "bg-amber-400 text-slate-900 font-extrabold shadow-2xs"
+                className={`px-1.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider ${isSelected
+                  ? "bg-amber-400 text-slate-900 font-medium shadow-2xs"
                   : "bg-indigo-100 text-indigo-950 border border-indigo-200"
                   }`}
               >
@@ -577,7 +578,7 @@ export const SessionFlyoutPanel: React.FC<{
 
             {session.isLogged ? (
               <span
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase ${isSelected
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[12px] font-medium uppercase ${isSelected
                   ? "bg-emerald-500/30 text-emerald-200 border border-emerald-400/40"
                   : "bg-emerald-50 text-emerald-800 border border-emerald-200"
                   }`}
@@ -587,7 +588,7 @@ export const SessionFlyoutPanel: React.FC<{
               </span>
             ) : (
               <span
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase ${isSelected
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[12px] font-medium uppercase ${isSelected
                   ? "bg-amber-400/30 text-amber-200 border border-amber-400/40"
                   : "bg-amber-50 text-amber-900 border border-amber-200"
                   }`}
@@ -606,8 +607,8 @@ export const SessionFlyoutPanel: React.FC<{
         {/* 1. Header with Schedule Label & Close Button */}
         <div className="p-4 border-b border-gray-100 flex items-start justify-between shrink-0 bg-gray-50/50">
           <div>
-            <h4 className="font-black text-charcoal text-xs">Select Meeting Session</h4>
-            <p className="text-[10px] text-charcoal/60 font-semibold truncate max-w-[210px]">
+            <h4 className="font-semibold text-charcoal text-xs">Select Meeting Session</h4>
+            <p className="text-[12px] text-muted font-medium truncate max-w-[210px]">
               {groupScheduleText || "Weekly Session Schedule"}
             </p>
           </div>
@@ -615,7 +616,7 @@ export const SessionFlyoutPanel: React.FC<{
             type="button"
             onClick={onClose}
             aria-label="Close session flyout"
-            className="p-1 text-charcoal/40 hover:text-charcoal hover:bg-gray-200/60 rounded-xl cursor-pointer transition-colors"
+            className="p-1 text-muted hover:text-charcoal hover:bg-gray-200/60 rounded-xl cursor-pointer transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -630,9 +631,9 @@ export const SessionFlyoutPanel: React.FC<{
                 setFilterTab("missing");
                 setVisibleLimit(6);
               }}
-              className={`py-1 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center ${filterTab === "missing"
-                ? "bg-amber-400 text-amber-950 shadow-2xs font-extrabold"
-                : "text-charcoal/60 hover:text-charcoal"
+              className={`py-1 px-2 rounded-lg text-[12px] font-medium transition-all cursor-pointer text-center ${filterTab === "missing"
+                ? "bg-amber-400 text-amber-950 shadow-2xs font-medium"
+                : "text-muted hover:text-charcoal"
                 }`}
             >
               Missing ({missingCount})
@@ -643,9 +644,9 @@ export const SessionFlyoutPanel: React.FC<{
                 setFilterTab("all");
                 setVisibleLimit(6);
               }}
-              className={`py-1 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer text-center ${filterTab === "all"
-                ? "bg-white text-charcoal shadow-2xs font-extrabold"
-                : "text-charcoal/60 hover:text-charcoal"
+              className={`py-1 px-2 rounded-lg text-[12px] font-medium transition-all cursor-pointer text-center ${filterTab === "all"
+                ? "bg-white text-charcoal shadow-2xs font-medium"
+                : "text-muted hover:text-charcoal"
                 }`}
             >
               All ({sessions.length})
@@ -677,7 +678,7 @@ export const SessionFlyoutPanel: React.FC<{
                 onMouseLeave={handleMouseUp}
                 onWheel={handleMonthWheel}
                 onDragStart={(e) => e.preventDefault()}
-                className={`flex items-center gap-1 overflow-x-auto py-0.5 text-[10px] select-none scrollbar-none flex-1 min-w-0 ${isDragActive ? "cursor-grabbing" : "cursor-grab"
+                className={`flex items-center gap-1 overflow-x-auto py-0.5 text-[12px] select-none scrollbar-none flex-1 min-w-0 ${isDragActive ? "cursor-grabbing" : "cursor-grab"
                   }`}
                 style={{ touchAction: "pan-x" }}
               >
@@ -692,8 +693,8 @@ export const SessionFlyoutPanel: React.FC<{
                       e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
                     }
                   }}
-                  className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer shrink-0 ${selectedMonth === "all"
-                    ? "bg-slate-900 text-white shadow-2xs font-black"
+                  className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer shrink-0 ${selectedMonth === "all"
+                    ? "bg-slate-900 text-white shadow-2xs font-medium"
                     : "bg-gray-100 text-charcoal/70 hover:bg-gray-200/80 hover:text-charcoal"
                     }`}
                 >
@@ -713,18 +714,18 @@ export const SessionFlyoutPanel: React.FC<{
                         e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
                       }
                     }}
-                    className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 shrink-0 ${selectedMonth === m.key
-                      ? "bg-slate-900 text-white shadow-2xs font-black"
+                    className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1 shrink-0 ${selectedMonth === m.key
+                      ? "bg-slate-900 text-white shadow-2xs font-medium"
                       : "bg-gray-100 text-charcoal/70 hover:bg-gray-200/80 hover:text-charcoal"
                       }`}
                   >
                     <span>{m.label}</span>
                     <span
-                      className={`text-[9px] px-1 py-0.2 rounded-full font-bold ${selectedMonth === m.key
-                        ? "bg-amber-400 text-slate-950 font-black"
+                      className={`text-[12px] px-1 py-0.2 rounded-full font-medium ${selectedMonth === m.key
+                        ? "bg-amber-400 text-slate-950 font-medium"
                         : m.missingCount > 0
                           ? "bg-amber-100 text-amber-900"
-                          : "bg-gray-200 text-charcoal/60"
+                          : "bg-gray-200 text-muted"
                         }`}
                     >
                       {filterTab === "missing" ? m.count : m.count}
@@ -760,17 +761,17 @@ export const SessionFlyoutPanel: React.FC<{
           className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-2.5 focus:outline-none scrollbar-thin"
         >
           {monthFilteredSessions.length === 0 ? (
-            <div className="py-8 text-center text-charcoal/40 space-y-1.5">
+            <div className="py-8 text-center text-muted space-y-1.5">
               <CheckCircle2 className="w-6 h-6 mx-auto text-emerald-500" />
-              <p className="font-bold text-xs text-charcoal/80">
+              <p className="font-medium text-xs text-charcoal/80">
                 {filterTab === "missing" ? "No missing sessions found!" : "No sessions found!"}
               </p>
-              <p className="text-[10px] text-charcoal/50 max-w-[200px] mx-auto">
+              <p className="text-[12px] text-muted max-w-[200px] mx-auto">
                 {selectedMonth !== "all" ? (
                   <button
                     type="button"
                     onClick={() => setSelectedMonth("all")}
-                    className="text-indigo font-bold hover:underline cursor-pointer"
+                    className="text-indigo font-medium hover:underline cursor-pointer"
                   >
                     View all months
                   </button>
@@ -782,7 +783,7 @@ export const SessionFlyoutPanel: React.FC<{
           ) : (
             groupedSessions.map((group) => (
               <div key={group.monthYear} className="space-y-1.5">
-                <div className="sticky top-0 z-10 bg-gray-100/95 backdrop-blur-xs px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-charcoal/60 rounded-md border border-gray-200/50 shadow-2xs">
+                <div className="sticky top-0 z-10 bg-gray-100/95 backdrop-blur-xs px-2.5 py-0.5 text-[12px] font-medium uppercase tracking-wider text-muted rounded-md border border-gray-200/50 shadow-2xs">
                   {group.monthYear}
                 </div>
                 <div className="space-y-1.5">
@@ -801,7 +802,7 @@ export const SessionFlyoutPanel: React.FC<{
                   setVisibleLimit((prev) => prev + 8);
                   if (onLoadOlder) onLoadOlder();
                 }}
-                className="w-full py-1.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-indigo font-bold text-[11px] transition-all cursor-pointer shadow-2xs"
+                className="w-full py-1.5 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-indigo font-medium text-[12px] transition-all cursor-pointer shadow-2xs"
               >
                 Show older sessions (+{Math.min(8, monthFilteredSessions.length - visibleLimit)} more)
               </button>
@@ -811,7 +812,7 @@ export const SessionFlyoutPanel: React.FC<{
 
         {/* 4. Pinned Footer: "+ Add special session" */}
         <div className="p-3 border-t border-gray-100 bg-gray-50/90 flex items-center justify-between shrink-0">
-          <span className="text-charcoal/50 text-[10px] font-semibold">
+          <span className="text-muted text-[12px] font-medium">
             Showing {visibleSessions.length} of {monthFilteredSessions.length}
           </span>
           <button
@@ -820,7 +821,7 @@ export const SessionFlyoutPanel: React.FC<{
               onClose();
               onSpecialClick();
             }}
-            className="font-black text-indigo hover:text-indigo-800 text-[11px] inline-flex items-center gap-1 cursor-pointer transition-colors"
+            className="font-medium text-indigo hover:text-indigo-800 text-[12px] inline-flex items-center gap-1 cursor-pointer transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>+ Add special session</span>

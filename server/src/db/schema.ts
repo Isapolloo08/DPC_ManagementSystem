@@ -321,6 +321,15 @@ export async function initSchema() {
       console.warn("Role/Admin seed note:", e.message);
     }
 
+    // Explicit household relationships also allow parents who are not registered members.
+    await sql`
+      ALTER TABLE households
+      ADD COLUMN IF NOT EXISTS father_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS mother_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS guardian_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS family_members JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `;
+
     // 4. Ensure membership application form columns exist on members table
     try {
       await sql`

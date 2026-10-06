@@ -1,8 +1,10 @@
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { SystemLookup, SystemSetting, Ministry, LookupType, NotificationEmailSettings, NotificationEventType, NotificationRule } from "../types";
 import { SettingsPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import {
@@ -34,12 +36,13 @@ const COLOR_PRESETS = [
 
 interface SettingsPageProps {
   onNavigateToUsers?: () => void;
+  initialTab?: SettingsTab;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, initialTab = 'ministries' }) => {
   const { user } = useAuth();
   const { showToast, deleteWithUndo } = useToast();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("ministries");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -226,19 +229,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
   useSocketEvent("lookups:changed", () => loadAllData());
 
 
-  const loadAllData = async () => {
+ const loadAllData = async () => {
+    guideData.clearError();
     setLoading(true);
     try {
       const [lookupsRes, ministriesRes, generalRes] = await Promise.all([
         api.getLookups().catch(err => {
+          guideData.reportError(err);
           console.warn("Could not load lookups:", err);
           return [];
         }),
         api.getMinistries().catch(err => {
+          guideData.reportError(err);
           console.warn("Could not load ministries:", err);
           return [];
         }),
         api.getGeneralSettings().catch(err => {
+          guideData.reportError(err);
           console.warn("Could not load general settings:", err);
           return { settings: {}, list: [] };
         })
@@ -251,6 +258,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       setGeneralForm(settingsMap);
     } catch (err: any) {
       console.error("Failed to load settings data:", err);
+      guideData.reportError(err);
       showToast(err.message || "Failed to load settings data", "error");
     } finally {
       setLoading(false);
@@ -550,6 +558,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
     return true;
   });
 
+  const guideData = useGuideDataState("settings", { loading, count: 1, retry: loadAllData });
+
   if (loading && lookups.length === 0 && ministries.length === 0) {
     return <SettingsPageSkeleton />;
   }
@@ -570,12 +580,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
         <div className="space-y-2 relative z-10">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <Sliders className="w-3.5 h-3.5 text-amber-300" />
               <span>Church Configuration & Master Tables</span>
             </div>
           </div>
-          <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-white tracking-tight">
             System Settings & Lookups
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
@@ -619,13 +629,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
             return (
               <button
                 key={tab.id}
+                data-guide={`settings-${tab.id}`}
+                aria-pressed={isActive}
                 onClick={() => {
                   if (!isDragging) {
                     setActiveTab(tab.id);
                     setSearchTerm("");
                   }
                 }}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all shrink-0 cursor-pointer ${isActive
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 cursor-pointer ${isActive
                     ? "bg-indigo text-white shadow-md shadow-indigo-950/20"
                     : "bg-white hover:bg-indigo-50/80 text-charcoal/70 hover:text-indigo border border-indigo-100/80 hover:border-indigo-200 shadow-2xs"
                   }`}
@@ -636,7 +648,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 <span>{tab.label}</span>
                 {tab.count !== undefined && (
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isActive
+                    className={`px-2 py-0.5 rounded-full text-[12px] font-medium ${isActive
                         ? "bg-white/20 text-white"
                         : "bg-indigo-50 text-indigo border border-indigo-100/60"
                       }`}
@@ -674,10 +686,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
             <span className="p-2.5 rounded-2xl bg-amber-500 text-white shadow-sm ring-4 ring-amber-100/50">
               <Sliders className="w-5 h-5" />
             </span>
-            <h1 className="text-2xl lg:text-3xl font-black text-indigo tracking-tight">
+            <h1 className="text-2xl lg:text-3xl font-semibold text-indigo tracking-tight">
               System Settings & Dropdowns
             </h1>
-            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-black uppercase tracking-wider shadow-2xs">
+            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-medium uppercase tracking-wider shadow-2xs">
               Lookups & Configuration
             </span>
           </div>
@@ -690,7 +702,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           {onNavigateToUsers && (
             <button
               onClick={onNavigateToUsers}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
             >
               <UserCog className="w-4 h-4 text-indigo-950" />
               <span>User Management (5 Roles)</span>
@@ -699,7 +711,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           <button
             onClick={loadAllData}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-indigo-50/60 border border-indigo-200/80 text-xs font-bold text-charcoal shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-indigo-50/60 border border-indigo-200/80 text-xs font-medium text-charcoal shadow-2xs hover:shadow-xs transition-all cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -717,17 +729,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-charcoal flex items-center gap-2">
                   <Users className="w-5 h-5 text-indigo" />
                   <span>Ministries & Age Demographics</span>
                 </h2>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-muted">
                   Manage core ministry departments, target age ranges (for automatic age matching and aging-out alerts), and branding colors.
                 </p>
               </div>
-              <button
+              <button data-guide="settings-ministry-new"
                 onClick={() => handleOpenMinistryModal()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add New Ministry</span>
@@ -746,14 +758,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-xs"
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-medium shadow-xs"
                           style={{ backgroundColor: min.color || "#2C3968" }}
                         >
                           {min.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <h3 className="font-bold text-sm text-charcoal">{min.name}</h3>
-                          <span className="text-[11px] font-semibold text-charcoal/60">
+                          <h3 className="font-semibold text-sm text-charcoal">{min.name}</h3>
+                          <span className="text-[12px] font-medium text-muted">
                             {min.min_age !== null && min.max_age !== null
                               ? `Ages ${min.min_age} - ${min.max_age} yrs`
                               : min.min_age !== null
@@ -770,12 +782,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 text-xs">
                       <div className="bg-white p-2 rounded-xl border border-gray-100">
-                        <span className="text-[10px] text-charcoal/50 uppercase font-bold block">Members</span>
-                        <span className="font-bold text-indigo">{min.active_members_count || 0} active</span>
+                        <span className="text-[12px] text-muted uppercase font-medium block">Members</span>
+                        <span className="font-medium text-indigo">{min.active_members_count || 0} active</span>
                       </div>
                       <div className="bg-white p-2 rounded-xl border border-gray-100">
-                        <span className="text-[10px] text-charcoal/50 uppercase font-bold block">Age Bracket</span>
-                        <span className="font-bold text-charcoal">
+                        <span className="text-[12px] text-muted uppercase font-medium block">Age Bracket</span>
+                        <span className="font-medium text-charcoal">
                           {min.min_age !== null && min.min_age !== undefined ? `${min.min_age}-${min.max_age || '+'} yrs` : 'All Ages'}
                         </span>
                       </div>
@@ -784,7 +796,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                     <div className="flex items-center justify-end gap-2 pt-2">
                       <button
                         onClick={() => handleOpenMinistryModal(min)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-indigo hover:bg-indigo-50 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-indigo hover:bg-indigo-50 transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                         <span>Edit</span>
@@ -816,17 +828,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-charcoal flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-indigo" />
                   <span>Bible Study Group Categories</span>
                 </h2>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-muted">
                   Categories used to classify Bible study and small groups in filters and creation forms.
                 </p>
               </div>
-              <button
+              <button data-guide="settings-lookups-new"
                 onClick={() => handleOpenLookupModal("bible_study_category")}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Group Category</span>
@@ -846,25 +858,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                           className="w-3 h-3 rounded-full shrink-0 shadow-2xs"
                           style={{ backgroundColor: cat.color || "#2C3968" }}
                         />
-                        <span className="font-bold text-xs text-charcoal">{cat.name}</span>
+                        <span className="font-medium text-xs text-charcoal">{cat.name}</span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo">
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo">
                         {cat.usage_count ?? 0} groups
                       </span>
                     </div>
-                    <p className="text-[11px] text-charcoal/70 line-clamp-2 leading-relaxed">
+                    <p className="text-[12px] text-charcoal/70 line-clamp-2 leading-relaxed">
                       {cat.description || "No description provided."}
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cat.is_active ? "text-emerald-700 bg-emerald-50" : "text-gray-500 bg-gray-100"
+                    <span className={`text-[12px] font-medium px-1.5 py-0.5 rounded ${cat.is_active ? "text-emerald-700 bg-emerald-50" : "text-gray-500 bg-gray-100"
                       }`}>
                       {cat.is_active ? "Active" : "Inactive"}
                     </span>
 
                     <div className="flex items-center gap-1">
-                      <button
+                      <button data-guide="settings-lookups-new"
                         onClick={() => handleOpenLookupModal("bible_study_category", cat)}
                         className="p-1.5 hover:bg-indigo-50 text-indigo rounded-lg transition-colors"
                         title="Edit Category"
@@ -898,17 +910,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-charcoal flex items-center gap-2">
                   <MapPin className="w-5 h-5 text-indigo" />
                   <span>Meeting Rooms & Locations</span>
                 </h2>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-muted">
                   Standard rooms, campus halls, and off-site locations used for Bible study groups and event venues.
                 </p>
               </div>
-              <button
+              <button data-guide="settings-lookups-new"
                 onClick={() => handleOpenLookupModal("event_location")}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Room / Location</span>
@@ -925,20 +937,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <MapPin className="w-3.5 h-3.5 text-indigo" />
-                        <span className="font-bold text-xs text-charcoal">{loc.name}</span>
+                        <span className="font-medium text-xs text-charcoal">{loc.name}</span>
                       </div>
                     </div>
-                    <p className="text-[11px] text-charcoal/60 mt-1">
+                    <p className="text-[12px] text-muted mt-1">
                       {loc.description || "Church facility room"}
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <span className="text-[10px] text-charcoal/50">
+                    <span className="text-[12px] text-muted">
                       {loc.usage_count ?? 0} bookings
                     </span>
                     <div className="flex items-center gap-1">
-                      <button
+                      <button data-guide="settings-lookups-new"
                         onClick={() => handleOpenLookupModal("event_location", loc)}
                         className="p-1 hover:bg-indigo-50 text-indigo rounded transition-colors"
                       >
@@ -970,17 +982,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-charcoal flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-indigo" />
                   <span>Event Categories & Types</span>
                 </h2>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-muted">
                   Classifications for church calendar events (Sunday Worship, Midweek Prayer, Conferences, Outreach).
                 </p>
               </div>
-              <button
+              <button data-guide="settings-lookups-new"
                 onClick={() => handleOpenLookupModal("event_category")}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Event Category</span>
@@ -999,13 +1011,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                         className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: cat.color || "#2C3968" }}
                       />
-                      <span className="font-bold text-xs text-charcoal">{cat.name}</span>
+                      <span className="font-medium text-xs text-charcoal">{cat.name}</span>
                     </div>
-                    <p className="text-[11px] text-charcoal/60 line-clamp-2">{cat.description || "Standard calendar event"}</p>
+                    <p className="text-[12px] text-muted line-clamp-2">{cat.description || "Standard calendar event"}</p>
                   </div>
 
                   <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
-                    <button
+                    <button data-guide="settings-lookups-new"
                       onClick={() => handleOpenLookupModal("event_category", cat)}
                       className="p-1.5 hover:bg-indigo-50 text-indigo rounded-lg transition-colors"
                     >
@@ -1037,17 +1049,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
             <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-charcoal flex items-center gap-2">
                     <Tag className="w-5 h-5 text-indigo" />
                     <span>Announcement Priority & Types</span>
                   </h2>
-                  <p className="text-xs text-charcoal/60">
+                  <p className="text-xs text-muted">
                     Categories for church news bulletins (General, Urgent, Ministry Update, Special Events).
                   </p>
                 </div>
-                <button
+                <button data-guide="settings-lookups-new"
                   onClick={() => handleOpenLookupModal("announcement_category")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs shrink-0"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Announcement Tag</span>
@@ -1066,13 +1078,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                         style={{ backgroundColor: cat.color || "#2C3968" }}
                       />
                       <div>
-                        <span className="font-bold text-xs text-charcoal block">{cat.name}</span>
-                        <span className="text-[10px] text-charcoal/50">{cat.description}</span>
+                        <span className="font-medium text-xs text-charcoal block">{cat.name}</span>
+                        <span className="text-[12px] text-muted">{cat.description}</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1">
-                      <button
+                      <button data-guide="settings-lookups-new"
                         onClick={() => handleOpenLookupModal("announcement_category", cat)}
                         className="p-1 hover:bg-indigo-50 text-indigo rounded transition-colors"
                       >
@@ -1103,17 +1115,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
           <div className="bg-white rounded-2xl p-6 border border-indigo-100 shadow-xs space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-charcoal flex items-center gap-2">
                   <Shield className="w-5 h-5 text-indigo" />
                   <span>Membership Statuses & Stages</span>
                 </h2>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-muted">
                   Status types assigned to church records (Active, Inactive, Visitor, Candidate for Baptism, Regular Attendee).
                 </p>
               </div>
-              <button
+              <button data-guide="settings-lookups-new"
                 onClick={() => handleOpenLookupModal("member_status")}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Membership Status</span>
@@ -1133,9 +1145,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                           className="w-3 h-3 rounded-full shrink-0"
                           style={{ backgroundColor: status.color || "#10B981" }}
                         />
-                        <span className="font-bold text-sm text-charcoal">{status.name}</span>
+                        <span className="font-medium text-sm text-charcoal">{status.name}</span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo">
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo">
                         {status.usage_count ?? 0} members
                       </span>
                     </div>
@@ -1145,9 +1157,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                   </div>
 
                   <div className="flex items-center justify-end gap-1.5 pt-3 border-t border-gray-100">
-                    <button
+                    <button data-guide="settings-lookups-new"
                       onClick={() => handleOpenLookupModal("member_status", status)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-bold text-indigo hover:bg-indigo-50 transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-indigo hover:bg-indigo-50 transition-colors"
                     >
                       <Edit2 className="w-3 h-3" />
                       <span>Edit</span>
@@ -1182,36 +1194,36 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
         {/* ==================================================== */}
         {activeTab === "notifications_email" && (user?.role_name === "Admin" || user?.role_name === "IT Admin" || user?.role_name === "Pastor") && (
           <div className="space-y-6">
-            <form onSubmit={saveEmailSettings} className="bg-white rounded-2xl p-5 sm:p-7 border border-indigo-100 shadow-sm space-y-6">
+            <form data-guide="settings-email-form" onSubmit={saveEmailSettings} className="bg-white rounded-2xl p-5 sm:p-7 border border-indigo-100 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
                 <div>
-                  <h2 className="text-lg font-black text-indigo-950 flex items-center gap-2"><Mail className="w-5 h-5 text-amber-500" /> SMTP email delivery</h2>
+                  <h2 className="text-lg font-semibold text-indigo-950 flex items-center gap-2"><Mail className="w-5 h-5 text-amber-500" /> SMTP email delivery</h2>
                   <p className="text-xs text-slate-500 mt-1">Messages are queued locally and retried up to five times when internet access returns.</p>
                 </div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-black"><LockKeyhole className="w-3.5 h-3.5" /> App password encrypted</span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[12px] font-medium"><LockKeyhole className="w-3.5 h-3.5" /> App password encrypted</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">SMTP host</span><input value={emailSettings.smtpHost} onChange={event => setEmailSettings(value => ({ ...value, smtpHost: event.target.value }))} placeholder="smtp.gmail.com" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
-                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">SMTP port</span><input type="number" min={1} max={65535} value={emailSettings.smtpPort} onChange={event => setEmailSettings(value => ({ ...value, smtpPort: Number(event.target.value) }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
-                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">SMTP username</span><input value={emailSettings.smtpUser} onChange={event => setEmailSettings(value => ({ ...value, smtpUser: event.target.value }))} autoComplete="off" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
-                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">App password</span><input type="password" value={emailSettings.smtpPassword} onChange={event => setEmailSettings(value => ({ ...value, smtpPassword: event.target.value }))} autoComplete="new-password" placeholder={emailSettings.hasSmtpPassword ? "Saved — enter to replace" : "Enter app password"} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
-                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">From name</span><input value={emailSettings.fromName} onChange={event => setEmailSettings(value => ({ ...value, fromName: event.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
-                <label className="space-y-1.5"><span className="text-xs font-black text-slate-700">From email</span><input type="email" value={emailSettings.fromEmail} onChange={event => setEmailSettings(value => ({ ...value, fromEmail: event.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
-                <label className="space-y-1.5 md:col-span-2"><span className="text-xs font-black text-slate-700">Pastor notification email</span><input type="email" value={emailSettings.pastorEmail} onChange={event => setEmailSettings(value => ({ ...value, pastorEmail: event.target.value }))} placeholder="pastor@example.org" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
-                <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 self-end"><input type="checkbox" checked={emailSettings.smtpSecure} onChange={event => setEmailSettings(value => ({ ...value, smtpSecure: event.target.checked }))} className="w-4 h-4 accent-indigo-700" /><span><strong className="block text-xs text-slate-700">Use secure SMTP</strong><small className="text-[10px] text-slate-500">Usually enabled for port 465</small></span></label>
+                <label className="space-y-1.5"><span className="text-xs font-medium text-slate-700">SMTP host</span><input value={emailSettings.smtpHost} onChange={event => setEmailSettings(value => ({ ...value, smtpHost: event.target.value }))} placeholder="smtp.gmail.com" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-medium text-slate-700">SMTP port</span><input type="number" min={1} max={65535} value={emailSettings.smtpPort} onChange={event => setEmailSettings(value => ({ ...value, smtpPort: Number(event.target.value) }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-medium text-slate-700">SMTP username</span><input value={emailSettings.smtpUser} onChange={event => setEmailSettings(value => ({ ...value, smtpUser: event.target.value }))} autoComplete="off" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-medium text-slate-700">App password</span><input type="password" value={emailSettings.smtpPassword} onChange={event => setEmailSettings(value => ({ ...value, smtpPassword: event.target.value }))} autoComplete="new-password" placeholder={emailSettings.hasSmtpPassword ? "Saved — enter to replace" : "Enter app password"} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-medium text-slate-700">From name</span><input value={emailSettings.fromName} onChange={event => setEmailSettings(value => ({ ...value, fromName: event.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5"><span className="text-xs font-medium text-slate-700">From email</span><input type="email" value={emailSettings.fromEmail} onChange={event => setEmailSettings(value => ({ ...value, fromEmail: event.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="space-y-1.5 md:col-span-2"><span className="text-xs font-medium text-slate-700">Pastor notification email</span><input type="email" value={emailSettings.pastorEmail} onChange={event => setEmailSettings(value => ({ ...value, pastorEmail: event.target.value }))} placeholder="pastor@example.org" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-200 outline-none" /></label>
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 self-end"><input type="checkbox" checked={emailSettings.smtpSecure} onChange={event => setEmailSettings(value => ({ ...value, smtpSecure: event.target.checked }))} className="w-4 h-4 accent-indigo-700" /><span><strong className="block text-xs text-slate-700">Use secure SMTP</strong><small className="text-[12px] text-slate-500">Usually enabled for port 465</small></span></label>
               </div>
 
               <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex gap-3"><Info className="w-5 h-5 text-amber-600 shrink-0" /><p><strong>Privacy:</strong> Absence emails contain member names. They are sent only to recipients configured in the rules below. Review recipient addresses before enabling email delivery.</p></div>
 
               <div className="flex flex-col sm:flex-row justify-end gap-3">
-                <button type="button" onClick={() => void sendTestEmail()} disabled={sendingTestEmail || (!emailSettings.pastorEmail && !emailSettings.fromEmail)} className="px-4 py-2.5 rounded-xl border border-indigo-200 text-indigo-700 text-xs font-black flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-indigo-50"><Send className="w-4 h-4" />{sendingTestEmail ? "Queuing…" : "Send test email"}</button>
-                <button type="submit" disabled={savingNotifications} className="px-5 py-2.5 rounded-xl bg-indigo-700 text-white text-xs font-black disabled:opacity-50 hover:bg-indigo-800">{savingNotifications ? "Saving…" : "Save email settings"}</button>
+                <button type="button" onClick={() => void sendTestEmail()} disabled={sendingTestEmail || (!emailSettings.pastorEmail && !emailSettings.fromEmail)} className="px-4 py-2.5 rounded-xl border border-indigo-200 text-indigo-700 text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-indigo-50"><Send className="w-4 h-4" />{sendingTestEmail ? "Queuing…" : "Send test email"}</button>
+                <button data-guide="settings-email-save" type="submit" disabled={savingNotifications} className="px-5 py-2.5 rounded-xl bg-indigo-700 text-white text-xs font-medium disabled:opacity-50 hover:bg-indigo-800">{savingNotifications ? "Saving…" : "Save email settings"}</button>
               </div>
             </form>
 
             <div className="bg-white rounded-2xl p-5 sm:p-7 border border-indigo-100 shadow-sm space-y-4">
-              <div><h2 className="text-lg font-black text-indigo-950 flex items-center gap-2"><Bell className="w-5 h-5 text-amber-500" /> Event delivery rules</h2><p className="text-xs text-slate-500 mt-1">Role and ministry recipient scopes are resolved automatically for each event.</p></div>
+              <div><h2 className="text-lg font-semibold text-indigo-950 flex items-center gap-2"><Bell className="w-5 h-5 text-amber-500" /> Event delivery rules</h2><p className="text-xs text-slate-500 mt-1">Role and ministry recipient scopes are resolved automatically for each event.</p></div>
               <div className="space-y-3">
                 {Array.from(new Set(notificationRules.map(rule => rule.event_type))).map(eventType => {
                   const rules = notificationRules.filter(rule => rule.event_type === eventType);
@@ -1222,18 +1234,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                   const label = eventType.replace(/_/g, " ").replace(/\b\w/g, char => char.toUpperCase());
                   return (
                     <div key={eventType} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-col lg:flex-row lg:items-center gap-4">
-                      <div className="flex-1 min-w-0"><h3 className="text-sm font-black text-indigo-950">{label}</h3><p className="text-[10px] text-slate-500 mt-1">Recipients: {rules.map(rule => rule.recipient_value === "pastor" ? "Pastor email" : rule.recipient_value).join(", ")}</p></div>
+                      <div className="flex-1 min-w-0"><h3 className="text-sm font-semibold text-indigo-950">{label}</h3><p className="text-[12px] text-slate-500 mt-1">Recipients: {rules.map(rule => rule.recipient_value === "pastor" ? "Pastor email" : rule.recipient_value).join(", ")}</p></div>
                       <div className="flex flex-wrap items-center gap-4">
-                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={enabled} onChange={event => void updateEventRules(eventType, { enabled: event.target.checked })} className="accent-indigo-700" /> Enabled</label>
-                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={inApp} onChange={event => void updateEventRules(eventType, { in_app_enabled: event.target.checked })} className="accent-indigo-700" /> In-app</label>
-                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700"><input type="checkbox" checked={email} onChange={event => void updateEventRules(eventType, { email_enabled: event.target.checked })} className="accent-indigo-700" /> Email</label>
-                        {(eventType === "absence_alert" || eventType === "sunday_absence_streak" || eventType === "at_risk_member") && <label className="flex items-center gap-2 text-xs font-bold text-slate-700">Threshold <input type="number" min={1} max={12} value={threshold} onChange={event => void updateEventRules(eventType, { threshold: Number(event.target.value) })} className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 bg-white" /></label>}
+                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700"><input type="checkbox" checked={enabled} onChange={event => void updateEventRules(eventType, { enabled: event.target.checked })} className="accent-indigo-700" /> Enabled</label>
+                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700"><input type="checkbox" checked={inApp} onChange={event => void updateEventRules(eventType, { in_app_enabled: event.target.checked })} className="accent-indigo-700" /> In-app</label>
+                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700"><input type="checkbox" checked={email} onChange={event => void updateEventRules(eventType, { email_enabled: event.target.checked })} className="accent-indigo-700" /> Email</label>
+                        {(eventType === "absence_alert" || eventType === "sunday_absence_streak" || eventType === "at_risk_member") && <label className="flex items-center gap-2 text-xs font-medium text-slate-700">Threshold <input type="number" min={1} max={12} value={threshold} onChange={event => void updateEventRules(eventType, { threshold: Number(event.target.value) })} className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 bg-white" /></label>}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <p className="text-[10px] text-slate-400">At-risk, Sunday streak, duty, and dishwashing rules are ready for their later event hooks. Absence and reschedule events are active now.</p>
+              <p className="text-[12px] text-slate-400">At-risk, Sunday streak, duty, and dishwashing rules are ready for their later event hooks. Absence and reschedule events are active now.</p>
             </div>
           </div>
         )}
@@ -1249,21 +1261,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
         {/* 8. GENERAL CHURCH SETTINGS */}
         {/* ==================================================== */}
         {activeTab === "general" && (
-          <form onSubmit={handleSaveGeneralSettings} className="bg-white rounded-2xl p-6 lg:p-8 border border-indigo-100 shadow-xs space-y-6">
+          <form data-guide="settings-general-form" onSubmit={handleSaveGeneralSettings} className="bg-white rounded-2xl p-6 lg:p-8 border border-indigo-100 shadow-xs space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
               <div>
-                <h2 className="text-lg font-bold text-charcoal flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-charcoal flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-indigo" />
                   <span>Church Profile & System Preferences</span>
                 </h2>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-muted">
                   Global branding, contact numbers, security prefixes, and Sunday live service configurations.
                 </p>
               </div>
-              <button
+              <button data-guide="settings-general-save"
                 type="submit"
                 disabled={savingGeneral}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs shrink-0 disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs shrink-0 disabled:opacity-50"
               >
                 <Check className="w-4 h-4" />
                 <span>{savingGeneral ? "Saving Changes..." : "Save Preferences"}</span>
@@ -1273,11 +1285,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Church Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
+                <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-indigo" />
                   <span>Church Name</span>
                 </label>
-                <input
+                <input data-guide="settings-church-name"
                   type="text"
                   value={generalForm.church_name || ""}
                   onChange={(e) => setGeneralForm({ ...generalForm, church_name: e.target.value })}
@@ -1288,7 +1300,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Pastor Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
+                <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-indigo" />
                   <span>Senior Pastor / Minister</span>
                 </label>
@@ -1303,7 +1315,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Tagline / Mission */}
               <div className="md:col-span-2 space-y-1.5">
-                <label className="text-xs font-bold text-charcoal">
+                <label className="text-xs font-medium text-charcoal">
                   Church Motto / Mission Tagline
                 </label>
                 <input
@@ -1317,7 +1329,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Church Address */}
               <div className="md:col-span-2 space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
+                <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-indigo" />
                   <span>Physical Address & Location</span>
                 </label>
@@ -1332,7 +1344,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Phone */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
+                <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-indigo" />
                   <span>Contact Phone Number</span>
                 </label>
@@ -1347,7 +1359,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Email */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
+                <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                   <Mail className="w-3.5 h-3.5 text-indigo" />
                   <span>Official Church Email</span>
                 </label>
@@ -1362,7 +1374,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Service Times */}
               <div className="md:col-span-2 space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
+                <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-indigo" />
                   <span>Sunday Worship & Fellowship Times</span>
                 </label>
@@ -1377,7 +1389,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Security Code Prefix */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-charcoal flex items-center gap-1.5">
+                <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-indigo" />
                   <span>Sunday Check-In Security Code Prefix</span>
                 </label>
@@ -1392,10 +1404,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
             </div>
 
             <div className="pt-4 border-t border-gray-100 flex justify-end">
-              <button
+              <button data-guide="settings-general-save"
                 type="submit"
                 disabled={savingGeneral}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs disabled:opacity-50"
               >
                 <Check className="w-4 h-4" />
                 <span>{savingGeneral ? "Saving Changes..." : "Save Preferences"}</span>
@@ -1412,31 +1424,31 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       {/* ==================================================== */}
       {isLookupModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div data-modal-header className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-2xs"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-medium shadow-2xs"
                   style={{ backgroundColor: lookupFormData.color }}
                 >
                   <Tag className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="font-black text-base text-charcoal">
+                <h3 className="font-semibold text-base text-charcoal">
                   {editingLookup ? "Edit Category Item" : "New Category Item"}
                 </h3>
               </div>
               <button
                 onClick={() => setIsLookupModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/50 hover:text-charcoal transition-colors"
+                className="p-1.5 hover:bg-gray-100 rounded-lg text-muted hover:text-charcoal transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveLookup} className="space-y-4">
+            <form data-guide="settings-lookup-form" onSubmit={handleSaveLookup} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-charcoal">Name *</label>
-                <input
+                <label className="text-xs font-medium text-charcoal">Name *</label>
+                <input data-guide="settings-lookup-label"
                   type="text"
                   required
                   placeholder="e.g. Young Professionals, Main Sanctuary..."
@@ -1447,7 +1459,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-charcoal">Description / Notes</label>
+                <label className="text-xs font-medium text-charcoal">Description / Notes</label>
                 <textarea
                   rows={2}
                   placeholder="Brief description of this category..."
@@ -1459,9 +1471,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Color Selector */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-charcoal flex items-center justify-between">
+                <label className="text-xs font-medium text-charcoal flex items-center justify-between">
                   <span>Badge Color</span>
-                  <span className="text-[10px] font-mono text-charcoal/50 uppercase">{lookupFormData.color}</span>
+                  <span className="text-[12px] font-mono text-muted uppercase">{lookupFormData.color}</span>
                 </label>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {COLOR_PRESETS.map((col) => (
@@ -1489,7 +1501,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               {/* Sort Order & Active */}
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-charcoal">Display Sort Order</label>
+                  <label className="text-xs font-medium text-charcoal">Display Sort Order</label>
                   <input
                     type="number"
                     value={lookupFormData.sort_order}
@@ -1499,7 +1511,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-charcoal">Status</label>
+                  <label className="text-xs font-medium text-charcoal">Status</label>
                   <select
                     value={lookupFormData.is_active}
                     onChange={(e) => setLookupFormData({ ...lookupFormData, is_active: Number(e.target.value) })}
@@ -1511,23 +1523,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <div data-modal-footer className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsLookupModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-charcoal/70 hover:bg-gray-100 transition-colors"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="settings-lookup-save"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs"
                 >
                   {editingLookup ? "Save Changes" : "Create Item"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1537,30 +1549,30 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       {/* ==================================================== */}
       {isMinistryModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div data-modal-header className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-2xs"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-medium shadow-2xs"
                   style={{ backgroundColor: ministryFormData.color }}
                 >
                   <Users className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="font-black text-base text-charcoal">
+                <h3 className="font-semibold text-base text-charcoal">
                   {editingMinistry ? "Edit Ministry" : "Add New Ministry"}
                 </h3>
               </div>
               <button
                 onClick={() => setIsMinistryModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg text-charcoal/50 hover:text-charcoal transition-colors"
+                className="p-1.5 hover:bg-gray-100 rounded-lg text-muted hover:text-charcoal transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveMinistry} className="space-y-4">
+            <form data-guide="settings-ministry-form" onSubmit={handleSaveMinistry} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-charcoal">Ministry Name *</label>
+                <label className="text-xs font-medium text-charcoal">Ministry Name *</label>
                 <input
                   type="text"
                   required
@@ -1573,7 +1585,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-charcoal">Min Age (Years)</label>
+                  <label className="text-xs font-medium text-charcoal">Min Age (Years)</label>
                   <input
                     type="number"
                     placeholder="e.g. 18"
@@ -1584,7 +1596,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-charcoal">Max Age (Years)</label>
+                  <label className="text-xs font-medium text-charcoal">Max Age (Years)</label>
                   <input
                     type="number"
                     placeholder="e.g. 35"
@@ -1596,7 +1608,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-charcoal">Description</label>
+                <label className="text-xs font-medium text-charcoal">Description</label>
                 <textarea
                   rows={2}
                   placeholder="Target demographic, Sunday class goals..."
@@ -1608,9 +1620,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
 
               {/* Color */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-charcoal flex items-center justify-between">
+                <label className="text-xs font-medium text-charcoal flex items-center justify-between">
                   <span>Department Brand Color</span>
-                  <span className="text-[10px] font-mono text-charcoal/50 uppercase">{ministryFormData.color}</span>
+                  <span className="text-[12px] font-mono text-muted uppercase">{ministryFormData.color}</span>
                 </label>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {COLOR_PRESETS.map((col) => (
@@ -1634,23 +1646,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+              <div data-modal-footer className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsMinistryModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-charcoal/70 hover:bg-gray-100 transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-charcoal/70 hover:bg-gray-100 transition-colors"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="settings-ministry-save"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-bold transition-all shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs"
                 >
                   {editingMinistry ? "Save Ministry" : "Create Ministry"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -1660,38 +1672,38 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers })
       {/* ==================================================== */}
       {deleteConfirm && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose flex items-center justify-center mx-auto">
+          <ModalPanel className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div data-modal-header className="space-y-4"><div className="w-10 h-10 rounded-xl bg-rose-50 text-rose flex items-center justify-center mx-auto">
               <Trash2 className="w-5 h-5" />
             </div>
 
             <div className="text-center space-y-1.5">
-              <h3 className="font-black text-base text-charcoal">Confirm Deletion</h3>
+              <h3 className="font-semibold text-base text-charcoal">Confirm Deletion</h3>
               <p className="text-xs text-charcoal/70">
-                Are you sure you want to delete <span className="font-bold text-charcoal">"{deleteConfirm.name}"</span>?
+                Are you sure you want to delete <span className="font-medium text-charcoal">"{deleteConfirm.name}"</span>?
               </p>
               {deleteConfirm.usageCount !== undefined && deleteConfirm.usageCount > 0 && (
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 text-left">
-                  <span className="font-bold">Notice:</span> This item is currently referenced by {deleteConfirm.usageCount} records.
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[12px] text-amber-900 text-left">
+                  <span className="font-medium">Notice:</span> This item is currently referenced by {deleteConfirm.usageCount} records.
                 </div>
               )}
-            </div>
+            </div></div>
 
-            <div className="flex items-center gap-2 pt-2">
+            <div data-modal-footer className="flex items-center gap-2 pt-2">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="flex-1 py-2 rounded-xl text-xs font-bold text-charcoal/70 border border-gray-200 hover:bg-gray-50 transition-colors"
+                className="flex-1 py-2 rounded-xl text-xs font-medium text-charcoal/70 border border-gray-200 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="flex-1 py-2 rounded-xl text-xs font-bold bg-rose text-white hover:bg-rose-900 transition-colors shadow-xs"
+                className="flex-1 py-2 rounded-xl text-xs font-medium bg-rose text-white hover:bg-rose-900 transition-colors shadow-xs"
               >
                 Yes, Delete
               </button>
             </div>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

@@ -42,6 +42,8 @@ Thumbs.db
 
 # Desktop App
 dist_electron/
+dist_electron.zip
+*.zip
 release/
 dist/
 

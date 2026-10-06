@@ -1,3 +1,4 @@
+import { MessageSquare as UIMessageSquare } from "lucide-react";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   BibleStudyGroup, GroupAttendanceResponse,
@@ -182,8 +183,8 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
     return (
       <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-12 text-center space-y-3">
         <Users className="w-12 h-12 text-charcoal/30 mx-auto" />
-        <h3 className="text-base font-black text-charcoal">No Group Selected</h3>
-        <p className="text-xs text-charcoal/60 max-w-sm mx-auto">
+        <h3 className="text-base font-semibold text-charcoal">No Group Selected</h3>
+        <p className="text-xs text-muted max-w-sm mx-auto">
           Please select a Small Group from the dropdown above to monitor attendance and absentee records.
         </p>
       </div>
@@ -209,18 +210,18 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         {/* Total Sessions */}
         <div className="bg-white rounded-3xl border border-gray-200 shadow-xs p-5 flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-charcoal/50">
+            <span className="text-[12px] font-medium uppercase tracking-wider text-muted">
               Total Sessions Held
             </span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-black text-xs">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-medium text-xs">
               <Calendar className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-black text-charcoal">
-              {summary.total_sessions} <span className="text-xs font-bold text-charcoal/50">sessions</span>
+            <div className="text-2xl sm:text-3xl font-medium text-charcoal">
+              {summary.total_sessions} <span className="text-xs font-medium text-muted">sessions</span>
             </div>
-            <p className="text-[11px] text-charcoal/60 mt-0.5 font-semibold">
+            <p className="text-[12px] text-muted mt-0.5 font-medium">
               Avg {summary.average_attendees_per_session} attendees / session
             </p>
           </div>
@@ -229,15 +230,15 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         {/* Overall Attendance Rate */}
         <div className="bg-white rounded-3xl border border-gray-200 shadow-xs p-5 flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-charcoal/50">
+            <span className="text-[12px] font-medium uppercase tracking-wider text-muted">
               Attendance Rate
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xs">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-medium text-xs">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-black text-emerald-950">
+            <div className="text-2xl sm:text-3xl font-medium text-emerald-950">
               {summary.overall_attendance_rate}%
             </div>
             <div className="w-full bg-emerald-100 rounded-full h-1.5 mt-2 overflow-hidden">
@@ -252,18 +253,18 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         {/* Total Absences Logged */}
         <div className="bg-white rounded-3xl border border-gray-200 shadow-xs p-5 flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-charcoal/50">
+            <span className="text-[12px] font-medium uppercase tracking-wider text-muted">
               Total Absences (Dati)
             </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-black text-xs">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-medium text-xs">
               <UserX className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-black text-amber-950">
-              {summary.total_absences} <span className="text-xs font-bold text-charcoal/50">missed slots</span>
+            <div className="text-2xl sm:text-3xl font-medium text-amber-950">
+              {summary.total_absences} <span className="text-xs font-medium text-muted">missed slots</span>
             </div>
-            <p className="text-[11px] text-amber-800/80 mt-0.5 font-semibold">
+            <p className="text-[12px] text-amber-800/80 mt-0.5 font-medium">
               Across all recorded meetings
             </p>
           </div>
@@ -276,18 +277,18 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
             : "bg-white border-gray-200"
         }`}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-900/70">
+            <span className="text-[12px] font-medium uppercase tracking-wider text-rose-900/70">
               Needs Follow-Up
             </span>
-            <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-black text-xs">
+            <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-medium text-xs">
               <ShieldAlert className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl sm:text-3xl font-black text-rose-950">
-              {summary.at_risk_count} <span className="text-xs font-bold text-charcoal/50">disciples</span>
+            <div className="text-2xl sm:text-3xl font-medium text-rose-950">
+              {summary.at_risk_count} <span className="text-xs font-medium text-muted">disciples</span>
             </div>
-            <p className="text-[11px] text-rose-800/80 mt-0.5 font-semibold">
+            <p className="text-[12px] text-rose-800/80 mt-0.5 font-medium">
               {summary.at_risk_count > 0 ? ">=2 or 3 consecutive absences" : "All members consistent"}
             </p>
           </div>
@@ -303,30 +304,30 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
           <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-2xl w-fit">
             <button
               onClick={() => setActiveSubTab("disciples")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                 activeSubTab === "disciples"
                   ? "bg-white text-charcoal shadow-xs"
-                  : "text-charcoal/60 hover:text-charcoal"
+                  : "text-muted hover:text-charcoal"
               }`}
             >
               <UserCheck className="w-4 h-4 text-indigo" />
               <span>Disciple Absentee Breakdown</span>
-              <span className="bg-indigo-100 text-indigo-900 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className="bg-indigo-100 text-indigo-900 text-[12px] px-1.5 py-0.2 rounded-full font-medium">
                 {data?.members?.length || 0}
               </span>
             </button>
 
             <button
               onClick={() => setActiveSubTab("sessions")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                 activeSubTab === "sessions"
                   ? "bg-white text-charcoal shadow-xs"
-                  : "text-charcoal/60 hover:text-charcoal"
+                  : "text-muted hover:text-charcoal"
               }`}
             >
               <Clock className="w-4 h-4 text-amber-600" />
               <span>Past Session History Logs (Dati)</span>
-              <span className="bg-amber-100 text-amber-900 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className="bg-amber-100 text-amber-900 text-[12px] px-1.5 py-0.2 rounded-full font-medium">
                 {data?.sessions?.length || 0}
               </span>
             </button>
@@ -335,7 +336,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenRollCall}
-              className="px-4 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="px-4 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <CheckCircle2 className="w-4 h-4 text-amber-300" />
               <span>Take Weekly Roll-Call</span>
@@ -343,7 +344,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
 
             <button
               onClick={handlePrint}
-              className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer print:hidden"
+              className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-medium text-xs transition-colors flex items-center gap-1.5 cursor-pointer print:hidden"
               title="Print attendance report"
             >
               <Printer className="w-4 h-4" />
@@ -364,18 +365,18 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search Input */}
           <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-charcoal/40 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder={activeSubTab === "disciples" ? "Search disciple name, phone, ministry..." : "Search past session topic, date, chapter..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 bg-ivory-light rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-semibold text-charcoal"
+              className="w-full pl-9 pr-8 py-2 bg-ivory-light rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-charcoal/40 hover:text-rose-500 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-rose-500 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -388,15 +389,15 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
               <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
                 <button
                   onClick={() => setStatusFilter("all")}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
-                    statusFilter === "all" ? "bg-white text-charcoal shadow-2xs" : "text-charcoal/60"
+                  className={`px-2.5 py-1 rounded-lg font-medium text-[12px] transition-all cursor-pointer ${
+                    statusFilter === "all" ? "bg-white text-charcoal shadow-2xs" : "text-muted"
                   }`}
                 >
                   All ({data?.members?.length || 0})
                 </button>
                 <button
                   onClick={() => setStatusFilter("at_risk")}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg font-medium text-[12px] transition-all cursor-pointer ${
                     statusFilter === "at_risk" ? "bg-rose-500 text-white shadow-2xs" : "text-rose-700 hover:bg-rose-50"
                   }`}
                 >
@@ -404,7 +405,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                 </button>
                 <button
                   onClick={() => setStatusFilter("has_absences")}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg font-medium text-[12px] transition-all cursor-pointer ${
                     statusFilter === "has_absences" ? "bg-amber-500 text-white shadow-2xs" : "text-amber-800 hover:bg-amber-50"
                   }`}
                 >
@@ -412,7 +413,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                 </button>
                 <button
                   onClick={() => setStatusFilter("consistent")}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg font-medium text-[12px] transition-all cursor-pointer ${
                     statusFilter === "consistent" ? "bg-emerald-600 text-white shadow-2xs" : "text-emerald-800 hover:bg-emerald-50"
                   }`}
                 >
@@ -422,11 +423,11 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
 
               {/* Sort Selector */}
               <div className="flex items-center gap-1.5 ml-auto">
-                <ArrowUpDown className="w-3.5 h-3.5 text-charcoal/40" />
+                <ArrowUpDown className="w-3.5 h-3.5 text-muted" />
                 <select
                   value={sortBy}
                   onChange={(e: any) => setSortBy(e.target.value)}
-                  className="bg-ivory-light py-1.5 px-2.5 rounded-xl border border-gray-200 text-[11px] font-bold text-charcoal cursor-pointer"
+                  className="bg-ivory-light py-1.5 px-2.5 rounded-xl border border-gray-200 text-[12px] font-medium text-charcoal cursor-pointer"
                 >
                   <option value="absences_desc">Most Absences First</option>
                   <option value="rate_asc">Lowest Attendance Rate</option>
@@ -443,10 +444,10 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         {activeSubTab === "disciples" && (
           <div className="space-y-3">
             {filteredDisciples.length === 0 ? (
-              <div className="py-12 text-center text-charcoal/50 space-y-2 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+              <div className="py-12 text-center text-muted space-y-2 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
                 <UserCheck className="w-8 h-8 mx-auto text-charcoal/30" />
-                <p className="font-bold text-xs">No disciples matched your filter</p>
-                <p className="text-[11px]">Try adjusting your search query or selecting "All"</p>
+                <p className="font-medium text-xs">No disciples matched your filter</p>
+                <p className="text-[12px]">Try adjusting your search query or selecting "All"</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white">
@@ -470,7 +471,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                       >
                         {/* Member Identity */}
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 shadow-2xs ${
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-medium text-xs shrink-0 shadow-2xs ${
                             isAtRisk
                               ? "bg-rose-100 text-rose-800 ring-2 ring-rose-300"
                               : disciple.absent_count === 0
@@ -482,27 +483,27 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
 
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-extrabold text-charcoal text-sm truncate">
+                              <span className="font-medium text-charcoal text-sm truncate">
                                 {disciple.display_name}
                               </span>
 
                               {isAtRisk && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black animate-pulse">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[12px] font-medium animate-pulse">
                                   <AlertTriangle className="w-3 h-3" />
                                   <span>Needs Shepherd Follow-Up</span>
                                 </span>
                               )}
 
                               {disciple.consecutive_absences >= 2 && (
-                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[12px] font-medium">
                                   {disciple.consecutive_absences} missed in a row
                                 </span>
                               )}
                             </div>
 
-                            <div className="flex items-center gap-2 text-[11px] text-charcoal/50 mt-0.5 flex-wrap">
+                            <div className="flex items-center gap-2 text-[12px] text-muted mt-0.5 flex-wrap">
                               {disciple.ministry_name ? (
-                                <span className="font-bold text-indigo bg-indigo-50 px-1.5 py-0.2 rounded-md">
+                                <span className="font-medium text-indigo bg-indigo-50 px-1.5 py-0.2 rounded-md">
                                   {disciple.ministry_name}
                                 </span>
                               ) : (
@@ -515,7 +516,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                                 </span>
                               )}
                               {disciple.contact_email && (
-                                <span className="hidden md:flex items-center gap-1 text-charcoal/50 truncate">
+                                <span className="hidden md:flex items-center gap-1 text-muted truncate">
                                   <Mail className="w-3 h-3" />
                                   <span className="truncate">{disciple.contact_email}</span>
                                 </span>
@@ -528,8 +529,8 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                         <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
                           {/* Present vs Total */}
                           <div className="text-left sm:text-right">
-                            <div className="text-xs font-black text-charcoal">
-                              {disciple.present_count} / {summary.total_sessions} <span className="text-[10px] font-bold text-charcoal/50">Sessions</span>
+                            <div className="text-xs font-medium text-charcoal">
+                              {disciple.present_count} / {summary.total_sessions} <span className="text-[12px] font-medium text-muted">Sessions</span>
                             </div>
                             <div className="flex items-center gap-1.5 mt-1 sm:justify-end">
                               <div className="w-16 bg-gray-200 rounded-full h-1.5 overflow-hidden">
@@ -544,7 +545,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                                   style={{ width: `${disciple.attendance_rate}%` }}
                                 />
                               </div>
-                              <span className="text-[10px] font-black text-charcoal/70">
+                              <span className="text-[12px] font-medium text-charcoal/70">
                                 {disciple.attendance_rate}%
                               </span>
                             </div>
@@ -552,7 +553,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
 
                           {/* Absent Counter Badge (User explicitly requested: makita lahat kung ilan na absent) */}
                           <div className="shrink-0 text-center">
-                            <span className={`inline-flex items-center justify-center gap-1 px-3 py-1 rounded-full text-xs font-black shadow-2xs ${
+                            <span className={`inline-flex items-center justify-center gap-1 px-3 py-1 rounded-full text-xs font-medium shadow-2xs ${
                               disciple.absent_count === 0
                                 ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                 : disciple.absent_count >= 3
@@ -566,7 +567,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
 
                           <button
                             type="button"
-                            className="p-1 text-charcoal/40 hover:text-indigo rounded-lg cursor-pointer"
+                            className="p-1 text-muted hover:text-indigo rounded-lg cursor-pointer"
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
@@ -576,13 +577,13 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                       {/* Expandable Session-by-Session Timeline Tray */}
                       {isExpanded && (
                         <div className="bg-gray-50/70 border-t border-gray-100 p-4 space-y-3 animate-in fade-in">
-                          <div className="flex items-center justify-between text-xs font-bold text-charcoal/70">
+                          <div className="flex items-center justify-between text-xs font-medium text-charcoal/70">
                             <span>Attendance History Across All {summary.total_sessions} Sessions:</span>
                             {disciple.contact_phone && (
                               <a
                                 href={`tel:${disciple.contact_phone}`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-indigo hover:text-indigo-800 text-[11px] flex items-center gap-1 font-bold"
+                                className="text-indigo hover:text-indigo-800 text-[12px] flex items-center gap-1 font-medium"
                               >
                                 <Phone className="w-3 h-3" />
                                 <span>Call Disciple for Follow-Up</span>
@@ -591,7 +592,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                           </div>
 
                           {disciple.history.length === 0 ? (
-                            <p className="text-xs text-charcoal/50 italic">No session attendance recorded yet.</p>
+                            <p className="text-xs text-muted italic">No session attendance recorded yet.</p>
                           ) : (
                             <div>
                               {(() => {
@@ -616,25 +617,25 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                                                 ? "bg-white border-emerald-200 text-emerald-950"
                                                 : h.status === "excused"
                                                 ? "bg-white border-sky-200 text-sky-950"
-                                                : "bg-rose-50/80 border-rose-200 text-rose-950 font-semibold"
+                                                : "bg-rose-50/80 border-rose-200 text-rose-950 font-medium"
                                             }`}
                                           >
                                             <div>
-                                              <div className="font-extrabold flex items-center gap-1.5">
-                                                <Calendar className="w-3 h-3 text-charcoal/40" />
+                                              <div className="font-medium flex items-center gap-1.5">
+                                                <Calendar className="w-3 h-3 text-muted" />
                                                 <span>{formattedDate}</span>
                                               </div>
-                                              <div className="text-[10px] text-charcoal/60 truncate mt-0.5">
+                                              <div className="text-[12px] text-muted truncate mt-0.5">
                                                 {h.chapter || h.topic_title}
                                               </div>
                                               {h.notes && (
-                                                <div className="text-[10px] text-charcoal/50 italic mt-0.5 line-clamp-1">
+                                                <div className="text-[12px] text-muted italic mt-0.5 line-clamp-1">
                                                   "{h.notes}"
                                                 </div>
                                               )}
                                             </div>
 
-                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                                            <span className={`text-[12px] font-medium uppercase px-2 py-0.5 rounded-full shrink-0 ${
                                               h.status === "present"
                                                 ? "bg-emerald-100 text-emerald-900"
                                                 : h.status === "excused"
@@ -659,7 +660,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                                               [disciple.member_id]: !prev[disciple.member_id]
                                             }));
                                           }}
-                                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo font-bold text-[11px] rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo font-medium text-[12px] rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
                                         >
                                           {isAllHistoryShown ? (
                                             <>
@@ -696,10 +697,10 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         {activeSubTab === "sessions" && (
           <div className="space-y-3">
             {filteredSessions.length === 0 ? (
-              <div className="py-12 text-center text-charcoal/50 space-y-2 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+              <div className="py-12 text-center text-muted space-y-2 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
                 <Calendar className="w-8 h-8 mx-auto text-charcoal/30" />
-                <p className="font-bold text-xs">No past Bible Study sessions found</p>
-                <p className="text-[11px]">Click "Take Weekly Roll-Call" above to log attendance for a meeting date.</p>
+                <p className="font-medium text-xs">No past Bible Study sessions found</p>
+                <p className="text-[12px]">Click "Take Weekly Roll-Call" above to log attendance for a meeting date.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -723,27 +724,26 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                         className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-gray-50/60 transition-colors"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-black text-xs shrink-0 mt-0.5">
+                          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-medium text-xs shrink-0 mt-0.5">
                             <BookOpen className="w-5 h-5 text-amber-600" />
                           </div>
 
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-black text-sm text-charcoal">
+                              <h4 className="font-semibold text-sm text-charcoal">
                                 {formattedDate}
                               </h4>
-                              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo font-bold text-[10px]">
+                              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo font-medium text-[12px]">
                                 {session.chapter || "Bible Study Session"}
                               </span>
                             </div>
 
-                            <p className="text-xs text-charcoal/70 font-semibold mt-0.5">
+                            <p className="text-xs text-charcoal/70 font-medium mt-0.5">
                               {session.topic_title || activeGroup.curriculum || "Weekly Life Group Fellowship"}
                             </p>
 
                             {session.notes && (
-                              <p className="text-[11px] text-charcoal/50 italic mt-0.5 line-clamp-1">
-                                💬 "{session.notes}"
+                              <p className="text-[12px] text-muted italic mt-0.5 line-clamp-1"><UIMessageSquare aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> "{session.notes}"
                               </p>
                             )}
                           </div>
@@ -752,13 +752,13 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                         {/* Attendees vs Absentees Ratio */}
                         <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-extrabold text-xs">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-medium text-xs">
                               <Check className="w-3.5 h-3.5 text-emerald-600" />
                               <span>{session.present_count} Present</span>
                             </span>
 
                             {session.absent_count > 0 && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 font-extrabold text-xs">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 font-medium text-xs">
                                 <X className="w-3.5 h-3.5 text-rose-600" />
                                 <span>{session.absent_count} Absent</span>
                               </span>
@@ -777,7 +777,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                             <Trash2 className="w-4 h-4" />
                           </button>
 
-                          <div className="p-1 text-charcoal/40">
+                          <div className="p-1 text-muted">
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </div>
                         </div>
@@ -788,18 +788,18 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                         <div className="bg-gray-50/80 border-t border-gray-100 p-4 space-y-4 animate-in fade-in text-xs">
                           {/* Attendees Section */}
                           <div>
-                            <div className="flex items-center gap-1.5 font-bold text-emerald-950 mb-2">
+                            <div className="flex items-center gap-1.5 font-medium text-emerald-950 mb-2">
                               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                               <span>Present Disciples ({session.attendees.length}):</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               {session.attendees.length === 0 ? (
-                                <span className="text-charcoal/40 italic">No disciples marked present</span>
+                                <span className="text-muted italic">No disciples marked present</span>
                               ) : (
                                 session.attendees.map(a => (
                                   <span
                                     key={a.member_id}
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-emerald-200 text-emerald-900 font-bold text-xs shadow-2xs"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-emerald-200 text-emerald-900 font-medium text-xs shadow-2xs"
                                   >
                                     <div className="w-2 h-2 rounded-full bg-emerald-500" />
                                     <span>{a.name}</span>
@@ -812,7 +812,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                           {/* Absentees Section (Crucial for Leader to see who missed) */}
                           {session.absentees.length > 0 && (
                             <div>
-                              <div className="flex items-center gap-1.5 font-bold text-rose-950 mb-2">
+                              <div className="flex items-center gap-1.5 font-medium text-rose-950 mb-2">
                                 <AlertCircle className="w-4 h-4 text-rose-600" />
                                 <span>Absent Disciples ({session.absentees.length}):</span>
                               </div>
@@ -820,7 +820,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                                 {session.absentees.map(a => (
                                   <span
                                     key={a.member_id}
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-rose-200 text-rose-900 font-bold text-xs shadow-2xs"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-rose-200 text-rose-900 font-medium text-xs shadow-2xs"
                                   >
                                     <div className="w-2 h-2 rounded-full bg-rose-500" />
                                     <span>{a.name}</span>
@@ -842,7 +842,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                           {/* Session Notes */}
                           {session.notes && (
                             <div className="p-3 bg-white rounded-xl border border-gray-200 space-y-1">
-                              <div className="font-bold text-charcoal/70 flex items-center gap-1">
+                              <div className="font-medium text-charcoal/70 flex items-center gap-1">
                                 <MessageSquare className="w-3.5 h-3.5 text-indigo" />
                                 <span>Leader Session Notes & Prayer Highlights:</span>
                               </div>
@@ -860,7 +860,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                 {/* Pagination Controls for Past Sessions */}
                 {filteredSessions.length > 0 && totalSessionPages > 1 && (
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-200 text-xs">
-                    <div className="text-charcoal/60 font-semibold text-[11px]">
+                    <div className="text-muted font-medium text-[12px]">
                       Showing <strong className="text-charcoal">{(sessionPage - 1) * SESSIONS_PER_PAGE + 1}</strong> to <strong className="text-charcoal">{Math.min(sessionPage * SESSIONS_PER_PAGE, filteredSessions.length)}</strong> of <strong className="text-charcoal">{filteredSessions.length}</strong> past sessions
                     </div>
 
@@ -869,7 +869,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                         type="button"
                         disabled={sessionPage <= 1}
                         onClick={() => setSessionPage(p => Math.max(1, p - 1))}
-                        className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-bold text-charcoal/70 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                        className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-medium text-charcoal/70 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
                       >
                         <ChevronLeft className="w-3.5 h-3.5" />
                         <span>Prev</span>
@@ -881,7 +881,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                             key={pageNum}
                             type="button"
                             onClick={() => setSessionPage(pageNum)}
-                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            className={`w-7 h-7 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                               sessionPage === pageNum
                                 ? "bg-indigo text-white shadow-2xs"
                                 : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
@@ -896,7 +896,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
                         type="button"
                         disabled={sessionPage >= totalSessionPages}
                         onClick={() => setSessionPage(p => Math.min(totalSessionPages, p + 1))}
-                        className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-bold text-charcoal/70 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                        className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white font-medium text-charcoal/70 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
                       >
                         <span>Next</span>
                         <ChevronRight className="w-3.5 h-3.5" />

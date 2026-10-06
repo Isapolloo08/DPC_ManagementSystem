@@ -1,8 +1,11 @@
+import { Target as UITarget } from "lucide-react";
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { useSocketEvent } from "../socket";
 import { DishwashingPageSkeleton, CardGridSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
 import { DishwashingTeam, SundayDutyScheduleItem, Member, BibleStudyGroup, Ministry } from "../types";
@@ -10,7 +13,7 @@ import { ConfirmationModal, ModalType } from "../components/common/ConfirmationM
 import {
   Utensils, Calendar, CalendarCheck, Users, CheckCircle2, Clock, Plus,
   Trash2, Edit, RefreshCw, ArrowLeftRight, Check, X,
-  AlertCircle, ChevronRight, Phone, CheckSquare, Crown, UserPlus,
+  AlertCircle, ChevronRight, Phone, CheckSquare, UserCheck, UserPlus,
   BookOpen, Building2, Layers, ShieldCheck, ArrowRight,
   Droplets, Flame, Search, Filter, CalendarDays, Award,
   ListOrdered, HeartHandshake, Eye
@@ -446,11 +449,12 @@ export const DishwashingPage: React.FC = () => {
     loadDishwashingData();
   });
 
-  const loadDishwashingData = async () => {
+ const loadDishwashingData = async () => {
+    guideData.clearError();
     try {
       setLoading(true);
       const [teamsData, scheduleData, membersData, groupsData, ministriesData] = await Promise.all([
-        api.getDishwashingTeams().catch(() => []),
+        api.getDishwashingTeams().catch(err => { guideData.reportError(err); return []; }),
         api.getDishwashingSchedule({ count: 16 }).catch(() => ({ total_teams: 0, cycle_interval_weeks: 0, thisSunday: null, nextSunday: null, schedule: [] })),
         api.getMembers({ status: "active" }).catch(() => []),
         api.getGroups().catch(() => []),
@@ -467,6 +471,7 @@ export const DishwashingPage: React.FC = () => {
       setMinistriesList(ministriesData || []);
     } catch (err) {
       console.error("Failed to load dishwashing roster:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
     }
@@ -1075,6 +1080,8 @@ export const DishwashingPage: React.FC = () => {
     }
   };
 
+  const guideData = useGuideDataState("washing-teams", { loading, count: activeTab === "teams" ? filteredTeams.length : teams.length, filtered: activeTab === "teams" && Boolean(searchQuery || filterMode !== "all"), retry: loadDishwashingData });
+
   if (loading && teams.length === 0) {
     return <DishwashingPageSkeleton />;
   }
@@ -1093,15 +1100,15 @@ export const DishwashingPage: React.FC = () => {
 
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <Utensils className="w-3.5 h-3.5 text-amber-300" />
               <span>Rotating Service Cycle</span>
             </div>
-            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-bold px-3 py-1 rounded-full backdrop-blur-md">
+            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
               {teams.length} Teams in Loop
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
             Sunday Dishwashing & Kitchen Care
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
@@ -1118,9 +1125,9 @@ export const DishwashingPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-amber-300" : ""}`} />
           </button>
           {isAdminOrCoordinator && (
-            <button
+            <button data-guide="washing-new"
               onClick={handleOpenCreateTeam}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4 text-indigo-950" />
               <span>Add Team to Cycle</span>
@@ -1136,8 +1143,8 @@ export const DishwashingPage: React.FC = () => {
             <ListOrdered className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Rotating Units</span>
-            <span className="text-lg font-black text-slate-800">{teams.length} Teams in Loop</span>
+            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">Rotating Units</span>
+            <span className="text-lg font-medium text-slate-800">{teams.length} Teams in Loop</span>
           </div>
         </div>
 
@@ -1146,8 +1153,8 @@ export const DishwashingPage: React.FC = () => {
             <CalendarDays className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Turn Repeat</span>
-            <span className="text-lg font-black text-slate-800">Every {teams.length || 1} Weeks</span>
+            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">Turn Repeat</span>
+            <span className="text-lg font-medium text-slate-800">Every {teams.length || 1} Weeks</span>
           </div>
         </div>
 
@@ -1156,8 +1163,8 @@ export const DishwashingPage: React.FC = () => {
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Completed Cleanups</span>
-            <span className="text-lg font-black text-slate-800">{completedCount} Verified</span>
+            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">Completed Cleanups</span>
+            <span className="text-lg font-medium text-slate-800">{completedCount} Verified</span>
           </div>
         </div>
 
@@ -1166,8 +1173,8 @@ export const DishwashingPage: React.FC = () => {
             <CalendarCheck className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">This Sunday</span>
-            <span className="text-sm font-black text-slate-800 truncate block max-w-[140px]">
+            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">This Sunday</span>
+            <span className="text-sm font-medium text-slate-800 truncate block max-w-[140px]">
               {thisSunday?.team?.name || "Pending Assign"}
             </span>
           </div>
@@ -1186,19 +1193,19 @@ export const DishwashingPage: React.FC = () => {
             {/* Header Badge Row */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="bg-emerald-500 text-slate-950 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
+                <span className="bg-emerald-500 text-slate-950 font-medium text-[12px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
                   <Droplets className="w-3.5 h-3.5 text-slate-950" />
                   <span>THIS SUNDAY ON DISHWASHING</span>
                 </span>
                 {thisSunday && (
-                  <span className="text-xs text-teal-100 font-bold bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+                  <span className="text-xs text-teal-100 font-medium bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
                     {thisSunday.date_formatted}
                   </span>
                 )}
               </div>
 
               {thisSunday?.status === "completed" && (
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[12px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
                   <Check className="w-3 h-3" />
                   <span>Sanitation Done</span>
                 </span>
@@ -1209,7 +1216,7 @@ export const DishwashingPage: React.FC = () => {
             {thisSunday?.team ? (
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
                     {thisSunday.team.name}
                   </h2>
                   <span
@@ -1217,13 +1224,13 @@ export const DishwashingPage: React.FC = () => {
                     style={{ backgroundColor: thisSunday.team.color }}
                   ></span>
                   {thisSunday.team.cycle_mode === "biblestudy_group" && (
-                    <span className="text-[10px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[12px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
                       <BookOpen className="w-3 h-3" />
                       <span>Bible Study Group</span>
                     </span>
                   )}
                   {thisSunday.team.cycle_mode === "ministry" && (
-                    <span className="text-[10px] bg-teal-500/30 text-teal-200 border border-teal-400/30 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[12px] bg-teal-500/30 text-teal-200 border border-teal-400/30 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Building2 className="w-3 h-3" />
                       <span>Ministry Unit</span>
                     </span>
@@ -1237,14 +1244,14 @@ export const DishwashingPage: React.FC = () => {
                 {/* Point Person & Volunteers row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
                   <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-2.5">
-                    <Crown className="w-4 h-4 text-amber-300 shrink-0" />
+                    <UserCheck className="w-4 h-4 text-amber-300 shrink-0" />
                     <div className="min-w-0">
-                      <span className="text-[10px] text-teal-200/70 block uppercase font-bold">Crew Leader / Contact</span>
-                      <span className="text-xs font-black text-white truncate block">
+                      <span className="text-[12px] text-teal-200/70 block uppercase font-medium">Crew Leader / Contact</span>
+                      <span className="text-xs font-medium text-white truncate block">
                         {thisSunday.team.leader_name || "Assigned Point Person"}
                       </span>
                       {(thisSunday.team.leader_contact || thisSunday.team.leader_phone) && (
-                        <span className="text-[10px] text-teal-300 font-mono block">
+                        <span className="text-[12px] text-teal-300 font-mono block">
                           {thisSunday.team.leader_contact || thisSunday.team.leader_phone}
                         </span>
                       )}
@@ -1254,11 +1261,11 @@ export const DishwashingPage: React.FC = () => {
                   <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-2.5">
                     <Users className="w-4 h-4 text-emerald-300 shrink-0" />
                     <div>
-                      <span className="text-[10px] text-teal-200/70 block uppercase font-bold">Volunteer Crew</span>
-                      <span className="text-xs font-black text-white">
+                      <span className="text-[12px] text-teal-200/70 block uppercase font-medium">Volunteer Crew</span>
+                      <span className="text-xs font-medium text-white">
                         {thisSunday.team.members?.length || thisSunday.team.members_count || thisSunday.team.volunteers_count || 5} Members Assigned
                       </span>
-                      <span className="text-[10px] text-emerald-300 block">Ready for fellowship duty</span>
+                      <span className="text-[12px] text-emerald-300 block">Ready for fellowship duty</span>
                     </div>
                   </div>
                 </div>
@@ -1274,14 +1281,14 @@ export const DishwashingPage: React.FC = () => {
           {thisSunday?.team && (
             <div className="relative z-10 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <div className="text-xs text-teal-200 font-bold bg-white/10 border border-white/20 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs backdrop-blur-xs">
+                <div className="text-xs text-teal-200 font-medium bg-white/10 border border-white/20 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs backdrop-blur-xs">
                   <CheckCircle2 className="w-4 h-4 text-teal-300" />
                   <span>Active Live Cycle • {thisSunday.date_formatted}</span>
                 </div>
 
-                <button
+                <button data-guide="washing-swap"
                   onClick={() => handleOpenSwapModal(thisSunday)}
-                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs py-2 px-3.5 rounded-xl border border-white/15 transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white font-medium text-xs py-2 px-3.5 rounded-xl border border-white/15 transition-all active:scale-95 cursor-pointer"
                 >
                   <ArrowLeftRight className="w-3.5 h-3.5 text-teal-300" />
                   <span>Swap Turn</span>
@@ -1293,14 +1300,14 @@ export const DishwashingPage: React.FC = () => {
                   {thisSunday.team.members.slice(0, 4).map((m, i) => (
                     <div
                       key={i}
-                      className="w-7 h-7 rounded-full bg-teal-800 border-2 border-slate-900 flex items-center justify-center text-[10px] font-black text-white"
+                      className="w-7 h-7 rounded-full bg-teal-800 border-2 border-slate-900 flex items-center justify-center text-[12px] font-medium text-white"
                       title={`${m.first_name} ${m.last_name}`}
                     >
                       {m.first_name.charAt(0)}
                     </div>
                   ))}
                   {thisSunday.team.members.length > 4 && (
-                    <div className="w-7 h-7 rounded-full bg-teal-900 border-2 border-slate-900 flex items-center justify-center text-[10px] font-black text-teal-200">
+                    <div className="w-7 h-7 rounded-full bg-teal-900 border-2 border-slate-900 flex items-center justify-center text-[12px] font-medium text-teal-200">
                       +{thisSunday.team.members.length - 4}
                     </div>
                   )}
@@ -1319,11 +1326,11 @@ export const DishwashingPage: React.FC = () => {
                   <Calendar className="w-4 h-4" />
                 </span>
                 <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Upcoming Rotation Queue</h3>
-                  <span className="text-[11px] text-slate-500">Next scheduled kitchen steward units</span>
+                  <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Upcoming Rotation Queue</h3>
+                  <span className="text-[12px] text-slate-500">Next scheduled kitchen steward units</span>
                 </div>
               </div>
-              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
+              <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
                 16-Wk Forecast
               </span>
             </div>
@@ -1332,10 +1339,10 @@ export const DishwashingPage: React.FC = () => {
             {nextSunday ? (
               <div className="mt-4 p-4 rounded-2xl bg-white border border-teal-200/80 shadow-2xs space-y-2.5 relative overflow-hidden group hover:border-teal-400 transition-all">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                  <span className="text-[12px] font-medium uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200">
                     NEXT SUNDAY • {nextSunday.date_formatted}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-bold">Week #{nextSunday.week_number}</span>
+                  <span className="text-[12px] text-slate-400 font-medium">Week #{nextSunday.week_number}</span>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -1345,8 +1352,8 @@ export const DishwashingPage: React.FC = () => {
                       style={{ backgroundColor: nextSunday.team?.color || "#0D9488" }}
                     ></span>
                     <div>
-                      <h4 className="font-black text-sm text-slate-900">{nextSunday.team?.name || "Unassigned"}</h4>
-                      <span className="text-[11px] text-slate-500">
+                      <h4 className="font-semibold text-sm text-slate-900">{nextSunday.team?.name || "Unassigned"}</h4>
+                      <span className="text-[12px] text-slate-500">
                         Lead: <strong className="text-slate-700">{nextSunday.team?.leader_name || "Team Leader"}</strong>
                       </span>
                     </div>
@@ -1373,13 +1380,13 @@ export const DishwashingPage: React.FC = () => {
                     style={{ backgroundColor: thirdSunday.team?.color || "#64748B" }}
                   ></span>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    <span className="text-[12px] font-medium text-slate-400 block uppercase">
                       ON DECK • {thirdSunday.date_formatted}
                     </span>
-                    <span className="font-black text-slate-800">{thirdSunday.team?.name}</span>
+                    <span className="font-medium text-slate-800">{thirdSunday.team?.name}</span>
                   </div>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                <span className="text-[12px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                   Turn #{thirdSunday.team?.order_seq || 3}
                 </span>
               </div>
@@ -1387,14 +1394,14 @@ export const DishwashingPage: React.FC = () => {
           </div>
 
           {/* Quick Rotation Indicator */}
-          <div className="pt-3 border-t border-teal-100 flex items-center justify-between text-xs font-bold text-slate-600">
+          <div className="pt-3 border-t border-teal-100 flex items-center justify-between text-xs font-medium text-slate-600">
             <span className="flex items-center gap-1.5 text-teal-800">
               <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
               <span>Full 16-Week Schedule is Active</span>
             </span>
             <button
               onClick={() => setActiveTab("schedule")}
-              className="text-teal-700 hover:text-teal-900 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
+              className="text-teal-700 hover:text-teal-900 font-medium text-xs flex items-center gap-1 cursor-pointer transition-colors"
             >
               <span>View Timeline</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -1407,9 +1414,9 @@ export const DishwashingPage: React.FC = () => {
       <div className="bg-white/95 rounded-3xl p-3 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          <button
+          <button data-guide="washing-teams-tab"
             onClick={() => setActiveTab("teams")}
-            className={`flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "teams"
+            className={`flex items-center gap-2 text-xs font-medium px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "teams"
               ? "bg-slate-900 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
@@ -1420,7 +1427,8 @@ export const DishwashingPage: React.FC = () => {
 
           <button
             onClick={() => setActiveTab("schedule")}
-            className={`flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "schedule"
+            data-guide="dishwashing-schedule-tab"
+            className={`flex items-center gap-2 text-xs font-medium px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "schedule"
               ? "bg-slate-900 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
@@ -1429,9 +1437,9 @@ export const DishwashingPage: React.FC = () => {
             <span>16-Week Rotation Timeline ({schedule.length})</span>
           </button>
 
-          <button
+          <button data-guide="washing-protocols-tab"
             onClick={() => setActiveTab("tasks")}
-            className={`flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "tasks"
+            className={`flex items-center gap-2 text-xs font-medium px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "tasks"
               ? "bg-slate-900 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
@@ -1443,7 +1451,7 @@ export const DishwashingPage: React.FC = () => {
 
         {/* Filter & Search Bar (Active in Teams Tab) */}
         {activeTab === "teams" && (
-          <div className="flex items-center gap-2">
+          <div data-guide="washing-filters" className="flex items-center gap-2">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
@@ -1458,7 +1466,7 @@ export const DishwashingPage: React.FC = () => {
             <select
               value={filterMode}
               onChange={(e) => setFilterMode(e.target.value as any)}
-              className="py-1.5 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold text-slate-700 cursor-pointer"
+              className="py-1.5 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-medium text-slate-700 cursor-pointer"
             >
               <option value="all">All Types</option>
               <option value="biblestudy_group">Bible Study Groups</option>
@@ -1499,11 +1507,11 @@ export const DishwashingPage: React.FC = () => {
                           style={{ backgroundColor: team.color }}
                         ></span>
                         <div>
-                          <h3 className="font-black text-base text-slate-900 group-hover:text-teal-700 transition-colors">
+                          <h3 className="font-semibold text-base text-slate-900 group-hover:text-teal-700 transition-colors">
                             {team.name}
                           </h3>
                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            <span className="text-[10px] text-teal-900 font-black bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                            <span className="text-[12px] text-teal-900 font-medium bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
                               Turn #{team.order_seq} in Loop
                             </span>
                             {(() => {
@@ -1516,7 +1524,7 @@ export const DishwashingPage: React.FC = () => {
 
                               if (savedGroupIds.length > 0 && savedMinIds.length > 0) {
                                 return (
-                                  <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 flex items-center gap-1">
+                                  <span className="text-[12px] text-indigo-900 font-medium bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 flex items-center gap-1">
                                     <HeartHandshake className="w-3 h-3 text-indigo-600" />
                                     <span>{savedGroupIds.length} BS + {savedMinIds.length} Min</span>
                                   </span>
@@ -1524,7 +1532,7 @@ export const DishwashingPage: React.FC = () => {
                               }
                               if (savedGroupIds.length > 1) {
                                 return (
-                                  <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 flex items-center gap-1">
+                                  <span className="text-[12px] text-indigo-900 font-medium bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 flex items-center gap-1">
                                     <BookOpen className="w-2.5 h-2.5 text-indigo-600" />
                                     <span>{savedGroupIds.length} BS Groups Combined</span>
                                   </span>
@@ -1532,7 +1540,7 @@ export const DishwashingPage: React.FC = () => {
                               }
                               if (team.cycle_mode === "biblestudy_group" || savedGroupIds.length === 1) {
                                 return (
-                                  <span className="text-[10px] text-indigo-900 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
+                                  <span className="text-[12px] text-indigo-900 font-medium bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
                                     <BookOpen className="w-2.5 h-2.5" />
                                     <span>BS Group</span>
                                   </span>
@@ -1540,7 +1548,7 @@ export const DishwashingPage: React.FC = () => {
                               }
                               if (savedMinIds.length > 1) {
                                 return (
-                                  <span className="text-[10px] text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                  <span className="text-[12px] text-emerald-900 font-medium bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
                                     <Building2 className="w-2.5 h-2.5 text-emerald-600" />
                                     <span>{savedMinIds.length} Ministries Combined</span>
                                   </span>
@@ -1548,14 +1556,14 @@ export const DishwashingPage: React.FC = () => {
                               }
                               if (team.cycle_mode === "ministry" || savedMinIds.length === 1) {
                                 return (
-                                  <span className="text-[10px] text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1">
+                                  <span className="text-[12px] text-emerald-900 font-medium bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1">
                                     <Building2 className="w-2.5 h-2.5" />
                                     <span>Ministry</span>
                                   </span>
                                 );
                               }
                               return (
-                                <span className="text-[10px] text-slate-700 font-bold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                                <span className="text-[12px] text-slate-700 font-medium bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
                                   <Layers className="w-2.5 h-2.5" />
                                   <span>Custom Unit</span>
                                 </span>
@@ -1586,14 +1594,14 @@ export const DishwashingPage: React.FC = () => {
                     {/* Point Person Info */}
                     <div className="mt-3.5 bg-slate-50/90 p-3 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <Crown className="w-4 h-4 text-amber-500 shrink-0" />
+                        <UserCheck className="w-4 h-4 text-amber-500 shrink-0" />
                         <div>
-                          <span className="text-[10px] text-slate-400 font-bold block">Point Person / Leader</span>
-                          <span className="font-black text-slate-800">{team.leader_name || "Unassigned"}</span>
+                          <span className="text-[12px] text-slate-400 font-medium block">Point Person / Leader</span>
+                          <span className="font-medium text-slate-800">{team.leader_name || "Unassigned"}</span>
                         </div>
                       </div>
                       {(team.leader_contact || team.leader_phone) && (
-                        <span className="text-[10px] text-teal-800 font-mono font-bold">
+                        <span className="text-[12px] text-teal-800 font-mono font-medium">
                           {team.leader_contact || team.leader_phone}
                         </span>
                       )}
@@ -1649,11 +1657,11 @@ export const DishwashingPage: React.FC = () => {
 
                       return (
                         <div className="mt-4 space-y-2">
-                          <div className="flex items-center justify-between text-xs font-black text-slate-800 flex-wrap gap-1">
+                          <div className="flex items-center justify-between text-xs font-medium text-slate-800 flex-wrap gap-1">
                             <span>Members ({displayMembers.length})</span>
                             <button
                               onClick={() => handleOpenAddMember(team)}
-                              className="text-teal-700 hover:text-teal-900 text-[11px] flex items-center gap-1 font-black cursor-pointer transition-colors"
+                              className="text-teal-700 hover:text-teal-900 text-[12px] flex items-center gap-1 font-medium cursor-pointer transition-colors"
                             >
                               <UserPlus className="w-3.5 h-3.5" />
                               <span>Add Member</span>
@@ -1669,11 +1677,11 @@ export const DishwashingPage: React.FC = () => {
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
-                                    <span className="font-bold text-slate-800">
+                                    <span className="font-medium text-slate-800">
                                       {m.first_name} {m.last_name}
                                     </span>
                                     {m.team_role === "Team Leader" && (
-                                      <span className="text-[9px] bg-amber-100 text-amber-900 font-black px-1.5 py-0.2 rounded-md border border-amber-300">
+                                      <span className="text-[12px] bg-amber-100 text-amber-900 font-medium px-1.5 py-0.2 rounded-md border border-amber-300">
                                         Lead
                                       </span>
                                     )}
@@ -1694,7 +1702,7 @@ export const DishwashingPage: React.FC = () => {
                               No members assigned yet.
                               <button
                                 onClick={() => handleOpenAddMember(team)}
-                                className="block mx-auto mt-1 text-teal-700 font-bold underline cursor-pointer"
+                                className="block mx-auto mt-1 text-teal-700 font-medium underline cursor-pointer"
                               >
                                 + Add first member
                               </button>
@@ -1706,8 +1714,8 @@ export const DishwashingPage: React.FC = () => {
                   </div>
 
                   {/* Tasks Preview */}
-                  <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-500 line-clamp-2">
-                    <span className="font-bold text-slate-700">Checklist:</span>{" "}
+                  <div className="pt-3 border-t border-slate-100 text-[12px] text-slate-500 line-clamp-2">
+                    <span className="font-medium text-slate-700">Checklist:</span>{" "}
                     {team.tasks_checklist || "Plates & Cutleries Pre-rinse, 3-Compartment Washing, Kitchen Counter & Sink Deep Wipe, Trash Disposal."}
                   </div>
                 </div>
@@ -1718,15 +1726,15 @@ export const DishwashingPage: React.FC = () => {
           {filteredTeams.length === 0 && !loading && (
             <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-sm">
               <Utensils className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <h3 className="font-black text-slate-900 text-base">No Matching Dishwashing Units</h3>
+              <h3 className="font-semibold text-slate-900 text-base">No Matching Dishwashing Units</h3>
               <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
                 {searchQuery || filterMode !== "all"
                   ? "Try resetting your search filter to see all active rotating teams."
                   : "Add Bible Study Groups, Ministries, or Custom Teams to start the automatic Sunday duty cycle."}
               </p>
-              <button
+              <button data-guide="washing-new"
                 onClick={handleOpenCreateTeam}
-                className="mt-4 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-5 py-2.5 rounded-2xl shadow-sm cursor-pointer"
+                className="mt-4 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs px-5 py-2.5 rounded-2xl shadow-sm cursor-pointer"
               >
                 + Add First Dishwashing Team
               </button>
@@ -1739,10 +1747,10 @@ export const DishwashingPage: React.FC = () => {
       {/* TAB 2: 16-WEEK PERPETUAL ROTATION SCHEDULE TIMELINE */}
       {/* ========================================================================= */}
       {activeTab === "schedule" && (
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
+        <div data-guide="dishwashing-schedule" className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
             <div>
-              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                 <CalendarCheck className="w-5 h-5 text-teal-600" />
                 <span>16-Week Continuous Sunday Rotation Roster</span>
               </h2>
@@ -1750,7 +1758,7 @@ export const DishwashingPage: React.FC = () => {
                 Teams cycle seamlessly every Sunday based on their turn sequence. Individual dates can be swapped or edited without altering other weeks.
               </p>
             </div>
-            <span className="text-xs font-black text-teal-900 bg-teal-50 border border-teal-200 px-3.5 py-1 rounded-full">
+            <span className="text-xs font-medium text-teal-900 bg-teal-50 border border-teal-200 px-3.5 py-1 rounded-full">
               Loop Interval: {teams.length} Weeks
             </span>
           </div>
@@ -1771,19 +1779,19 @@ export const DishwashingPage: React.FC = () => {
                 <div className="flex items-center gap-4">
                   {/* Date & Week badge */}
                   <div className="w-32 shrink-0">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[12px] font-medium uppercase tracking-wider text-slate-400 block">
                       Week {item.week_number}
                     </span>
-                    <span className="text-xs font-black text-slate-900 block">
+                    <span className="text-xs font-medium text-slate-900 block">
                       {item.date_formatted}
                     </span>
                     {item.is_this_sunday && (
-                      <span className="text-[9px] bg-emerald-600 text-white font-black px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
+                      <span className="text-[12px] bg-emerald-600 text-white font-medium px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5 shadow-2xs">
                         This Sunday
                       </span>
                     )}
                     {item.is_next_sunday && (
-                      <span className="text-[9px] bg-indigo-100 text-indigo-900 font-bold px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5">
+                      <span className="text-[12px] bg-indigo-100 text-indigo-900 font-medium px-2 py-0.2 rounded-full uppercase tracking-wide inline-block mt-0.5">
                         Next Sunday
                       </span>
                     )}
@@ -1798,54 +1806,54 @@ export const DishwashingPage: React.FC = () => {
                       ></span>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="font-black text-sm text-slate-900">{item.team.name}</h4>
-                          <span className="text-[10px] text-slate-400 font-bold">
+                          <h4 className="font-semibold text-sm text-slate-900">{item.team.name}</h4>
+                          <span className="text-[12px] text-slate-400 font-medium">
                             ({item.team.members?.length || item.team.members_count || item.team.volunteers_count || 5} Volunteers)
                           </span>
                           {item.team.cycle_mode === "combined" || (Boolean(item.team.biblestudy_group_ids?.length) && Boolean(item.team.ministry_ids?.length)) ? (
-                            <span className="text-[9px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.2 rounded border border-indigo-200 flex items-center gap-0.5">
+                            <span className="text-[12px] bg-indigo-50 text-indigo-900 font-medium px-1.5 py-0.2 rounded border border-indigo-200 flex items-center gap-0.5">
                               <HeartHandshake className="w-2.5 h-2.5 text-indigo-600" />
                               <span>BS + Ministry</span>
                             </span>
                           ) : item.team.cycle_mode === "biblestudy_group" || Boolean(item.team.biblestudy_group_ids?.length) ? (
-                            <span className="text-[9px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.2 rounded border border-indigo-100">
+                            <span className="text-[12px] bg-indigo-50 text-indigo-900 font-medium px-1.5 py-0.2 rounded border border-indigo-100">
                               BS Group
                             </span>
                           ) : item.team.cycle_mode === "ministry" || Boolean(item.team.ministry_ids?.length) ? (
-                            <span className="text-[9px] bg-teal-50 text-teal-900 font-bold px-1.5 py-0.2 rounded border border-teal-100">
+                            <span className="text-[12px] bg-teal-50 text-teal-900 font-medium px-1.5 py-0.2 rounded border border-teal-100">
                               Ministry
                             </span>
                           ) : (
-                            <span className="text-[9px] bg-slate-50 text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
+                            <span className="text-[12px] bg-slate-50 text-slate-700 font-medium px-1.5 py-0.2 rounded border border-slate-200">
                               Custom Unit
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-slate-600">
-                          Leader: <strong className="text-slate-800 font-bold">{item.team.leader_name || "Assigned"}</strong>
+                        <span className="text-[12px] text-slate-600">
+                          Leader: <strong className="text-slate-800 font-medium">{item.team.leader_name || "Assigned"}</strong>
                           {(item.team.leader_contact || item.team.leader_phone) && ` • ${item.team.leader_contact || item.team.leader_phone}`}
                         </span>
                         {item.notes && (
-                          <div className="text-[10px] text-slate-500 italic mt-0.5">
+                          <div className="text-[12px] text-slate-500 italic mt-0.5">
                             Note: {item.notes}
                           </div>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <span className="text-xs text-rose-600 font-bold">No unit assigned</span>
+                    <span className="text-xs text-rose-600 font-medium">No unit assigned</span>
                   )}
                 </div>
 
                 {/* Status & Actions */}
                 <div className="flex items-center gap-2 self-end md:self-center">
                   {item.is_this_sunday ? (
-                    <span className="bg-teal-100 text-teal-950 text-xs font-black px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-teal-300 shadow-2xs">
+                    <span className="bg-teal-100 text-teal-950 text-xs font-medium px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 border border-teal-300 shadow-2xs">
                       <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
                       <span>On Duty This Sunday</span>
                     </span>
                   ) : item.is_next_sunday ? (
-                    <span className="bg-indigo-50 text-indigo-950 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-200">
+                    <span className="bg-indigo-50 text-indigo-950 text-xs font-medium px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-indigo-200">
                       <Clock className="w-3.5 h-3.5 text-indigo-700" />
                       <span>Next in Turn</span>
                     </span>
@@ -1863,7 +1871,7 @@ export const DishwashingPage: React.FC = () => {
                     <ArrowLeftRight className="w-4 h-4" />
                   </button>
 
-                  <button
+                  <button data-guide="washing-override"
                     onClick={() => handleOpenOverrideModal(item)}
                     className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
                     title="Edit/Override single date"
@@ -1885,7 +1893,7 @@ export const DishwashingPage: React.FC = () => {
           {/* Action Header */}
           <div className="flex flex-wrap items-center justify-between gap-4 p-5 bg-white rounded-3xl border border-slate-200/90 shadow-sm">
             <div className="space-y-0.5">
-              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                 <Utensils className="w-5 h-5 text-teal-600" />
                 <span>Kitchen Sanitation Protocols & Guidelines</span>
               </h2>
@@ -1898,22 +1906,22 @@ export const DishwashingPage: React.FC = () => {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <button
                   onClick={handleResetProtocols}
-                  className="px-3.5 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-2 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
                   title="Restore default church protocols"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Reset Defaults</span>
                 </button>
-                <button
+                <button data-guide="washing-checklist-new"
                   onClick={handleOpenAddChecklist}
-                  className="px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/80 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  className="px-3.5 py-2 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/80 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Checklist Task</span>
                 </button>
-                <button
+                <button data-guide="washing-protocol-new"
                   onClick={handleOpenAddProtocol}
-                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600  rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
+                  className="px-4 py-2 text-xs font-medium text-white bg-emerald-600  rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-lg"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Protocol Card</span>
@@ -1938,7 +1946,7 @@ export const DishwashingPage: React.FC = () => {
                           <Utensils className="w-5 h-5" />
                         </span>
                         <div>
-                          <h3 className="font-black text-base text-slate-900">{proto.title}</h3>
+                          <h3 className="font-semibold text-base text-slate-900">{proto.title}</h3>
                           {proto.subtitle && (
                             <p className="text-xs text-slate-500">{proto.subtitle}</p>
                           )}
@@ -1987,15 +1995,15 @@ export const DishwashingPage: React.FC = () => {
                       <ShieldCheck className="w-5 h-5" />
                     </span>
                     <div>
-                      <h3 className="font-black text-base text-slate-900">Kitchen Close-out Checklist</h3>
+                      <h3 className="font-semibold text-base text-slate-900">Kitchen Close-out Checklist</h3>
                       <p className="text-xs text-slate-500">Post-fellowship sanitation & safety standards</p>
                     </div>
                   </div>
 
                   {isAdminOrCoordinator && (
-                    <button
+                    <button data-guide="washing-checklist-new"
                       onClick={handleOpenAddChecklist}
-                      className="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                      className="text-[12px] font-medium text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add Task</span>
@@ -2054,11 +2062,11 @@ export const DishwashingPage: React.FC = () => {
               </div>
 
               <div className="p-4 rounded-2xl bg-teal-950 text-white space-y-1.5 mt-4">
-                <div className="flex items-center gap-2 text-teal-300 text-xs font-black">
+                <div className="flex items-center gap-2 text-teal-300 text-xs font-medium">
                   <Award className="w-4 h-4" />
                   <span>Kitchen Stewards Fellowship</span>
                 </div>
-                <p className="text-[11px] text-teal-100/80 leading-relaxed">
+                <p className="text-[12px] text-teal-100/80 leading-relaxed">
                   Thank you for ministering through kitchen stewardship. Your service provides a clean, safe, and welcoming environment for our church family!
                 </p>
               </div>
@@ -2074,13 +2082,13 @@ export const DishwashingPage: React.FC = () => {
       {/* MODAL 1: Create / Edit Team */}
       {isTeamModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h2 className="text-base font-black text-slate-900">
+                <h2 className="text-base font-semibold text-slate-900">
                   {editingTeam ? "Edit Dishwashing Unit" : "Create Dishwashing Unit"}
                 </h2>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[12px] text-slate-500">
                   Assign a Bible Study Group, Ministry, or Custom Team to the rotating turn order
                 </span>
               </div>
@@ -2092,15 +2100,15 @@ export const DishwashingPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveTeam} className="space-y-4 text-xs">
+            <form data-guide="washing-team-form" onSubmit={handleSaveTeam} className="space-y-4 text-xs">
               {/* Unit Mode Picker */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">Unit Classification</label>
+                <label className="block font-medium text-slate-700 mb-1.5">Unit Classification</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => handleCycleModeChange("biblestudy_group")}
-                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "biblestudy_group"
+                    className={`p-2.5 rounded-2xl border text-center font-medium flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "biblestudy_group"
                       ? "bg-slate-900 text-white border-slate-900 shadow-sm"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-400"
                       }`}
@@ -2111,7 +2119,7 @@ export const DishwashingPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleCycleModeChange("ministry")}
-                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "ministry"
+                    className={`p-2.5 rounded-2xl border text-center font-medium flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "ministry"
                       ? "bg-teal-700 text-white border-teal-700 shadow-sm"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-400"
                       }`}
@@ -2122,7 +2130,7 @@ export const DishwashingPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleCycleModeChange("combined")}
-                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "combined"
+                    className={`p-2.5 rounded-2xl border text-center font-medium flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "combined"
                       ? "bg-indigo-900 text-white border-indigo-900 shadow-sm"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:border-indigo-400"
                       }`}
@@ -2133,7 +2141,7 @@ export const DishwashingPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleCycleModeChange("custom")}
-                    className={`p-2.5 rounded-2xl border text-center font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "custom"
+                    className={`p-2.5 rounded-2xl border text-center font-medium flex flex-col items-center gap-1 transition-all cursor-pointer ${teamForm.cycle_mode === "custom"
                       ? "bg-emerald-700 text-white border-emerald-700 shadow-sm"
                       : "bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-400"
                       }`}
@@ -2149,17 +2157,17 @@ export const DishwashingPage: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                      <label className="block font-black text-slate-800 text-xs">
+                      <label className="block font-medium text-slate-800 text-xs">
                         Select Bible Study Group(s) *
                       </label>
-                      <span className="text-[11px] text-slate-500 block">
+                      <span className="text-[12px] text-slate-500 block">
                         {teamForm.cycle_mode === "combined"
                           ? "Select Bible Study circles to pair with ministries (e.g. Jet/Blanca)"
                           : "Select 1, 2, or more groups to combine for one Sunday turn (e.g. Jet/Blanca/Jessica)"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
+                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
                         {teamForm.biblestudy_group_ids.length} Group{teamForm.biblestudy_group_ids.length !== 1 ? "s" : ""} Selected
                       </span>
                       {bsGroups.length > 0 && (
@@ -2190,7 +2198,7 @@ export const DishwashingPage: React.FC = () => {
                               }));
                             }
                           }}
-                          className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline cursor-pointer"
+                          className="text-[12px] font-medium text-teal-700 hover:text-teal-900 underline cursor-pointer"
                         >
                           {teamForm.biblestudy_group_ids.length === bsGroups.length ? "Clear Groups" : "Select All Groups"}
                         </button>
@@ -2232,8 +2240,8 @@ export const DishwashingPage: React.FC = () => {
                             }`}
                           >
                             <div className="min-w-0">
-                              <span className="font-bold text-xs truncate block">{g.name}</span>
-                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
+                              <span className="font-medium text-xs truncate block">{g.name}</span>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[12px] text-slate-500">
                                 <span>Lead: <strong className="text-slate-700">{g.leader_name || "Unassigned"}</strong></span>
                                 <span>• {disciplesCount} {disciplesCount === 1 ? "disciple" : "disciples"}</span>
                               </div>
@@ -2259,17 +2267,17 @@ export const DishwashingPage: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                      <label className="block font-black text-slate-800 text-xs">
+                      <label className="block font-medium text-slate-800 text-xs">
                         Select Church Ministry(s) *
                       </label>
-                      <span className="text-[11px] text-slate-500 block">
+                      <span className="text-[12px] text-slate-500 block">
                         {teamForm.cycle_mode === "combined"
                           ? "Select ministries to pair with Bible Study groups (e.g. High School Ministry)"
                           : "Select 1 or more ministries for this Sunday turn (e.g. High School Ministry)"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
+                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
                         {teamForm.ministry_ids.length} Selected
                       </span>
                       {ministriesList.length > 0 && (
@@ -2300,7 +2308,7 @@ export const DishwashingPage: React.FC = () => {
                               }));
                             }
                           }}
-                          className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline cursor-pointer"
+                          className="text-[12px] font-medium text-teal-700 hover:text-teal-900 underline cursor-pointer"
                         >
                           {teamForm.ministry_ids.length === ministriesList.length ? "Clear Ministries" : "Select All Ministries"}
                         </button>
@@ -2345,9 +2353,9 @@ export const DishwashingPage: React.FC = () => {
                                   className="w-2.5 h-2.5 rounded-full shrink-0"
                                   style={{ backgroundColor: m.color || "#0D9488" }}
                                 ></span>
-                                <span className="font-bold text-xs truncate block">{m.name} Ministry</span>
+                                <span className="font-medium text-xs truncate block">{m.name} Ministry</span>
                               </div>
-                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[12px] text-slate-500">
                                 <span>{coordName ? `Coord: ${coordName}` : "Active"}</span>
                                 <span>• {minMembers.length} members</span>
                               </div>
@@ -2375,7 +2383,7 @@ export const DishwashingPage: React.FC = () => {
 
                 if (selectedGroups.length === 0 && selectedMins.length === 0) {
                   return (
-                    <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-500 italic text-[11px] text-center">
+                    <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-500 italic text-[12px] text-center">
                       Please check at least one Bible Study Group or Ministry above to load covered volunteers.
                     </div>
                   );
@@ -2383,7 +2391,7 @@ export const DishwashingPage: React.FC = () => {
 
                 return (
                   <div className="mt-2.5 p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-3">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-teal-950 flex-wrap gap-1">
+                    <div className="flex items-center justify-between text-[12px] font-medium text-teal-950 flex-wrap gap-1">
                       <span className="flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5 text-teal-700" />
                         <span>
@@ -2397,7 +2405,7 @@ export const DishwashingPage: React.FC = () => {
                             const allIds = Array.from(new Set([...allGroupDisciples, ...allMinMembers]));
                             setTeamForm(prev => ({ ...prev, selectedMemberIds: allIds }));
                           }}
-                          className="text-[10px] text-teal-700 hover:text-teal-900 underline font-black cursor-pointer"
+                          className="text-[12px] text-teal-700 hover:text-teal-900 underline font-medium cursor-pointer"
                         >
                           Select All ({totalCoveredCount})
                         </button>
@@ -2410,8 +2418,8 @@ export const DishwashingPage: React.FC = () => {
                         const groupMembers = g.members || [];
                         return (
                           <div key={`bs-box-${g.id}`} className="bg-white/95 p-2.5 rounded-xl border border-teal-100 space-y-1.5 shadow-2xs">
-                            <div className="flex items-center justify-between text-[10px] font-black text-slate-700">
-                              <span className="flex items-center gap-1 text-teal-900 font-bold">
+                            <div className="flex items-center justify-between text-[12px] font-medium text-slate-700">
+                              <span className="flex items-center gap-1 text-teal-900 font-medium">
                                 <BookOpen className="w-3 h-3 text-teal-600" />
                                 <span>{g.name} ({groupMembers.length})</span>
                               </span>
@@ -2433,7 +2441,7 @@ export const DishwashingPage: React.FC = () => {
                                           : [...prev.selectedMemberIds, sm.member_id as number]
                                       }));
                                     }}
-                                    className={`px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                    className={`px-2.5 py-1 rounded-xl text-[12px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
                                       isChecked
                                         ? "bg-teal-600 text-white shadow-2xs"
                                         : "bg-white text-slate-700 border border-slate-200 hover:bg-teal-50"
@@ -2445,7 +2453,7 @@ export const DishwashingPage: React.FC = () => {
                                 );
                               })}
                               {groupMembers.length === 0 && (
-                                <span className="text-[10px] text-slate-400 italic">No disciples listed in this group.</span>
+                                <span className="text-[12px] text-slate-400 italic">No disciples listed in this group.</span>
                               )}
                             </div>
                           </div>
@@ -2457,8 +2465,8 @@ export const DishwashingPage: React.FC = () => {
                         const minMembers = getMinistryMembers(m);
                         return (
                           <div key={`min-box-${m.id}`} className="bg-white/95 p-2.5 rounded-xl border border-teal-100 space-y-1.5 shadow-2xs">
-                            <div className="flex items-center justify-between text-[10px] font-black text-slate-700">
-                              <span className="flex items-center gap-1 text-teal-900 font-bold">
+                            <div className="flex items-center justify-between text-[12px] font-medium text-slate-700">
+                              <span className="flex items-center gap-1 text-teal-900 font-medium">
                                 <Building2 className="w-3 h-3 text-teal-600" />
                                 <span>{m.name} Ministry ({minMembers.length})</span>
                               </span>
@@ -2481,7 +2489,7 @@ export const DishwashingPage: React.FC = () => {
                                           : [...prev.selectedMemberIds, sm.id]
                                       }));
                                     }}
-                                    className={`px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                    className={`px-2.5 py-1 rounded-xl text-[12px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
                                       isChecked
                                         ? "bg-teal-600 text-white shadow-2xs"
                                         : "bg-white text-slate-700 border border-slate-200 hover:bg-teal-50"
@@ -2493,7 +2501,7 @@ export const DishwashingPage: React.FC = () => {
                                 );
                               })}
                               {minMembers.length === 0 && (
-                                <span className="text-[10px] text-slate-400 italic">No members registered in this ministry.</span>
+                                <span className="text-[12px] text-slate-400 italic">No members registered in this ministry.</span>
                               )}
                             </div>
                           </div>
@@ -2508,7 +2516,7 @@ export const DishwashingPage: React.FC = () => {
               {teamForm.cycle_mode === "custom" && (
                 <div className="space-y-2">
                   <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-emerald-950">
+                    <div className="flex items-center justify-between text-[12px] font-medium text-emerald-950">
                       <span className="flex items-center gap-1">
                         <Users className="w-3.5 h-3.5 text-emerald-700" />
                         <span>Select Members from Church Directory ({teamForm.selectedMemberIds.length} chosen)</span>
@@ -2530,7 +2538,7 @@ export const DishwashingPage: React.FC = () => {
                                   : [...prev.selectedMemberIds, cm.id]
                               }));
                             }}
-                            className={`px-2.5 py-1 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-xl text-[12px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
                               isChecked
                                 ? "bg-emerald-600 text-white shadow-2xs"
                                 : "bg-white text-slate-700 border border-slate-200 hover:bg-emerald-50"
@@ -2548,8 +2556,8 @@ export const DishwashingPage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Display Team Name *</label>
-                  <input
+                  <label className="block font-medium text-slate-700 mb-1">Display Team Name *</label>
+                  <input data-guide="washing-team-name"
                     type="text"
                     required
                     placeholder="e.g. Jet/Blanca/Jessica, High School Ministry"
@@ -2559,7 +2567,7 @@ export const DishwashingPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Rotation Order (Turn #)</label>
+                  <label className="block font-medium text-slate-700 mb-1">Rotation Order (Turn #)</label>
                   <input
                     type="number"
                     min="1"
@@ -2574,8 +2582,8 @@ export const DishwashingPage: React.FC = () => {
               {/* Point Person / Leader */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Assigned Point Person</label>
-                  <select
+                  <label className="block font-medium text-slate-700 mb-1">Assigned Point Person</label>
+                  <select data-guide="washing-team-leader"
                     value={teamForm.leader_id}
                     onChange={(e) => handleSelectPointPerson(e.target.value)}
                     className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium cursor-pointer"
@@ -2610,8 +2618,7 @@ export const DishwashingPage: React.FC = () => {
                           {prioritizedLeaders.length > 0 && (
                             <optgroup label="Leaders from Selected Unit(s)">
                               {prioritizedLeaders.map(m => (
-                                <option key={`prio-${m.id}`} value={m.id}>
-                                  ⭐ {m.first_name} {m.last_name} ({m.ministry_name || "Leader"})
+                                <option key={`prio-${m.id}`} value={m.id}> {m.first_name} {m.last_name} ({m.ministry_name || "Leader"})
                                 </option>
                               ))}
                             </optgroup>
@@ -2630,7 +2637,7 @@ export const DishwashingPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Contact Phone / Email</label>
+                  <label className="block font-medium text-slate-700 mb-1">Contact Phone / Email</label>
                   <input
                     type="text"
                     placeholder="e.g. 0917-123-4567"
@@ -2644,7 +2651,7 @@ export const DishwashingPage: React.FC = () => {
               {/* Color & Volunteers Target */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1.5">Color Badge</label>
+                  <label className="block font-medium text-slate-700 mb-1.5">Color Badge</label>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {["#0D9488", "#0284C7", "#7C3AED", "#EA580C", "#059669", "#D97706", "#DB2777", "#475569"].map((c) => (
                       <button
@@ -2660,7 +2667,7 @@ export const DishwashingPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Volunteers Target</label>
+                  <label className="block font-medium text-slate-700 mb-1">Volunteers Target</label>
                   <input
                     type="number"
                     min="1"
@@ -2672,8 +2679,8 @@ export const DishwashingPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Kitchen Tasks / Checklist</label>
-                <textarea
+                <label className="block font-medium text-slate-700 mb-1">Kitchen Tasks / Checklist</label>
+                <textarea data-guide="washing-team-tasks"
                   rows={2}
                   value={teamForm.tasks_checklist}
                   onChange={(e) => setTeamForm({ ...teamForm, tasks_checklist: e.target.value })}
@@ -2682,23 +2689,23 @@ export const DishwashingPage: React.FC = () => {
                 ></textarea>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsTeamModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="washing-team-save"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   {editingTeam ? "Save Changes" : "Create Unit"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -2744,11 +2751,11 @@ export const DishwashingPage: React.FC = () => {
 
         return createPortal(
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between">
+            <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <div data-modal-header className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">Add Member to {targetTeam.name}</h2>
-                  <span className="text-[11px] text-slate-500">Assign members to this Sunday dishwashing crew</span>
+                  <h2 className="text-base font-semibold text-slate-900">Add Member to {targetTeam.name}</h2>
+                  <span className="text-[12px] text-slate-500">Assign members to this Sunday dishwashing crew</span>
                 </div>
                 <button
                   onClick={() => setIsAddMemberModalOpen(false)}
@@ -2764,29 +2771,27 @@ export const DishwashingPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => { setMemberTab("group"); setSelectedMemberId(""); }}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${memberTab === "group"
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${memberTab === "group"
                       ? "bg-white text-teal-900 shadow-xs"
                       : "text-slate-500 hover:text-slate-900"
                       }`}
-                  >
-                    🎯 {entityLabel} ({unassignedCoveredMembers.length})
+                  ><UITarget aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {entityLabel} ({unassignedCoveredMembers.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => { setMemberTab("all"); setSelectedMemberId(""); }}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${memberTab === "all"
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer ${memberTab === "all"
                       ? "bg-white text-teal-900 shadow-xs"
                       : "text-slate-500 hover:text-slate-900"
                       }`}
-                  >
-                    👥 All Members ({allEligibleChurchMembers.length})
+                  ><Users aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> All Members ({allEligibleChurchMembers.length})
                   </button>
                 </div>
               )}
 
               <form onSubmit={handleAddMemberToTeam} className="space-y-4 text-xs">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
+                  <label className="block font-medium text-slate-700 mb-1">
                     Search & Select Member *
                   </label>
                   <div className="relative mb-2">
@@ -2821,7 +2826,7 @@ export const DishwashingPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Role in Crew</label>
+                  <label className="block font-medium text-slate-700 mb-1">Role in Crew</label>
                   <select
                     value={memberRole}
                     onChange={(e) => setMemberRole(e.target.value)}
@@ -2834,24 +2839,24 @@ export const DishwashingPage: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <div data-modal-footer className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setIsAddMemberModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={!selectedMemberId}
-                    className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                    className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-medium shadow-md transition-all active:scale-95 cursor-pointer"
                   >
                     Confirm Assignment
                   </button>
                 </div>
               </form>
-            </div>
+            </ModalPanel>
           </div>,
           document.body
         );
@@ -2860,9 +2865,9 @@ export const DishwashingPage: React.FC = () => {
       {/* MODAL 3: Swap Sunday Dishwashing Turns */}
       {isSwapModalOpen && swapItem1 && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                 <ArrowLeftRight className="w-5 h-5 text-teal-600" />
                 <span>Swap Sunday Dishwashing Turn</span>
               </h2>
@@ -2874,20 +2879,20 @@ export const DishwashingPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleExecuteSwap} className="space-y-4 text-xs">
+            <form data-guide="washing-swap-form" onSubmit={handleExecuteSwap} className="space-y-4 text-xs">
               <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-1">
-                <span className="text-[10px] font-black uppercase text-teal-700 block">Currently Selected Turn:</span>
-                <span className="text-sm font-black text-slate-900 block">{swapItem1.date_formatted}</span>
-                <span className="text-xs text-slate-600 font-semibold block">Team: <strong>{swapItem1.team?.name}</strong></span>
+                <span className="text-[12px] font-medium uppercase text-teal-700 block">Currently Selected Turn:</span>
+                <span className="text-sm font-medium text-slate-900 block">{swapItem1.date_formatted}</span>
+                <span className="text-xs text-slate-600 font-medium block">Team: <strong>{swapItem1.team?.name}</strong></span>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">Swap with which upcoming Sunday? *</label>
+                <label className="block font-medium text-slate-700 mb-1.5">Swap with which upcoming Sunday? *</label>
                 <select
                   required
                   value={swapTargetDate}
                   onChange={(e) => setSwapTargetDate(e.target.value)}
-                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-bold text-slate-900 cursor-pointer text-xs"
+                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-600 font-medium text-slate-900 cursor-pointer text-xs"
                 >
                   <option value="">-- Choose Sunday to Swap With --</option>
                   {schedule
@@ -2900,23 +2905,23 @@ export const DishwashingPage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsSwapModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   Confirm Swap
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -2926,23 +2931,23 @@ export const DishwashingPage: React.FC = () => {
       {/* ========================================================================= */}
       {overrideItem && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
                   <Edit className="w-4 h-4 text-teal-600" />
                   <span>Edit Assignment for {overrideItem.date_formatted}</span>
                 </h2>
-                <span className="text-[10px] text-slate-500">Overrides this single Sunday without altering subsequent recurring turns</span>
+                <span className="text-[12px] text-slate-500">Overrides this single Sunday without altering subsequent recurring turns</span>
               </div>
               <button onClick={() => setOverrideItem(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveOverride} className="space-y-4 text-xs">
+            <form data-guide="washing-override-form" onSubmit={handleSaveOverride} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Assign Team / Unit *</label>
+                <label className="block font-medium text-slate-700 mb-1">Assign Team / Unit *</label>
                 <select
                   required
                   value={overrideTeamId}
@@ -2958,7 +2963,7 @@ export const DishwashingPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Status</label>
+                <label className="block font-medium text-slate-700 mb-1">Status</label>
                 <select
                   value={overrideStatus}
                   onChange={(e) => setOverrideStatus(e.target.value)}
@@ -2972,7 +2977,7 @@ export const DishwashingPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Special Notes / Reasons for Override</label>
+                <label className="block font-medium text-slate-700 mb-1">Special Notes / Reasons for Override</label>
                 <textarea
                   rows={3}
                   value={overrideNotes}
@@ -2982,23 +2987,23 @@ export const DishwashingPage: React.FC = () => {
                 ></textarea>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setOverrideItem(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-600 hover:bg-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-md cursor-pointer"
                 >
                   Save Override
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -3006,13 +3011,13 @@ export const DishwashingPage: React.FC = () => {
       {/* MODAL 5: Create / Edit Protocol Card */}
       {isProtocolModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h2 className="text-base font-black text-slate-900">
+                <h2 className="text-base font-semibold text-slate-900">
                   {editingProtocol ? "Edit Protocol Card" : "Create Protocol Card"}
                 </h2>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[12px] text-slate-500">
                   Customize kitchen sanitation standard operating procedures
                 </span>
               </div>
@@ -3024,9 +3029,9 @@ export const DishwashingPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveProtocol} className="space-y-4 text-xs">
+            <form data-guide="washing-protocol-form" onSubmit={handleSaveProtocol} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Card Title *</label>
+                <label className="block font-medium text-slate-700 mb-1">Card Title *</label>
                 <input
                   type="text"
                   required
@@ -3038,7 +3043,7 @@ export const DishwashingPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Subtitle / Summary</label>
+                <label className="block font-medium text-slate-700 mb-1">Subtitle / Summary</label>
                 <input
                   type="text"
                   placeholder="e.g. Fellowship cutlery, plates, and bowls handling"
@@ -3049,7 +3054,7 @@ export const DishwashingPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Color Theme</label>
+                <label className="block font-medium text-slate-700 mb-1">Color Theme</label>
                 <div className="grid grid-cols-4 gap-2">
                   {[
                     { key: "teal", label: "Teal", bg: "bg-teal-50 text-teal-700 border-teal-200" },
@@ -3064,7 +3069,7 @@ export const DishwashingPage: React.FC = () => {
                       key={theme.key}
                       type="button"
                       onClick={() => setProtocolForm({ ...protocolForm, color: theme.key as any })}
-                      className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${theme.bg} ${protocolForm.color === theme.key ? "ring-2 ring-slate-800 scale-102 shadow-xs" : "opacity-60 hover:opacity-100"
+                      className={`py-1.5 px-2 rounded-xl text-[12px] font-medium border transition-all cursor-pointer ${theme.bg} ${protocolForm.color === theme.key ? "ring-2 ring-slate-800 scale-102 shadow-xs" : "opacity-60 hover:opacity-100"
                         }`}
                     >
                       {theme.label}
@@ -3075,11 +3080,11 @@ export const DishwashingPage: React.FC = () => {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block font-bold text-slate-700">Protocol Steps & Instructions *</label>
+                  <label className="block font-medium text-slate-700">Protocol Steps & Instructions *</label>
                   <button
                     type="button"
                     onClick={() => setProtocolForm({ ...protocolForm, items: [...protocolForm.items, ""] })}
-                    className="text-[11px] font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
+                    className="text-[12px] font-medium text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Step</span>
@@ -3089,7 +3094,7 @@ export const DishwashingPage: React.FC = () => {
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {protocolForm.items.map((step, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 font-bold text-[10px] flex items-center justify-center shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 font-medium text-[12px] flex items-center justify-center shrink-0">
                         {idx + 1}
                       </span>
                       <input
@@ -3122,23 +3127,23 @@ export const DishwashingPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsProtocolModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-600 hover:bg-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-md cursor-pointer"
                 >
                   {editingProtocol ? "Save Changes" : "Create Protocol"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -3146,13 +3151,13 @@ export const DishwashingPage: React.FC = () => {
       {/* MODAL 6: Create / Edit Checklist Task */}
       {isChecklistModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h2 className="text-base font-black text-slate-900">
+                <h2 className="text-base font-semibold text-slate-900">
                   {editingChecklistItem ? "Edit Checklist Task" : "Add Checklist Task"}
                 </h2>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[12px] text-slate-500">
                   Kitchen close-out procedure task for dishwashing stewards
                 </span>
               </div>
@@ -3164,9 +3169,9 @@ export const DishwashingPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveChecklistItem} className="space-y-4 text-xs">
+            <form data-guide="washing-checklist-form" onSubmit={handleSaveChecklistItem} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Task Description *</label>
+                <label className="block font-medium text-slate-700 mb-1">Task Description *</label>
                 <textarea
                   required
                   rows={3}
@@ -3177,23 +3182,23 @@ export const DishwashingPage: React.FC = () => {
                 ></textarea>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div data-modal-footer className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsChecklistModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-100 font-medium text-slate-600 hover:bg-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-md cursor-pointer"
                 >
                   {editingChecklistItem ? "Save Changes" : "Add Task"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

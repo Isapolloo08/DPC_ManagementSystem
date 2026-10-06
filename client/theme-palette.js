@@ -15,6 +15,7 @@ function darkColor(kind, family, shade, palette) {
     if (family === 'amber' && ['DEFAULT', '300', '400', '500'].includes(shade)) return palette[800];
   }
   if (kind === 'ink') {
+    if (family === 'muted') return '#b6c2d2';
     if (family === 'charcoal' || family === 'black') return '#e2e8f0';
     if (neutral.has(family) && Number(shade) >= 500) return Number(shade) >= 800 ? '#f1f5f9' : Number(shade) >= 600 ? '#cbd5e1' : '#94a3b8';
     if (accents.has(family) && (shade === 'DEFAULT' || Number(shade) >= 500)) return palette[Number(shade) >= 800 ? 100 : 300];

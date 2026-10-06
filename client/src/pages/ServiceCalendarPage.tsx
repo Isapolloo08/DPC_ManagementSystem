@@ -1,6 +1,8 @@
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { ServiceItem, CreateServicePayload, UpdateServicePayload } from "../types";
 import { useSocketEvent } from "../socket";
 import {
@@ -55,6 +57,7 @@ export const ServiceCalendarPage: React.FC = () => {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  useGuideDataState("services", { loading, count: services.length, filtered: true, error, retry: () => loadServices() });
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
   // Month Calendar Navigation State
@@ -245,7 +248,7 @@ export const ServiceCalendarPage: React.FC = () => {
     return (
       <div className="bg-white rounded-2xl p-8 text-center border border-stone-200">
         <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-        <h2 className="text-base font-bold text-charcoal">Access Restricted</h2>
+        <h2 className="text-base font-semibold text-charcoal">Access Restricted</h2>
         <p className="text-xs text-stone-500 mt-1">The Service Calendar is restricted to Church Administrators and Ministry Coordinators.</p>
       </div>
     );
@@ -260,7 +263,7 @@ export const ServiceCalendarPage: React.FC = () => {
             <CalendarIcon className="w-6 h-6 text-indigo" />
           </div>
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-charcoal">Service Calendar</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-charcoal">Service Calendar</h1>
             <p className="text-xs sm:text-sm font-medium text-stone-500">
               Official registry of held, unrecorded, and cancelled worship services for reliable attendance and absence analytics.
             </p>
@@ -270,18 +273,18 @@ export const ServiceCalendarPage: React.FC = () => {
         {/* Action Controls */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="bg-stone-100 p-1 rounded-xl flex items-center border border-stone-200">
-            <button
+            <button data-guide="service-list"
               onClick={() => setViewMode("list")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
                 viewMode === "list" ? "bg-white text-indigo shadow-sm" : "text-stone-500 hover:text-charcoal"
               }`}
             >
               <List className="w-3.5 h-3.5" />
               <span>List</span>
             </button>
-            <button
+            <button data-guide="service-month"
               onClick={() => setViewMode("month")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
                 viewMode === "month" ? "bg-white text-indigo shadow-sm" : "text-stone-500 hover:text-charcoal"
               }`}
             >
@@ -290,19 +293,19 @@ export const ServiceCalendarPage: React.FC = () => {
             </button>
           </div>
 
-          <button
+          <button data-guide="service-generate"
             onClick={handleGenerateSundays}
             disabled={isGenerating}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-charcoal rounded-xl text-xs font-bold transition border border-stone-200 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-charcoal rounded-xl text-xs font-medium transition border border-stone-200 disabled:opacity-50"
             title="Auto-generate upcoming Sunday worship services"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? "animate-spin text-indigo" : "text-stone-600"}`} />
             <span>Generate Sundays</span>
           </button>
 
-          <button
+          <button data-guide="service-new"
             onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo hover:bg-indigo-900 text-white rounded-xl text-xs font-bold transition shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo hover:bg-indigo-900 text-white rounded-xl text-xs font-medium transition shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span>Add Special Service</span>
@@ -313,36 +316,36 @@ export const ServiceCalendarPage: React.FC = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-stone-500">Total Services</div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-black text-charcoal">{summary.total}</div>
-          <div className="text-[11px] text-stone-400 font-semibold mt-0.5">In selected range</div>
+          <div className="text-[12px] font-medium uppercase tracking-wider text-stone-500">Total Services</div>
+          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-charcoal">{summary.total}</div>
+          <div className="text-[12px] text-stone-400 font-medium mt-0.5">In selected range</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Held & Recorded</span>
+            <span className="text-[12px] font-medium uppercase tracking-wider text-emerald-700">Held & Recorded</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-black text-emerald-700">{summary.heldRecorded}</div>
-          <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">Active check-in logs</div>
+          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-emerald-700">{summary.heldRecorded}</div>
+          <div className="text-[12px] text-emerald-600 font-medium mt-0.5">Active check-in logs</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Unrecorded</span>
+            <span className="text-[12px] font-medium uppercase tracking-wider text-amber-700">Unrecorded</span>
             <Clock className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-black text-amber-700">{summary.heldUnrecorded}</div>
-          <div className="text-[11px] text-amber-600 font-semibold mt-0.5">Zero check-ins logged</div>
+          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-amber-700">{summary.heldUnrecorded}</div>
+          <div className="text-[12px] text-amber-600 font-medium mt-0.5">Zero check-ins logged</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700">Cancelled</span>
+            <span className="text-[12px] font-medium uppercase tracking-wider text-rose-700">Cancelled</span>
             <XCircle className="w-4 h-4 text-rose-600" />
           </div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-black text-rose-700">{summary.cancelled}</div>
-          <div className="text-[11px] text-rose-600 font-semibold mt-0.5">Excluded from absences</div>
+          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-rose-700">{summary.cancelled}</div>
+          <div className="text-[12px] text-rose-600 font-medium mt-0.5">Excluded from absences</div>
         </div>
       </div>
 
@@ -363,24 +366,24 @@ export const ServiceCalendarPage: React.FC = () => {
           {/* Filter Bar */}
           <div className="p-4 border-b border-stone-100 bg-stone-50/60 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-stone-600">
                 <Filter className="w-3.5 h-3.5 text-indigo" />
                 <span>Filters:</span>
               </div>
-              <select
+              <select data-guide="service-filters"
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-semibold text-charcoal outline-none focus:border-indigo"
+                className="px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-medium text-charcoal outline-none focus:border-indigo"
               >
                 <option value="">All Service Types</option>
                 <option value="sunday_service">Sunday Worship Service</option>
                 <option value="special_service">Special Service</option>
               </select>
 
-              <select
+              <select data-guide="service-status-filter"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-semibold text-charcoal outline-none focus:border-indigo"
+                className="px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-medium text-charcoal outline-none focus:border-indigo"
               >
                 <option value="">All Statuses</option>
                 <option value="held">Held Services</option>
@@ -388,23 +391,23 @@ export const ServiceCalendarPage: React.FC = () => {
               </select>
             </div>
 
-            <div className="text-xs text-stone-500 font-semibold">
+            <div className="text-xs text-stone-500 font-medium">
               Showing {services.length} services
             </div>
           </div>
 
           {/* Table */}
           {loading ? (
-            <div className="p-8 text-center text-xs font-bold text-stone-500">Loading service calendar...</div>
+            <div className="p-8 text-center text-xs font-medium text-stone-500">Loading service calendar...</div>
           ) : error ? (
-            <div className="p-8 text-center text-xs font-bold text-rose-600">{error}</div>
+            <div className="p-8 text-center text-xs font-medium text-rose-600">{error}</div>
           ) : services.length === 0 ? (
-            <div className="p-12 text-center text-xs font-bold text-stone-400">No services found in this timeframe.</div>
+            <div className="p-12 text-center text-xs font-medium text-stone-400">No services found in this timeframe.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-stone-50 text-[11px] font-bold text-stone-500 uppercase tracking-wider border-b border-stone-200">
+                  <tr className="bg-stone-50 text-[12px] font-medium text-stone-500 uppercase tracking-wider border-b border-stone-200">
                     <th className="py-3 px-4 sm:px-6">Date</th>
                     <th className="py-3 px-4">Type</th>
                     <th className="py-3 px-4">Title / Purpose</th>
@@ -424,19 +427,19 @@ export const ServiceCalendarPage: React.FC = () => {
                       <tr key={srv.id} className="hover:bg-stone-50/80 transition-colors">
                         {/* Date */}
                         <td className="py-3 px-4 sm:px-6 whitespace-nowrap">
-                          <span className="font-black text-charcoal">{srv.service_date}</span>
-                          <span className="ml-1.5 text-[11px] font-bold text-stone-400 uppercase">({dayName})</span>
+                          <span className="font-medium text-charcoal">{srv.service_date}</span>
+                          <span className="ml-1.5 text-[12px] font-medium text-stone-400 uppercase">({dayName})</span>
                         </td>
 
                         {/* Type */}
                         <td className="py-3 px-4 whitespace-nowrap">
                           {isSunday ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo font-bold text-[11px] border border-indigo-100">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo font-medium text-[12px] border border-indigo-100">
                               <Sun className="w-3 h-3 text-amber-500" />
                               <span>Sunday Service</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-bold text-[11px] border border-amber-200">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-medium text-[12px] border border-amber-200">
                               <Award className="w-3 h-3 text-amber-600" />
                               <span>Special Service</span>
                             </span>
@@ -444,19 +447,19 @@ export const ServiceCalendarPage: React.FC = () => {
                         </td>
 
                         {/* Title */}
-                        <td className="py-3 px-4 font-bold text-charcoal">
+                        <td className="py-3 px-4 font-medium text-charcoal">
                           {srv.title}
                         </td>
 
                         {/* Status Badge */}
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           {isHeld ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                               <span>Held</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-rose-100 text-rose-800 border border-rose-200">
                               <XCircle className="w-3 h-3 text-rose-600" />
                               <span>Cancelled</span>
                             </span>
@@ -467,12 +470,12 @@ export const ServiceCalendarPage: React.FC = () => {
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           {isHeld ? (
                             srv.is_recorded ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-black text-xs">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-medium text-xs">
                                 <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>{srv.check_in_count} logged</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 font-bold text-[11px] border border-amber-200/60" title="Zero check-ins logged (unrecorded)">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 font-medium text-[12px] border border-amber-200/60" title="Zero check-ins logged (unrecorded)">
                                 <Clock className="w-3 h-3 text-amber-600" />
                                 <span>Unrecorded (0)</span>
                               </span>
@@ -490,9 +493,9 @@ export const ServiceCalendarPage: React.FC = () => {
                         {/* Actions */}
                         <td className="py-3 px-4 sm:px-6 text-right whitespace-nowrap">
                           <div className="inline-flex items-center gap-1.5">
-                            <button
+                            <button data-guide="service-status"
                               onClick={() => handleQuickToggleStatus(srv)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                              className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition border ${
                                 isHeld
                                   ? "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
                                   : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
@@ -502,7 +505,7 @@ export const ServiceCalendarPage: React.FC = () => {
                               {isHeld ? "Mark Cancelled" : "Mark Held"}
                             </button>
 
-                            <button
+                            <button data-guide="service-edit"
                               onClick={() => handleOpenEditModal(srv)}
                               className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition"
                               title="Edit service details"
@@ -524,7 +527,7 @@ export const ServiceCalendarPage: React.FC = () => {
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200 space-y-4">
           {/* Calendar Month Navigation */}
           <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-            <h2 className="text-lg font-black text-charcoal">
+            <h2 className="text-lg font-semibold text-charcoal">
               {calendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
             </h2>
             <div className="flex items-center gap-1.5">
@@ -540,7 +543,7 @@ export const ServiceCalendarPage: React.FC = () => {
               </button>
               <button
                 onClick={() => setCalendarMonth(new Date())}
-                className="px-2.5 py-1 rounded-lg border border-stone-200 text-xs font-bold text-stone-600 hover:bg-stone-100 transition"
+                className="px-2.5 py-1 rounded-lg border border-stone-200 text-xs font-medium text-stone-600 hover:bg-stone-100 transition"
               >
                 Today
               </button>
@@ -558,7 +561,7 @@ export const ServiceCalendarPage: React.FC = () => {
           </div>
 
           {/* Days of Week Header */}
-          <div className="grid grid-cols-7 gap-2 text-center text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+          <div className="grid grid-cols-7 gap-2 text-center text-[12px] font-medium text-stone-400 uppercase tracking-wider">
             <span>Sun</span>
             <span>Mon</span>
             <span>Tue</span>
@@ -586,7 +589,7 @@ export const ServiceCalendarPage: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className={`text-xs font-black ${isToday ? "text-indigo" : "text-charcoal"}`}>
+                    <span className={`text-xs font-medium ${isToday ? "text-indigo" : "text-charcoal"}`}>
                       {item.dayNumber}
                     </span>
                     {servicesOnDay.length > 0 && (
@@ -596,10 +599,10 @@ export const ServiceCalendarPage: React.FC = () => {
 
                   <div className="space-y-1 overflow-y-auto no-scrollbar max-h-14">
                     {servicesOnDay.map((srv) => (
-                      <div
+                      <div data-guide="service-edit"
                         key={srv.id}
                         onClick={() => handleOpenEditModal(srv)}
-                        className={`p-1 rounded-md text-[10px] font-bold cursor-pointer transition truncate border ${
+                        className={`p-1 rounded-md text-[12px] font-medium cursor-pointer transition truncate border ${
                           srv.status === "cancelled"
                             ? "bg-rose-50 text-rose-800 border-rose-200"
                             : srv.is_recorded
@@ -623,9 +626,9 @@ export const ServiceCalendarPage: React.FC = () => {
       {/* Add / Edit Service Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-stone-200 space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <h3 className="text-lg font-black text-charcoal">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-stone-200 space-y-5">
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <h3 className="text-lg font-semibold text-charcoal">
                 {editingService ? "Edit Service" : "Add Service Entry"}
               </h3>
               <button
@@ -636,28 +639,28 @@ export const ServiceCalendarPage: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveService} className="space-y-4">
+            <form data-guide="service-form" onSubmit={handleSaveService} className="space-y-4">
               {/* Date */}
-              <div>
-                <label className="block text-xs font-bold text-stone-600 mb-1">Service Date</label>
+              <div data-guide="service-date">
+                <label className="block text-xs font-medium text-stone-600 mb-1">Service Date</label>
                 <input
                   type="date"
                   value={formDate}
                   disabled={!!editingService} // Keep date immutable on edit
                   onChange={(e) => setFormDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-charcoal outline-none focus:border-indigo disabled:opacity-60"
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal outline-none focus:border-indigo disabled:opacity-60"
                   required
                 />
               </div>
 
               {/* Type */}
               <div>
-                <label className="block text-xs font-bold text-stone-600 mb-1">Service Type</label>
-                <select
+                <label className="block text-xs font-medium text-stone-600 mb-1">Service Type</label>
+                <select data-guide="service-type"
                   value={formType}
                   disabled={!!editingService}
                   onChange={(e) => setFormType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-charcoal outline-none focus:border-indigo disabled:opacity-60"
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal outline-none focus:border-indigo disabled:opacity-60"
                 >
                   <option value="sunday_service">Sunday Worship Service</option>
                   <option value="special_service">Special Service (Midweek / Thanksgiving / Holiday)</option>
@@ -666,24 +669,24 @@ export const ServiceCalendarPage: React.FC = () => {
 
               {/* Title */}
               <div>
-                <label className="block text-xs font-bold text-stone-600 mb-1">Service Title</label>
-                <input
+                <label className="block text-xs font-medium text-stone-600 mb-1">Service Title</label>
+                <input data-guide="service-title"
                   type="text"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   placeholder="e.g., Sunday Worship Service, Christmas Eve Service"
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-charcoal outline-none focus:border-indigo"
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal outline-none focus:border-indigo"
                   required
                 />
               </div>
 
               {/* Status */}
               <div>
-                <label className="block text-xs font-bold text-stone-600 mb-1">Status</label>
+                <label className="block text-xs font-medium text-stone-600 mb-1">Status</label>
                 <select
                   value={formStatus}
                   onChange={(e) => setFormStatus(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-charcoal outline-none focus:border-indigo"
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal outline-none focus:border-indigo"
                 >
                   <option value="held">Held (Normal Service)</option>
                   <option value="cancelled">Cancelled (Typhoon, Emergency, Holiday)</option>
@@ -692,8 +695,8 @@ export const ServiceCalendarPage: React.FC = () => {
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-bold text-stone-600 mb-1">Notes / Cancellation Reason</label>
-                <textarea
+                <label className="block text-xs font-medium text-stone-600 mb-1">Notes / Cancellation Reason</label>
+                <textarea data-guide="service-notes"
                   rows={3}
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
@@ -703,24 +706,24 @@ export const ServiceCalendarPage: React.FC = () => {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">
+              <div data-modal-footer className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition"
+                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-medium transition"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="service-save"
                   type="submit"
                   disabled={isSaving}
-                  className="px-4 py-2 bg-indigo hover:bg-indigo-900 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+                  className="px-4 py-2 bg-indigo hover:bg-indigo-900 text-white rounded-xl text-xs font-medium transition shadow-sm disabled:opacity-50"
                 >
                   {isSaving ? "Saving..." : "Save Service"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>
       )}
     </div>

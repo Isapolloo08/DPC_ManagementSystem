@@ -158,7 +158,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       case "duty_schedules":
       case "dishwashing_roster": return <Users className="w-3.5 h-3.5 text-blue-600" />;
       case "announcements": return <MessageSquare className="w-3.5 h-3.5 text-purple-600" />;
-      default: return <Database className="w-3.5 h-3.5 text-charcoal/60" />;
+      default: return <Database className="w-3.5 h-3.5 text-muted" />;
     }
   };
 
@@ -171,31 +171,31 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div data-modal-panel className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-amber-50/60">
+        <div data-modal-header className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-amber-50/60">
           <div className="flex items-center gap-3">
             <span className="p-3 rounded-2xl bg-amber-400 text-indigo-950 shadow-md">
               <Download className="w-6 h-6" />
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-indigo tracking-tight">
+                <h3 className="text-lg font-semibold text-indigo tracking-tight">
                   {isFull ? "Generate Full Database Backup" : `Generate Backup — Year ${year}`}
                 </h3>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 text-xs font-black">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 text-xs font-medium">
                   {isFull ? "All Tables" : `Year ${year}`}
                 </span>
               </div>
-              <p className="text-xs text-charcoal/60 font-medium">
+              <p className="text-xs text-muted font-medium">
                 Review data preview below and enter password to authorize download.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-slate-100 text-charcoal/50 hover:text-charcoal transition-all cursor-pointer"
+            className="p-1.5 rounded-xl hover:bg-slate-100 text-muted hover:text-charcoal transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -206,16 +206,16 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           
           {/* Scope Card */}
           <div className="bg-slate-50 border border-indigo-100 rounded-2xl p-4 text-xs space-y-2 text-charcoal/80">
-            <div className="flex items-center justify-between font-bold">
-              <span className="text-charcoal/60">Backup Target:</span>
-              <span className="font-black text-indigo">
+            <div className="flex items-center justify-between font-medium">
+              <span className="text-muted">Backup Target:</span>
+              <span className="font-medium text-indigo">
                 {isFull ? "Entire Database Snapshot" : `Historical Records for Year ${year}`}
               </span>
             </div>
             {recordCount !== undefined && (
-              <div className="flex items-center justify-between font-bold pt-1 border-t border-indigo-50">
-                <span className="text-charcoal/60">Total Estimated Records:</span>
-                <span className="font-black text-emerald-700">{recordCount.toLocaleString()} rows</span>
+              <div className="flex items-center justify-between font-medium pt-1 border-t border-indigo-50">
+                <span className="text-muted">Total Estimated Records:</span>
+                <span className="font-medium text-emerald-700">{recordCount.toLocaleString()} rows</span>
               </div>
             )}
           </div>
@@ -223,12 +223,12 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           {/* Data Breakdown & Live Inspection */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-black text-indigo flex items-center gap-1.5">
+              <label className="text-xs font-medium text-indigo flex items-center gap-1.5">
                 <Eye className="w-4 h-4 text-indigo" />
                 <span>Year Data Breakdown ({availableKeys.length} Tables)</span>
               </label>
               {loadingPreview && (
-                <span className="text-[10px] text-indigo font-bold flex items-center gap-1">
+                <span className="text-[12px] text-indigo font-medium flex items-center gap-1">
                   <RefreshCw className="w-3 h-3 animate-spin" /> Loading data...
                 </span>
               )}
@@ -253,7 +253,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               </button>
 
               {/* Scrollable & Draggable Tabs Container */}
-              <div
+              <div data-guide="backup-preview-tabs"
                 ref={tabsContainerRef}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -272,7 +272,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                       key={k}
                       type="button"
                       onClick={() => !isDragging && setActivePreviewTab(k)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer whitespace-nowrap ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer whitespace-nowrap ${
                         isSelected
                           ? "bg-indigo text-white shadow-sm ring-2 ring-indigo-300/40"
                           : "bg-slate-100 hover:bg-indigo-50/70 text-charcoal/80 border border-slate-200/80 hover:border-indigo-200"
@@ -280,7 +280,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                     >
                       <span>{getTableIcon(k)}</span>
                       <span>{formatTableName(k)}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      <span className={`px-2 py-0.5 rounded-full text-[12px] font-medium ${
                         isSelected ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo border border-indigo-100/60"
                       }`}>
                         {count}
@@ -310,23 +310,23 @@ export const BackupModal: React.FC<BackupModalProps> = ({
             {/* Table Sample Preview Box */}
             <div className="border border-indigo-100 rounded-2xl bg-slate-50/50 p-3 max-h-40 overflow-y-auto text-xs">
               {currentTabRecords.length === 0 ? (
-                <p className="text-charcoal/40 text-center py-4 font-bold text-[11px]">
+                <p className="text-muted text-center py-4 font-medium text-[12px]">
                   No records found in this table for the selected year.
                 </p>
               ) : (
                 <div className="space-y-1.5">
                   {currentTabRecords.slice(0, 5).map((row, idx) => (
-                    <div key={idx} className="bg-white p-2 rounded-xl border border-indigo-50 text-[11px] flex items-center justify-between gap-2 shadow-2xs">
-                      <span className="font-bold text-charcoal truncate">
+                    <div key={idx} className="bg-white p-2 rounded-xl border border-indigo-50 text-[12px] flex items-center justify-between gap-2 shadow-2xs">
+                      <span className="font-medium text-charcoal truncate">
                         {row.title || row.member_name || row.assigned_name || row.team_name || row.first_name || `Record #${row.id}`}
                       </span>
-                      <span className="text-[10px] font-mono text-charcoal/50 shrink-0">
+                      <span className="text-[12px] font-mono text-muted shrink-0">
                         {row.start_time || row.checked_in_at || row.donated_at || row.duty_date || row.created_at || ""}
                       </span>
                     </div>
                   ))}
                   {currentTabRecords.length > 5 && (
-                    <p className="text-[10px] text-charcoal/40 text-center font-bold pt-1">
+                    <p className="text-[12px] text-muted text-center font-medium pt-1">
                       + {currentTabRecords.length - 5} more records will be exported
                     </p>
                   )}
@@ -337,16 +337,16 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
           {/* Error Alert */}
           {error && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl p-3 text-xs font-bold flex items-center gap-2">
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl p-3 text-xs font-medium flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Form with Password input */}
-          <form id="backup-auth-form" onSubmit={handleExecuteBackup} className="space-y-3 pt-1">
+          <form data-guide="backup-auth" id="backup-auth-form" onSubmit={handleExecuteBackup} className="space-y-3 pt-1">
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-charcoal flex items-center gap-1.5">
+              <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-indigo" />
                 <span>Enter Account Password to Authorize Backup:</span>
               </label>
@@ -367,20 +367,20 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-indigo-100 bg-slate-50 flex items-center justify-between gap-3">
+        <div data-modal-footer className="p-4 border-t border-indigo-100 bg-slate-50 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-charcoal/70 hover:bg-white transition-all cursor-pointer"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-charcoal/70 hover:bg-white transition-all cursor-pointer"
           >
             Cancel
           </button>
-          <button
+          <button data-guide="backup-download"
             type="submit"
             form="backup-auth-form"
             disabled={loading || !password.trim()}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-indigo-950 text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-indigo-950 text-xs font-medium shadow-md transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
           >
             <Download className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             <span>{loading ? "Generating Backup..." : "Generate & Download Backup"}</span>

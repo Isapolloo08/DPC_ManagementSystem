@@ -194,8 +194,33 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   res.status(500).json({ error: err.message || "Internal server error" });
 });
 
+// Graceful Server Shutdown & Signal Handling
+const cleanup = () => {
+  httpServer.close(() => {
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 1000).unref();
+};
+
+process.on("SIGINT", cleanup);
+process.on("SIGTERM", cleanup);
+process.on("message", (msg) => {
+  if (msg === "shutdown" || (typeof msg === "object" && msg !== null && (msg as any).type === "SHUTDOWN")) {
+    cleanup();
+  }
+});
+
 // Start Server
 async function start() {
+  httpServer.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`[SERVER] ⚠️ Port ${PORT} is currently in use by another process.`);
+    } else {
+      console.error("[SERVER] HTTP Server Error:", err);
+    }
+    process.exit(1);
+  });
+
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`✨ ChMS Backend API & Socket.IO running on http://0.0.0.0:${PORT}`);
   });

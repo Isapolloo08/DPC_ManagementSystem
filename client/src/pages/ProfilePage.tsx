@@ -1,6 +1,8 @@
+import { CalendarDays as UICalendarDays, MapPin as UIMapPin } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { UserActivityStats } from "../types";
 import {
   User as UserIcon, Lock, Shield, BarChart3, CheckCircle2, AlertCircle,
@@ -13,6 +15,7 @@ type TabType = "personal" | "security" | "roles" | "activity";
 
 export const ProfilePage: React.FC = () => {
   const { user, refreshUserData } = useAuth();
+  useGuideDataState("profile", { loading: false, count: user ? 1 : 0, retry: refreshUserData });
   const [activeTab, setActiveTab] = useState<TabType>("personal");
 
   // Profile form state
@@ -292,7 +295,7 @@ export const ProfilePage: React.FC = () => {
           <div className="flex items-center gap-4 sm:gap-5 min-w-0">
             {/* User Avatar with Ring */}
             <div className="relative shrink-0">
-              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-amber-400 text-indigo-950 font-black text-2xl sm:text-3xl flex items-center justify-center shadow-xl ring-4 ring-white/10">
+              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-amber-400 text-indigo-950 font-medium text-2xl sm:text-3xl flex items-center justify-center shadow-xl ring-4 ring-white/10">
                 {initials}
               </div>
               <span className="absolute -bottom-1 -right-1 p-1.5 rounded-xl bg-emerald-500 text-white shadow-md" title="Active session">
@@ -302,10 +305,10 @@ export const ProfilePage: React.FC = () => {
 
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight truncate">
+                <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight truncate">
                   {user.name}
                 </h1>
-                <span className={`text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-xs ${currentRoleMeta.color}`}>
+                <span className={`text-[12px] font-medium uppercase tracking-wider px-3 py-1 rounded-full shadow-xs ${currentRoleMeta.color}`}>
                   {user.role_name}
                 </span>
               </div>
@@ -317,13 +320,13 @@ export const ProfilePage: React.FC = () => {
 
               {user.ministries && user.ministries.length > 0 && (
                 <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
-                  <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">
+                  <span className="text-[12px] text-indigo-200 font-medium uppercase tracking-wider">
                     Assigned:
                   </span>
                   {user.ministries.map((m) => (
                     <span
                       key={m.id}
-                      className="text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-white/15 text-white backdrop-blur-xs border border-white/20"
+                      className="text-[12px] font-medium px-2.5 py-0.5 rounded-md bg-white/15 text-white backdrop-blur-xs border border-white/20"
                     >
                       {m.name} Ministry
                     </span>
@@ -346,12 +349,12 @@ export const ProfilePage: React.FC = () => {
 
         {/* NAVIGATION TABS */}
         <div className="flex items-center gap-2 mt-8 overflow-x-auto no-scrollbar pt-3 border-t border-white/10">
-          <button
+          <button data-guide="profile-personal"
             type="button"
             onClick={() => setActiveTab("personal")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
               activeTab === "personal"
-                ? "bg-white text-indigo-950 shadow-md font-black scale-100"
+                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
                 : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
             }`}
           >
@@ -359,12 +362,12 @@ export const ProfilePage: React.FC = () => {
             <span>Personal & Account Details</span>
           </button>
 
-          <button
+          <button data-guide="profile-security"
             type="button"
             onClick={() => setActiveTab("security")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
               activeTab === "security"
-                ? "bg-white text-indigo-950 shadow-md font-black scale-100"
+                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
                 : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
             }`}
           >
@@ -372,12 +375,12 @@ export const ProfilePage: React.FC = () => {
             <span>Password & Security</span>
           </button>
 
-          <button
+          <button data-guide="profile-roles"
             type="button"
             onClick={() => setActiveTab("roles")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
               activeTab === "roles"
-                ? "bg-white text-indigo-950 shadow-md font-black scale-100"
+                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
                 : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
             }`}
           >
@@ -385,12 +388,12 @@ export const ProfilePage: React.FC = () => {
             <span>Role & Permissions</span>
           </button>
 
-          <button
+          <button data-guide="profile-activity"
             type="button"
             onClick={() => setActiveTab("activity")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
               activeTab === "activity"
-                ? "bg-white text-indigo-950 shadow-md font-black scale-100"
+                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
                 : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
             }`}
           >
@@ -404,15 +407,15 @@ export const ProfilePage: React.FC = () => {
       <div className="space-y-6">
         {/* TAB 1: PERSONAL & ACCOUNT DETAILS */}
         {activeTab === "personal" && (
-          <form onSubmit={handleProfileSubmit} className="space-y-6">
+          <form data-guide="profile-form" onSubmit={handleProfileSubmit} className="space-y-6">
             {profileSuccessMsg && (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-3 shadow-2xs">
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium flex items-center gap-3 shadow-2xs">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                 <span>{profileSuccessMsg}</span>
               </div>
             )}
             {profileErrorMsg && (
-              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-3 shadow-2xs">
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium flex items-center gap-3 shadow-2xs">
                 <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
                 <span>{profileErrorMsg}</span>
               </div>
@@ -422,42 +425,42 @@ export const ProfilePage: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <KeyRound className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                   Core Account Credentials
                 </h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Full Name</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Full Name</label>
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-bold text-indigo-950 text-xs"
+                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Username</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Username</label>
                   <input
                     type="text"
                     placeholder="e.g. mark.angelo"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-bold text-indigo-950 text-xs"
+                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Email Address</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Email Address</label>
                   <input
                     type="email"
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-bold text-indigo-950 text-xs"
+                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
                   />
                 </div>
               </div>
@@ -467,14 +470,14 @@ export const ProfilePage: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <Phone className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                   Contact & Demographics
                 </h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Contact Phone</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Contact Phone</label>
                   <input
                     type="text"
                     placeholder="e.g. 0917-123-4567"
@@ -485,7 +488,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Date of Birth</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Date of Birth</label>
                   <input
                     type="date"
                     value={formData.birthdate}
@@ -495,11 +498,11 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Gender</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Gender</label>
                   <select
                     value={formData.gender}
                     onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs font-bold"
+                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs font-medium"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -507,7 +510,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 <div className="sm:col-span-3">
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Complete Home Address</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Complete Home Address</label>
                   <input
                     type="text"
                     placeholder="e.g. Brgy. Gahonon, Daet, Camarines Norte"
@@ -523,14 +526,14 @@ export const ProfilePage: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <Briefcase className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                   Academic, Career & Personal Interests
                 </h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Occupation / Workplace</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Occupation / Workplace</label>
                   <input
                     type="text"
                     placeholder="e.g. Software Engineer, Teacher, Nurse, Student"
@@ -541,7 +544,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Hobbies & Talents</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Hobbies & Talents</label>
                   <input
                     type="text"
                     placeholder="e.g. Music, Guitar, Cooking, Sports"
@@ -552,7 +555,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">College / University</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">College / University</label>
                   <input
                     type="text"
                     placeholder="e.g. CNSC / Mabini Colleges / SLSU"
@@ -563,7 +566,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-charcoal/70 mb-1.5">Degree Program & Major</label>
+                  <label className="block font-medium text-charcoal/70 mb-1.5">Degree Program & Major</label>
                   <input
                     type="text"
                     placeholder="e.g. BS Information Technology, BS Accountancy"
@@ -577,10 +580,10 @@ export const ProfilePage: React.FC = () => {
 
             {/* Save Button */}
             <div className="flex items-center justify-end gap-3 pt-2">
-              <button
+              <button data-guide="profile-save"
                 type="submit"
                 disabled={savingProfile}
-                className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs px-8 py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs px-8 py-3 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-50"
               >
                 <Save className="w-4 h-4 text-indigo-950" />
                 <span>{savingProfile ? "Saving Changes..." : "Save Profile Changes"}</span>
@@ -591,15 +594,15 @@ export const ProfilePage: React.FC = () => {
 
         {/* TAB 2: PASSWORD & SECURITY */}
         {activeTab === "security" && (
-          <form onSubmit={handlePasswordSubmit} className="max-w-2xl mx-auto space-y-6">
+          <form data-guide="profile-password-form" onSubmit={handlePasswordSubmit} className="max-w-2xl mx-auto space-y-6">
             {passwordSuccessMsg && (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-3 shadow-2xs">
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium flex items-center gap-3 shadow-2xs">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                 <span>{passwordSuccessMsg}</span>
               </div>
             )}
             {passwordErrorMsg && (
-              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-3 shadow-2xs">
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium flex items-center gap-3 shadow-2xs">
                 <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
                 <span>{passwordErrorMsg}</span>
               </div>
@@ -608,13 +611,13 @@ export const ProfilePage: React.FC = () => {
             <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-2xs space-y-5">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <Lock className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                   Update Account Password
                 </h3>
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1.5 text-xs">
+                <label className="block font-medium text-charcoal/70 mb-1.5 text-xs">
                   Current Password
                 </label>
                 <div className="relative">
@@ -637,7 +640,7 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1.5 text-xs">
+                <label className="block font-medium text-charcoal/70 mb-1.5 text-xs">
                   New Password
                 </label>
                 <div className="relative">
@@ -660,9 +663,9 @@ export const ProfilePage: React.FC = () => {
 
                 {passwordForm.newPassword && (
                   <div className="mt-2.5 space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold">
+                    <div className="flex items-center justify-between text-[12px] font-medium">
                       <span className="text-gray-500">Password Strength:</span>
-                      <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] ${getStrengthLabel(passwordStrength).color}`}>
+                      <span className={`px-2.5 py-0.5 rounded-full font-medium text-[12px] ${getStrengthLabel(passwordStrength).color}`}>
                         {getStrengthLabel(passwordStrength).label}
                       </span>
                     </div>
@@ -684,7 +687,7 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-charcoal/70 mb-1.5 text-xs">
+                <label className="block font-medium text-charcoal/70 mb-1.5 text-xs">
                   Confirm New Password
                 </label>
                 <div className="relative">
@@ -706,7 +709,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 {passwordForm.confirmPassword && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-xs font-bold">
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium">
                     {passwordForm.newPassword === passwordForm.confirmPassword ? (
                       <span className="text-emerald-600 flex items-center gap-1">
                         <Check className="w-4 h-4" /> Passwords match
@@ -721,19 +724,19 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-amber-900 text-xs space-y-1">
-                <div className="font-bold flex items-center gap-1.5 text-amber-950">
+                <div className="font-medium flex items-center gap-1.5 text-amber-950">
                   <ShieldCheck className="w-4 h-4 text-amber-700" />
                   <span>Security Recommendations</span>
                 </div>
-                <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                <p className="text-[12px] text-amber-800/90 leading-relaxed">
                   Always use a strong, unique password. Password updates immediately take effect across all church computers and kiosks.
                 </p>
               </div>
 
-              <button
+              <button data-guide="profile-password-save"
                 type="submit"
                 disabled={savingPassword}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-900 hover:bg-indigo-800 text-white font-black text-xs py-3.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 bg-indigo-900 hover:bg-indigo-800 text-white font-medium text-xs py-3.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer disabled:opacity-50"
               >
                 <KeyRound className="w-4 h-4 text-amber-400" />
                 <span>{savingPassword ? "Updating Password..." : "Update Account Password"}</span>
@@ -746,12 +749,12 @@ export const ProfilePage: React.FC = () => {
         {activeTab === "roles" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-charcoal/50 block">
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted block">
                 Assigned Role Overview
               </span>
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-black text-indigo-950">{currentRoleMeta.badge}</h2>
-                <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-xs ${currentRoleMeta.color}`}>
+                <h2 className="text-xl font-semibold text-indigo-950">{currentRoleMeta.badge}</h2>
+                <span className={`text-[12px] font-medium uppercase tracking-wider px-3 py-1 rounded-full shadow-xs ${currentRoleMeta.color}`}>
                   {user.role_name}
                 </span>
               </div>
@@ -763,7 +766,7 @@ export const ProfilePage: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                   Granted Privileges & Access Boundaries
                 </h3>
               </div>
@@ -785,7 +788,7 @@ export const ProfilePage: React.FC = () => {
               <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                   <Building className="w-4 h-4 text-indigo-600" />
-                  <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                     Authorized Ministry Departments
                   </h3>
                 </div>
@@ -798,8 +801,8 @@ export const ProfilePage: React.FC = () => {
                     >
                       <span className={`w-4 h-4 rounded-full ${m.color} shrink-0`} />
                       <div>
-                        <span className="text-xs font-black text-indigo-950 block">{m.name} Ministry</span>
-                        <span className="text-[10px] text-charcoal/50 font-bold">Authorized Department Scope</span>
+                        <span className="text-xs font-medium text-indigo-950 block">{m.name} Ministry</span>
+                        <span className="text-[12px] text-muted font-medium">Authorized Department Scope</span>
                       </div>
                     </div>
                   ))}
@@ -818,10 +821,10 @@ export const ProfilePage: React.FC = () => {
                   <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-charcoal/50 uppercase tracking-wider block">
+                  <span className="text-[12px] font-medium text-muted uppercase tracking-wider block">
                     Sunday Attendance
                   </span>
-                  <span className="text-xl font-black text-indigo-950">
+                  <span className="text-xl font-medium text-indigo-950">
                     {activityStats?.attendanceCount || 0} Records
                   </span>
                 </div>
@@ -832,10 +835,10 @@ export const ProfilePage: React.FC = () => {
                   <BookOpen className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-charcoal/50 uppercase tracking-wider block">
+                  <span className="text-[12px] font-medium text-muted uppercase tracking-wider block">
                     Life Groups Led
                   </span>
-                  <span className="text-xl font-black text-indigo-950">
+                  <span className="text-xl font-medium text-indigo-950">
                     {activityStats?.groupsLed.length || 0} Groups
                   </span>
                 </div>
@@ -846,10 +849,10 @@ export const ProfilePage: React.FC = () => {
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-charcoal/50 uppercase tracking-wider block">
+                  <span className="text-[12px] font-medium text-muted uppercase tracking-wider block">
                     Groups Attended
                   </span>
-                  <span className="text-xl font-black text-indigo-950">
+                  <span className="text-xl font-medium text-indigo-950">
                     {activityStats?.groupsAttended.length || 0} Active
                   </span>
                 </div>
@@ -860,10 +863,10 @@ export const ProfilePage: React.FC = () => {
                   <Utensils className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-charcoal/50 uppercase tracking-wider block">
+                  <span className="text-[12px] font-medium text-muted uppercase tracking-wider block">
                     Duty Assignments
                   </span>
-                  <span className="text-xl font-black text-indigo-950">
+                  <span className="text-xl font-medium text-indigo-950">
                     {activityStats?.dutiesAssigned.length || 0} Teams
                   </span>
                 </div>
@@ -875,7 +878,7 @@ export const ProfilePage: React.FC = () => {
               <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                   <BookOpen className="w-4 h-4 text-sky-600" />
-                  <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                     Life Groups You Facilitate
                   </h3>
                 </div>
@@ -883,10 +886,10 @@ export const ProfilePage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   {activityStats.groupsLed.map((g) => (
                     <div key={g.id} className="p-4 rounded-2xl bg-sky-50/40 border border-sky-100 space-y-1.5">
-                      <span className="font-black text-sky-950 text-sm block">{g.name}</span>
+                      <span className="font-medium text-sky-950 text-sm block">{g.name}</span>
                       <div className="text-xs text-sky-800/80 font-medium flex items-center gap-2">
-                        <span>🗓️ {g.schedule_day} {g.schedule_time}</span>
-                        {g.meeting_location && <span>• 📍 {g.meeting_location}</span>}
+                        <span><UICalendarDays aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {g.schedule_day} {g.schedule_time}</span>
+                        {g.meeting_location && <span>• <UIMapPin aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {g.meeting_location}</span>}
                       </div>
                     </div>
                   ))}
@@ -899,7 +902,7 @@ export const ProfilePage: React.FC = () => {
               <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                   <Utensils className="w-4 h-4 text-amber-600" />
-                  <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
                     Cleaning & Dishwashing Teams
                   </h3>
                 </div>
@@ -907,8 +910,8 @@ export const ProfilePage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   {activityStats.dutiesAssigned.map((d, idx) => (
                     <div key={idx} className="p-4 rounded-2xl bg-amber-50/40 border border-amber-100 space-y-1.5">
-                      <span className="font-black text-amber-950 text-sm block">{d.team_name}</span>
-                      <span className="text-[10px] bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-md font-bold inline-block">
+                      <span className="font-medium text-amber-950 text-sm block">{d.team_name}</span>
+                      <span className="text-[12px] bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-md font-medium inline-block">
                         {d.duty_role || "Team Member"}
                       </span>
                     </div>

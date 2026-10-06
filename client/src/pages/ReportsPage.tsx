@@ -1,6 +1,8 @@
+import { BookOpen as UIBookOpen, CircleCheck as UICircleCheck, Clock as UIClock, Mars as UIMars, Venus as UIVenus } from "lucide-react";
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import { DashboardMetrics, BirthdaySummary, GrowthInsightsData } from "../types";
 import { ReportsPageSkeleton } from "../components/common/SkeletonLoader";
 import { useSocketEvent } from "../socket";
@@ -42,7 +44,8 @@ export const ReportsPage: React.FC = () => {
   useSocketEvent("ministries:changed", () => loadReports(true));
   useSocketEvent("groups:changed", () => loadReports(true));
 
-  const loadReports = async (isSilent = false) => {
+ const loadReports = async (isSilent = false) => {
+    guideData.clearError();
     try {
       if (!isSilent) setLoading(true);
       else setIsRefreshing(true);
@@ -57,6 +60,7 @@ export const ReportsPage: React.FC = () => {
       setBirthdaySummary(b);
     } catch (err) {
       console.error("Failed to load reports:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -87,6 +91,8 @@ export const ReportsPage: React.FC = () => {
     return Math.max(50, ...growthData.attendance_trends.map(a => a.total));
   }, [growthData?.attendance_trends]);
 
+  const guideData = useGuideDataState("reports", { loading, count: metrics || growthData ? 1 : 0, retry: loadReports });
+
   if (loading && !metrics && !growthData) {
     return <ReportsPageSkeleton />;
   }
@@ -105,18 +111,18 @@ export const ReportsPage: React.FC = () => {
 
         <div className="space-y-2 relative z-10">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <Activity className="w-3.5 h-3.5 text-amber-300" />
               <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Leadership Intelligence"}</span>
             </div>
             {isRefreshing && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-300 font-bold bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-400/20 animate-pulse">
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-amber-300 font-medium bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-400/20 animate-pulse">
                 <RefreshCw className="w-3 h-3 animate-spin" />
                 Live Syncing...
               </span>
             )}
           </div>
-          <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-white tracking-tight">
             Ministry Health & Growth Insights
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
@@ -129,7 +135,7 @@ export const ReportsPage: React.FC = () => {
         {/* Action Controls */}
         <div className="relative z-10 flex items-center gap-2 flex-wrap shrink-0">
           {/* Timeframe Selector */}
-          <div className="bg-black/40 backdrop-blur-md p-1 rounded-2xl border border-white/10 flex items-center gap-1 text-xs font-bold">
+          <div data-guide="reports-period" className="bg-black/40 backdrop-blur-md p-1 rounded-2xl border border-white/10 flex items-center gap-1 text-xs font-medium">
             {[
               { id: "3m", label: "3 Mo" },
               { id: "6m", label: "6 Mo" },
@@ -140,7 +146,7 @@ export const ReportsPage: React.FC = () => {
                 key={t.id}
                 onClick={() => setTimeframe(t.id as any)}
                 className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${timeframe === t.id
-                  ? "bg-amber-400 text-slate-950 font-black shadow-md"
+                  ? "bg-amber-400 text-slate-950 font-medium shadow-md"
                   : "text-slate-300 hover:text-white hover:bg-white/5"
                   }`}
               >
@@ -150,9 +156,9 @@ export const ReportsPage: React.FC = () => {
           </div>
 
           {/* Print / Export Button */}
-          <button
+          <button data-guide="reports-print"
             onClick={handlePrintReport}
-            className="px-3.5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer backdrop-blur-md"
+            className="px-3.5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer backdrop-blur-md"
             title="Print Executive Summary for Leadership Meeting"
           >
             <Printer className="w-3.5 h-3.5 text-amber-300" />
@@ -163,9 +169,9 @@ export const ReportsPage: React.FC = () => {
 
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-gray-200/80 pb-2 print:hidden overflow-x-auto">
-        <button
+        <button data-guide="reports-growth"
           onClick={() => setActiveTab("growth")}
-          className={`px-4 py-2 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${activeTab === "growth"
+          className={`px-4 py-2 rounded-2xl font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${activeTab === "growth"
             ? "bg-indigo text-white shadow-md shadow-indigo/20"
             : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
             }`}
@@ -174,9 +180,9 @@ export const ReportsPage: React.FC = () => {
           <span>Growth Insights & Vitality</span>
         </button>
 
-        <button
+        <button data-guide="reports-demographics"
           onClick={() => setActiveTab("demographics")}
-          className={`px-4 py-2 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${activeTab === "demographics"
+          className={`px-4 py-2 rounded-2xl font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${activeTab === "demographics"
             ? "bg-indigo text-white shadow-md shadow-indigo/20"
             : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
             }`}
@@ -196,16 +202,16 @@ export const ReportsPage: React.FC = () => {
             {/* Card 1: Discipleship Ratio */}
             <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black text-charcoal/70">Discipleship Ratio</span>
+                <span className="text-xs font-medium text-charcoal/70">Discipleship Ratio</span>
                 <span className="p-2 rounded-2xl bg-indigo-50 text-indigo border border-indigo-100/80">
                   <BookOpen className="w-4 h-4" />
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-black text-indigo tracking-tight">
+                <div className="text-3xl font-medium text-indigo tracking-tight">
                   {growthData?.summary.discipleship_ratio ?? 0}%
                 </div>
-                <span className="text-[11px] font-bold text-charcoal/50">in Small Groups</span>
+                <span className="text-[12px] font-medium text-muted">in Small Groups</span>
               </div>
               <div className="w-full bg-gray-100 h-2 rounded-full mt-2.5 overflow-hidden">
                 <div
@@ -213,7 +219,7 @@ export const ReportsPage: React.FC = () => {
                   style={{ width: `${Math.min(100, growthData?.summary.discipleship_ratio || 0)}%` }}
                 ></div>
               </div>
-              <div className="text-[10px] text-charcoal/60 font-bold mt-2 flex items-center justify-between">
+              <div className="text-[12px] text-muted font-medium mt-2 flex items-center justify-between">
                 <span>{growthData?.summary.disciples_in_groups || 0} of {growthData?.summary.total_active_members || 0} Disciples</span>
                 <span className="text-emerald-600">Goal: ≥ 60%</span>
               </div>
@@ -222,17 +228,17 @@ export const ReportsPage: React.FC = () => {
             {/* Card 2: New Member Retention Rate */}
             <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black text-charcoal/70">New Member Retention</span>
+                <span className="text-xs font-medium text-charcoal/70">New Member Retention</span>
                 <span className="p-2 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100/80">
                   <UserCheck className="w-4 h-4" />
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-black text-emerald-900 tracking-tight">
+                <div className="text-3xl font-medium text-emerald-900 tracking-tight">
                   {growthData?.summary.retention_rate ?? 0}%
                 </div>
-                <span className="text-[11px] font-bold text-emerald-700">
-                  {(growthData?.summary.retention_rate || 0) >= 80 ? "Healthy 🟢" : "Stable 🟡"}
+                <span className="text-[12px] font-medium text-emerald-700">
+                  {(growthData?.summary.retention_rate || 0) >= 80 ? <>Healthy <UICircleCheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></> : <>Stable <UIClock aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></>}
                 </span>
               </div>
               <div className="w-full bg-gray-100 h-2 rounded-full mt-2.5 overflow-hidden">
@@ -241,7 +247,7 @@ export const ReportsPage: React.FC = () => {
                   style={{ width: `${Math.min(100, growthData?.summary.retention_rate || 0)}%` }}
                 ></div>
               </div>
-              <div className="text-[10px] text-charcoal/60 font-bold mt-2 flex items-center justify-between">
+              <div className="text-[12px] text-muted font-medium mt-2 flex items-center justify-between">
                 <span>{growthData?.summary.new_members_attended || 0} of {growthData?.summary.total_new_members || 0} New Joined</span>
                 <span className="text-emerald-700">Active in {timeframe.toUpperCase()}</span>
               </div>
@@ -250,26 +256,26 @@ export const ReportsPage: React.FC = () => {
             {/* Card 3: Water Baptism Momentum */}
             <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black text-charcoal/70">Baptisms</span>
+                <span className="text-xs font-medium text-charcoal/70">Baptisms</span>
                 <span className="p-2 rounded-2xl bg-sky-50 text-sky-700 border border-sky-100/80">
                   <Droplets className="w-4 h-4" />
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-black text-sky-950 tracking-tight">
+                <div className="text-3xl font-medium text-sky-950 tracking-tight">
                   {growthData?.summary.total_baptisms_period ?? 0}
                 </div>
-                <span className="text-[11px] font-bold text-sky-700">Baptized in Period</span>
+                <span className="text-[12px] font-medium text-sky-700">Baptized in Period</span>
               </div>
               <div className="flex items-center gap-2 mt-2.5">
-                <span className="text-[10px] font-bold bg-sky-100 text-sky-900 px-2 py-0.5 rounded-md">
+                <span className="text-[12px] font-medium bg-sky-100 text-sky-900 px-2 py-0.5 rounded-md">
                   {growthData?.baptisms.reduce((sum, b) => sum + b.male_count, 0) || 0} Brothers
                 </span>
-                <span className="text-[10px] font-bold bg-rose-100 text-rose-900 px-2 py-0.5 rounded-md">
+                <span className="text-[12px] font-medium bg-rose-100 text-rose-900 px-2 py-0.5 rounded-md">
                   {growthData?.baptisms.reduce((sum, b) => sum + b.female_count, 0) || 0} Sisters
                 </span>
               </div>
-              <div className="text-[10px] text-sky-800 font-bold mt-2">
+              <div className="text-[12px] text-sky-800 font-medium mt-2">
                 Across {growthData?.baptisms.length || 0} recorded months
               </div>
             </div>
@@ -277,24 +283,24 @@ export const ReportsPage: React.FC = () => {
             {/* Card 4: Average Weekly Sunday Attendance */}
             <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black text-charcoal/70">Avg Weekly Attendance</span>
+                <span className="text-xs font-medium text-charcoal/70">Avg Weekly Attendance</span>
                 <span className="p-2 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100/80">
                   <TrendingUp className="w-4 h-4" />
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-black text-amber-950 tracking-tight">
+                <div className="text-3xl font-medium text-amber-950 tracking-tight">
                   {growthData?.summary.avg_weekly_attendance ?? 0}
                 </div>
-                <span className="text-[11px] font-bold text-amber-800">Weekly Average</span>
+                <span className="text-[12px] font-medium text-amber-800">Weekly Average</span>
               </div>
-              <div className="text-[11px] text-charcoal/70 font-bold mt-2.5 flex items-center justify-between">
+              <div className="text-[12px] text-charcoal/70 font-medium mt-2.5 flex items-center justify-between">
                 <span>Peak Sunday: <strong>{growthData?.summary.peak_attendance ?? 0}</strong></span>
-                <span className="text-[10px] bg-amber-100 text-amber-950 px-2 py-0.5 rounded-full font-black">
+                <span className="text-[12px] bg-amber-100 text-amber-950 px-2 py-0.5 rounded-full font-medium">
                   {growthData?.attendance_trends.length || 0} Services
                 </span>
               </div>
-              <div className="text-[10px] text-charcoal/50 mt-1">
+              <div className="text-[12px] text-muted mt-1">
                 Measured across recorded check-in logs
               </div>
             </div>
@@ -309,10 +315,10 @@ export const ReportsPage: React.FC = () => {
                     <Droplets className="w-5 h-5 text-sky-700" />
                   </div>
                   <div>
-                    <h2 className="text-base font-black text-charcoal">
+                    <h2 className="text-base font-semibold text-charcoal">
                       Month-over-Month Baptism Trajectory
                     </h2>
-                    <p className="text-xs text-charcoal/60">
+                    <p className="text-xs text-muted">
                       Tracking public declarations of faith and baptismal growth across ministries.
                     </p>
                   </div>
@@ -320,7 +326,7 @@ export const ReportsPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 text-sky-950 border border-sky-200 text-xs font-black">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 text-sky-950 border border-sky-200 text-xs font-medium">
                   <Award className="w-3.5 h-3.5 text-sky-600" />
                   <span>{growthData?.summary.total_baptisms_period || 0} Baptisms Total</span>
                 </span>
@@ -339,10 +345,10 @@ export const ReportsPage: React.FC = () => {
                         className="bg-ivory-light p-4 rounded-2xl border border-gray-200/80 hover:border-sky-300 transition-all flex flex-col justify-between group hover:shadow-md"
                       >
                         <div className="text-center mb-2">
-                          <span className="text-[10px] font-bold text-charcoal/50 uppercase block">
+                          <span className="text-[12px] font-medium text-muted uppercase block">
                             {b.month_label}
                           </span>
-                          <span className="text-2xl font-black text-sky-950 mt-0.5 block">
+                          <span className="text-2xl font-medium text-sky-950 mt-0.5 block">
                             {b.count}
                           </span>
                         </div>
@@ -356,9 +362,9 @@ export const ReportsPage: React.FC = () => {
                         </div>
 
                         {/* Brother / Sister Breakdown */}
-                        <div className="mt-3 pt-2 border-t border-gray-200/60 flex items-center justify-between text-[10px] font-bold text-charcoal/70">
-                          <span className="text-sky-800">♂ {b.male_count}</span>
-                          <span className="text-rose-700">♀ {b.female_count}</span>
+                        <div className="mt-3 pt-2 border-t border-gray-200/60 flex items-center justify-between text-[12px] font-medium text-charcoal/70">
+                          <span className="text-sky-800"><UIMars aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {b.male_count}</span>
+                          <span className="text-rose-700"><UIVenus aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {b.female_count}</span>
                         </div>
                       </div>
                     );
@@ -368,8 +374,8 @@ export const ReportsPage: React.FC = () => {
             ) : (
               <div className="p-8 text-center bg-ivory-light rounded-2xl border border-dashed border-gray-300 space-y-2">
                 <Droplets className="w-8 h-8 text-sky-400 mx-auto" />
-                <h4 className="font-bold text-xs text-charcoal">No Baptism Records in this Timeframe</h4>
-                <p className="text-[11px] text-charcoal/50 max-w-sm mx-auto">
+                <h4 className="font-semibold text-xs text-charcoal">No Baptism Records in this Timeframe</h4>
+                <p className="text-[12px] text-muted max-w-sm mx-auto">
                   Baptism dates logged on member profiles will automatically populate this trajectory chart.
                 </p>
               </div>
@@ -382,15 +388,15 @@ export const ReportsPage: React.FC = () => {
             <div className="lg:col-span-2 bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
-                  <h2 className="text-base font-black text-charcoal flex items-center gap-2">
+                  <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
                     <BarChart3 className="w-5 h-5 text-indigo" />
                     <span>Weekly Sunday Service Attendance Momentum</span>
                   </h2>
-                  <p className="text-xs text-charcoal/60 mt-0.5">
+                  <p className="text-xs text-muted mt-0.5">
                     Week-by-week attendee check-in trends and Sunday consistency.
                   </p>
                 </div>
-                <span className="text-xs font-black bg-indigo-50 text-indigo px-3 py-1 rounded-full border border-indigo-100">
+                <span className="text-xs font-medium bg-indigo-50 text-indigo px-3 py-1 rounded-full border border-indigo-100">
                   Avg: {growthData?.summary.avg_weekly_attendance || 0} / Sunday
                 </span>
               </div>
@@ -407,7 +413,7 @@ export const ReportsPage: React.FC = () => {
                           className="flex-1 min-w-[36px] max-w-[56px] flex flex-col items-center gap-1 group h-full justify-end"
                         >
                           {/* Value on Hover */}
-                          <span className="text-[10px] font-black text-indigo opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          <span className="text-[12px] font-medium text-indigo opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                             {att.total}
                           </span>
 
@@ -420,7 +426,7 @@ export const ReportsPage: React.FC = () => {
                           </div>
 
                           {/* Date Label */}
-                          <span className="text-[9px] font-bold text-charcoal/60 group-hover:text-charcoal whitespace-nowrap mt-1">
+                          <span className="text-[12px] font-medium text-muted group-hover:text-charcoal whitespace-nowrap mt-1">
                             {att.date_label}
                           </span>
                         </div>
@@ -428,15 +434,15 @@ export const ReportsPage: React.FC = () => {
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] text-charcoal/60 pt-2 border-t border-gray-100 font-semibold">
+                  <div className="flex items-center justify-between text-[12px] text-muted pt-2 border-t border-gray-100 font-medium">
                     <span>Showing {growthData.attendance_trends.length} Sunday service dates</span>
-                    <span className="text-indigo font-bold">Peak Service: {growthData.summary.peak_attendance} attendees</span>
+                    <span className="text-indigo font-medium">Peak Service: {growthData.summary.peak_attendance} attendees</span>
                   </div>
                 </div>
               ) : (
                 <div className="p-8 text-center bg-ivory-light rounded-2xl border border-dashed border-gray-300 space-y-1">
-                  <BarChart3 className="w-6 h-6 text-charcoal/40 mx-auto" />
-                  <p className="text-xs font-bold text-charcoal/60">No Attendance Check-in Logs in this Window</p>
+                  <BarChart3 className="w-6 h-6 text-muted mx-auto" />
+                  <p className="text-xs font-medium text-muted">No Attendance Check-in Logs in this Window</p>
                 </div>
               )}
             </div>
@@ -444,11 +450,11 @@ export const ReportsPage: React.FC = () => {
             {/* Right 1 Col: New Member Assimilation & Retention Funnel */}
             <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
               <div>
-                <h3 className="text-base font-black text-charcoal flex items-center gap-2">
+                <h3 className="text-base font-semibold text-charcoal flex items-center gap-2">
                   <Compass className="w-5 h-5 text-emerald-700" />
                   <span>Assimilation Funnel</span>
                 </h3>
-                <p className="text-xs text-charcoal/60 mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   Conversion of new members into active disciples.
                 </p>
               </div>
@@ -456,9 +462,9 @@ export const ReportsPage: React.FC = () => {
               <div className="space-y-3 pt-1">
                 {/* Funnel Step 1: New Disciples Joined */}
                 <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
-                  <div className="flex items-center justify-between text-xs font-bold">
+                  <div className="flex items-center justify-between text-xs font-medium">
                     <span className="text-charcoal/70">1. Newly Enrolled</span>
-                    <span className="text-indigo font-black">{growthData?.summary.total_new_members || 0} Members (100%)</span>
+                    <span className="text-indigo font-medium">{growthData?.summary.total_new_members || 0} Members (100%)</span>
                   </div>
                   <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
                     <div className="h-full bg-indigo w-full rounded-full"></div>
@@ -467,9 +473,9 @@ export const ReportsPage: React.FC = () => {
 
                 {/* Funnel Step 2: Attended Sunday Service */}
                 <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
-                  <div className="flex items-center justify-between text-xs font-bold">
+                  <div className="flex items-center justify-between text-xs font-medium">
                     <span className="text-charcoal/70">2. Attended Service</span>
-                    <span className="text-emerald-800 font-black">
+                    <span className="text-emerald-800 font-medium">
                       {growthData?.summary.new_members_attended || 0} ({
                         growthData?.summary.total_new_members
                           ? Math.round(((growthData.summary.new_members_attended) / growthData.summary.total_new_members) * 100)
@@ -492,9 +498,9 @@ export const ReportsPage: React.FC = () => {
 
                 {/* Funnel Step 3: Joined Small Group */}
                 <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
-                  <div className="flex items-center justify-between text-xs font-bold">
+                  <div className="flex items-center justify-between text-xs font-medium">
                     <span className="text-charcoal/70">3. In Bible Study</span>
-                    <span className="text-amber-900 font-black">
+                    <span className="text-amber-900 font-medium">
                       {growthData?.summary.new_members_in_groups || 0} ({
                         growthData?.summary.total_new_members
                           ? Math.round(((growthData.summary.new_members_in_groups) / growthData.summary.total_new_members) * 100)
@@ -517,9 +523,9 @@ export const ReportsPage: React.FC = () => {
 
                 {/* Funnel Step 4: Water Baptized */}
                 <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
-                  <div className="flex items-center justify-between text-xs font-bold">
+                  <div className="flex items-center justify-between text-xs font-medium">
                     <span className="text-charcoal/70">4. Water Baptized</span>
-                    <span className="text-sky-900 font-black">
+                    <span className="text-sky-900 font-medium">
                       {growthData?.summary.new_members_baptized || 0} ({
                         growthData?.summary.total_new_members
                           ? Math.round(((growthData.summary.new_members_baptized) / growthData.summary.total_new_members) * 100)
@@ -547,20 +553,20 @@ export const ReportsPage: React.FC = () => {
           <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-black text-charcoal flex items-center gap-2">
+                <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-indigo" />
                   <span>Small Groups Health & Capacity Utilization</span>
                 </h2>
-                <p className="text-xs text-charcoal/60 mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   Roster health, curriculum pacing, and capacity metrics for weekly discipleship groups.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 text-xs flex-wrap">
-                <span className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo font-black border border-indigo-100">
+                <span className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo font-medium border border-indigo-100">
                   {growthData?.summary.total_groups || 0} Active Groups
                 </span>
-                <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-900 font-black border border-emerald-200">
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-900 font-medium border border-emerald-200">
                   {growthData?.summary.capacity_utilization || 0}% Capacity Filled
                 </span>
               </div>
@@ -578,19 +584,18 @@ export const ReportsPage: React.FC = () => {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h4 className="text-xs font-black text-charcoal leading-snug">{g.name}</h4>
-                          <span className="text-[10px] text-indigo-700 font-bold block mt-0.5">
-                            📖 {g.curriculum || "Scripture Study"}
+                          <h4 className="text-xs font-semibold text-charcoal leading-snug">{g.name}</h4>
+                          <span className="text-[12px] text-indigo-700 font-medium block mt-0.5"><UIBookOpen aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> {g.curriculum || "Scripture Study"}
                           </span>
                         </div>
-                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-50 text-indigo border border-indigo-200 uppercase whitespace-nowrap">
+                        <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo border border-indigo-200 uppercase whitespace-nowrap">
                           {g.current_chapter || "Chapter 1"}
                         </span>
                       </div>
 
                       {/* Capacity Bar with user color rule: Green when full, yellow when mid, red when low */}
                       <div>
-                        <div className="flex items-center justify-between text-[10px] font-bold text-charcoal/70 mb-1">
+                        <div className="flex items-center justify-between text-[12px] font-medium text-charcoal/70 mb-1">
                           <span>Roster: {g.enrolled_count} of {g.max_capacity} Enrolled</span>
                           <span>{util}% Full</span>
                         </div>
@@ -603,12 +608,12 @@ export const ReportsPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between text-[10px] text-charcoal/60 font-medium">
+                      <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between text-[12px] text-muted font-medium">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3 text-indigo" />
                           {g.meeting_day} ({g.meeting_time})
                         </span>
-                        <span className="font-bold text-charcoal/80">{g.progress_stage || "Active"}</span>
+                        <span className="font-medium text-charcoal/80">{g.progress_stage || "Active"}</span>
                       </div>
                     </div>
                   );
@@ -616,8 +621,8 @@ export const ReportsPage: React.FC = () => {
               </div>
             ) : (
               <div className="p-8 text-center bg-ivory-light rounded-2xl border border-dashed border-gray-300">
-                <BookOpen className="w-6 h-6 text-charcoal/40 mx-auto mb-1" />
-                <p className="text-xs font-bold text-charcoal/60">No Active Small Groups Logged</p>
+                <BookOpen className="w-6 h-6 text-muted mx-auto mb-1" />
+                <p className="text-xs font-medium text-muted">No Active Small Groups Logged</p>
               </div>
             )}
           </div>
@@ -633,7 +638,7 @@ export const ReportsPage: React.FC = () => {
           <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-black text-charcoal flex items-center gap-2">
+                <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-indigo" />
                   <span>
                     {coordinatorMinistryId
@@ -641,14 +646,14 @@ export const ReportsPage: React.FC = () => {
                       : "Ministry Demographic & Capacity Distribution"}
                   </span>
                 </h2>
-                <p className="text-xs text-charcoal/60 mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   {coordinatorMinistryId
                     ? `Active disciples and capacity strictly for ${coordinatorMinistryName} Ministry`
                     : "Relative distribution of active disciples across the 7 age bracket ministries"}
                 </p>
               </div>
               {coordinatorMinistryId && (
-                <span className="text-[10px] bg-indigo-50 text-indigo border border-indigo-200 px-2.5 py-1 rounded-full font-black">
+                <span className="text-[12px] bg-indigo-50 text-indigo border border-indigo-200 px-2.5 py-1 rounded-full font-medium">
                   Designated Scope
                 </span>
               )}
@@ -663,12 +668,12 @@ export const ReportsPage: React.FC = () => {
 
                 return (
                   <div key={m.id} className="space-y-1.5 p-3 rounded-2xl hover:bg-indigo-50/30 transition-colors">
-                    <div className="flex items-center justify-between text-xs font-bold">
+                    <div className="flex items-center justify-between text-xs font-medium">
                       <div className="flex items-center gap-2.5">
                         <span className="w-3.5 h-3.5 rounded-full shadow-2xs" style={{ backgroundColor: m.color }}></span>
-                        <span className="text-charcoal font-black">{m.name} Ministry</span>
+                        <span className="text-charcoal font-medium">{m.name} Ministry</span>
                       </div>
-                      <span className="text-indigo font-black">{m.member_count} Members ({pct}%)</span>
+                      <span className="text-indigo font-medium">{m.member_count} Members ({pct}%)</span>
                     </div>
                     <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden p-0.5">
                       <div
@@ -686,21 +691,21 @@ export const ReportsPage: React.FC = () => {
           <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-black text-charcoal flex items-center gap-2">
+                <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
                   <Cake className="w-5 h-5 text-rose-500" />
                   <span>Annual Birthday & Milestone Distribution</span>
                 </h2>
-                <p className="text-xs text-charcoal/60 mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   Monthly breakdown of member birthdays for pastoral care and celebratory events.
                 </p>
               </div>
               {birthdaySummary && (
                 <div className="flex items-center gap-2 text-xs flex-wrap">
-                  <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-950 font-black px-3 py-1.5 rounded-2xl border border-amber-200 shadow-2xs">
+                  <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-950 font-medium px-3 py-1.5 rounded-2xl border border-amber-200 shadow-2xs">
                     <Cake className="w-3.5 h-3.5 text-amber-700" />
                     <span>{birthdaySummary.counts.this_month} This Month</span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-950 font-black px-3 py-1.5 rounded-2xl border border-emerald-200 shadow-2xs">
+                  <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-950 font-medium px-3 py-1.5 rounded-2xl border border-emerald-200 shadow-2xs">
                     <Calendar className="w-3.5 h-3.5 text-emerald-700" />
                     <span>{birthdaySummary.counts.next_30_days} Next 30 Days</span>
                   </span>
@@ -709,7 +714,7 @@ export const ReportsPage: React.FC = () => {
             </div>
 
             {/* 12-Month Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div data-guide="reports-birthday-month" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {birthdaySummary?.monthly_distribution.map((m) => {
                 const isCurrentMonth = new Date().getMonth() + 1 === m.month;
                 const isSelected = selectedMonth === m.month;
@@ -727,25 +732,25 @@ export const ReportsPage: React.FC = () => {
                   >
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-[10px] font-black uppercase tracking-wider ${isSelected ? "text-indigo-950/80" : isCurrentMonth ? "text-amber-800" : "text-charcoal/50"
+                        <span className={`text-[12px] font-medium uppercase tracking-wider ${isSelected ? "text-indigo-950/80" : isCurrentMonth ? "text-amber-800" : "text-muted"
                           }`}>
                           Month {m.month}
                         </span>
                         {isCurrentMonth && (
-                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isSelected ? "bg-indigo-950 text-white" : "bg-amber-500 text-white"
+                          <span className={`text-[12px] font-medium px-2 py-0.5 rounded-full ${isSelected ? "bg-indigo-950 text-white" : "bg-amber-500 text-white"
                             }`}>
                             CURRENT
                           </span>
                         )}
                       </div>
-                      <h4 className={`text-xs font-black ${isSelected ? "text-indigo-950" : "text-charcoal"}`}>
+                      <h4 className={`text-xs font-semibold ${isSelected ? "text-indigo-950" : "text-charcoal"}`}>
                         {m.month_name}
                       </h4>
                     </div>
 
                     <div className="mt-3 pt-2 border-t border-black/5 flex items-center justify-between text-xs">
-                      <span className={`font-bold ${isSelected ? "text-indigo-950/80" : "text-charcoal/60"}`}>Birthdays:</span>
-                      <span className={`font-black text-sm px-2.5 py-0.5 rounded-full ${isSelected ? "bg-indigo-950/15 text-indigo-950" : "bg-indigo-50 text-indigo border border-indigo-100"
+                      <span className={`font-medium ${isSelected ? "text-indigo-950/80" : "text-muted"}`}>Birthdays:</span>
+                      <span className={`font-medium text-sm px-2.5 py-0.5 rounded-full ${isSelected ? "bg-indigo-950/15 text-indigo-950" : "bg-indigo-50 text-indigo border border-indigo-100"
                         }`}>
                         {m.count}
                       </span>
@@ -761,7 +766,7 @@ export const ReportsPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <PartyPopper className="w-4 h-4 text-amber-600" />
-                    <h4 className="font-black text-xs text-charcoal">
+                    <h4 className="font-semibold text-xs text-charcoal">
                       Celebrants in {birthdaySummary?.monthly_distribution.find(m => m.month === selectedMonth)?.month_name} ({
                         birthdaySummary?.monthly_distribution.find(m => m.month === selectedMonth)?.count
                       } Members)
@@ -769,7 +774,7 @@ export const ReportsPage: React.FC = () => {
                   </div>
                   <button
                     onClick={() => setSelectedMonth(null)}
-                    className="text-[11px] text-charcoal/60 hover:text-charcoal underline font-bold cursor-pointer"
+                    className="text-[12px] text-muted hover:text-charcoal underline font-medium cursor-pointer"
                   >
                     Close list
                   </button>
@@ -781,10 +786,10 @@ export const ReportsPage: React.FC = () => {
                     ?.celebrants.map(c => (
                       <div key={c.id} className="bg-white p-3 rounded-2xl border border-indigo-100/80 shadow-2xs flex items-center justify-between text-xs">
                         <div>
-                          <span className="font-bold text-charcoal block">{c.first_name} {c.last_name}</span>
-                          <span className="text-[10px] text-charcoal/50 font-medium">{c.ministry_name || "General"}</span>
+                          <span className="font-medium text-charcoal block">{c.first_name} {c.last_name}</span>
+                          <span className="text-[12px] text-muted font-medium">{c.ministry_name || "General"}</span>
                         </div>
-                        <span className="bg-amber-100 text-amber-950 text-[10px] font-black px-2.5 py-1 rounded-xl border border-amber-200">
+                        <span className="bg-amber-100 text-amber-950 text-[12px] font-medium px-2.5 py-1 rounded-xl border border-amber-200">
                           Day {c.birth_day}
                         </span>
                       </div>

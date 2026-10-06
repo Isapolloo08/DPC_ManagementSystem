@@ -247,7 +247,7 @@ function createWindow() {
   // Intercept window close: In Master PC mode, hide window to system tray instead of quitting!
   mainWindow.on("close", (event) => {
     const isMaster = isMasterMode(currentServerIp);
-    if (!isQuitting && isMaster) {
+    if (!isQuitting && isMaster && !isDev) {
       event.preventDefault();
       mainWindow.hide();
       const { displayTrayNotification } = require("./trayManager");
@@ -425,7 +425,7 @@ ipcMain.handle("window:is-maximized", () => {
 ipcMain.handle("window:close", () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     const isMaster = isMasterMode(currentServerIp);
-    if (!isQuitting && isMaster) {
+    if (!isQuitting && isMaster && !isDev) {
       mainWindow.hide();
       const { displayTrayNotification } = require("./trayManager");
       displayTrayNotification(
@@ -433,6 +433,7 @@ ipcMain.handle("window:close", () => {
         "The database server remains running in the background for all church client PCs. Click the system tray icon to re-open."
       );
     } else {
+      isQuitting = true;
       mainWindow.close();
     }
   }

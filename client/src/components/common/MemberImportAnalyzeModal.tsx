@@ -1,3 +1,4 @@
+import { Image as UIImage, Table2 as UITable2 } from "lucide-react";
 import React, { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -308,20 +309,20 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
 
   return createPortal(
     <div className="fixed inset-0 z-[120] bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div data-modal-panel className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Modal Header */}
-        <div className="bg-slate-900 p-4 sm:p-5 text-white flex items-center justify-between shrink-0">
+        <div data-modal-header className="bg-slate-900 p-4 sm:p-5 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shadow-inner">
               <Scan className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-black text-white">
+                <h3 className="text-base sm:text-lg font-semibold text-white">
                   {step === "preview" ? "Member Import & Spreadsheet Table Review" : "Import & Analyze Member Information List"}
                 </h3>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                <span className="text-[12px] px-2.5 py-0.5 rounded-full font-medium bg-amber-400/20 text-amber-300 border border-amber-400/30">
                   {step === "preview" ? `${parsedMembers.length} Rows Detected` : "Step 1: Upload / Paste"}
                 </span>
               </div>
@@ -350,7 +351,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
             <div className="space-y-5 my-auto max-w-2xl mx-auto w-full py-4">
               
               {/* Drag and Drop Zone */}
-              <div
+              <div data-guide="import-file"
                 onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handleDrop}
@@ -374,7 +375,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                 </div>
 
                 <div>
-                  <h4 className="text-base font-black text-slate-900">
+                  <h4 className="text-base font-semibold text-slate-900">
                     Click to browse or drag & drop file here
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">
@@ -382,25 +383,25 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-[11px] text-slate-600 font-bold">
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200">📊 Excel / CSV</span>
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200">📷 Photo / Scanned List</span>
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200">📝 Text / TSV Table</span>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-[12px] text-slate-600 font-medium">
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200"><UITable2 aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Excel / CSV</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200"><UIImage aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Photo / Scanned List</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200"><FileText aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Text / TSV Table</span>
                 </div>
               </div>
 
               {/* Paste Rows Directly Drawer */}
               <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
-                <button
+                <button data-guide="import-paste"
                   type="button"
                   onClick={() => setIsPasteOpen(!isPasteOpen)}
-                  className="w-full flex items-center justify-between text-xs font-black text-slate-800 hover:text-amber-700 transition-colors"
+                  className="w-full flex items-center justify-between text-xs font-medium text-slate-800 hover:text-amber-700 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Clipboard className="w-4 h-4 text-amber-600" />
                     <span>Or Copy & Paste Spreadsheet Rows (Google Sheets / Excel Table)</span>
                   </div>
-                  <span className="text-xs text-amber-600 font-bold">
+                  <span className="text-xs text-amber-600 font-medium">
                     {isPasteOpen ? "Hide" : "Expand Paste Area"}
                   </span>
                 </button>
@@ -427,7 +428,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                         type="button"
                         onClick={handlePasteAnalyze}
                         disabled={!pasteText.trim()}
-                        className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-medium text-xs rounded-xl shadow-xs transition-all cursor-pointer"
                       >
                         <FileText className="w-3.5 h-3.5" />
                         <span>Parse Spreadsheet Table</span>
@@ -449,7 +450,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                 <div className="absolute -inset-2 rounded-3xl border-2 border-amber-400/40 animate-ping opacity-30" />
               </div>
               <div>
-                <h4 className="text-base font-black text-slate-900">
+                <h4 className="text-base font-semibold text-slate-900">
                   Analyzing Spreadsheet & Member Information...
                 </h4>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
@@ -474,14 +475,14 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
               {saveSuccessMessage && (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                  <span className="font-bold">{saveSuccessMessage}</span>
+                  <span className="font-medium">{saveSuccessMessage}</span>
                 </div>
               )}
 
               {/* Progress Bar when saving */}
               {isSavingDirect && saveProgress && (
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-2xl space-y-2">
-                  <div className="flex items-center justify-between text-xs font-black text-amber-950">
+                  <div className="flex items-center justify-between text-xs font-medium text-amber-950">
                     <span>Importing members to database ({saveProgress.current} of {saveProgress.total})...</span>
                     <span>{Math.round((saveProgress.current / saveProgress.total) * 100)}%</span>
                   </div>
@@ -499,7 +500,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                 <div className="flex items-center gap-2.5 w-full sm:w-auto">
                   <div className="relative grow sm:grow-0">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
+                    <input data-guide="import-results"
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -507,7 +508,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                       className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs w-full sm:w-60 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30"
                     />
                   </div>
-                  <span className="text-xs font-black bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 whitespace-nowrap shadow-2xs">
+                  <span className="text-xs font-medium bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 whitespace-nowrap shadow-2xs">
                     {selectedRowIds.size} of {parsedMembers.length} Selected
                   </span>
                 </div>
@@ -516,7 +517,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                   <button
                     type="button"
                     onClick={handleAddBlankRow}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-50 border border-slate-200 text-slate-800 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-50 border border-slate-200 text-slate-800 font-medium text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5 text-amber-600" />
                     <span>Add Row</span>
@@ -527,7 +528,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                       setStep("select");
                       setPasteText("");
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium text-xs rounded-xl shadow-2xs transition-all cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Upload Another</span>
@@ -539,7 +540,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
               <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs grow flex flex-col min-h-0 bg-white">
                 <div className="overflow-x-auto overflow-y-auto max-h-[48vh] select-text">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 bg-slate-900 text-white font-black text-[11px] uppercase tracking-wider z-10">
+                    <thead className="sticky top-0 bg-slate-900 text-white font-medium text-[12px] uppercase tracking-wider z-10">
                       <tr>
                         <th className="p-3 w-10 text-center">
                           <button
@@ -602,7 +603,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                               </td>
 
                               {/* Row Number */}
-                              <td className="p-2.5 text-center font-black text-slate-400 text-xs">
+                              <td className="p-2.5 text-center font-medium text-slate-400 text-xs">
                                 {idx + 1}
                               </td>
 
@@ -613,7 +614,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                                   value={member.first_name}
                                   onChange={(e) => handleRowCellChange(member.id || "", "first_name", e.target.value)}
                                   placeholder="First name..."
-                                  className="w-full px-2.5 py-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:border-amber-500 focus:bg-white focus:ring-1 focus:ring-amber-500 font-bold text-slate-900 bg-transparent text-xs"
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:border-amber-500 focus:bg-white focus:ring-1 focus:ring-amber-500 font-medium text-slate-900 bg-transparent text-xs"
                                 />
                               </td>
 
@@ -624,7 +625,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                                   value={member.last_name}
                                   onChange={(e) => handleRowCellChange(member.id || "", "last_name", e.target.value)}
                                   placeholder="Last name..."
-                                  className="w-full px-2.5 py-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:border-amber-500 focus:bg-white focus:ring-1 focus:ring-amber-500 font-bold text-slate-900 bg-transparent text-xs"
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-transparent hover:border-slate-300 focus:border-amber-500 focus:bg-white focus:ring-1 focus:ring-amber-500 font-medium text-slate-900 bg-transparent text-xs"
                                 />
                               </td>
 
@@ -655,7 +656,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                                 <select
                                   value={member.gender}
                                   onChange={(e) => handleRowCellChange(member.id || "", "gender", e.target.value)}
-                                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                                  className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 cursor-pointer"
                                 >
                                   <option value="Male">Male</option>
                                   <option value="Female">Female</option>
@@ -687,15 +688,15 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                               <td className="p-2.5">
                                 {age > 0 ? (
                                   <div className="flex flex-col gap-0.5">
-                                    <span className="text-[11px] font-bold text-indigo-950">
+                                    <span className="text-[12px] font-medium text-indigo-950">
                                       {ministry ? ministry.name : "Assigned"}
                                     </span>
-                                    <span className="text-[10px] text-slate-500">
+                                    <span className="text-[12px] text-slate-500">
                                       {age} yrs old
                                     </span>
                                   </div>
                                 ) : (
-                                  <span className="text-[10px] text-slate-400 italic">No bday</span>
+                                  <span className="text-[12px] text-slate-400 italic">No bday</span>
                                 )}
                               </td>
 
@@ -742,7 +743,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -755,18 +756,18 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
                         const target = parsedMembers.find(m => selectedRowIds.has(m.id || "")) || parsedMembers[0];
                         if (target) handleApplySingleToForm(target);
                       }}
-                      className="px-4 py-2 rounded-xl text-xs font-black text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all cursor-pointer"
+                      className="px-4 py-2 rounded-xl text-xs font-medium text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all cursor-pointer"
                     >
                       <span>Edit in Full Add Form</span>
                     </button>
                   )}
 
                   {/* Batch Save All Direct */}
-                  <button
+                  <button data-guide="import-save"
                     type="button"
                     onClick={handleBatchSaveDirect}
                     disabled={isSavingDirect || selectedRowIds.size === 0}
-                    className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                    className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                   >
                     {isSavingDirect ? (
                       <>

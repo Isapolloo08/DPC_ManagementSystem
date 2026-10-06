@@ -1,0 +1,45 @@
+.celebrations-page { color: var(--ui-text); }
+.celebrations-toolbar { padding: 8px 0; }
+.celebrations-page .celebrations-segment { background: var(--ui-subtle); border: 1px solid var(--ui-border); max-width: 100%; }
+.celebrations-page .celebrations-segment button { background: transparent; color: var(--ui-muted); box-shadow: none; transform: none; border-radius: 8px; min-height: 34px; white-space: nowrap; }
+.celebrations-page .celebrations-segment button:hover { color: var(--ui-heading); background: var(--ui-surface); }
+.celebrations-page .celebrations-segment button[aria-pressed="true"] { background: var(--ui-surface); color: var(--ui-heading); box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
+.celebrations-segment button svg { color: inherit; }
+.celebrations-add { background: var(--ui-accent); color: var(--ui-accent-text); cursor: pointer; min-height: 40px; }
+.celebrations-add:hover { background: var(--ui-accent-hover); }
+.celebrations-overview, .celebrations-filters, .celebration-card { background: var(--ui-surface); border: 1px solid var(--ui-border); }
+.celebrations-page .celebrations-totals > span { background: transparent; border: 0; padding: 0; color: var(--ui-muted); }
+.celebrations-page .celebrations-month { background: var(--ui-subtle); border-color: var(--ui-border); opacity: 1; box-shadow: none; min-height: 124px; min-width: 0; }
+.celebrations-page .celebrations-month[data-current-month="true"] { border-color: rgb(var(--ink-amber-500) / .55); background: rgb(var(--surface-amber-50) / .35); }
+.celebrations-month > div:first-child > span:last-child:not(:first-child) { background: var(--ui-surface); color: var(--ui-muted); border: 1px solid var(--ui-border); }
+.celebrations-month-entry { background: var(--ui-surface); border-left: 2px solid rgb(var(--ink-indigo-400)); }
+.celebrations-month-entry[title^="[Annual]"] { border-left-color: rgb(var(--ink-amber-500)); }
+.celebrations-month-entry > div:first-child { color: var(--ui-text); }
+.celebrations-month-entry > div:last-child { color: var(--ui-muted); }
+.celebrations-filters > div:first-child { min-width: 0; }
+.celebrations-search { min-width: 0; }
+.celebrations-search input { width: 100%; min-width: 180px; }
+.celebrations-search input, .celebrations-search select { background: var(--ui-subtle); color: var(--ui-text); border-color: var(--ui-border); min-height: 40px; }
+.celebration-card { min-width: 0; transition: border-color .15s; }
+.celebration-card:hover { border-color: rgb(var(--line-indigo-300)); }
+.celebration-card-heading > div:first-child { min-width: 0; }
+.celebration-card-heading h3 { overflow-wrap: anywhere; line-height: 1.5; }
+.celebration-card-icon { background: rgb(var(--surface-indigo-50)); color: rgb(var(--ink-indigo-600)); flex-shrink: 0; }
+.celebration-date { background: var(--ui-subtle); border: 1px solid var(--ui-border); }
+.celebration-actions { background: transparent; border-top: 1px solid var(--ui-border); gap: 10px; }
+.celebrations-page button:focus-visible, .celebrations-page input:focus-visible, .celebrations-page select:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
+@media (min-width: 1280px) { .celebrations-search { flex: 1; max-width: 460px; } }
+@media (max-width: 639px) {
+  .celebrations-toolbar > div > div:last-child { width: 100%; }
+  .celebrations-page .celebrations-segment { overflow-x: auto; }
+  .celebrations-filters [data-guide="celebration-type-filter"] { width: 100%; }
+  .celebrations-search { width: 100%; }
+  .celebrations-search > div, .celebrations-search select { width: 100%; }
+  .celebrations-totals { row-gap: 8px; }
+  .celebrations-page .celebrations-month { min-height: 100px; padding: 10px; }
+  .celebrations-months { gap: 8px; }
+  .celebrations-month-entry { padding: 6px; }
+  .celebrations-month-entry > div:first-child > span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .celebrations-month-entry > div:first-child { align-items: flex-start; }
+  .celebrations-month-entry > div:last-child { flex-wrap: wrap; gap: 2px; }
+}

@@ -150,6 +150,7 @@ export interface Member {
   previous_church?: string | null;
   facebook_account?: string | null;
   family_details?: string | null;
+  household_family_details?: string | null;
   application_date?: string | null;
   civil_status?: "Single" | "Married" | "Widowed" | "Separated" | string | null;
   spouse_name?: string | null;
@@ -286,11 +287,22 @@ export interface MemberAnnualAttendanceResponse {
   }[];
 }
 
+export interface HouseholdFamilyMember {
+  name: string;
+  relationship: string;
+  member_id?: number | null;
+  aliases?: string[];
+}
+
 export interface Household {
   id: number;
   name: string;
   address: string | null;
   primary_contact_phone: string | null;
+  father_name?: string | null;
+  mother_name?: string | null;
+  guardian_name?: string | null;
+  family_members?: HouseholdFamilyMember[];
   member_count?: number;
   members?: (Member & { age: number })[];
 }

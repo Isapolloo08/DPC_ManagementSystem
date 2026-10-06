@@ -124,23 +124,23 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
   return (
     <div className="relative">
       {label && (
-        <label className="block font-bold text-xs text-charcoal/70 mb-1">{label}</label>
+        <label className="block font-medium text-xs text-charcoal/70 mb-1">{label}</label>
       )}
 
       {/* Trigger Input */}
       <div ref={triggerRef} className="relative">
         <div
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full bg-ivory-light p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-bold text-charcoal h-[41px] ${
+          className={`w-full bg-ivory-light p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-medium text-charcoal h-[41px] ${
             isOpen ? "border-indigo ring-2 ring-indigo-100 bg-white" : "border-gray-200 hover:border-gray-300"
           }`}
         >
           <Clock className="w-3.5 h-3.5 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <span className={`truncate ${value ? "text-charcoal font-bold" : "text-charcoal/40 font-normal"}`}>
+          <span className={`truncate ${value ? "text-charcoal font-medium" : "text-muted font-normal"}`}>
             {value || placeholder}
           </span>
           <ChevronDown
-            className={`w-3.5 h-3.5 text-charcoal/40 shrink-0 transition-transform duration-200 ${
+            className={`w-3.5 h-3.5 text-muted shrink-0 transition-transform duration-200 ${
               isOpen ? "rotate-180 text-indigo-600" : ""
             }`}
           />
@@ -170,10 +170,10 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
             {/* Header Display & AM/PM Toggle */}
             <div className="flex items-center justify-between p-2.5 bg-indigo-900 text-white rounded-xl shadow-xs">
               <div className="flex items-baseline gap-1">
-                <span className="text-xl font-black tracking-tight">{selectedHour}</span>
-                <span className="text-xl font-bold text-indigo-200 animate-pulse">:</span>
-                <span className="text-xl font-black tracking-tight">{selectedMinute}</span>
-                <span className="text-xs font-bold text-amber-300 ml-1.5">{selectedPeriod}</span>
+                <span className="text-xl font-medium tracking-tight">{selectedHour}</span>
+                <span className="text-xl font-medium text-indigo-200 animate-pulse">:</span>
+                <span className="text-xl font-medium tracking-tight">{selectedMinute}</span>
+                <span className="text-xs font-medium text-amber-300 ml-1.5">{selectedPeriod}</span>
               </div>
 
               {/* AM / PM Segmented Control */}
@@ -181,7 +181,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
                 <button
                   type="button"
                   onClick={() => updateTime(selectedHour, selectedMinute, "AM")}
-                  className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  className={`px-2 py-1 rounded-md text-[12px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                     selectedPeriod === "AM"
                       ? "bg-amber-400 text-charcoal shadow-xs"
                       : "text-indigo-200 hover:text-white"
@@ -193,7 +193,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
                 <button
                   type="button"
                   onClick={() => updateTime(selectedHour, selectedMinute, "PM")}
-                  className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  className={`px-2 py-1 rounded-md text-[12px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                     selectedPeriod === "PM"
                       ? "bg-amber-400 text-charcoal shadow-xs"
                       : "text-indigo-200 hover:text-white"
@@ -207,9 +207,9 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
 
             {/* Hours Grid */}
             <div>
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5">
+              <div className="flex items-center justify-between text-[12px] uppercase font-medium tracking-wider text-muted mb-1.5">
                 <span>Select Hour</span>
-                <span className="text-indigo-600 font-semibold">{selectedHour} o'clock</span>
+                <span className="text-indigo-600 font-medium">{selectedHour} o'clock</span>
               </div>
               <div className="grid grid-cols-6 gap-1">
                 {hours.map((h) => {
@@ -219,9 +219,9 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
                       key={h}
                       type="button"
                       onClick={() => updateTime(h, selectedMinute, selectedPeriod)}
-                      className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                         isSelected
-                          ? "bg-indigo text-white shadow-xs font-black ring-1 ring-indigo-300"
+                          ? "bg-indigo text-white shadow-xs font-medium ring-1 ring-indigo-300"
                           : "bg-gray-50 text-charcoal/80 hover:bg-indigo-50 hover:text-indigo"
                       }`}
                     >
@@ -234,9 +234,9 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
 
             {/* Minutes Row */}
             <div>
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5">
+              <div className="flex items-center justify-between text-[12px] uppercase font-medium tracking-wider text-muted mb-1.5">
                 <span>Select Minute</span>
-                <span className="text-indigo-600 font-semibold">:{selectedMinute}</span>
+                <span className="text-indigo-600 font-medium">:{selectedMinute}</span>
               </div>
               <div className="grid grid-cols-4 gap-1.5">
                 {minutes.map((m) => {
@@ -246,9 +246,9 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
                       key={m}
                       type="button"
                       onClick={() => updateTime(selectedHour, m, selectedPeriod)}
-                      className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                         isSelected
-                          ? "bg-amber-400 text-charcoal shadow-xs font-black ring-1 ring-amber-500"
+                          ? "bg-amber-400 text-charcoal shadow-xs font-medium ring-1 ring-amber-500"
                           : "bg-gray-50 text-charcoal/80 hover:bg-amber-50 hover:text-amber-950"
                       }`}
                     >
@@ -261,7 +261,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
 
             {/* Quick Preset Chips */}
             <div>
-              <div className="text-[10px] uppercase font-bold tracking-wider text-charcoal/50 mb-1.5 flex items-center gap-1">
+              <div className="text-[12px] uppercase font-medium tracking-wider text-muted mb-1.5 flex items-center gap-1">
                 <Clock className="w-3 h-3 text-amber-500" />
                 <span>Quick Presets</span>
               </div>
@@ -271,7 +271,7 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
                     key={preset}
                     type="button"
                     onClick={() => handlePresetClick(preset)}
-                    className="px-2 py-0.5 rounded-md bg-ivory-light hover:bg-indigo-50 border border-gray-200 text-[10px] font-semibold text-charcoal/70 hover:text-indigo hover:border-indigo-200 transition-colors cursor-pointer"
+                    className="px-2 py-0.5 rounded-md bg-ivory-light hover:bg-indigo-50 border border-gray-200 text-[12px] font-medium text-charcoal/70 hover:text-indigo hover:border-indigo-200 transition-colors cursor-pointer"
                   >
                     {preset}
                   </button>
@@ -287,14 +287,14 @@ export const TimePickerInput: React.FC<TimePickerInputProps> = ({
                   onChange("");
                   setIsOpen(false);
                 }}
-                className="text-[11px] font-semibold text-charcoal/40 hover:text-rose-500 cursor-pointer"
+                className="text-[12px] font-medium text-muted hover:text-rose-500 cursor-pointer"
               >
                 Clear
               </button>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="px-3 py-1 bg-indigo hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                className="px-3 py-1 bg-indigo hover:bg-indigo-700 text-white rounded-lg text-xs font-medium flex items-center gap-1 shadow-xs cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Done</span>

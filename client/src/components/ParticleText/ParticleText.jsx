@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 const hexToRgb = hex => {
   const clean = hex.replace('#', '').trim();
   if (!/^[0-9a-fA-F]{6}$/.test(clean)) return null;
@@ -51,6 +51,130 @@ const waitForFonts = async font => {
   await document.fonts.ready;
 };
 
+// One GPU batch for the existing particle sprites. The 2D renderer remains
+// available on machines where Chromium cannot create a WebGL context.
+const createGpuRenderer = canvas => {
+  const gl = canvas.getContext('webgl', { alpha: true, antialias: false, depth: false, stencil: false, powerPreference: 'low-power' });
+  if (!gl) return null;
+  const vertex = gl.createShader(gl.VERTEX_SHADER);
+  const fragment = gl.createShader(gl.FRAGMENT_SHADER);
+  if (!vertex || !fragment) {
+    if (vertex) gl.deleteShader(vertex);
+    if (fragment) gl.deleteShader(fragment);
+    return null;
+  }
+  gl.shaderSource(vertex, `
+    attribute vec3 a_position;
+    attribute vec2 a_sprite;
+    uniform vec2 u_resolution;
+    uniform float u_size;
+    varying vec2 v_sprite;
+    varying float v_alpha;
+    void main() {
+      gl_Position = vec4(a_position.x / u_resolution.x * 2.0 - 1.0, 1.0 - a_position.y / u_resolution.y * 2.0, 0.0, 1.0);
+      gl_PointSize = u_size;
+      v_sprite = a_sprite;
+      v_alpha = a_position.z;
+    }
+  `);
+  gl.shaderSource(fragment, `
+    precision mediump float;
+    uniform sampler2D u_atlas;
+    uniform vec2 u_cell;
+    varying vec2 v_sprite;
+    varying float v_alpha;
+    void main() {
+      gl_FragColor = texture2D(u_atlas, v_sprite + gl_PointCoord * u_cell) * v_alpha;
+    }
+  `);
+  gl.compileShader(vertex);
+  gl.compileShader(fragment);
+  const program = gl.createProgram();
+  if (!program) {
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
+    return null;
+  }
+  gl.attachShader(program, vertex);
+  gl.attachShader(program, fragment);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    gl.deleteProgram(program);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
+    return null;
+  }
+  gl.deleteShader(vertex);
+  gl.deleteShader(fragment);
+  const positions = gl.createBuffer();
+  const sprites = gl.createBuffer();
+  const texture = gl.createTexture();
+  if (!positions || !sprites || !texture) {
+    if (positions) gl.deleteBuffer(positions);
+    if (sprites) gl.deleteBuffer(sprites);
+    if (texture) gl.deleteTexture(texture);
+    gl.deleteProgram(program);
+    return null;
+  }
+  const positionLocation = gl.getAttribLocation(program, 'a_position');
+  const spriteLocation = gl.getAttribLocation(program, 'a_sprite');
+  const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
+  const sizeLocation = gl.getUniformLocation(program, 'u_size');
+  const cellLocation = gl.getUniformLocation(program, 'u_cell');
+  let frameData = new Float32Array(0);
+  let count = 0;
+  gl.useProgram(program);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  return {
+    prepare(atlas, cell, particles, width, height) {
+      count = particles.length;
+      frameData = new Float32Array(count * 3);
+      const coordinates = new Float32Array(count * 2);
+      particles.forEach((particle, index) => {
+        coordinates[index * 2] = particle.sprite.x / atlas.width;
+        coordinates[index * 2 + 1] = particle.sprite.y / atlas.height;
+      });
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.uniform2f(resolutionLocation, width, height);
+      gl.uniform1f(sizeLocation, cell);
+      gl.uniform2f(cellLocation, cell / atlas.width, cell / atlas.height);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
+      gl.bindBuffer(gl.ARRAY_BUFFER, sprites);
+      gl.bufferData(gl.ARRAY_BUFFER, coordinates, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(spriteLocation);
+      gl.vertexAttribPointer(spriteLocation, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positions);
+      gl.bufferData(gl.ARRAY_BUFFER, frameData.byteLength, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(positionLocation);
+      gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+    },
+    particle(index, particle, alpha) {
+      frameData[index * 3] = particle.x;
+      frameData[index * 3 + 1] = particle.y;
+      frameData[index * 3 + 2] = alpha;
+    },
+    draw() {
+      if (gl.isContextLost()) return;
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, frameData);
+      gl.drawArrays(gl.POINTS, 0, count);
+    },
+    dispose() {
+      gl.deleteTexture(texture);
+      gl.deleteBuffer(positions);
+      gl.deleteBuffer(sprites);
+      gl.deleteProgram(program);
+    }
+  };
+};
+
 const ParticleText = ({
   text = 'React Bits',
   particleSize = 2,
@@ -79,6 +203,7 @@ const ParticleText = ({
 }) => {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
+  const [gpuEnabled, setGpuEnabled] = useState(true);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -87,8 +212,14 @@ const ParticleText = ({
     const canvas = canvasRef.current;
     if (!container || !canvas) return undefined;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return undefined;
+    let gpu = gpuEnabled ? createGpuRenderer(canvas) : null;
+    const ctx = gpu ? null : canvas.getContext('2d');
+    if (!ctx && !gpu) {
+      // A failed shader has already claimed the canvas as WebGL. Recreate the
+      // element before asking for a 2D context; a context type cannot be changed.
+      if (gpuEnabled) setGpuEnabled(false);
+      return undefined;
+    }
 
     let particles = [];
     let animationFrame = null;
@@ -106,6 +237,9 @@ const ParticleText = ({
     let width = 0;
     let height = 0;
     let dpr = 1;
+    let spriteAtlas = null;
+    let spriteCell = 0;
+    let lastFrameAt = 0;
 
     const pointer = {
       active: false,
@@ -140,7 +274,60 @@ const ParticleText = ({
       gathering = true;
     };
 
+    // Rasterize each distinct dot and its original glow once. Reusing these
+    // sprites avoids thousands of shadow filters and paths on every frame.
+    const prepareSprites = () => {
+      const sprites = new Map();
+      particles.forEach(particle => {
+        const key = particle.color + ':' + particle.size;
+        if (!sprites.has(key)) sprites.set(key, { size: particle.size, color: particle.color });
+        particle.sprite = sprites.get(key);
+      });
+      const blur = glow && !reducedMotion ? particleSize * 3 : 0;
+      const maxSize = Math.max(particleSize * 1.2, 2.1);
+      // Canvas shadows use backing pixels; their blur does not scale with the
+      // transform. Keep only enough transparent padding for the same glow.
+      spriteCell = Math.ceil(maxSize * dpr + blur * 4 + 4);
+      const columns = Math.min(sprites.size, Math.max(1, Math.floor(2048 / spriteCell)));
+      const atlas = document.createElement('canvas');
+      atlas.width = columns * spriteCell;
+      atlas.height = Math.ceil(sprites.size / columns) * spriteCell;
+      const atlasCtx = atlas.getContext('2d');
+      if (!atlasCtx) {
+        spriteAtlas = null;
+        return;
+      }
+      atlasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      atlasCtx.shadowBlur = blur;
+      atlasCtx.shadowColor = highlightColor;
+      let index = 0;
+      sprites.forEach(sprite => {
+        sprite.x = (index % columns) * spriteCell;
+        sprite.y = Math.floor(index / columns) * spriteCell;
+        const centerX = (sprite.x + spriteCell / 2) / dpr;
+        const centerY = (sprite.y + spriteCell / 2) / dpr;
+        atlasCtx.fillStyle = sprite.color;
+        if (sprite.size <= 2.1) {
+          atlasCtx.fillRect(centerX - sprite.size / 2, centerY - sprite.size / 2, sprite.size, sprite.size);
+        } else {
+          atlasCtx.beginPath();
+          atlasCtx.arc(centerX, centerY, sprite.size / 2, 0, Math.PI * 2);
+          atlasCtx.fill();
+        }
+        index += 1;
+      });
+      spriteAtlas = atlas;
+      gpu?.prepare(atlas, spriteCell, particles, width, height);
+    };
+
     const drawParticle = particle => {
+      if (spriteAtlas) {
+        const size = spriteCell / dpr;
+        ctx.drawImage(spriteAtlas, particle.sprite.x, particle.sprite.y, spriteCell, spriteCell,
+          particle.x - size / 2, particle.y - size / 2, size, size);
+        return;
+      }
+      // Preserve the original renderer if a sprite context is unavailable.
       const size = particle.size;
       ctx.fillStyle = particle.color;
 
@@ -155,21 +342,27 @@ const ParticleText = ({
     };
 
     const render = now => {
-      ctx.clearRect(0, 0, width, height);
+      ctx?.clearRect(0, 0, width, height);
 
-      if (glow && !reducedMotion) {
+      if (ctx && !spriteAtlas && glow && !reducedMotion) {
         ctx.shadowBlur = particleSize * 3;
         ctx.shadowColor = highlightColor;
-      } else {
+      } else if (ctx) {
         ctx.shadowBlur = 0;
       }
 
-      pointer.smoothX += (pointer.x - pointer.smoothX) * 0.18;
-      pointer.smoothY += (pointer.y - pointer.smoothY) * 0.18;
+      // Follow elapsed time, so skipped frames do not stretch the gathering
+      // sequence on slower machines. At 60 Hz these match the original values.
+      const frameScale = lastFrameAt ? Math.min(6, (now - lastFrameAt) / (1000 / 60)) : 1;
+      lastFrameAt = now;
+      const pointerFollow = 1 - Math.pow(0.82, frameScale);
+      const follow = reducedMotion ? 1 : 1 - Math.pow(0.78, frameScale);
+      pointer.smoothX += (pointer.x - pointer.smoothX) * pointerFollow;
+      pointer.smoothY += (pointer.y - pointer.smoothY) * pointerFollow;
 
       let complete = true;
 
-      particles.forEach(particle => {
+      particles.forEach((particle, index) => {
         let baseX = particle.ambient ? particle.startX : particle.targetX;
         let baseY = particle.ambient ? particle.startY : particle.targetY;
         let progress = 1;
@@ -177,10 +370,9 @@ const ParticleText = ({
         if (waitingToGather || particle.ambient) {
           if (fieldDrift > 0 && !reducedMotion) {
             const elapsed = particle.ambient && !waitingToGather ? gatherStart - fieldStart : now - fieldStart;
-            const travel = (Math.max(0, elapsed) / 1000) * fieldDrift * (0.6 + particle.depth * 0.4);
-            const direction = particle.seed * Math.PI * 2;
-            baseX = particle.startX + Math.cos(direction) * travel;
-            baseY = particle.startY + Math.sin(direction) * travel;
+            const seconds = Math.max(0, elapsed) / 1000;
+            baseX = particle.startX + particle.velocityX * seconds;
+            baseY = particle.startY + particle.velocityY * seconds;
           } else {
             const driftTime = now * 0.001;
             baseX = particle.startX + Math.sin(driftTime * 0.9 + particle.seed * 10) * idleDrift * particle.depth;
@@ -202,15 +394,15 @@ const ParticleText = ({
         if (pointer.active && !reducedMotion && pointerRepel > 0 && repelRadius > 0) {
           const dx = baseX - pointer.smoothX;
           const dy = baseY - pointer.smoothY;
-          const distance = Math.hypot(dx, dy);
-          if (distance > 0 && distance < repelRadius) {
+          const distanceSquared = dx * dx + dy * dy;
+          if (distanceSquared > 0 && distanceSquared < repelRadius * repelRadius) {
+            const distance = Math.sqrt(distanceSquared);
             const force = Math.pow(1 - distance / repelRadius, 2) * pointerRepel;
             baseX += (dx / distance) * force;
             baseY += (dy / distance) * force;
           }
         }
 
-        const follow = reducedMotion ? 1 : 0.22;
         particle.x += (baseX - particle.x) * follow;
         particle.y += (baseY - particle.y) * follow;
 
@@ -219,14 +411,21 @@ const ParticleText = ({
           : gathering
             ? particle.skyBrightness + (particle.brightness - particle.skyBrightness) * progress
             : particle.brightness;
-        ctx.globalAlpha = particle.ambient
+        const alpha = particle.ambient
           ? particle.brightness
           : clamp(0.35 + progress * 0.65, 0, 1) * brightness;
-        drawParticle(particle);
+        if (gpu) gpu.particle(index, particle, alpha);
+        else {
+          ctx.globalAlpha = alpha;
+          drawParticle(particle);
+        }
       });
 
-      ctx.globalAlpha = 1;
-      ctx.shadowBlur = 0;
+      if (gpu) gpu.draw();
+      else {
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
 
       if (gathering && complete) {
         gathering = false;
@@ -241,12 +440,16 @@ const ParticleText = ({
     };
 
     const ensureRenderLoop = () => {
-      if (animationFrame === null) {
+      if (animationFrame === null && !document.hidden) {
+        lastFrameAt = 0;
         animationFrame = window.requestAnimationFrame(render);
       }
     };
 
     const sampleText = async () => {
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+      lastFrameAt = 0;
       if (gatherTimer !== null) window.clearTimeout(gatherTimer);
       gatherTimer = null;
       const currentBuild = ++buildId;
@@ -261,7 +464,7 @@ const ParticleText = ({
       canvas.height = Math.max(1, Math.floor(height * dpr));
       canvas.style.width = '100%';
       canvas.style.height = '100%';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const computed = window.getComputedStyle(container);
       const resolvedFamily = fontFamily === 'inherit' ? computed.fontFamily || 'sans-serif' : fontFamily;
@@ -396,6 +599,14 @@ const ParticleText = ({
         }
       }
 
+      particles.forEach(particle => {
+        const direction = particle.seed * Math.PI * 2;
+        const speed = fieldDrift * (0.6 + particle.depth * 0.4);
+        particle.velocityX = Math.cos(direction) * speed;
+        particle.velocityY = Math.sin(direction) * speed;
+      });
+      prepareSprites();
+
       pointer.x = width / 2;
       pointer.y = height / 2;
       pointer.smoothX = pointer.x;
@@ -429,6 +640,9 @@ const ParticleText = ({
     };
 
     const queueSample = () => {
+      const rect = container.getBoundingClientRect();
+      if (Math.floor(rect.width) === width && Math.floor(rect.height) === height
+        && Math.min(window.devicePixelRatio || 1, 2) === dpr) return;
       if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
       resizeFrame = window.requestAnimationFrame(sampleText);
     };
@@ -472,7 +686,33 @@ const ParticleText = ({
       sampleText();
     };
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      } else {
+        ensureRenderLoop();
+      }
+    };
+
+    const handleContextLost = event => {
+      event.preventDefault();
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+    };
+    const handleContextRestored = () => {
+      gpu?.dispose();
+      gpu = createGpuRenderer(canvas);
+      if (gpu && spriteAtlas) {
+        gpu.prepare(spriteAtlas, spriteCell, particles, width, height);
+        ensureRenderLoop();
+      } else if (!gpu) setGpuEnabled(false);
+    };
+
     reduceMotionQuery?.addEventListener('change', handleReduceMotionChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    canvas.addEventListener('webglcontextlost', handleContextLost);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored);
     canvas.addEventListener('pointerenter', handlePointerEnter);
     canvas.addEventListener('pointermove', handlePointerMove);
     canvas.addEventListener('pointerleave', handlePointerLeave);
@@ -486,6 +726,9 @@ const ParticleText = ({
       buildId += 1;
       resizeObserver.disconnect();
       reduceMotionQuery?.removeEventListener('change', handleReduceMotionChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
+      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
       canvas.removeEventListener('pointerenter', handlePointerEnter);
       canvas.removeEventListener('pointermove', handlePointerMove);
       canvas.removeEventListener('pointerleave', handlePointerLeave);
@@ -494,6 +737,8 @@ const ParticleText = ({
       if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
       if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
       if (gatherTimer !== null) window.clearTimeout(gatherTimer);
+      spriteAtlas = null;
+      gpu?.dispose();
     };
   }, [
     text,
@@ -517,7 +762,8 @@ const ParticleText = ({
     fontSize,
     fontWeight,
     fontFamily,
-    glow
+    glow,
+    gpuEnabled
   ]);
 
   return (
@@ -527,7 +773,7 @@ const ParticleText = ({
       style={style}
       aria-label={text}
     >
-      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" aria-hidden="true" />
+      <canvas key={gpuEnabled ? 'gpu' : 'cpu'} ref={canvasRef} className="absolute inset-0 block h-full w-full" aria-hidden="true" />
       <span className="sr-only">{text}</span>
     </div>
   );

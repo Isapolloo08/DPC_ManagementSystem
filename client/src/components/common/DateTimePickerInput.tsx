@@ -234,7 +234,7 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
   return (
     <div className={`relative ${className}`}>
       {label && (
-        <label className="block font-bold text-xs text-charcoal/70 mb-1">
+        <label className="block font-medium text-xs text-charcoal/70 mb-1">
           {label} {required && <span className="text-rose-500">*</span>}
         </label>
       )}
@@ -243,16 +243,16 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
       <div ref={triggerRef} className="relative">
         <div
           onClick={handleToggle}
-          className={`w-full bg-ivory-light p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-bold text-charcoal h-[41px] ${
+          className={`w-full bg-ivory-light p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-medium text-charcoal h-[41px] ${
             isOpen ? "border-indigo-600 ring-2 ring-indigo-100 bg-white" : "border-gray-200 hover:border-gray-300"
           }`}
         >
           <CalendarIcon className="w-3.5 h-3.5 text-indigo-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <span className={`truncate ${value ? "text-charcoal font-bold" : "text-charcoal/40 font-normal"}`}>
+          <span className={`truncate ${value ? "text-charcoal font-medium" : "text-muted font-normal"}`}>
             {value ? formatDisplay(value) : placeholder}
           </span>
           <ChevronDown
-            className={`w-3.5 h-3.5 text-charcoal/40 shrink-0 transition-transform duration-200 ${
+            className={`w-3.5 h-3.5 text-muted shrink-0 transition-transform duration-200 ${
               isOpen ? "rotate-180 text-indigo-600" : ""
             }`}
           />
@@ -278,13 +278,13 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
             <div className="flex items-center justify-between p-2.5 bg-indigo-950 text-white rounded-xl shadow-xs flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="w-4 h-4 text-amber-300" />
-                <span className="font-extrabold text-xs text-indigo-100">
+                <span className="font-medium text-xs text-indigo-100">
                   {monthNames[viewMonth].slice(0, 3)} {selectedDay}, {viewYear}
                 </span>
               </div>
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4 text-amber-300" />
-                <span className="font-black text-sm text-white">
+                <span className="font-medium text-sm text-white">
                   {selectedHour}:{selectedMinute} {selectedPeriod}
                 </span>
               </div>
@@ -298,23 +298,23 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
                   <button
                     type="button"
                     onClick={prevMonth}
-                    className="p-1 rounded-lg hover:bg-gray-100 text-charcoal/60 transition-colors cursor-pointer"
+                    className="p-1 rounded-lg hover:bg-gray-100 text-muted transition-colors cursor-pointer"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
-                  <span className="font-bold text-xs text-charcoal">
+                  <span className="font-medium text-xs text-charcoal">
                     {monthNames[viewMonth]} {viewYear}
                   </span>
                   <button
                     type="button"
                     onClick={nextMonth}
-                    className="p-1 rounded-lg hover:bg-gray-100 text-charcoal/60 transition-colors cursor-pointer"
+                    className="p-1 rounded-lg hover:bg-gray-100 text-muted transition-colors cursor-pointer"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="grid grid-cols-7 text-center text-[9px] font-black uppercase text-charcoal/40">
+                <div className="grid grid-cols-7 text-center text-[12px] font-medium uppercase text-muted">
                   <span className="text-rose-500">Su</span>
                   <span>Mo</span>
                   <span>Tu</span>
@@ -326,7 +326,7 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
 
                 <div className="grid grid-cols-7 gap-1 text-center">
                   {Array.from({ length: startDayIndex }).map((_, idx) => (
-                    <div key={`prev-${idx}`} className="py-1 text-[11px] text-charcoal/20 select-none" />
+                    <div key={`prev-${idx}`} className="py-1 text-[12px] text-charcoal/20 select-none" />
                   ))}
 
                   {Array.from({ length: totalDays }).map((_, idx) => {
@@ -337,9 +337,9 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
                         key={`day-${d}`}
                         type="button"
                         onClick={() => handleSelectDay(d)}
-                        className={`py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                        className={`py-1 rounded-md text-[12px] font-medium transition-all cursor-pointer ${
                           isSelected
-                            ? "bg-indigo-600 text-white font-black shadow-xs"
+                            ? "bg-indigo-600 text-white font-medium shadow-xs"
                             : "text-charcoal hover:bg-indigo-50 hover:text-indigo-600"
                         }`}
                       >
@@ -354,15 +354,15 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
               <div className="space-y-2.5 pt-2 sm:pt-0 sm:pl-3">
                 {/* AM / PM Segmented Control */}
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase text-charcoal/50">Period</span>
+                  <span className="text-[12px] font-medium uppercase text-muted">Period</span>
                   <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
                     <button
                       type="button"
                       onClick={() => handleUpdateTime(selectedHour, selectedMinute, "AM")}
-                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      className={`px-2.5 py-0.5 rounded-md text-[12px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                         selectedPeriod === "AM"
                           ? "bg-amber-400 text-charcoal shadow-xs"
-                          : "text-charcoal/60 hover:text-charcoal"
+                          : "text-muted hover:text-charcoal"
                       }`}
                     >
                       <Sun className="w-2.5 h-2.5" />
@@ -371,10 +371,10 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
                     <button
                       type="button"
                       onClick={() => handleUpdateTime(selectedHour, selectedMinute, "PM")}
-                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      className={`px-2.5 py-0.5 rounded-md text-[12px] font-medium transition-all cursor-pointer flex items-center gap-1 ${
                         selectedPeriod === "PM"
                           ? "bg-amber-400 text-charcoal shadow-xs"
-                          : "text-charcoal/60 hover:text-charcoal"
+                          : "text-muted hover:text-charcoal"
                       }`}
                     >
                       <Moon className="w-2.5 h-2.5" />
@@ -385,7 +385,7 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
 
                 {/* Hours */}
                 <div>
-                  <span className="block text-[10px] font-black uppercase text-charcoal/50 mb-1">
+                  <span className="block text-[12px] font-medium uppercase text-muted mb-1">
                     Hour ({selectedHour})
                   </span>
                   <div className="grid grid-cols-6 gap-1">
@@ -396,9 +396,9 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
                           key={`hr-${h}`}
                           type="button"
                           onClick={() => handleUpdateTime(h, selectedMinute, selectedPeriod)}
-                          className={`py-1 text-[11px] rounded font-bold transition-all cursor-pointer ${
+                          className={`py-1 text-[12px] rounded font-medium transition-all cursor-pointer ${
                             isSel
-                              ? "bg-indigo-600 text-white font-black shadow-xs"
+                              ? "bg-indigo-600 text-white font-medium shadow-xs"
                               : "bg-gray-50 text-charcoal/80 hover:bg-indigo-50 hover:text-indigo-600"
                           }`}
                         >
@@ -411,7 +411,7 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
 
                 {/* Minutes */}
                 <div>
-                  <span className="block text-[10px] font-black uppercase text-charcoal/50 mb-1">
+                  <span className="block text-[12px] font-medium uppercase text-muted mb-1">
                     Minute (:{selectedMinute})
                   </span>
                   <div className="grid grid-cols-4 gap-1">
@@ -422,9 +422,9 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
                           key={`min-${m}`}
                           type="button"
                           onClick={() => handleUpdateTime(selectedHour, m, selectedPeriod)}
-                          className={`py-1 text-[11px] rounded font-bold transition-all cursor-pointer ${
+                          className={`py-1 text-[12px] rounded font-medium transition-all cursor-pointer ${
                             isSel
-                              ? "bg-amber-400 text-charcoal font-black shadow-xs"
+                              ? "bg-amber-400 text-charcoal font-medium shadow-xs"
                               : "bg-gray-50 text-charcoal/80 hover:bg-amber-50 hover:text-amber-950"
                           }`}
                         >
@@ -445,7 +445,7 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
                   onChange("");
                   setIsOpen(false);
                 }}
-                className="text-[11px] font-semibold text-charcoal/40 hover:text-rose-500 cursor-pointer"
+                className="text-[12px] font-medium text-muted hover:text-rose-500 cursor-pointer"
               >
                 Clear
               </button>
@@ -457,7 +457,7 @@ export const DateTimePickerInput: React.FC<DateTimePickerInputProps> = ({
                   }
                   setIsOpen(false);
                 }}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Done</span>

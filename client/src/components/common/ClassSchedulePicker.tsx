@@ -227,10 +227,10 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
     <div className={`space-y-2.5 ${className}`}>
       {/* Header with Title and Mode Toggle */}
       <div className="flex items-center justify-between">
-        <label className="block font-bold text-xs text-charcoal/80 flex items-center gap-1.5">
+        <label className="block font-medium text-xs text-charcoal/80 flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-indigo-600" />
           <span>{label}</span>
-          <span className="text-[10px] font-normal text-charcoal/40 hidden sm:inline">
+          <span className="text-[12px] font-normal text-muted hidden sm:inline">
             (Multi-day & multi-shift supported)
           </span>
         </label>
@@ -245,7 +245,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
               if (compiled) onChange(compiled);
             }
           }}
-          className={`text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all px-2.5 py-1 rounded-xl shadow-2xs border ${
+          className={`text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-all px-2.5 py-1 rounded-xl shadow-2xs border ${
             isManualMode
               ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300"
               : "bg-white hover:bg-gray-50 text-indigo-800 border-indigo-200/80 hover:border-indigo-300"
@@ -268,12 +268,12 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
       {isManualMode ? (
         /* Option 2: Freeform Manual Input */
         <div className="p-3.5 bg-amber-50/40 rounded-2xl border border-amber-200 shadow-2xs space-y-2 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="font-bold text-amber-950 flex items-center gap-1.5">
+          <div className="flex items-center justify-between text-[12px]">
+            <span className="font-medium text-amber-950 flex items-center gap-1.5">
               <Edit3 className="w-3.5 h-3.5 text-amber-600" />
               <span>Manual Freeform Entry</span>
             </span>
-            <span className="text-[10px] text-charcoal/50">
+            <span className="text-[12px] text-muted">
               Type custom irregular days or hours
             </span>
           </div>
@@ -284,13 +284,13 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
               placeholder={placeholder}
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              className="w-full bg-white p-2.5 pr-8 rounded-xl border border-amber-300/80 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500 text-xs font-semibold text-charcoal shadow-2xs placeholder:text-charcoal/40"
+              className="w-full bg-white p-2.5 pr-8 rounded-xl border border-amber-300/80 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500 text-xs font-medium text-charcoal shadow-2xs placeholder:text-muted"
             />
             {value && (
               <button
                 type="button"
                 onClick={() => onChange("")}
-                className="p-1 text-charcoal/40 hover:text-charcoal absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
+                className="p-1 text-muted hover:text-charcoal absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -313,14 +313,14 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
               >
                 {/* Slot Header Badge & Summary */}
                 <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-100">
-                  <div className="flex items-center gap-2 font-bold text-charcoal flex-wrap">
-                    <span className="w-5 h-5 rounded-lg bg-indigo text-white text-[11px] flex items-center justify-center font-black shadow-xs">
+                  <div className="flex items-center gap-2 font-medium text-charcoal flex-wrap">
+                    <span className="w-5 h-5 rounded-lg bg-indigo text-white text-[12px] flex items-center justify-center font-medium shadow-xs">
                       {index + 1}
                     </span>
-                    <span className="text-indigo-950 font-black">
+                    <span className="text-indigo-950 font-medium">
                       Schedule Shift {slots.length > 1 ? `#${index + 1}` : ""}
                     </span>
-                    <span className="text-[11px] bg-indigo-50 text-indigo-800 font-bold px-2 py-0.5 rounded-lg border border-indigo-100 flex items-center gap-1 shadow-2xs">
+                    <span className="text-[12px] bg-indigo-50 text-indigo-800 font-medium px-2 py-0.5 rounded-lg border border-indigo-100 flex items-center gap-1 shadow-2xs">
                       <Clock className="w-3 h-3 text-indigo-600" />
                       <span>{daysDisplay}</span>
                       <span className="text-indigo-400">•</span>
@@ -342,7 +342,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
 
                 {/* 1. Select Days */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-charcoal/70">
+                  <div className="flex items-center justify-between text-[12px] font-medium text-charcoal/70">
                     <span className="flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 inline-block"></span>
                       <span>1. Select Class Days:</span>
@@ -350,13 +350,13 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
 
                     {/* Quick Combo Shortcuts */}
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-[10px] text-charcoal/40 font-normal hidden sm:inline">Presets:</span>
+                      <span className="text-[12px] text-muted font-normal hidden sm:inline">Presets:</span>
                       {(["MWF", "TTH", "M-W", "Th-F", "Mon-Fri", "Sat"] as const).map((combo) => (
                         <button
                           key={combo}
                           type="button"
                           onClick={() => handleSetQuickDays(slot.id, combo)}
-                          className="px-2 py-0.5 rounded-lg bg-indigo-50/80 hover:bg-indigo-100 text-[10px] font-black text-indigo-900 border border-indigo-100 transition-colors cursor-pointer"
+                          className="px-2 py-0.5 rounded-lg bg-indigo-50/80 hover:bg-indigo-100 text-[12px] font-medium text-indigo-900 border border-indigo-100 transition-colors cursor-pointer"
                         >
                           {combo}
                         </button>
@@ -373,7 +373,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
                           key={d.key}
                           type="button"
                           onClick={() => handleToggleDay(slot.id, d.key)}
-                          className={`py-2 px-1 rounded-xl text-xs font-black transition-all cursor-pointer text-center flex flex-col items-center justify-center ${
+                          className={`py-2 px-1 rounded-xl text-xs font-medium transition-all cursor-pointer text-center flex flex-col items-center justify-center ${
                             isSelected
                               ? "bg-indigo text-white shadow-sm ring-2 ring-indigo-300 scale-[1.02]"
                               : "bg-gray-50 hover:bg-gray-100 text-charcoal/70 border border-gray-200/60"
@@ -388,7 +388,7 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
 
                 {/* 2. Select Time Range */}
                 <div className="space-y-2 pt-1 border-t border-gray-100">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-charcoal/70">
+                  <div className="flex items-center justify-between text-[12px] font-medium text-charcoal/70">
                     <span className="flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block"></span>
                       <span>2. Select Time Range:</span>
@@ -405,20 +405,20 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
                           key={preset.label}
                           type="button"
                           onClick={() => handleSetTimePreset(slot.id, preset)}
-                          className={`p-2 rounded-xl text-left text-xs font-bold transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                          className={`p-2 rounded-xl text-left text-xs font-medium transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                             isSelected
                               ? "bg-amber-50 text-amber-950 border-2 border-amber-400 shadow-xs ring-1 ring-amber-300"
                               : "bg-gray-50/80 hover:bg-gray-100/90 text-charcoal/80 border border-gray-200/60"
                           }`}
                         >
                           <div className="flex items-center justify-between w-full">
-                            <span className="text-[10px] uppercase font-black tracking-wider text-charcoal/50 flex items-center gap-1">
+                            <span className="text-[12px] uppercase font-medium tracking-wider text-muted flex items-center gap-1">
                               <IconComponent className="w-3 h-3 text-amber-600" />
                               <span>{preset.shift}</span>
                             </span>
                             {isSelected && <Check className="w-3 h-3 text-amber-700" />}
                           </div>
-                          <span className="text-[11px] font-bold truncate leading-tight">
+                          <span className="text-[12px] font-medium truncate leading-tight">
                             {preset.label}
                           </span>
                         </button>
@@ -429,20 +429,20 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
                     <button
                       type="button"
                       onClick={() => handleSetTimePreset(slot.id, "Custom")}
-                      className={`p-2 rounded-xl text-left text-xs font-bold transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                      className={`p-2 rounded-xl text-left text-xs font-medium transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                         slot.timePreset === "Custom"
                           ? "bg-indigo-50 text-indigo-950 border-2 border-indigo-500 shadow-xs ring-1 ring-indigo-300"
                           : "bg-gray-50/80 hover:bg-gray-100/90 text-charcoal/80 border border-gray-200/60"
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <span className="text-[10px] uppercase font-black tracking-wider text-indigo-600 flex items-center gap-1">
+                        <span className="text-[12px] uppercase font-medium tracking-wider text-indigo-600 flex items-center gap-1">
                           <Edit3 className="w-3 h-3" />
                           <span>Custom</span>
                         </span>
                         {slot.timePreset === "Custom" && <Check className="w-3 h-3 text-indigo-700" />}
                       </div>
-                      <span className="text-[11px] font-bold text-indigo-900 truncate leading-tight">
+                      <span className="text-[12px] font-medium text-indigo-900 truncate leading-tight">
                         Pick Hours
                       </span>
                     </button>
@@ -451,12 +451,12 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
                   {/* Custom Time Range Picker with TimePickerInput */}
                   {slot.timePreset === "Custom" && (
                     <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-2 animate-in fade-in zoom-in-98 duration-150">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-indigo-900">
+                      <div className="flex items-center justify-between text-[12px] font-medium text-indigo-900">
                         <span className="flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-indigo-600" />
                           <span>Choose Custom Shift Hours</span>
                         </span>
-                        <span className="text-[10px] font-normal text-indigo-700/80">
+                        <span className="text-[12px] font-normal text-indigo-700/80">
                           Click either box to open interactive time selector
                         </span>
                       </div>
@@ -487,13 +487,13 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
             <button
               type="button"
               onClick={handleAddSlot}
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-indigo-50/80 text-indigo-950 border border-indigo-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-2xs hover:shadow-xs hover:border-indigo-300"
+              className="px-3.5 py-2 rounded-xl bg-white hover:bg-indigo-50/80 text-indigo-950 border border-indigo-200 text-xs font-medium flex items-center gap-2 transition-all cursor-pointer shadow-2xs hover:shadow-xs hover:border-indigo-300"
             >
               <Plus className="w-4 h-4 text-indigo-600" />
               <span>+ Add Another Shift (e.g. Th-F 1:00 PM - 5:00 PM)</span>
             </button>
 
-            <span className="text-[11px] text-charcoal/50 font-medium">
+            <span className="text-[12px] text-muted font-medium">
               Combine multi-day & split-schedule classes
             </span>
           </div>
@@ -501,11 +501,11 @@ export const ClassSchedulePicker: React.FC<ClassSchedulePickerProps> = ({
           {/* Real-Time Live Compiled Schedule Banner */}
           {value && (
             <div className="p-2.5 rounded-xl bg-white border border-indigo-100 flex items-center gap-2.5 text-xs shadow-2xs">
-              <span className="font-black text-indigo-900 shrink-0 text-[10px] uppercase tracking-wider bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 flex items-center gap-1.5">
+              <span className="font-medium text-indigo-900 shrink-0 text-[12px] uppercase tracking-wider bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 flex items-center gap-1.5">
                 <Navigation className="w-3 h-3 text-indigo-600" />
                 <span>Active Schedule:</span>
               </span>
-              <span className="font-bold text-indigo-950 truncate flex-1">{value}</span>
+              <span className="font-medium text-indigo-950 truncate flex-1">{value}</span>
             </div>
           )}
         </div>

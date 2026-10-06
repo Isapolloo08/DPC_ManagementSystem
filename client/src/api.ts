@@ -1,3 +1,4 @@
+import { isGuideSandbox } from "./components/help/sandbox/runtime";
 import {
   Ministry, User, Role, Member, Household, AttendanceRecord, AttendanceRosterItem,
   EventItem, Announcement,
@@ -119,6 +120,10 @@ async function sleep(ms: number): Promise<void> {
  * Robust HTTP client with Exponential Backoff + Jitter retry for network & 5xx errors
  */
 async function request<T>(endpoint: string, options: RequestInit = {}, maxRetries = 3): Promise<T> {
+  if (isGuideSandbox()) {
+    const { demoRequest } = await import("./components/help/sandbox/demoApi");
+    return demoRequest(endpoint, options) as Promise<T>;
+  }
   const apiBase = getApiBase();
   const method = (options.method || "GET").toUpperCase();
   const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
@@ -428,8 +433,13 @@ export const api = {
   // Households
   getHouseholds: () => request<Household[]>("/households"),
   getHousehold: (id: number) => request<Household>(`/households/${id}`),
-  createHousehold: (data: { name: string; address?: string; primary_contact_phone?: string }) => request<{ id: number; message: string }>("/households", {
+  createHousehold: (data: Pick<Household, "name"> & Partial<Pick<Household, "address" | "primary_contact_phone" | "father_name" | "mother_name" | "guardian_name" | "family_members">>) => request<{ id: number; message: string }>("/households", {
     method: "POST",
+    body: JSON.stringify(data)
+  }),
+
+  updateHousehold: (id: number, data: Partial<Pick<Household, "name" | "address" | "primary_contact_phone" | "father_name" | "mother_name" | "guardian_name" | "family_members">>) => request<{ message: string }>(`/households/${id}`, {
+    method: "PUT",
     body: JSON.stringify(data)
   }),
 
@@ -649,6 +659,7 @@ export const api = {
     session_date: string;
     topic_title?: string;
     chapter?: string;
+    update_group_progress?: boolean;
     notes?: string;
     records?: Array<{ member_id: number; status: string; notes?: string }>;
     present_member_ids?: number[];

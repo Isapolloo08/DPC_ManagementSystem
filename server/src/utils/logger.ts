@@ -25,6 +25,16 @@ export const logger = pino({
  */
 export const httpLogger = pinoHttp({
   logger,
+  serializers: {
+    req: (req) => ({
+      id: req.id,
+      method: req.method,
+      url: req.url
+    }),
+    res: (res) => ({
+      statusCode: res.statusCode
+    })
+  },
   customLogLevel: (_req, res, err) => {
     if (res.statusCode >= 500 || err) return "error";
     if (res.statusCode >= 400) return "warn";

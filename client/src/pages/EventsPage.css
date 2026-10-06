@@ -1,0 +1,66 @@
+.church-calendar {
+  --calendar-surface: var(--ui-surface);
+  --calendar-subtle: rgb(var(--surface-slate-50));
+  --calendar-border: rgb(var(--line-gray-200) / .65);
+  --calendar-ink: var(--ui-text);
+  --calendar-muted: var(--ui-muted);
+  color: var(--calendar-ink);
+}
+.calendar-title { color: var(--ui-heading); }
+.calendar-subtitle { color: var(--calendar-muted); }
+.calendar-title-icon { color: rgb(var(--ink-indigo-600)); background: rgb(var(--surface-indigo-50)); }
+.calendar-toolbar { padding: 4px 0; }
+.calendar-view-switch { background: var(--calendar-subtle); border: 1px solid var(--calendar-border); }
+.calendar-view-switch button { border-radius: 8px; color: var(--calendar-muted); background: transparent; box-shadow: none; min-height: 36px; }
+.calendar-view-switch button[aria-pressed="true"] { color: var(--ui-heading); background: var(--calendar-surface); box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
+.calendar-secondary-action { border: 1px solid var(--calendar-border); background: var(--calendar-surface); color: var(--calendar-ink); cursor: pointer; }
+.calendar-secondary-action:hover { background: var(--calendar-subtle); }
+.calendar-primary-action { background: var(--ui-accent); color: var(--ui-accent-text); cursor: pointer; min-height: 40px; }
+.calendar-primary-action:hover { background: var(--ui-accent-hover); }
+.calendar-primary-action svg, .calendar-secondary-action svg { color: inherit; }
+.calendar-filters, .calendar-surface, .calendar-details { border: 1px solid var(--calendar-border); background: var(--calendar-surface); }
+.calendar-filters [data-guide="calendar-kinds"] button {
+  border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--calendar-muted); box-shadow: none; --tw-ring-shadow: 0 0 #0000;
+}
+.calendar-filters [data-guide="calendar-kinds"] button:hover { background: var(--calendar-subtle); color: var(--calendar-ink); }
+.calendar-filters [data-guide="calendar-kinds"] button[aria-pressed="true"] { background: rgb(var(--surface-indigo-50)); color: rgb(var(--ink-indigo-900)); border-color: rgb(var(--line-indigo-200)); }
+.calendar-filters select, .calendar-filters input { min-height: 38px; border-radius: 10px; }
+.calendar-workspace > div { min-width: 0; }
+.calendar-month-header { color: var(--calendar-ink); border-bottom: 1px solid var(--calendar-border); }
+.calendar-month-arrows { border: 1px solid var(--calendar-border); }
+.calendar-month-arrows button { color: var(--calendar-ink); min-width: 34px; min-height: 34px; }
+.calendar-month-arrows button:hover { background: var(--calendar-subtle); }
+.calendar-weekdays { background: var(--calendar-subtle); color: var(--calendar-muted); border-bottom: 1px solid var(--calendar-border); }
+.calendar-grid-scroll { overflow-x: auto; }
+.calendar-weekdays, .calendar-weeks { min-width: 620px; }
+.calendar-weeks > div, .calendar-weeks .divide-x > * + * { border-color: var(--calendar-border); }
+.calendar-week button[aria-current="date"] { background: var(--ui-accent); color: var(--ui-accent-text); box-shadow: none; --tw-ring-shadow: 0 0 #0000; }
+.calendar-activity {
+  --activity-ink: rgb(var(--ink-indigo-900));
+  --activity-surface: rgb(var(--surface-indigo-50));
+  --activity-mark: rgb(var(--ink-indigo-500));
+  background: color-mix(in srgb, var(--calendar-surface) 88%, var(--activity-mark)); color: var(--activity-ink); border: 1px solid transparent; border-left: 3px solid var(--activity-mark);
+  line-height: 1.4; box-shadow: none; filter: none; min-height: 30px;
+}
+.calendar-activity[data-kind="bible_study"] { --activity-ink: rgb(var(--ink-purple-900)); --activity-surface: rgb(var(--surface-purple-50)); --activity-mark: rgb(var(--ink-purple-500)); }
+.calendar-activity[data-kind="dishwashing"] { --activity-ink: rgb(var(--ink-teal-900)); --activity-surface: rgb(var(--surface-teal-50)); --activity-mark: rgb(var(--ink-teal-500)); }
+.calendar-activity[data-kind="saturday_duty"] { --activity-ink: rgb(var(--ink-amber-900)); --activity-surface: rgb(var(--surface-amber-50)); --activity-mark: rgb(var(--ink-amber-600)); }
+.calendar-activity[data-kind="birthday"] { --activity-ink: rgb(var(--ink-rose-900)); --activity-surface: rgb(var(--surface-rose-50)); --activity-mark: rgb(var(--ink-rose-500)); }
+.calendar-activity svg { color: inherit; }
+.calendar-activity:hover { border-color: var(--activity-mark); }
+.calendar-activity[data-selected="true"] { border-color: var(--activity-mark); outline: 1px solid var(--activity-mark); outline-offset: 1px; --tw-ring-shadow: 0 0 #0000; box-shadow: none; }
+.calendar-span > span { color: inherit; background: transparent; }
+.calendar-week-more { color: rgb(var(--ink-indigo-900)); background: rgb(var(--surface-indigo-50) / .65); border: 1px solid rgb(var(--line-indigo-200) / .6); cursor: pointer; }
+.calendar-week-more:hover { background: rgb(var(--surface-indigo-100)); }
+.calendar-details h4 { font-size: 20px; line-height: 1.4; overflow-wrap: anywhere; }
+.calendar-details > div:first-child { align-items: flex-start; gap: 8px; }
+.calendar-details > div:first-child > span { background: rgb(var(--surface-indigo-50)) !important; color: rgb(var(--ink-indigo-900)); font-size: 10px; letter-spacing: .04em; padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
+.church-calendar button:focus-visible, .church-calendar input:focus-visible, .church-calendar select:focus-visible, .calendar-grid-scroll:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
+@media (min-width: 1024px) {
+  .calendar-details-column { position: sticky; top: 20px; }
+}
+@media (max-width: 639px) {
+  .calendar-toolbar > div:last-child { gap: 8px; }
+  .calendar-secondary-action, .calendar-primary-action { min-height: 40px; }
+  .calendar-month-header h2 { font-size: 18px; }
+}

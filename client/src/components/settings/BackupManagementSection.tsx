@@ -137,7 +137,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
       <div className="bg-white rounded-3xl p-8 border border-indigo-100 shadow-xs flex items-center justify-center min-h-[300px]">
         <div className="flex flex-col items-center space-y-3 text-indigo">
           <RefreshCw className="w-8 h-8 animate-spin" />
-          <p className="text-xs font-bold text-charcoal/60">Loading backup and storage analytics...</p>
+          <p className="text-xs font-medium text-muted">Loading backup and storage analytics...</p>
         </div>
       </div>
     );
@@ -158,10 +158,10 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               <span className="p-2.5 rounded-2xl bg-white/10 text-amber-300 border border-white/10">
                 <Database className="w-6 h-6" />
               </span>
-              <h2 className="text-xl lg:text-2xl font-black tracking-tight">
+              <h2 className="text-xl lg:text-2xl font-semibold tracking-tight">
                 Database Backup, Restore & Data Management
               </h2>
-              <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[10px] font-black uppercase tracking-wider">
+              <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[12px] font-medium uppercase tracking-wider">
                 Password Protected
               </span>
             </div>
@@ -174,7 +174,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
             <button
               onClick={handleInspectFullLive}
               disabled={loadingInspect}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
             >
               <Eye className="w-4 h-4 text-amber-300" />
               <span>Inspect Live Data</span>
@@ -193,24 +193,24 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
         {summary?.totalStats && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 pt-6 border-t border-white/10 relative z-10">
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-              <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Members</div>
-              <div className="text-lg font-black text-white">{summary.totalStats.members?.toLocaleString()}</div>
+              <div className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Members</div>
+              <div className="text-lg font-medium text-white">{summary.totalStats.members?.toLocaleString()}</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-              <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Attendance Logs</div>
-              <div className="text-lg font-black text-white">{summary.totalStats.attendance?.toLocaleString()}</div>
+              <div className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Attendance Logs</div>
+              <div className="text-lg font-medium text-white">{summary.totalStats.attendance?.toLocaleString()}</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-              <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Events & RSVPs</div>
-              <div className="text-lg font-black text-white">{summary.totalStats.events?.toLocaleString()}</div>
+              <div className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Events & RSVPs</div>
+              <div className="text-lg font-medium text-white">{summary.totalStats.events?.toLocaleString()}</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-              <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Duty Schedules</div>
-              <div className="text-lg font-black text-white">{((summary.totalStats.duty_schedules || 0) + (summary.totalStats.dishwashing_roster || 0)).toLocaleString()}</div>
+              <div className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Duty Schedules</div>
+              <div className="text-lg font-medium text-white">{((summary.totalStats.duty_schedules || 0) + (summary.totalStats.dishwashing_roster || 0)).toLocaleString()}</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-              <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">Audit History</div>
-              <div className="text-lg font-black text-white">{summary.totalStats.audit_logs?.toLocaleString()}</div>
+              <div className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Audit History</div>
+              <div className="text-lg font-medium text-white">{summary.totalStats.audit_logs?.toLocaleString()}</div>
             </div>
           </div>
         )}
@@ -224,18 +224,18 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h3 className="text-base font-black text-white">Supabase Cloud Sync & Offsite Replication</h3>
+              <h3 className="text-base font-semibold text-white">Supabase Cloud Sync & Offsite Replication</h3>
               {cloudSyncStatus?.connected ? (
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+                <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                   Cloud Connected
                 </span>
               ) : cloudSyncStatus?.configured ? (
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-400/30">
                   Cloud Offline
                 </span>
               ) : (
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/10 text-indigo-200 border border-white/10">
+                <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-white/10 text-indigo-200 border border-white/10">
                   Setup Required
                 </span>
               )}
@@ -244,7 +244,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               Use LAN locally during Sunday services with zero lag. When ready, push members, attendance, events, and schedules to Supabase Cloud with one click.
             </p>
             {cloudSyncStatus?.lastSyncedAt && (
-              <div className="text-[11px] text-indigo-300/70 font-medium pt-0.5">
+              <div className="text-[12px] text-indigo-300/70 font-medium pt-0.5">
                 Last synced: <strong className="text-white">{new Date(cloudSyncStatus.lastSyncedAt).toLocaleString()}</strong>
                 {cloudSyncStatus.lastSyncedBy ? ` by ${cloudSyncStatus.lastSyncedBy}` : ""}
               </div>
@@ -253,10 +253,10 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <button
+          <button data-guide="backup-cloud"
             type="button"
             onClick={() => setIsCloudSyncModalOpen(true)}
-            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-indigo-600  text-white font-black text-xs shadow-lg shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer border border-indigo-300/30"
+            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-indigo-600  text-white font-medium text-xs shadow-lg shadow-indigo-950/40 transition-all active:scale-95 cursor-pointer border border-indigo-300/30"
           >
             <ArrowUpCircle className="w-4 h-4 text-indigo-200" />
             <span>Open Cloud Sync Manager</span>
@@ -274,24 +274,24 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               <span className="p-3 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100">
                 <Download className="w-6 h-6" />
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-100/70 text-amber-900 text-[10px] font-black uppercase">
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-100/70 text-amber-900 text-[12px] font-medium uppercase">
                 Export Hub
               </span>
             </div>
             <div>
-              <h3 className="text-base font-black text-indigo">1. Backup Database</h3>
-              <p className="text-xs text-charcoal/60 leading-relaxed mt-1">
+              <h3 data-guide="backup-create" className="text-base font-semibold text-indigo">1. Backup Database</h3>
+              <p className="text-xs text-muted leading-relaxed mt-1">
                 Export complete system snapshot or select a specific year to generate a standardized JSON archive file.
               </p>
             </div>
 
             {/* Year Selector */}
             <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-bold text-charcoal">Select Backup Scope:</label>
-              <select
+              <label className="text-[12px] font-medium text-charcoal">Select Backup Scope:</label>
+              <select data-guide="backup-scope"
                 value={containerBackupYear}
                 onChange={(e) => setContainerBackupYear(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-indigo-100 text-xs font-bold text-charcoal focus:outline-none focus:ring-2 focus:ring-indigo/20 bg-slate-50"
+                className="w-full px-3 py-2 rounded-xl border border-indigo-100 text-xs font-medium text-charcoal focus:outline-none focus:ring-2 focus:ring-indigo/20 bg-slate-50"
               >
                 <option value="all">Full Database (All Years & Tables)</option>
                 {yearlyList.map(y => (
@@ -303,9 +303,9 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
             </div>
           </div>
 
-          <button
+          <button data-guide="backup-open"
             onClick={() => handleOpenBackupModal(containerBackupYear === "all" ? "all" : Number(containerBackupYear))}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs shadow-md transition-all active:scale-95 cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>Generate Backup</span>
@@ -319,19 +319,19 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               <span className="p-3 rounded-2xl bg-indigo-50 text-indigo border border-indigo-100">
                 <RotateCcw className="w-6 h-6" />
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-indigo-100/70 text-indigo-900 text-[10px] font-black uppercase">
+              <span className="px-2.5 py-0.5 rounded-full bg-indigo-100/70 text-indigo-900 text-[12px] font-medium uppercase">
                 Import Hub
               </span>
             </div>
             <div>
-              <h3 className="text-base font-black text-indigo">2. Restore from Backup</h3>
-              <p className="text-xs text-charcoal/60 leading-relaxed mt-1">
+              <h3 data-guide="backup-restore" className="text-base font-semibold text-indigo">2. Restore from Backup</h3>
+              <p className="text-xs text-muted leading-relaxed mt-1">
                 Upload a verified .json backup file. Preview table counts, choose replace or merge mode, and verify password to restore.
               </p>
             </div>
 
-            <div className="bg-indigo-50/50 border border-indigo-100/80 rounded-2xl p-3 text-[11px] text-indigo-950 font-medium space-y-1">
-              <div className="flex items-center gap-1.5 font-black text-indigo">
+            <div className="bg-indigo-50/50 border border-indigo-100/80 rounded-2xl p-3 text-[12px] text-indigo-950 font-medium space-y-1">
+              <div className="flex items-center gap-1.5 font-medium text-indigo">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo shrink-0" />
                 <span>Supports:</span>
               </div>
@@ -340,7 +340,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
             </div>
           </div>
 
-          <button
+          <button data-guide="restore-open"
             onClick={() => {
               if (!isSuperAdmin) {
                 onShowToast("Database restore requires Super Administrator authorization.", "error");
@@ -348,10 +348,10 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               }
               setIsRestoreModalOpen(true);
             }}
-            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer ${
+            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-medium text-xs shadow-md transition-all active:scale-95 cursor-pointer ${
               isSuperAdmin
                 ? "bg-indigo hover:bg-indigo-950 text-white"
-                : "bg-slate-200 text-charcoal/60 hover:bg-slate-300"
+                : "bg-slate-200 text-muted hover:bg-slate-300"
             }`}
           >
             <UploadCloud className="w-4 h-4 text-amber-300" />
@@ -366,24 +366,24 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               <span className="p-3 rounded-2xl bg-rose-50 text-rose-700 border border-rose-100">
                 <Trash2 className="w-6 h-6" />
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 text-[10px] font-black uppercase">
+              <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 text-[12px] font-medium uppercase">
                 Purge Hub
               </span>
             </div>
             <div>
-              <h3 className="text-base font-black text-rose-950">3. Delete Records by Year</h3>
-              <p className="text-xs text-charcoal/60 leading-relaxed mt-1">
+              <h3 data-guide="backup-purge" className="text-base font-semibold text-rose-950">3. Delete Records by Year</h3>
+              <p className="text-xs text-muted leading-relaxed mt-1">
                 Permanently purge transactional data for an entire year (attendance, events, and rosters) with double password authorization.
               </p>
             </div>
 
             {/* Purge Year Selector */}
             <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-bold text-charcoal">Select Year to Purge:</label>
-              <select
+              <label className="text-[12px] font-medium text-charcoal">Select Year to Purge:</label>
+              <select data-guide="purge-year"
                 value={containerPurgeYear}
                 onChange={(e) => setContainerPurgeYear(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-rose-200 text-xs font-bold text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-500/20 bg-rose-50/40"
+                className="w-full px-3 py-2 rounded-xl border border-rose-200 text-xs font-medium text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-500/20 bg-rose-50/40"
               >
                 {yearlyList.map(y => (
                   <option key={y.year} value={String(y.year)}>
@@ -394,7 +394,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
             </div>
           </div>
 
-          <button
+          <button data-guide="purge-open"
             onClick={() => {
               if (!isSuperAdmin) {
                 onShowToast("Database purge requires Tier 1 Administrator authorization.", "error");
@@ -403,10 +403,10 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
               if (containerPurgeYear) handleOpenPurgeModal(Number(containerPurgeYear));
             }}
             disabled={!containerPurgeYear}
-            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer ${
+            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-medium text-xs shadow-md transition-all active:scale-95 cursor-pointer ${
               isSuperAdmin
                 ? "bg-rose-600 hover:bg-rose-700 text-white"
-                : "bg-slate-200 text-charcoal/60 hover:bg-slate-300"
+                : "bg-slate-200 text-muted hover:bg-slate-300"
             }`}
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -420,17 +420,17 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
       <div className="bg-white rounded-3xl p-6 lg:p-8 border border-indigo-100 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-black text-indigo flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-indigo flex items-center gap-2">
               <Calendar className="w-5 h-5 text-indigo" />
               <span>Year-by-Year Data Registry ({yearlyList.length} Years Found)</span>
             </h3>
-            <p className="text-xs text-charcoal/60">
+            <p className="text-xs text-muted">
               Inspect individual tables, download targeted annual backups, or purge historical records.
             </p>
           </div>
           <button
             onClick={loadSummary}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-100 hover:bg-indigo-50 text-xs font-bold text-charcoal/70 transition-all cursor-pointer self-start sm:self-auto"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-100 hover:bg-indigo-50 text-xs font-medium text-charcoal/70 transition-all cursor-pointer self-start sm:self-auto"
           >
             <RefreshCw className="w-3.5 h-3.5 text-indigo" />
             <span>Refresh Analytics</span>
@@ -440,14 +440,14 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
         {/* Years Table */}
         <div className="overflow-x-auto border border-indigo-100/80 rounded-2xl">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 text-charcoal font-black border-b border-indigo-100">
+            <thead className="bg-slate-50 text-charcoal font-medium border-b border-indigo-100">
               <tr>
-                <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Year</th>
-                <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Attendance</th>
-                <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Events</th>
-                <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Duty Rosters</th>
-                <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70">Total Activity</th>
-                <th className="px-5 py-3 font-bold uppercase text-[10px] tracking-wider text-charcoal/70 text-right">Actions</th>
+                <th className="px-5 py-3 font-medium uppercase text-[12px] tracking-wider text-charcoal/70">Year</th>
+                <th className="px-5 py-3 font-medium uppercase text-[12px] tracking-wider text-charcoal/70">Attendance</th>
+                <th className="px-5 py-3 font-medium uppercase text-[12px] tracking-wider text-charcoal/70">Events</th>
+                <th className="px-5 py-3 font-medium uppercase text-[12px] tracking-wider text-charcoal/70">Duty Rosters</th>
+                <th className="px-5 py-3 font-medium uppercase text-[12px] tracking-wider text-charcoal/70">Total Activity</th>
+                <th className="px-5 py-3 font-medium uppercase text-[12px] tracking-wider text-charcoal/70 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-indigo-50 bg-white">
@@ -457,11 +457,11 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
                   <tr key={row.year} className="hover:bg-indigo-50/30 transition-colors">
                     
                     {/* Year Badge */}
-                    <td className="px-5 py-4 font-black text-indigo">
+                    <td className="px-5 py-4 font-medium text-indigo">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-black">{row.year}</span>
+                        <span className="text-sm font-medium">{row.year}</span>
                         {isCurrentYear && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[12px] font-medium">
                             Current Year
                           </span>
                         )}
@@ -470,7 +470,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
 
                     {/* Attendance */}
                     <td className="px-5 py-4 text-charcoal/80">
-                      <div className="flex items-center gap-1.5 font-bold">
+                      <div className="flex items-center gap-1.5 font-medium">
                         <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         <span>{row.attendance.toLocaleString()} logs</span>
                       </div>
@@ -478,7 +478,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
 
                     {/* Events */}
                     <td className="px-5 py-4 text-charcoal/80">
-                      <div className="flex items-center gap-1.5 font-bold">
+                      <div className="flex items-center gap-1.5 font-medium">
                         <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                         <span>{row.events.toLocaleString()} events</span>
                       </div>
@@ -486,7 +486,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
 
                     {/* Duty Rosters */}
                     <td className="px-5 py-4 text-charcoal/80">
-                      <div className="flex items-center gap-1.5 font-bold">
+                      <div className="flex items-center gap-1.5 font-medium">
                         <Users className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                         <span>{(row.dutySchedules + row.dishwashingRoster).toLocaleString()} shifts</span>
                       </div>
@@ -494,7 +494,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
 
                     {/* Total Records */}
                     <td className="px-5 py-4">
-                      <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-100 font-black text-xs">
+                      <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-100 font-medium text-xs">
                         {row.totalRecords.toLocaleString()} records
                       </span>
                     </td>
@@ -506,7 +506,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
                         <button
                           onClick={() => handleInspectYear(row.year)}
                           disabled={loadingInspect}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo text-xs font-bold transition-all cursor-pointer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo text-xs font-medium transition-all cursor-pointer"
                           title={`Inspect ${row.year} records in modal`}
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -516,7 +516,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
                         {/* Backup Year */}
                         <button
                           onClick={() => handleOpenBackupModal(row.year, row.totalRecords)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 text-xs font-bold transition-all cursor-pointer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 text-xs font-medium transition-all cursor-pointer"
                           title={`Download ${row.year} backup file`}
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -526,7 +526,7 @@ export const BackupManagementSection: React.FC<BackupManagementSectionProps> = (
                         {/* Delete / Purge Year */}
                         <button
                           onClick={() => handleOpenPurgeModal(row.year)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 text-xs font-bold transition-all cursor-pointer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 text-xs font-medium transition-all cursor-pointer"
                           title={`Purge/Delete ${row.year} data`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />

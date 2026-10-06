@@ -1,3 +1,4 @@
+import { Check as UICheck, Highlighter as UIHighlighter, PenLine as UIPenLine, X as UIX } from "lucide-react";
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Printer, BookOpen, BookmarkCheck, Calendar, Eye, Sliders
@@ -88,17 +89,17 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/30">
+              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/30">
                 <BookmarkCheck className="w-3.5 h-3.5 text-sky-400" /> 1-Year Bible Reading Guide Monitor
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30">
                 NIV Edition
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-slate-200">
+              <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-white/10 text-slate-200">
                 Automated Progress Schedule
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight flex items-center gap-2">
               D.P.C. Church Bible Reading Schedule Tracker
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-3xl">
@@ -110,7 +111,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
             <button
               type="button"
               onClick={() => setIsAlignmentModalOpen(true)}
-              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-black shadow-md transition-all flex items-center gap-2 active:scale-95"
+              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-medium shadow-md transition-all flex items-center gap-2 active:scale-95"
               title="Calibrate schedule to match church reading benchmark"
             >
               <Sliders className="w-4 h-4 text-sky-400" /> Calibrate Schedule
@@ -118,7 +119,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-sky-600/25 transition-all flex items-center gap-2 active:scale-95"
+              className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-2xl text-xs font-medium shadow-lg shadow-sky-600/25 transition-all flex items-center gap-2 active:scale-95"
             >
               <Printer className="w-4 h-4" /> Print Sheet
             </button>
@@ -130,54 +131,54 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
           
           {/* Box 1: Current Benchmark Today */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xs space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-bold text-sky-300 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-xs font-medium text-sky-300 uppercase tracking-wider">
               <span className="flex items-center gap-1.5">
                 <BookOpen className="w-4 h-4 text-sky-400" /> Today's Assigned Reading
               </span>
-              <span className="text-[10px] px-2 py-0.5 bg-sky-500/20 text-sky-200 rounded-md font-bold">
+              <span className="text-[12px] px-2 py-0.5 bg-sky-500/20 text-sky-200 rounded-md font-medium">
                 Day {scheduledTarget.targetDayIndex} of 365
               </span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white">
+            <div className="text-xl sm:text-2xl font-medium text-white">
               {scheduledTarget.currentBenchmarkPassage}
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[12px] text-slate-400">
               {scheduledTarget.todaysReading.isSunday ? "Sunday 5 Chapters" : "Weekday 3 Chapters"} • {scheduledTarget.todaysReading.testamentSummary}
             </p>
           </div>
 
           {/* Box 2: Chapters Covered To Date */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xs space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-bold text-indigo-300 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-xs font-medium text-indigo-300 uppercase tracking-wider">
               <span className="flex items-center gap-1.5">
                 <BookmarkCheck className="w-4 h-4 text-indigo-400" /> Chapters Covered to Date
               </span>
-              <span className="text-[10px] px-2 py-0.5 bg-indigo-500/20 text-indigo-200 rounded-md font-bold">
+              <span className="text-[12px] px-2 py-0.5 bg-indigo-500/20 text-indigo-200 rounded-md font-medium">
                 {progressPercent}% of Bible
               </span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white">
+            <div className="text-xl sm:text-2xl font-medium text-white">
               {scheduledCount} <span className="text-xs font-medium text-slate-400">/ 1,189 chapters</span>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[12px] text-slate-400">
               {remainingChapters} chapters remaining in annual cycle
             </p>
           </div>
 
           {/* Box 3: Schedule Pace Rule */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xs space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-bold text-amber-300 uppercase tracking-wider">
+            <div className="flex items-center justify-between text-xs font-medium text-amber-300 uppercase tracking-wider">
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-amber-400" /> Reading Schedule Cadence
               </span>
-              <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-200 rounded-md font-bold">
+              <span className="text-[12px] px-2 py-0.5 bg-amber-500/20 text-amber-200 rounded-md font-medium">
                 1-Year Cycle
               </span>
             </div>
-            <div className="text-base sm:text-lg font-black text-amber-300">
+            <div className="text-base sm:text-lg font-medium text-amber-300">
               Mon–Sat: 3 Ch/day • Sun: 5 Ch
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[12px] text-slate-400">
               23 chapters/week • All 66 books covered in 365 days
             </p>
           </div>
@@ -193,8 +194,8 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-black text-slate-900">D.P.C. Bible Reading Guide (Grid Sheet)</h2>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+              <h2 className="text-base font-semibold text-slate-900">D.P.C. Bible Reading Guide (Grid Sheet)</h2>
+              <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
                 NIV Edition
               </span>
             </div>
@@ -206,7 +207,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap w-full md:w-auto justify-between md:justify-end">
           {/* Testament Tabs */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-bold">
+          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-medium">
             <button
               type="button"
               onClick={() => setActiveTestamentTab("all")}
@@ -237,8 +238,8 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
           </div>
 
           {/* Mark Style Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-bold">
-            <span className="text-[10px] text-slate-500 uppercase px-1.5 hidden sm:inline">Style:</span>
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-medium">
+            <span className="text-[12px] text-slate-500 uppercase px-1.5 hidden sm:inline">Style:</span>
             <button
               type="button"
               onClick={() => setMarkStyle("slash")}
@@ -246,8 +247,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                 markStyle === "slash" ? "bg-white text-blue-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
               title="Classic diagonal pen slash"
-            >
-              ✍️ Slash ( / )
+            ><UIPenLine aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Slash ( / )
             </button>
             <button
               type="button"
@@ -256,8 +256,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                 markStyle === "pen" ? "bg-white text-blue-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
               title="Fine pen cross mark"
-            >
-              ✕ Pen Cross
+            ><UIX aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Pen Cross
             </button>
             <button
               type="button"
@@ -266,8 +265,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                 markStyle === "fill" ? "bg-white text-emerald-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
               title="Pastel highlighter"
-            >
-              🟩 Highlight
+            ><UIHighlighter aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Highlight
             </button>
             <button
               type="button"
@@ -276,8 +274,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                 markStyle === "check" ? "bg-white text-emerald-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
               title="Checkmark badge"
-            >
-              ✓ Check
+            ><UICheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Check
             </button>
           </div>
 
@@ -285,7 +282,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
           <button
             type="button"
             onClick={handlePrint}
-            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black shadow-md shadow-sky-600/20 transition-all flex items-center gap-1.5 active:scale-95"
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-medium shadow-md shadow-sky-600/20 transition-all flex items-center gap-1.5 active:scale-95"
           >
             <Printer className="w-4 h-4" /> Print Sheet
           </button>
@@ -293,19 +290,19 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
       </div>
 
       {/* Main Printed Sheet Container */}
-      <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-300 shadow-xl print:shadow-none print:border-none print:p-0 font-sans text-slate-900 max-w-5xl mx-auto overflow-x-auto">
+      <div data-guide="reading-grid" className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-300 shadow-xl print:shadow-none print:border-none print:p-0 font-sans text-slate-900 max-w-5xl mx-auto overflow-x-auto">
         
         {/* Printable Sheet Header (Exact replica of church handout photo) */}
         <div className="text-center pb-5 mb-5 border-b-2 border-slate-900 space-y-1.5">
           <div className="flex items-center justify-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-wider text-slate-900 uppercase">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-wider text-slate-900 uppercase">
               D.P.C. {year} Bible Reading Guide
             </h1>
-            <span className="text-xs font-black px-2 py-0.5 bg-slate-900 text-white rounded-md tracking-wider">
+            <span className="text-xs font-medium px-2 py-0.5 bg-slate-900 text-white rounded-md tracking-wider">
               NIV
             </span>
           </div>
-          <div className="flex items-center justify-center gap-4 text-xs sm:text-sm font-bold text-slate-800 flex-wrap">
+          <div className="flex items-center justify-center gap-4 text-xs sm:text-sm font-medium text-slate-800 flex-wrap">
             <div className="flex items-center gap-1.5">
               <span>Name:</span>
               <input
@@ -313,11 +310,11 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
                 placeholder="Enter Your Name"
-                className="font-black border-b-2 border-slate-400 focus:border-slate-900 outline-hidden px-2 py-0.5 text-center bg-transparent w-48 sm:w-64"
+                className="font-medium border-b-2 border-slate-400 focus:border-slate-900 outline-hidden px-2 py-0.5 text-center bg-transparent w-48 sm:w-64"
               />
             </div>
           </div>
-          <p className="text-xs sm:text-sm font-black text-rose-700 tracking-wide pt-1">
+          <p className="text-xs sm:text-sm font-medium text-rose-700 tracking-wide pt-1">
             Everyday 3 Chapters and Every Sunday 5 Chapters.
           </p>
         </div>
@@ -333,7 +330,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
               >
                 {/* Testament Header Badge */}
                 <div className="text-center">
-                  <span className={`inline-block px-8 py-1.5 rounded-full text-base sm:text-lg font-black tracking-wide border-2 ${
+                  <span className={`inline-block px-8 py-1.5 rounded-full text-base sm:text-lg font-medium tracking-wide border-2 ${
                     testamentData.testament === "Old Testament"
                       ? "bg-rose-50 text-rose-800 border-rose-600 shadow-xs"
                       : "bg-sky-50 text-sky-800 border-sky-600 shadow-xs"
@@ -343,14 +340,14 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                 </div>
 
                 {/* Table Layout */}
-                <div className="border-2 border-slate-800 rounded-lg overflow-hidden text-[10px] sm:text-[11px]">
+                <div className="border-2 border-slate-800 rounded-lg overflow-hidden text-[12px] sm:text-[12px]">
                   <table className="w-full border-collapse table-fixed select-none">
                     <thead>
-                      <tr className="bg-slate-100 border-b border-slate-800 text-slate-700 font-bold text-center">
+                      <tr className="bg-slate-100 border-b border-slate-800 text-slate-700 font-medium text-center">
                         <th className="w-[12%] p-1 border-r border-slate-400">Category</th>
                         <th className="w-[16%] p-1 border-r border-slate-800 text-left pl-2">Book</th>
                         {cols25.map((c) => (
-                          <th key={c} className="p-0.5 border-r border-slate-300 font-semibold text-[9px] text-slate-500 last:border-r-0">
+                          <th key={c} className="p-0.5 border-r border-slate-300 font-medium text-[12px] text-slate-500 last:border-r-0">
                             {c}
                           </th>
                         ))}
@@ -382,7 +379,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                                 {showCategoryCell && (
                                   <td
                                     rowSpan={totalCategoryRows}
-                                    className="border-r-2 border-slate-800 bg-slate-50/80 text-center font-black text-slate-800 align-middle p-1 tracking-widest uppercase text-[10px] sm:text-xs"
+                                    className="border-r-2 border-slate-800 bg-slate-50/80 text-center font-medium text-slate-800 align-middle p-1 tracking-widest uppercase text-[12px] sm:text-xs"
                                     style={{
                                       writingMode: "vertical-rl",
                                       textOrientation: "upright",
@@ -395,7 +392,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
 
                                 {/* Book Name */}
                                 <td
-                                  className={`p-1.5 border-r-2 border-slate-800 font-bold text-slate-900 truncate pl-2 ${
+                                  className={`p-1.5 border-r-2 border-slate-800 font-medium text-slate-900 truncate pl-2 ${
                                     rowIdx > 0 ? "text-slate-400 italic font-medium" : ""
                                   }`}
                                   title={book.name}
@@ -425,7 +422,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                                   let cellBgClass = "bg-white text-slate-800 hover:bg-sky-100 hover:text-sky-900";
                                   if (isChecked) {
                                     if (markStyle === "fill") {
-                                      cellBgClass = "bg-emerald-100/90 text-emerald-950 font-black border-emerald-300";
+                                      cellBgClass = "bg-emerald-100/90 text-emerald-950 font-medium border-emerald-300";
                                     } else if (markStyle === "slash") {
                                       cellBgClass = "bg-blue-50/30 text-slate-900 hover:bg-blue-50";
                                     } else if (markStyle === "pen") {
@@ -439,7 +436,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                                     <td
                                       key={colNum}
                                       onClick={() => handleCellClick(book.name, chapterNum)}
-                                      className={`border-r border-slate-400 p-0 text-center align-middle cursor-pointer transition-all relative select-none last:border-r-0 h-6 sm:h-7 font-bold ${cellBgClass}`}
+                                      className={`border-r border-slate-400 p-0 text-center align-middle cursor-pointer transition-all relative select-none last:border-r-0 h-6 sm:h-7 font-medium ${cellBgClass}`}
                                       title={`${book.name} Chapter ${chapterNum} • ${
                                         scheduleInfo
                                           ? `Day ${scheduleInfo.dayIndex} (${scheduleInfo.dateString})`
@@ -447,7 +444,7 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
                                       } - Click to read NIV passage`}
                                     >
                                       {/* Chapter Number Label */}
-                                      <span className="relative z-10 text-[9px] sm:text-[10px] font-bold">
+                                      <span className="relative z-10 text-[12px] sm:text-[12px] font-medium">
                                         {chapterNum}
                                       </span>
 
@@ -512,10 +509,10 @@ export const DpcBibleGridGuide: React.FC<DpcBibleGridGuideProps> = ({
         {/* Sheet Footer */}
         <div className="mt-8 pt-4 border-t border-slate-400 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600 gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-900">Current Schedule Progress:</span>
-            <span className="font-black text-rose-700">{scheduledCount} / {TOTAL_BIBLE_CHAPTERS} chapters covered ({progressPercent}%)</span>
+            <span className="font-medium text-slate-900">Current Schedule Progress:</span>
+            <span className="font-medium text-rose-700">{scheduledCount} / {TOTAL_BIBLE_CHAPTERS} chapters covered ({progressPercent}%)</span>
           </div>
-          <div className="italic text-slate-500 text-[11px]">
+          <div className="italic text-slate-500 text-[12px]">
             Discipleship Church • 1-Year Bible Reading Guide (NIV)
           </div>
         </div>

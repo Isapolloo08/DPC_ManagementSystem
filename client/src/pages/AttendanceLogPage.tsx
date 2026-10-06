@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { useGuideDataState } from "../components/help/GuideDataContext";
 import {
   AttendanceLogItem,
   AttendanceLogSummary,
@@ -84,6 +85,7 @@ export const AttendanceLogPage: React.FC = () => {
   // UI State
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  useGuideDataState("attendance-history", { loading, count: total, filtered: true, error, retry: () => fetchAttendanceLog() });
   const [isExportingCsv, setIsExportingCsv] = useState<boolean>(false);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
 
@@ -407,7 +409,7 @@ export const AttendanceLogPage: React.FC = () => {
               <UserCheck className="w-6 h-6 text-indigo" />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-charcoal">Attendance Log</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-charcoal">Attendance Log</h1>
               <p className="text-xs sm:text-sm font-medium text-stone-500">
                 Unified audit history of Sunday service check-ins, Bible Study attendance, and Special Events.
               </p>
@@ -417,20 +419,20 @@ export const AttendanceLogPage: React.FC = () => {
 
         {/* Action Buttons: CSV & PDF */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          <button
+          <button data-guide="log-csv"
             onClick={handleExportCsv}
             disabled={isExportingCsv || loading || rows.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white rounded-xl text-sm font-semibold transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             title="Download UTF-8 CSV with Excel compatibility"
           >
             {isExportingCsv ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
             <span>Export CSV</span>
           </button>
 
-          <button
+          <button data-guide="log-pdf"
             onClick={handleExportPdf}
             disabled={isExportingPdf || loading || rows.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo hover:bg-indigo-900 active:scale-[0.98] text-white rounded-xl text-sm font-semibold transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo hover:bg-indigo-900 active:scale-[0.98] text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             title="Generate print-ready formatted PDF report"
           >
             {isExportingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
@@ -443,48 +445,48 @@ export const AttendanceLogPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4">
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Total Records</span>
+            <span className="text-xs font-medium uppercase tracking-wider text-stone-500">Total Records</span>
             <Layers className="w-4 h-4 text-indigo" />
           </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-black text-indigo">
+          <div className="mt-2 text-2xl sm:text-3xl font-medium text-indigo">
             {loading ? "..." : summary.total.toLocaleString()}
           </div>
-          <div className="text-[11px] text-stone-600 font-semibold mt-1">Filtered timeframe</div>
+          <div className="text-[12px] text-stone-600 font-medium mt-1">Filtered timeframe</div>
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-emerald-200/80 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Present</span>
+            <span className="text-xs font-medium uppercase tracking-wider text-emerald-700">Present</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-black text-emerald-700">
+          <div className="mt-2 text-2xl sm:text-3xl font-medium text-emerald-700">
             {loading ? "..." : summary.present.toLocaleString()}
           </div>
-          <div className="text-[11px] text-emerald-600 font-semibold mt-1">
+          <div className="text-[12px] text-emerald-600 font-medium mt-1">
             {summary.total > 0 ? `${((summary.present / summary.total) * 100).toFixed(1)}% of total` : "0%"}
           </div>
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-rose-200/80 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-700">Absent</span>
+            <span className="text-xs font-medium uppercase tracking-wider text-rose-700">Absent</span>
             <XCircle className="w-4 h-4 text-rose-600" />
           </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-black text-rose-700">
+          <div className="mt-2 text-2xl sm:text-3xl font-medium text-rose-700">
             {loading ? "..." : summary.absent.toLocaleString()}
           </div>
-          <div className="text-[11px] text-rose-600 font-semibold mt-1">Bible Study records</div>
+          <div className="text-[12px] text-rose-600 font-medium mt-1">Bible Study records</div>
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/80 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Excused</span>
+            <span className="text-xs font-medium uppercase tracking-wider text-amber-700">Excused</span>
             <Clock className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-black text-amber-700">
+          <div className="mt-2 text-2xl sm:text-3xl font-medium text-amber-700">
             {loading ? "..." : summary.excused.toLocaleString()}
           </div>
-          <div className="text-[11px] text-amber-600 font-semibold mt-1">Notice filed</div>
+          <div className="text-[12px] text-amber-600 font-medium mt-1">Notice filed</div>
         </div>
       </div>
 
@@ -494,10 +496,10 @@ export const AttendanceLogPage: React.FC = () => {
         <div>
           <span>Sunday records reflect service check-ins (present). Absent and excused statuses apply to Bible Study and small group sessions.</span>
           {isLeaderRole && (
-            <span className="ml-1 font-bold text-amber-950">Leader View: Displaying records scoped to the Bible Study groups you facilitate.</span>
+            <span className="ml-1 font-medium text-amber-950">Leader View: Displaying records scoped to the Bible Study groups you facilitate.</span>
           )}
           {isCoordinatorRole && (
-            <span className="ml-1 font-bold text-amber-950">Coordinator View: Displaying records scoped to your assigned ministries.</span>
+            <span className="ml-1 font-medium text-amber-950">Coordinator View: Displaying records scoped to your assigned ministries.</span>
           )}
         </div>
       </div>
@@ -505,13 +507,13 @@ export const AttendanceLogPage: React.FC = () => {
       {/* Filter Toolbar */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-200 space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-2 text-sm font-bold text-charcoal">
+          <div className="flex items-center gap-2 text-sm font-medium text-charcoal">
             <Filter className="w-4 h-4 text-indigo" />
             <span>Search & Filter Options</span>
           </div>
-          <button
+          <button data-guide="log-reset"
             onClick={handleResetFilters}
-            className="text-xs font-semibold text-stone-500 hover:text-indigo inline-flex items-center gap-1 transition"
+            className="text-xs font-medium text-stone-500 hover:text-indigo inline-flex items-center gap-1 transition"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Filters</span>
@@ -521,18 +523,18 @@ export const AttendanceLogPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {/* From Date */}
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">
+            <label className="block text-xs font-medium text-stone-600 mb-1">
               From Date
             </label>
             <div className="relative">
-              <input
+              <input data-guide="log-from"
                 type="date"
                 value={fromDate}
                 onChange={(e) => {
                   setFromDate(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
+                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
               />
               <Calendar className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
             </div>
@@ -540,18 +542,18 @@ export const AttendanceLogPage: React.FC = () => {
 
           {/* To Date */}
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">
+            <label className="block text-xs font-medium text-stone-600 mb-1">
               To Date
             </label>
             <div className="relative">
-              <input
+              <input data-guide="log-to"
                 type="date"
                 value={toDate}
                 onChange={(e) => {
                   setToDate(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
+                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
               />
               <Calendar className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
             </div>
@@ -559,17 +561,17 @@ export const AttendanceLogPage: React.FC = () => {
 
           {/* Type Filter */}
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">
+            <label className="block text-xs font-medium text-stone-600 mb-1">
               Attendance Type
             </label>
-            <select
+            <select data-guide="log-type"
               value={logType}
               disabled={isLeaderRole} // Leaders are automatically scoped to Bible Study
               onChange={(e) => {
                 setLogType(e.target.value as AttendanceLogType | "");
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition disabled:opacity-60"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition disabled:opacity-60"
             >
               <option value="">All Types (Sunday, Bible Study & Events)</option>
               <option value="sunday_service">Sunday Worship Service</option>
@@ -580,16 +582,16 @@ export const AttendanceLogPage: React.FC = () => {
 
           {/* Status Filter */}
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">
+            <label className="block text-xs font-medium text-stone-600 mb-1">
               Status
             </label>
-            <select
+            <select data-guide="log-status"
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value as AttendanceLogStatus | "");
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
             >
               <option value="">All Statuses</option>
               <option value="present">Present</option>
@@ -600,17 +602,17 @@ export const AttendanceLogPage: React.FC = () => {
 
           {/* Ministry Filter */}
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">
+            <label className="block text-xs font-medium text-stone-600 mb-1">
               Ministry
             </label>
-            <select
+            <select data-guide="log-ministry"
               value={selectedMinistryId}
               disabled={isLeaderRole}
               onChange={(e) => {
                 setSelectedMinistryId(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition disabled:opacity-60"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition disabled:opacity-60"
             >
               <option value="all">All Ministries</option>
               {ministries.map((m) => (
@@ -623,16 +625,16 @@ export const AttendanceLogPage: React.FC = () => {
 
           {/* Bible Study Group Filter */}
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">
+            <label className="block text-xs font-medium text-stone-600 mb-1">
               Bible Study Group
             </label>
-            <select
+            <select data-guide="log-group"
               value={selectedGroupId}
               onChange={(e) => {
                 setSelectedGroupId(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
             >
               <option value="all">All Groups</option>
               {groups.map((g) => (
@@ -645,11 +647,11 @@ export const AttendanceLogPage: React.FC = () => {
 
           {/* Member Name Search (2 columns on lg) */}
           <div className="sm:col-span-2">
-            <label className="block text-xs font-bold text-stone-600 mb-1">
+            <label className="block text-xs font-medium text-stone-600 mb-1">
               Search Member Name
             </label>
             <div className="relative">
-              <input
+              <input data-guide="log-search"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -661,7 +663,7 @@ export const AttendanceLogPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 text-xs font-bold p-0.5 rounded-full"
+                  className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600 text-xs font-medium p-0.5 rounded-full"
                 >
                   ×
                 </button>
@@ -677,7 +679,7 @@ export const AttendanceLogPage: React.FC = () => {
         {loading && (
           <div className="p-8 text-center">
             <Loader2 className="w-8 h-8 animate-spin text-indigo mx-auto mb-3" />
-            <p className="text-xs font-bold text-stone-500">Loading attendance logs...</p>
+            <p className="text-xs font-medium text-stone-500">Loading attendance logs...</p>
           </div>
         )}
 
@@ -685,10 +687,10 @@ export const AttendanceLogPage: React.FC = () => {
         {!loading && error && (
           <div className="p-8 text-center space-y-3">
             <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
-            <div className="text-sm font-bold text-rose-800">{error}</div>
+            <div className="text-sm font-medium text-rose-800">{error}</div>
             <button
               onClick={() => fetchAttendanceLog()}
-              className="px-4 py-2 bg-indigo text-white text-xs font-bold rounded-xl hover:bg-indigo-900 transition"
+              className="px-4 py-2 bg-indigo text-white text-xs font-medium rounded-xl hover:bg-indigo-900 transition"
             >
               Retry
             </button>
@@ -701,13 +703,13 @@ export const AttendanceLogPage: React.FC = () => {
             <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto text-stone-400 border border-stone-200">
               <UserCheck className="w-7 h-7" />
             </div>
-            <h3 className="text-base font-bold text-charcoal">No attendance records found</h3>
+            <h3 className="text-base font-semibold text-charcoal">No attendance records found</h3>
             <p className="text-xs text-stone-500 max-w-sm mx-auto">
               There are no attendance records matching your selected date range and filter criteria. Try expanding your date range or clearing search keywords.
             </p>
-            <button
+            <button data-guide="log-reset"
               onClick={handleResetFilters}
-              className="mt-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 text-charcoal text-xs font-bold rounded-xl transition inline-flex items-center gap-1.5"
+              className="mt-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 text-charcoal text-xs font-medium rounded-xl transition inline-flex items-center gap-1.5"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset Filters</span>
@@ -720,7 +722,7 @@ export const AttendanceLogPage: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-stone-50/90 border-b border-stone-200 text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                <tr className="bg-stone-50/90 border-b border-stone-200 text-[12px] font-medium text-stone-500 uppercase tracking-wider">
                   <th className="py-3.5 px-4 sm:px-6">Date</th>
                   <th className="py-3.5 px-4">Type</th>
                   <th className="py-3.5 px-4">Member Name</th>
@@ -742,26 +744,26 @@ export const AttendanceLogPage: React.FC = () => {
                       className="hover:bg-stone-50/80 transition-colors"
                     >
                       {/* Date */}
-                      <td className="py-3 px-4 sm:px-6 font-bold text-charcoal whitespace-nowrap">
+                      <td className="py-3 px-4 sm:px-6 font-medium text-charcoal whitespace-nowrap">
                         {row.logDate}
                       </td>
 
                       {/* Type Badge */}
                       <td className="py-3 px-4 whitespace-nowrap">
                         {isSunday && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo rounded-lg text-[11px] font-bold border border-indigo-100">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo rounded-lg text-[12px] font-medium border border-indigo-100">
                             <Calendar className="w-3 h-3 text-amber-500" />
                             <span>Sunday Service</span>
                           </span>
                         )}
                         {isBs && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-900 rounded-lg text-[11px] font-bold border border-amber-200/60">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-900 rounded-lg text-[12px] font-medium border border-amber-200/60">
                             <HeartHandshake className="w-3 h-3 text-amber-600" />
                             <span>Bible Study</span>
                           </span>
                         )}
                         {isEvent && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-900 rounded-lg text-[11px] font-bold border border-purple-200/60">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-900 rounded-lg text-[12px] font-medium border border-purple-200/60">
                             <PartyPopper className="w-3 h-3 text-purple-600" />
                             <span>Special Event</span>
                           </span>
@@ -769,7 +771,7 @@ export const AttendanceLogPage: React.FC = () => {
                       </td>
 
                       {/* Member Name */}
-                      <td className="py-3 px-4 font-bold text-charcoal">
+                      <td className="py-3 px-4 font-medium text-charcoal">
                         {row.memberName}
                       </td>
 
@@ -782,7 +784,7 @@ export const AttendanceLogPage: React.FC = () => {
                       <td className="py-3 px-4 text-stone-600 font-medium">
                         {isBs && (row.groupName || <span className="text-stone-300">-</span>)}
                         {isEvent && (
-                          <span className="font-semibold text-purple-900">
+                          <span className="font-medium text-purple-900">
                             {row.eventName || "Special Event"}
                           </span>
                         )}
@@ -792,19 +794,19 @@ export const AttendanceLogPage: React.FC = () => {
                       {/* Status Colored Badge */}
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         {row.status === "present" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             <span>Present</span>
                           </span>
                         )}
                         {row.status === "absent" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-rose-100 text-rose-800 border border-rose-200">
                             <XCircle className="w-3 h-3 text-rose-600" />
                             <span>Absent</span>
                           </span>
                         )}
                         {row.status === "excused" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
                             <Clock className="w-3 h-3 text-amber-600" />
                             <span>Excused</span>
                           </span>
@@ -812,7 +814,7 @@ export const AttendanceLogPage: React.FC = () => {
                       </td>
 
                       {/* Recorded Time */}
-                      <td className="py-3 px-4 sm:px-6 text-right text-stone-600 font-semibold whitespace-nowrap">
+                      <td className="py-3 px-4 sm:px-6 text-right text-stone-600 font-medium whitespace-nowrap">
                         {row.recordedAt ? new Date(row.recordedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-"}
                       </td>
                     </tr>
@@ -827,9 +829,9 @@ export const AttendanceLogPage: React.FC = () => {
         {!loading && !error && rows.length > 0 && (
           <div className="bg-stone-50 border-t border-stone-200 p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
             <div className="text-stone-500 font-medium">
-              Showing <span className="font-bold text-charcoal">{((page - 1) * pageSize) + 1}</span> to{" "}
-              <span className="font-bold text-charcoal">{Math.min(page * pageSize, total)}</span> of{" "}
-              <span className="font-bold text-charcoal">{total.toLocaleString()}</span> records
+              Showing <span className="font-medium text-charcoal">{((page - 1) * pageSize) + 1}</span> to{" "}
+              <span className="font-medium text-charcoal">{Math.min(page * pageSize, total)}</span> of{" "}
+              <span className="font-medium text-charcoal">{total.toLocaleString()}</span> records
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -852,7 +854,7 @@ export const AttendanceLogPage: React.FC = () => {
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <span className="px-3 py-1 font-bold text-charcoal">
+              <span className="px-3 py-1 font-medium text-charcoal">
                 Page {page} of {totalPages}
               </span>
 
@@ -878,7 +880,7 @@ export const AttendanceLogPage: React.FC = () => {
               {/* Jump to page form */}
               {totalPages > 1 && (
                 <form onSubmit={handleJumpPage} className="flex items-center gap-1.5 ml-2">
-                  <span className="text-stone-600 font-semibold">Go:</span>
+                  <span className="text-stone-600 font-medium">Go:</span>
                   <input
                     type="number"
                     min={1}
@@ -886,11 +888,11 @@ export const AttendanceLogPage: React.FC = () => {
                     value={jumpPageInput}
                     onChange={(e) => setJumpPageInput(e.target.value)}
                     placeholder="#"
-                    className="w-12 px-2 py-1 bg-white border border-stone-200 rounded-lg text-xs font-bold text-charcoal outline-none focus:border-indigo"
+                    className="w-12 px-2 py-1 bg-white border border-stone-200 rounded-lg text-xs font-medium text-charcoal outline-none focus:border-indigo"
                   />
                   <button
                     type="submit"
-                    className="px-2 py-1 bg-stone-200 hover:bg-stone-300 rounded-lg text-xs font-bold text-charcoal transition"
+                    className="px-2 py-1 bg-stone-200 hover:bg-stone-300 rounded-lg text-xs font-medium text-charcoal transition"
                   >
                     Go
                   </button>

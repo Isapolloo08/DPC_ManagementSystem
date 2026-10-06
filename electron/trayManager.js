@@ -1,5 +1,7 @@
 const { app, Tray, Menu, nativeImage, clipboard } = require("electron");
 const os = require("os");
+const path = require("path");
+const fs = require("fs");
 
 let tray = null;
 
@@ -14,6 +16,29 @@ function getLanIps() {
     }
   }
   return ips;
+}
+
+function getTrayMenuItemIcon(iconName) {
+  try {
+    const candidates = [
+      path.join(__dirname, "assets", "tray-icons", `${iconName}.png`),
+      path.join(app.getAppPath(), "electron", "assets", "tray-icons", `${iconName}.png`),
+      process.resourcesPath ? path.join(process.resourcesPath, "electron", "assets", "tray-icons", `${iconName}.png`) : null,
+      process.resourcesPath ? path.join(process.resourcesPath, "app.asar.unpacked", "electron", "assets", "tray-icons", `${iconName}.png`) : null
+    ].filter(Boolean);
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        const img = nativeImage.createFromPath(p);
+        if (!img.isEmpty()) {
+          return img.resize({ width: 16, height: 16 });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[TrayManager] Error loading icon for ${iconName}:`, e);
+  }
+  return undefined;
 }
 
 function createOrUpdateTray({ iconPath, onOpenApp, onRestartServer, onOpenSettings, onQuitApp, isDev }) {
@@ -57,10 +82,11 @@ function createOrUpdateTray({ iconPath, onOpenApp, onRestartServer, onOpenSettin
   const hostname = os.hostname();
   const deviceMenuItems = [
     {
-      label: `💻 Device Name: ${hostname}:4000 (Click to Copy)`,
-      toolTip: `Click to copy ${hostname}:4000 (Permanent address — won't change when Wi-Fi restarts)`,
+      label: `Device Name: ${hostname}:${serverPort} (Click to Copy)`,
+      icon: getTrayMenuItemIcon("device"),
+      toolTip: `Click to copy ${hostname}:${serverPort} (Permanent address — won't change when Wi-Fi restarts)`,
       click: () => {
-        const text = `${hostname}:4000`;
+        const text = `${hostname}:${serverPort}`;
         clipboard.writeText(text);
         if (tray && process.platform === "win32") {
           try {
@@ -76,7 +102,8 @@ function createOrUpdateTray({ iconPath, onOpenApp, onRestartServer, onOpenSettin
 
   const ipMenuItems = lanIps.length > 0
     ? lanIps.map((ip) => ({
-        label: `🌐 LAN IP: ${ip}:${serverPort} (Click to Copy)`,
+        label: `LAN IP: ${ip}:${serverPort} (Click to Copy)`,
+        icon: getTrayMenuItemIcon("network"),
         toolTip: `Click to copy ${ip}:${serverPort} for other Client PCs`,
         click: () => {
           const text = `${ip}:${serverPort}`;
@@ -93,18 +120,21 @@ function createOrUpdateTray({ iconPath, onOpenApp, onRestartServer, onOpenSettin
       }))
     : [
         {
-          label: `🌐 Local: 127.0.0.1:${serverPort}`,
+          label: `Local: 127.0.0.1:${serverPort}`,
+          icon: getTrayMenuItemIcon("network"),
           enabled: false
         }
       ];
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "👑 DPC Master PC (Server Active)",
+      label: "DPC Master PC (Server Active)",
+      icon: getTrayMenuItemIcon("crown"),
       enabled: false
     },
     {
-      label: `● Database Server: Running on Port ${serverPort}`,
+      label: `Database Server: Running on Port ${serverPort}`,
+      icon: getTrayMenuItemIcon("database"),
       enabled: false
     },
     { type: "separator" },
@@ -112,13 +142,15 @@ function createOrUpdateTray({ iconPath, onOpenApp, onRestartServer, onOpenSettin
     ...ipMenuItems,
     { type: "separator" },
     {
-      label: "🖥️ Open DPC Application",
+      label: "Open DPC Application",
+      icon: getTrayMenuItemIcon("app-open"),
       click: () => {
         if (onOpenApp) onOpenApp();
       }
     },
     {
-      label: "🔄 Restart Backend Server",
+      label: "Restart Backend Server",
+      icon: getTrayMenuItemIcon("restart"),
       click: () => {
         if (onRestartServer) onRestartServer();
         if (tray && process.platform === "win32") {
@@ -132,14 +164,16 @@ function createOrUpdateTray({ iconPath, onOpenApp, onRestartServer, onOpenSettin
       }
     },
     {
-      label: "⚙️ Network & Server Configuration",
+      label: "Network & Server Configuration",
+      icon: getTrayMenuItemIcon("settings"),
       click: () => {
         if (onOpenSettings) onOpenSettings();
       }
     },
     { type: "separator" },
     {
-      label: "❌ Exit & Stop Master Server",
+      label: "Exit & Stop Master Server",
+      icon: getTrayMenuItemIcon("exit"),
       click: () => {
         if (onQuitApp) {
           onQuitApp();

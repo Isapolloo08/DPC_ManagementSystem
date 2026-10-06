@@ -144,7 +144,7 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
       case "duty_schedules":
       case "dishwashing_roster": return <Users className="w-3.5 h-3.5 text-blue-600" />;
       case "announcements": return <MessageSquare className="w-3.5 h-3.5 text-purple-600" />;
-      default: return <Database className="w-3.5 h-3.5 text-charcoal/60" />;
+      default: return <Database className="w-3.5 h-3.5 text-muted" />;
     }
   };
 
@@ -158,31 +158,31 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-rose-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-rose-200 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div data-modal-panel className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-rose-200 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="p-6 border-b border-rose-100 flex items-center justify-between gap-4 bg-rose-50">
+        <div data-modal-header className="p-6 border-b border-rose-100 flex items-center justify-between gap-4 bg-rose-50">
           <div className="flex items-center gap-3">
             <span className="p-3 rounded-2xl bg-rose-100 text-rose-700 border border-rose-200">
               <ShieldAlert className="w-6 h-6" />
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-charcoal">
+                <h3 className="text-lg font-semibold text-charcoal">
                   Purge Data for Year {year}
                 </h3>
-                <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-xs font-black">
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-xs font-medium">
                   {totalRecordsToPurge} Records Target
                 </span>
               </div>
-              <p className="text-xs text-rose-600 font-bold">
+              <p className="text-xs text-rose-600 font-medium">
                 Review data to be deleted & enter password to confirm.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-slate-100 text-charcoal/50 hover:text-charcoal transition-all cursor-pointer"
+            className="p-1.5 rounded-xl hover:bg-slate-100 text-muted hover:text-charcoal transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -193,11 +193,11 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
           
           {/* Warning Card */}
           <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-4 text-xs text-rose-950 space-y-2">
-            <div className="flex items-center gap-1.5 font-black text-rose-900">
+            <div className="flex items-center gap-1.5 font-medium text-rose-900">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>Warning: Irreversible Deletion</span>
             </div>
-            <p className="text-[11px] text-rose-900/90 leading-relaxed font-medium">
+            <p className="text-[12px] text-rose-900/90 leading-relaxed font-medium">
               This will permanently delete all attendance logs, events, duty schedules, and announcements for <strong>Year {year}</strong>.
             </p>
           </div>
@@ -205,12 +205,12 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
           {/* Data to be Purged Preview */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-black text-charcoal flex items-center gap-1.5">
+              <label className="text-xs font-medium text-charcoal flex items-center gap-1.5">
                 <Eye className="w-4 h-4 text-rose-600" />
                 <span>Records in Year {year} ({availableKeys.length} Tables)</span>
               </label>
               {loadingData && (
-                <span className="text-[10px] text-rose-600 font-bold flex items-center gap-1">
+                <span className="text-[12px] text-rose-600 font-medium flex items-center gap-1">
                   <RefreshCw className="w-3 h-3 animate-spin" /> Loading data...
                 </span>
               )}
@@ -254,7 +254,7 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
                       key={k}
                       type="button"
                       onClick={() => !isDragging && setActiveTab(k)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer whitespace-nowrap ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer whitespace-nowrap ${
                         isSelected
                           ? "bg-rose-600 text-white shadow-sm ring-2 ring-rose-300/40"
                           : "bg-slate-100 hover:bg-rose-50/70 text-charcoal/80 border border-slate-200/80 hover:border-rose-200"
@@ -262,7 +262,7 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
                     >
                       <span>{getTableIcon(k)}</span>
                       <span>{formatTableName(k)}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      <span className={`px-2 py-0.5 rounded-full text-[12px] font-medium ${
                         isSelected ? "bg-white/20 text-white" : "bg-rose-100 text-rose-900"
                       }`}>
                         {count}
@@ -292,23 +292,23 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
             {/* Table Records Preview Box */}
             <div className="border border-slate-200 rounded-2xl bg-slate-50/50 p-3 max-h-36 overflow-y-auto text-xs">
               {currentTabRecords.length === 0 ? (
-                <p className="text-charcoal/40 text-center py-4 font-bold text-[11px]">
+                <p className="text-muted text-center py-4 font-medium text-[12px]">
                   No records in this table for Year {year}.
                 </p>
               ) : (
                 <div className="space-y-1.5">
                   {currentTabRecords.slice(0, 5).map((row, idx) => (
-                    <div key={idx} className="bg-white p-2 rounded-xl border border-slate-100 text-[11px] flex items-center justify-between gap-2 shadow-2xs">
-                      <span className="font-bold text-charcoal truncate">
+                    <div key={idx} className="bg-white p-2 rounded-xl border border-slate-100 text-[12px] flex items-center justify-between gap-2 shadow-2xs">
+                      <span className="font-medium text-charcoal truncate">
                         {row.title || row.member_name || row.assigned_name || row.team_name || row.first_name || `Record #${row.id}`}
                       </span>
-                      <span className="text-[10px] font-mono text-charcoal/50 shrink-0">
+                      <span className="text-[12px] font-mono text-muted shrink-0">
                         {row.start_time || row.checked_in_at || row.donated_at || row.duty_date || row.created_at || ""}
                       </span>
                     </div>
                   ))}
                   {currentTabRecords.length > 5 && (
-                    <p className="text-[10px] text-charcoal/40 text-center font-bold pt-1">
+                    <p className="text-[12px] text-muted text-center font-medium pt-1">
                       + {currentTabRecords.length - 5} more records will be purged
                     </p>
                   )}
@@ -318,10 +318,10 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
           </div>
 
           {/* Form with Verification Input & Password */}
-          <form id="purge-form" onSubmit={handleConfirm} className="space-y-3 pt-1">
+          <form data-guide="purge-confirmation" id="purge-form" onSubmit={handleConfirm} className="space-y-3 pt-1">
             <div className="space-y-1">
-              <label className="text-[11px] font-black text-charcoal flex items-center justify-between">
-                <span>To confirm, type <span className="underline text-rose-600 font-black">{year}</span> below:</span>
+              <label className="text-[12px] font-medium text-charcoal flex items-center justify-between">
+                <span>To confirm, type <span className="underline text-rose-600 font-medium">{year}</span> below:</span>
               </label>
               <input
                 type="text"
@@ -331,12 +331,12 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
                   setInputYear(e.target.value);
                   setError(null);
                 }}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 text-xs font-bold text-center tracking-widest"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 text-xs font-medium text-center tracking-widest"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-[11px] font-black text-charcoal">
+              <label className="text-[12px] font-medium text-charcoal">
                 Enter Account Password:
               </label>
               <input
@@ -353,27 +353,27 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
             </div>
 
             {error && (
-              <p className="text-xs text-rose-600 font-bold">{error}</p>
+              <p className="text-xs text-rose-600 font-medium">{error}</p>
             )}
           </form>
 
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-rose-100 bg-slate-50 flex items-center justify-between gap-3">
+        <div data-modal-footer className="p-4 border-t border-rose-100 bg-slate-50 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-charcoal/70 hover:bg-white transition-all cursor-pointer"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-charcoal/70 hover:bg-white transition-all cursor-pointer"
           >
             Cancel
           </button>
-          <button
+          <button data-guide="purge-execute"
             type="submit"
             form="purge-form"
             disabled={!isMatched || !password.trim() || isDeleting}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-xs font-medium shadow-md transition-all active:scale-95 cursor-pointer disabled:cursor-not-allowed"
           >
             <Trash2 className="w-4 h-4" />
             <span>{isDeleting ? "Purging Records..." : `Purge Year ${year} Data`}</span>

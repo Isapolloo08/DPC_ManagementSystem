@@ -3,9 +3,11 @@ import { useAuth } from "../../context/AuthContext";
 import { useSocketConnection, } from "../../socket";
 import { ChurchLogo } from "../common/ChurchLogo";
 import { WindowControls } from "./WindowControls";
-import { UserCog } from "lucide-react";
+import { UserCog, Compass } from "lucide-react";
 import { NotificationBell } from "../notifications/NotificationBell";
 import { ThemeSelector } from "../common/ThemeSelector";
+import { DashboardDateButton } from "./DashboardDateButton";
+import { isGuideSandbox } from "../help/sandbox/runtime";
 
 
 
@@ -33,12 +35,14 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
 
 interface NavbarProps {
   currentTab?: string;
+  isScrolled?: boolean;
   onToggleSidebar?: () => void;
   onOpenProfile?: () => void;
   onNavigate?: (tab: string, refId?: number | null) => void;
+  onOpenHelp?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onToggleSidebar, onOpenProfile, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", isScrolled = false, onToggleSidebar, onOpenProfile, onNavigate, onOpenHelp }) => {
   const { user } = useAuth();
   const isConnected = useSocketConnection();
   const isElectron = typeof window !== "undefined" && Boolean(window.electronAPI?.isElectron || (window as any).__electron__);
@@ -52,13 +56,18 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
   }
 
   return (
-    <header className="bg-indigo text-white border-b border-indigo-800/60 shadow-xs select-none relative">
+    <header data-scrolled={isScrolled} className={`text-charcoal border-b select-none relative transition-colors duration-300 motion-reduce:transition-none ${isScrolled
+      ? "bg-ivory-light/95 border-gray-200/70 backdrop-blur-md"
+      : "bg-transparent border-transparent"}`}>
       {/* Top-Right Window Controls (Fixed at top-right desktop window corner) */}
       <div
         className="absolute top-0 right-0 z-50 pointer-events-auto"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
-        <WindowControls />
+        <WindowControls
+          buttonClassName="w-11 sm:w-12 h-8 sm:h-9 flex items-center justify-center text-charcoal/70 hover:text-charcoal hover:bg-gray-200 transition-colors cursor-pointer"
+          closeButtonClassName="w-12 sm:w-13 h-8 sm:h-9 flex items-center justify-center text-charcoal/70 hover:text-white hover:bg-red-600 transition-colors cursor-pointer group"
+        />
       </div>
 
       {/* Main Navbar Row with explicit padding ensuring a solid gap before window controls */}
@@ -77,8 +86,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
                 type="button"
                 onClick={onToggleSidebar}
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                className="md:hidden p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer shrink-0"
+                className="md:hidden p-1.5 rounded-xl bg-white hover:bg-gray-100 text-charcoal transition-colors cursor-pointer shrink-0"
                 aria-label="Toggle navigation menu"
+                data-guide="navigation"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" />
@@ -89,17 +99,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
             {/* Mobile-only compact logo & brand title */}
             <div className="flex items-center gap-2 min-w-0 md:hidden">
               <ChurchLogo className="w-7 h-7 shrink-0 rounded-lg drop-shadow-xs" />
-              <div className="min-w-0 truncate font-bold text-xs text-white">
-                Daet Presbyterian <span className="text-amber-400 font-serif italic text-[10px]">ChMS</span>
+              <div className="min-w-0 truncate font-medium text-xs text-charcoal">
+                Daet Presbyterian <span className="text-amber-400 font-serif italic text-[12px]">ChMS</span>
               </div>
             </div>
 
             {/* Desktop Active View Title & Subtitle */}
             <div className="hidden md:block min-w-0">
-              <h2 className="font-bold text-base lg:text-lg tracking-tight text-white flex items-center gap-2 truncate">
+              <h2 className="font-semibold text-sm tracking-tight text-charcoal flex items-center gap-2 truncate">
                 <span>{currentTabMeta.title}</span>
               </h2>
-              <p className="text-[11px] text-indigo-200/80 leading-none truncate mt-0.5">
+              <p className="text-[12px] text-muted leading-none truncate mt-1">
                 {currentTabMeta.subtitle}
               </p>
             </div>
@@ -110,17 +120,24 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
             className="flex items-center gap-2 sm:gap-3 shrink-0"
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           >
+            {currentTab === 'dashboard' && onNavigate && ['Admin', 'IT Admin', 'Pastor', 'Coordinator'].includes(user?.role_name || '') && <DashboardDateButton onOpenCalendar={() => onNavigate('events')} />}
             <ThemeSelector />
+            {onOpenHelp && (
+              <button type="button" onClick={onOpenHelp} data-guide="help-launcher" aria-label="Open Start Here" title="Start Here: tours and task guides" className="flex items-center gap-1.5 p-2 sm:px-3 rounded-xl border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 text-xs font-medium cursor-pointer shrink-0">
+                <Compass className="w-4 h-4" aria-hidden="true" />
+                <span className="hidden lg:inline">Start Here</span>
+              </button>
+            )}
             {/* Real-time Socket.IO Live Indicator */}
             <div
-              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide border transition-all ${isConnected
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium tracking-wide border transition-all ${isConnected
                 ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                 : "bg-amber-500/15 text-amber-300 border-amber-500/30"
                 }`}
-              title={isConnected ? "Real-time Socket.IO connected across all church terminals" : "Connecting to real-time server..."}
+              title={isGuideSandbox() ? "Isolated practice workspace with sample data" : isConnected ? "Real-time Socket.IO connected across all church terminals" : "Connecting to real-time server..."}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
-              <span className="hidden lg:inline">{isConnected ? "Live Sync" : "Syncing..."}</span>
+              <span className="hidden lg:inline">{isGuideSandbox() ? "Sample data" : isConnected ? "Live Sync" : "Syncing..."}</span>
             </div>
 
             {onNavigate && (user?.role_name === "Admin" || user?.role_name === "IT Admin" || user?.role_name === "Pastor") && (
@@ -133,21 +150,22 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", onTogg
                 type="button"
                 onClick={onOpenProfile}
                 title="Manage Account Profile & Security Settings"
-                className="group flex items-center gap-2 pl-2.5 pr-2.5 py-1 rounded-2xl border border-indigo-700/80 bg-indigo-900/40 hover:bg-indigo-800/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs text-left active:scale-98"
+                data-guide="account"
+                className="group flex items-center gap-2 pl-2.5 pr-2.5 py-1 rounded-full border border-gray-200 bg-white hover:bg-ivory transition-all cursor-pointer text-left active:scale-98"
               >
-                <div className="w-7 h-7 rounded-full bg-amber-500 text-indigo-950 font-black flex items-center justify-center text-xs shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-full bg-amber-500 text-indigo-950 font-medium flex items-center justify-center text-xs shadow-inner shrink-0 group-hover:scale-105 transition-transform">
                   {user.name.split(" ").map(n => n[0]).join("").substring(0, 2)}
                 </div>
                 <div className="hidden sm:block text-left min-w-0">
-                  <div className="text-xs font-bold leading-tight text-white truncate max-w-[110px] lg:max-w-[140px] group-hover:text-amber-300 transition-colors">
+                  <div className="text-xs font-medium leading-tight text-charcoal truncate max-w-[110px] lg:max-w-[140px] transition-colors">
                     {user.name}
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-sage-400 shrink-0"></span>
-                    <span className="text-[10px] text-amber-300/90 font-medium truncate">{user.role_name}</span>
+                    <span className="text-[12px] text-muted font-medium truncate">{user.role_name}</span>
                   </div>
                 </div>
-                <UserCog className="w-3.5 h-3.5 text-indigo-300 group-hover:text-amber-400 shrink-0 ml-0.5 transition-colors hidden md:block" />
+                <UserCog className="w-3.5 h-3.5 text-muted group-hover:text-amber-600 shrink-0 ml-0.5 transition-colors hidden md:block" />
               </button>
             )}
           </div>

@@ -1,9 +1,12 @@
+import { Bell as UIBell, Briefcase as UIBriefcase, Check as UICheck, Church as UIChurch, Circle as UICircle, CircleCheck as UICircleCheck, CircleX as UICircleX, ClipboardList as UIClipboardList, Clock as UIClock, GraduationCap as UIGraduationCap, HeartHandshake as UIHeartHandshake, House as UIHouse, Info as UIInfo, Phone as UIPhone, Plus as UIPlus, UserRound as UIUserRound, Users as UIUsers, Waves as UIWaves } from "lucide-react";
+import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { api } from "../api";
-import { Member, Household, Ministry } from "../types";
+import { useGuideDataState } from "../components/help/GuideDataContext";
+import { Member, Household, HouseholdFamilyMember, Ministry } from "../types";
 import {
   Users, Home, Search, Plus, Filter, AlertCircle, AlertTriangle,
   Heart, Phone, Mail, Calendar, ShieldCheck, ArrowRight, X, Check,
@@ -28,7 +31,17 @@ import { MembersPageSkeleton, TableSkeleton } from "../components/common/Skeleto
 import { analyzeMemberFile, parseMemberText, ParsedMemberData } from "../utils/memberFormParser";
 import { MemberImportAnalyzeModal } from "../components/common/MemberImportAnalyzeModal";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
+import { PartnerRegistrationModal, PartnerRegistrationData } from "../features/members/components/PartnerRegistrationModal";
 import { MemberAttendanceSummaryModal } from "../components/common/MemberAttendanceSummaryModal";
+import { HouseholdRegistrationFields } from "../features/members/components/HouseholdRegistrationFields";
+import { MemberFamilyDetailsField } from "../features/members/components/MemberFamilyDetailsField";
+import { RelativeRegistrationModal } from "../features/members/components/RelativeRegistrationModal";
+import type { RelativeRegistrationContext } from "../features/members/types";
+import { familyRelationships, familyRole, householdFamily, householdFamilyMembers, memberFamily, memberName, normalizeName, HouseholdRole, memberHouseholdRole, parentRoles, relationshipRole } from "../features/members/householdFamily";
+import { useMemberDuplicateCheck } from "../features/members/hooks/useMemberDuplicateCheck";
+import { memberRegistrationService } from "../features/members/services/memberRegistrationService";
+import { Button } from "../components/common/Button";
+import { MemberFamilySection } from "../features/members/components/MemberFamilySection";
 
 export const splitFullName = (fullName: string): { firstName: string; lastName: string } => {
   const trimmed = fullName.trim().replace(/\s+/g, ' ');
@@ -70,6 +83,7 @@ export const MembersPage: React.FC = () => {
   const { showToast, deleteWithUndo } = useToast();
   const [activeTab, setActiveTab] = useState<"members" | "households">("members");
   const [members, setMembers] = useState<Member[]>([]);
+  const [allChurchMembers, setAllChurchMembers] = useState<Member[]>([]);
   const isCoordinator = user?.role_name === "Coordinator";
   const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
     ? user.ministries[0].id
@@ -89,6 +103,8 @@ export const MembersPage: React.FC = () => {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [relativeChoice, setRelativeChoice] = useState<RelativeRegistrationContext | null>(null);
+  const [relativeRegistration, setRelativeRegistration] = useState<RelativeRegistrationContext | null>(null);
   const [deleteConfirmMember, setDeleteConfirmMember] = useState<Member | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isAddHouseholdModalOpen, setIsAddHouseholdModalOpen] = useState(false);
@@ -124,6 +140,11 @@ export const MembersPage: React.FC = () => {
   const [greetingMessage, setGreetingMessage] = useState<string>("");
   const [greetingSuccess, setGreetingSuccess] = useState<boolean>(false);
   const [sendingGreeting, setSendingGreeting] = useState<boolean>(false);
+
+  // Discipleship & Outreach "See More" Modal State
+  const [isInvitedMembersModalOpen, setIsInvitedMembersModalOpen] = useState(false);
+  const [invitedModalSearch, setInvitedModalSearch] = useState("");
+  const [invitedModalMinistryFilter, setInvitedModalMinistryFilter] = useState("all");
 
   // Member form state
   const [formData, setFormData] = useState({
@@ -161,8 +182,9 @@ export const MembersPage: React.FC = () => {
   });
 
   const [fullNameInput, setFullNameInput] = useState<string>("");
-  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState<boolean>(false);
-  const [dbDuplicateMember, setDbDuplicateMember] = useState<Member | null>(null);
+  const duplicateCheck = useMemberDuplicateCheck(fullNameInput, editingMember?.id, isAddModalOpen);
+  const isCheckingDuplicate = duplicateCheck.state.status === "loading";
+  const dbDuplicateMember = duplicateCheck.state.status === "success" ? duplicateCheck.state.member : null;
 
   const handleFullNameChange = (val: string) => {
     setFullNameInput(val);
@@ -174,33 +196,6 @@ export const MembersPage: React.FC = () => {
     }));
   };
 
-  // Real-time automatic database duplicate check as user types
-  useEffect(() => {
-    const trimmed = fullNameInput.trim();
-    if (trimmed.length < 2) {
-      setDbDuplicateMember(null);
-      setIsCheckingDuplicate(false);
-      return;
-    }
-
-    setIsCheckingDuplicate(true);
-    const timer = setTimeout(async () => {
-      try {
-        const res = await api.checkMemberDuplicate({
-          name: trimmed,
-          exclude_id: editingMember?.id
-        });
-        setDbDuplicateMember(res.duplicateName || null);
-      } catch (err) {
-        console.error("Duplicate check error:", err);
-      } finally {
-        setIsCheckingDuplicate(false);
-      }
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, [fullNameInput, editingMember?.id]);
-
   // Combined live duplicate match: database match + local state
   const liveDuplicateMember = useMemo(() => {
     if (dbDuplicateMember) return dbDuplicateMember;
@@ -209,8 +204,9 @@ export const MembersPage: React.FC = () => {
     if (trimmed.length < 2) return null;
 
     const normalizedInput = trimmed.replace(/\./g, '').replace(/\s+/g, ' ');
+    const source = allChurchMembers.length > 0 ? allChurchMembers : members;
 
-    return members.find(m => {
+    return source.find(m => {
       if (editingMember && m.id === editingMember.id) return false;
       const mFull = `${m.first_name} ${m.last_name}`.trim().toLowerCase();
       const normalizedM = mFull.replace(/\./g, '').replace(/\s+/g, ' ');
@@ -227,11 +223,18 @@ export const MembersPage: React.FC = () => {
       }
       return false;
     }) || null;
-  }, [fullNameInput, members, editingMember, dbDuplicateMember]);
+  }, [fullNameInput, allChurchMembers, members, editingMember, dbDuplicateMember]);
 
   // Spouse creation sub-form state (if spouse is not yet in member directory)
   const [createNewSpouseRecord, setCreateNewSpouseRecord] = useState<boolean>(false);
-  const [spouseFormData, setSpouseFormData] = useState({
+  const [registrationStep, setRegistrationStep] = useState<"member" | "partner">("member");
+  const [isSavingMember, setIsSavingMember] = useState(false);
+  const memberFormRef = useRef<HTMLFormElement>(null);
+  const backToMember = () => {
+    setRegistrationStep("member");
+    requestAnimationFrame(() => memberFormRef.current?.querySelector<HTMLButtonElement>('[data-guide="member-save"]')?.focus());
+  };
+  const [spouseFormData, setSpouseFormData] = useState<PartnerRegistrationData>({
     first_name: "",
     last_name: "",
     birthdate: "",
@@ -241,6 +244,7 @@ export const MembersPage: React.FC = () => {
     contact_email: "",
     address: "",
     same_address_as_member: true,
+    same_inviter_as_member: true,
     occupation: "",
     facebook_account: "",
     family_details: "",
@@ -268,14 +272,82 @@ export const MembersPage: React.FC = () => {
   const [householdForm, setHouseholdForm] = useState({
     name: "",
     address: "",
-    primary_contact_phone: ""
+    primary_contact_phone: "",
+    father_name: "",
+    mother_name: "",
+    guardian_name: ""
   });
+  const [editingHousehold, setEditingHousehold] = useState<Household | null>(null);
+  const [isSavingHousehold, setIsSavingHousehold] = useState(false);
+  const familyRowCounter = useRef(0);
+  const [householdFamilyDraft, setHouseholdFamilyDraft] = useState<(HouseholdFamilyMember & { key: number })[]>([]);
+  const [householdFamilyError, setHouseholdFamilyError] = useState("");
+  const availableFamilyMembers = (allChurchMembers.length ? allChurchMembers : members)
+    .filter(member => !member.household_id || member.household_id === editingHousehold?.id);
 
   // Household & Family Linkage State in Add/Edit Member Form
-  const [householdMode, setHouseholdMode] = useState<"link_parents" | "create_new" | "existing" | "none">("link_parents");
+  const [householdMode, setHouseholdMode] = useState<"create_new" | "existing" | "none">("existing");
   const [newHouseholdName, setNewHouseholdName] = useState<string>("");
-  const [parentSearchName, setParentSearchName] = useState<string>("");
-  const [selectedParentMember, setSelectedParentMember] = useState<Member | null>(null);
+  const [parentNameDirty, setParentNameDirty] = useState(false);
+  const [spouseSearchQuery, setSpouseSearchQuery] = useState<string>("");
+  const [householdRegistrationRole, setHouseholdRegistrationRole] = useState<HouseholdRole | "">("");
+  const [registrationFamilyMembers, setRegistrationFamilyMembers] = useState<HouseholdFamilyMember[]>([]);
+
+  const linkedHousehold = householdMode === "existing"
+    ? households.find(h => h.id === Number(formData.household_id)) : undefined;
+  const linkedFamily = householdFamily(linkedHousehold);
+  const isHouseholdParent = parentRoles.includes(householdRegistrationRole as any) ||
+    (!!linkedHousehold && !!familyRole(linkedHousehold, memberName(formData)));
+  const useHouseholdGuardian = !!linkedFamily.primaryParent && !parentNameDirty && !isHouseholdParent;
+  const applicationGuardianName = useHouseholdGuardian ? linkedFamily.primaryParent : formData.guardian_names;
+  const applicationGuardianPhone = useHouseholdGuardian ? linkedFamily.primaryPhone || formData.guardian_phone || linkedHousehold?.primary_contact_phone || "" : formData.guardian_phone;
+  const applicationFamilyDetails = formData.family_details;
+  const selectedHousehold = households.find(h => h.id === selectedMember?.household_id);
+  const selectedFamily = memberFamily(selectedHousehold, selectedMember?.family_details);
+  const selectedGuardian = selectedHousehold && selectedMember && !familyRole(selectedHousehold, memberName(selectedMember))
+    ? selectedFamily.primaryParent || selectedMember.guardian_names
+    : selectedMember?.guardian_names;
+  const selectedFamilyDetails = selectedFamily.summary || selectedMember?.family_details;
+  const selectedGuardianPhone = selectedFamily.primaryParent === selectedGuardian
+    ? selectedFamily.primaryPhone || selectedMember?.guardian_phone || selectedHousehold?.primary_contact_phone
+    : selectedMember?.guardian_phone;
+
+  const openHouseholdForm = (household: Household | null = null) => {
+    setEditingHousehold(household);
+    const fName = household?.father_name?.trim() || "";
+    const mName = household?.mother_name?.trim() || "";
+    const gName = household?.guardian_name?.trim() || "";
+    const isParent = (n: string) => {
+      const norm = normalizeName(n);
+      return (fName && norm === normalizeName(fName)) || (mName && norm === normalizeName(mName)) || (gName && norm === normalizeName(gName));
+    };
+    const otherMembers = householdFamilyMembers(household)
+      .filter(entry => !isParent(entry.name))
+      .map(entry => ({ ...entry, key: ++familyRowCounter.current }));
+    setHouseholdFamilyDraft(otherMembers);
+    setHouseholdFamilyError("");
+    setHouseholdForm({
+      name: household?.name || "",
+      address: household?.address || "",
+      primary_contact_phone: household?.primary_contact_phone || "",
+      father_name: fName,
+      mother_name: mName,
+      guardian_name: gName
+    });
+    setIsAddHouseholdModalOpen(true);
+  };
+
+  const updateHouseholdFamilyName = (key: number, name: string) => {
+    const normalized = normalizeName(name);
+    const member = availableFamilyMembers.find(m => normalizeName(memberName(m)) === normalized);
+    setHouseholdFamilyDraft(prev => prev.map(entry => entry.key === key ? { ...entry, name, member_id: member?.id || null } : entry));
+    setHouseholdFamilyError("");
+  };
+
+  const handleGuardianNameChange = (name: string) => {
+    setParentNameDirty(true);
+    setFormData(prev => ({ ...prev, guardian_names: name }));
+  };
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -283,7 +355,51 @@ export const MembersPage: React.FC = () => {
   const [totalRecords, setTotalRecords] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
 
+  const directoryToolbarRef = useRef<HTMLDivElement>(null);
+  const memberListRef = useRef<HTMLDivElement>(null);
+  const memberPaginationRef = useRef<HTMLDivElement>(null);
+  const [memberListMaxHeight, setMemberListMaxHeight] = useState<number>();
+  const isInitialMemberLoad = loading && members.length === 0;
+
+  useEffect(() => {
+    const toolbar = directoryToolbarRef.current;
+    const pagination = memberPaginationRef.current;
+    const workspace = toolbar?.closest("main");
+    if (!toolbar || !pagination || !workspace) return;
+
+    // Reserve room for the controls and pagination inside the app's scroll area.
+    const resizeList = () => {
+      const styles = getComputedStyle(workspace);
+      const gutters = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+      setMemberListMaxHeight(Math.max(160,
+        workspace.clientHeight - toolbar.offsetHeight - pagination.offsetHeight - gutters - 24
+      ));
+    };
+    const observer = new ResizeObserver(resizeList);
+    [workspace, toolbar, pagination].forEach(element => observer.observe(element));
+    resizeList();
+    return () => observer.disconnect();
+  }, [activeTab, isInitialMemberLoad]);
+
+  useEffect(() => {
+    if (memberListRef.current) memberListRef.current.scrollTop = 0;
+  }, [currentPage, pageSize, searchQuery, filterMinistry, membershipFilter, birthdayFilter]);
+
   const effectiveMinistries = localMinistries && localMinistries.length > 0 ? localMinistries : ministries;
+  const currentModalMinistryId = formData.ministry_id
+    ? Number(formData.ministry_id)
+    : (coordinatorMinistryId || suggestedMinistryInfo?.ministry?.id || null);
+  const currentModalMinistry = effectiveMinistries.find(m => m.id === currentModalMinistryId) || suggestedMinistryInfo?.ministry || null;
+  const currentMinName = (currentModalMinistry?.name || "").toLowerCase();
+  const canCreateHousehold = currentMinName.includes("junior") || currentMinName.includes("old") || currentMinName.includes("senior");
+
+  useEffect(() => {
+    if (isAddModalOpen && householdMode === "create_new" && !canCreateHousehold) {
+      setHouseholdMode("existing");
+      setHouseholdRegistrationRole("");
+      setRegistrationFamilyMembers([]);
+    }
+  }, [isAddModalOpen, householdMode, canCreateHousehold]);
 
   useEffect(() => {
     if (coordinatorMinistryId) {
@@ -315,6 +431,7 @@ export const MembersPage: React.FC = () => {
   });
 
   const loadData = async (pageToFetch: number = currentPage) => {
+    guideData.clearError();
     try {
       setLoading(true);
       const activeMinistryParam = coordinatorMinistryId
@@ -324,7 +441,7 @@ export const MembersPage: React.FC = () => {
       const isHealthFilter = ["warning", "action_required"].includes(membershipFilter);
       const isMembershipTypeFilter = ["baptized_regular", "unbaptized_regular", "guest", "inactive"].includes(membershipFilter);
 
-      const [mRes, hList, minList] = await Promise.all([
+      const [mRes, hList, minList, allMemsRes] = await Promise.all([
         api.getMembers({
           ministry_id: activeMinistryParam,
           search: searchQuery || undefined,
@@ -335,7 +452,8 @@ export const MembersPage: React.FC = () => {
           limit: pageSize
         }),
         api.getHouseholds(),
-        api.getMinistries().catch(() => [])
+        api.getMinistries().catch(() => []),
+        api.getMembers().catch(() => [])
       ]);
 
       if (mRes && typeof mRes === "object" && "data" in mRes) {
@@ -349,12 +467,20 @@ export const MembersPage: React.FC = () => {
         setTotalPages(Math.ceil(mRes.length / pageSize) || 1);
       }
 
+      if (allMemsRes) {
+        const fullList = Array.isArray(allMemsRes) ? allMemsRes : ((allMemsRes as any)?.data || []);
+        if (fullList.length > 0) {
+          setAllChurchMembers(fullList);
+        }
+      }
+
       setHouseholds(hList);
       if (minList && minList.length > 0) {
         setLocalMinistries(minList);
       }
     } catch (err) {
       console.error("Failed to load members/households:", err);
+      guideData.reportError(err);
     } finally {
       setLoading(false);
     }
@@ -402,6 +528,11 @@ export const MembersPage: React.FC = () => {
     const age = calculateClientAge(birthdateVal);
     const localSuggested = getSuggestedMinistryForAge(age);
     const jaMin = effectiveMinistries.find(m => m.name.toLowerCase().includes("junior"));
+    const isJAorOA = localSuggested && (
+      localSuggested.name.toLowerCase().includes("junior") ||
+      localSuggested.name.toLowerCase().includes("old") ||
+      localSuggested.name.toLowerCase().includes("senior")
+    );
 
     if (localSuggested) {
       setSuggestedMinistryInfo({ age, ministry: localSuggested });
@@ -409,10 +540,14 @@ export const MembersPage: React.FC = () => {
         setFormData(prev => ({
           ...prev,
           birthdate: birthdateVal,
-          ministry_id: prev.civil_status === "Married" && jaMin
+          civil_status: isJAorOA ? (prev.civil_status === "Widowed" ? "Widowed" : "Married") : "Single",
+          ministry_id: prev.civil_status === "Married" && jaMin && !isJAorOA
             ? String(jaMin.id)
             : (prev.ministry_id ? prev.ministry_id : String(localSuggested.id))
         }));
+        if (isJAorOA) {
+          if (householdMode === "none") setHouseholdMode("create_new");
+        }
       } else {
         setFormData(prev => ({ ...prev, birthdate: birthdateVal }));
       }
@@ -424,65 +559,53 @@ export const MembersPage: React.FC = () => {
     try {
       const res = await api.suggestMinistry(birthdateVal);
       setSuggestedMinistryInfo({ age: res.calculated_age, ministry: res.suggested_ministry });
-      if (res.suggested_ministry?.id && !coordinatorMinistryId && formData.civil_status !== "Married") {
+      if (res.suggested_ministry?.id && !coordinatorMinistryId) {
+        const resIsJAorOA = res.suggested_ministry.name.toLowerCase().includes("junior") ||
+          res.suggested_ministry.name.toLowerCase().includes("old") ||
+          res.suggested_ministry.name.toLowerCase().includes("senior");
         setFormData(prev => ({
           ...prev,
+          civil_status: resIsJAorOA ? (prev.civil_status === "Widowed" ? "Widowed" : "Married") : "Single",
           ministry_id: prev.ministry_id ? prev.ministry_id : String(res.suggested_ministry.id)
         }));
+        if (resIsJAorOA) {
+          if (householdMode === "none") setHouseholdMode("create_new");
+        }
       }
     } catch (err) {
       console.error("Age calculation error:", err);
     }
   };
 
-  const handleSelectParent = (parentName: string) => {
-    setParentSearchName(parentName);
-    const matched = members.find(
-      (m) => `${m.first_name} ${m.last_name}`.toLowerCase().trim() === parentName.toLowerCase().trim()
-    );
-    if (matched) {
-      setSelectedParentMember(matched);
-      setFormData(prev => ({
-        ...prev,
-        guardian_names: prev.guardian_names || `${matched.first_name} ${matched.last_name}`,
-        guardian_phone: prev.guardian_phone || matched.contact_phone || "",
-        address: prev.address || matched.address || "",
-        household_id: matched.household_id ? String(matched.household_id) : prev.household_id
-      }));
-    } else {
-      setSelectedParentMember(null);
-    }
-  };
-
   const handleCivilStatusChange = (status: string) => {
     if (status === "Married") {
-      const jaMin = effectiveMinistries.find(
-        m => m.name.toLowerCase().includes("junior")
-      );
       setFormData(prev => ({
         ...prev,
-        civil_status: "Married",
-        ministry_id: jaMin && !coordinatorMinistryId ? String(jaMin.id) : prev.ministry_id
+        civil_status: "Married"
       }));
-      setHouseholdMode("create_new");
-      setNewHouseholdName(`${formData.last_name ? `${formData.last_name} Household` : "New Family Household"}`);
+      setHouseholdMode(canCreateHousehold && !relativeRegistration ? "create_new" : "existing");
+      if (!newHouseholdName) {
+        setNewHouseholdName(`${formData.last_name ? `${formData.last_name} Household` : "New Family Household"}`);
+      }
     } else {
-      const age = calculateClientAge(formData.birthdate);
-      const suggested = getSuggestedMinistryForAge(age);
       setFormData(prev => ({
         ...prev,
-        civil_status: status,
+        civil_status: "Widowed",
         spouse_id: "",
-        spouse_name: "",
-        ministry_id: suggested && !coordinatorMinistryId ? String(suggested.id) : prev.ministry_id
+        spouse_name: ""
       }));
+      setSpouseSearchQuery("");
       setCreateNewSpouseRecord(false);
-      setHouseholdMode("link_parents");
+      setRegistrationStep("member");
     }
   };
 
   const handleOpenAdd = () => {
+    setRelativeRegistration(null);
     setEditingMember(null);
+    setHouseholdRegistrationRole("");
+    setRegistrationFamilyMembers([]);
+    setParentNameDirty(false);
     setFormData({
       first_name: "",
       last_name: "",
@@ -516,11 +639,11 @@ export const MembersPage: React.FC = () => {
       baptism_date: "",
       baptism_notes: ""
     });
-    setHouseholdMode("link_parents");
+    setHouseholdMode("existing");
     setNewHouseholdName("");
-    setParentSearchName("");
-    setSelectedParentMember(null);
+    setSpouseSearchQuery("");
     setCreateNewSpouseRecord(false);
+    setRegistrationStep("member");
     setSpouseFormData({
       first_name: "",
       last_name: "",
@@ -531,6 +654,7 @@ export const MembersPage: React.FC = () => {
       contact_email: "",
       address: "",
       same_address_as_member: true,
+      same_inviter_as_member: true,
       occupation: "",
       facebook_account: "",
       family_details: "",
@@ -548,6 +672,40 @@ export const MembersPage: React.FC = () => {
     setPasteRawText("");
     setFullNameInput("");
     setIsAddModalOpen(true);
+  };
+
+  const registerRelative = (context: RelativeRegistrationContext, relationship: string) => {
+    handleOpenAdd();
+    const role = relationshipRole(relationship);
+    const family = householdFamily(context.household);
+    const { firstName, lastName } = splitFullName(context.name);
+    setFullNameInput(context.name);
+    setHouseholdRegistrationRole(role);
+    setRelativeRegistration({ ...context, relationship });
+    setFormData(prev => ({
+      ...prev, first_name: firstName, last_name: lastName,
+      gender: ["mother", "daughter", "grandmother", "granddaughter", "sister"].includes(role) ? "Female" : "Male",
+      household_id: String(context.household.id),
+      address: context.household.address || context.sourceMember.address || "",
+      guardian_names: parentRoles.includes(role as any) ? "" : family.primaryParent,
+      guardian_phone: parentRoles.includes(role as any) ? "" : family.primaryPhone || context.household.primary_contact_phone || ""
+    }));
+    setRelativeChoice(null);
+    setSelectedMember(null);
+  };
+
+  const linkRelative = async (context: RelativeRegistrationContext, member: Member, relationship: string) => {
+    await memberRegistrationService.linkRelative(context, member, relationship);
+    setRelativeChoice(null);
+    await loadData();
+    setSelectedMember(await api.getMember(context.sourceMember.id).catch(() => context.sourceMember));
+    showToast(`${memberName(member)} is now linked to ${context.household.name}.`, "success");
+  };
+
+  const closeMemberForm = () => {
+    setIsAddModalOpen(false);
+    if (relativeRegistration) setSelectedMember(relativeRegistration.sourceMember);
+    setRelativeRegistration(null);
   };
 
   const handleOpenAddWithImport = () => {
@@ -618,7 +776,11 @@ export const MembersPage: React.FC = () => {
   };
 
   const handleOpenEdit = (member: Member) => {
+    setRelativeRegistration(null);
+    setHouseholdRegistrationRole("");
+    setRegistrationFamilyMembers([]);
     setEditingMember(member);
+    setParentNameDirty(false);
     setFullNameInput(`${member.first_name || ""} ${member.last_name || ""}`.trim());
     const formatDateStr = (d?: string | null) => {
       if (!d) return "";
@@ -658,6 +820,8 @@ export const MembersPage: React.FC = () => {
       baptism_notes: member.baptism_notes || ""
     });
     setCreateNewSpouseRecord(false);
+    setSpouseSearchQuery("");
+    setRegistrationStep("member");
     setSpouseFormData({
       first_name: "",
       last_name: "",
@@ -668,6 +832,7 @@ export const MembersPage: React.FC = () => {
       contact_email: "",
       address: "",
       same_address_as_member: true,
+      same_inviter_as_member: true,
       occupation: "",
       facebook_account: "",
       family_details: "",
@@ -677,18 +842,8 @@ export const MembersPage: React.FC = () => {
       medical_notes: ""
     });
 
-    if (member.household_id) {
-      setHouseholdMode("existing");
-    } else if (member.guardian_names) {
-      setHouseholdMode("link_parents");
-      setParentSearchName(member.guardian_names);
-      const matched = members.find(
-        (m) => `${m.first_name} ${m.last_name}`.toLowerCase().trim() === member.guardian_names!.toLowerCase().trim()
-      );
-      if (matched) setSelectedParentMember(matched);
-    } else {
-      setHouseholdMode("none");
-    }
+    setHouseholdMode(member.household_id ? "existing" : "none");
+    setHouseholdRegistrationRole(memberHouseholdRole(households.find(h => h.id === member.household_id), member));
     setNewHouseholdName("");
 
     if (member.occupation && member.occupation.trim() !== "") {
@@ -721,9 +876,18 @@ export const MembersPage: React.FC = () => {
 
   const handleSubmitMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingMember) return;
+    if (householdMode === "create_new" && !canCreateHousehold) {
+      showToast("Create New is available only for Junior Adult and Old Adult members.", "error");
+      return;
+    }
     const { firstName, lastName } = splitFullName(fullNameInput);
     const effectiveFirstName = firstName || formData.first_name.trim();
     const effectiveLastName = lastName || formData.last_name.trim() || effectiveFirstName;
+    if (relativeRegistration && !lastName) {
+      showToast("Enter this relative's complete name before registering.", "error");
+      return;
+    }
 
     try {
       if (!fullNameInput.trim() || (!effectiveFirstName && !effectiveLastName)) {
@@ -843,8 +1007,8 @@ export const MembersPage: React.FC = () => {
       }
 
       // Check guardian phone format
-      if (formData.guardian_phone && formData.guardian_phone.trim()) {
-        const cleanGPhone = formData.guardian_phone.replace(/\D/g, '');
+      if (applicationGuardianPhone && applicationGuardianPhone.trim()) {
+        const cleanGPhone = applicationGuardianPhone.replace(/\D/g, '');
         if (cleanGPhone.length !== 11 || !cleanGPhone.startsWith('09')) {
           setConfirmModalConfig({
             isOpen: true,
@@ -864,7 +1028,7 @@ export const MembersPage: React.FC = () => {
       }
 
       // Check partner phone format if registering partner
-      if (createNewSpouseRecord && spouseFormData.contact_phone && spouseFormData.contact_phone.trim()) {
+      if (createNewSpouseRecord && registrationStep === "partner" && spouseFormData.contact_phone && spouseFormData.contact_phone.trim()) {
         const cleanSPhone = spouseFormData.contact_phone.replace(/\D/g, '');
         if (cleanSPhone.length !== 11 || !cleanSPhone.startsWith('09')) {
           setConfirmModalConfig({
@@ -912,6 +1076,39 @@ export const MembersPage: React.FC = () => {
         }
       }
 
+      if (!formData.address.trim()) {
+        showToast("Please enter the main member's present address.", "error");
+        return;
+      }
+      if (formData.civil_status === "Married" && createNewSpouseRecord) {
+        if (registrationStep === "member") {
+          setRegistrationStep("partner");
+          return;
+        }
+        if (!spouseFormData.first_name.trim() || !spouseFormData.last_name.trim() || !spouseFormData.birthdate) {
+          showToast("Please enter the partner's first name, last name, and birthday.", "error");
+          return;
+        }
+        if (new Date(spouseFormData.birthdate) > new Date()) {
+          showToast("Partner birthday cannot be in the future.", "error");
+          return;
+        }
+        if (!spouseFormData.same_address_as_member && !spouseFormData.address.trim()) {
+          showToast("Please enter the partner's own present address.", "error");
+          return;
+        }
+      }
+      // No records are written until both steps are complete.
+      const registerHousehold = householdMode === "create_new" || householdMode === "existing";
+      if ((householdMode === "existing" || registrationFamilyMembers.length > 0) && !householdRegistrationRole) {
+        showToast("Choose your relationship in this household.", "error");
+        return;
+      }
+      if (registerHousehold && householdMode === "existing" && !formData.household_id) {
+        showToast("Choose an existing household.", "error");
+        return;
+      }
+      setIsSavingMember(true);
       const jaMin = effectiveMinistries.find(m => m.name.toLowerCase().includes("junior"));
       const finalMinistryId = coordinatorMinistryId
         ? coordinatorMinistryId
@@ -921,27 +1118,8 @@ export const MembersPage: React.FC = () => {
 
       let finalHouseholdId: number | null = null;
       if (householdMode === "create_new") {
-        const hName = (newHouseholdName.trim() || `${effectiveLastName} Household`);
-        const newH = await api.createHousehold({
-          name: hName,
-          address: formData.address || undefined,
-          primary_contact_phone: formData.contact_phone || undefined
-        });
-        finalHouseholdId = newH.id;
-      } else if (householdMode === "link_parents") {
-        if (selectedParentMember?.household_id) {
-          finalHouseholdId = selectedParentMember.household_id;
-        } else if (selectedParentMember) {
-          const newH = await api.createHousehold({
-            name: `${selectedParentMember.last_name} Household`,
-            address: selectedParentMember.address || formData.address || undefined,
-            primary_contact_phone: selectedParentMember.contact_phone || formData.contact_phone || undefined
-          });
-          await api.updateMember(selectedParentMember.id, { household_id: newH.id });
-          finalHouseholdId = newH.id;
-        } else if (formData.household_id) {
-          finalHouseholdId = Number(formData.household_id);
-        }
+        // The server creates the household with the member and family links atomically.
+        finalHouseholdId = null;
       } else if (householdMode === "existing") {
         finalHouseholdId = formData.household_id ? Number(formData.household_id) : null;
       } else {
@@ -950,6 +1128,9 @@ export const MembersPage: React.FC = () => {
 
       const payload: any = {
         ...formData,
+        guardian_names: registerHousehold && parentRoles.includes(householdRegistrationRole as any) ? formData.guardian_names || null : applicationGuardianName || null,
+        guardian_phone: registerHousehold && parentRoles.includes(householdRegistrationRole as any) ? formData.guardian_phone || null : applicationGuardianPhone || null,
+        family_details: applicationFamilyDetails || null,
         first_name: effectiveFirstName,
         last_name: effectiveLastName,
         civil_status: formData.civil_status || "Single",
@@ -963,6 +1144,19 @@ export const MembersPage: React.FC = () => {
         baptism_notes: formData.baptism_notes || null
       };
 
+      if (registerHousehold) {
+        payload.household_registration = {
+          mode: householdMode === "create_new" ? "create" : "existing",
+          name: newHouseholdName.trim() || `${effectiveLastName} Household`,
+          household_id: finalHouseholdId,
+          role: householdRegistrationRole || undefined,
+          family_members: householdMode === "create_new" ? registrationFamilyMembers : []
+        };
+        if (relativeRegistration) {
+          payload.household_registration.relative = { name: relativeRegistration.name, source_member_id: relativeRegistration.sourceMember.id };
+        }
+      }
+
       if (formData.civil_status === "Married" && createNewSpouseRecord && spouseFormData.first_name.trim()) {
         payload.partner_record = {
           first_name: spouseFormData.first_name.trim(),
@@ -972,12 +1166,12 @@ export const MembersPage: React.FC = () => {
           application_date: spouseFormData.application_date || formData.application_date || new Date().toISOString().split("T")[0],
           contact_phone: spouseFormData.contact_phone || null,
           contact_email: spouseFormData.contact_email || null,
-          address: spouseFormData.same_address_as_member ? (formData.address || null) : (spouseFormData.address || formData.address || null),
+          address: spouseFormData.same_address_as_member ? formData.address.trim() : spouseFormData.address.trim(),
           occupation: spouseFormData.occupation || null,
           facebook_account: spouseFormData.facebook_account || null,
           family_details: spouseFormData.family_details || formData.family_details || null,
           hobbies: spouseFormData.hobbies || null,
-          invited_by: spouseFormData.invited_by || formData.invited_by || null,
+          invited_by: spouseFormData.same_inviter_as_member ? formData.invited_by.trim() : spouseFormData.invited_by.trim(),
           previous_church: spouseFormData.previous_church || null,
           medical_notes: spouseFormData.medical_notes || null,
           household_id: finalHouseholdId
@@ -995,7 +1189,7 @@ export const MembersPage: React.FC = () => {
         if (payload.partner_record) {
           setConfirmModalConfig({
             isOpen: true,
-            title: "Couple Registered Successfully! 🎉",
+            title: "Couple Registered Successfully!",
             type: "success",
             confirmText: "Awesome",
             cancelText: null,
@@ -1015,7 +1209,15 @@ export const MembersPage: React.FC = () => {
       setEditingMember(null);
       setSuggestedMinistryInfo(null);
       setCreateNewSpouseRecord(false);
-      loadData();
+      setRegistrationStep("member");
+      if (relativeRegistration) {
+        const sourceId = relativeRegistration.sourceMember.id;
+        setRelativeRegistration(null);
+        await loadData();
+        setSelectedMember(await api.getMember(sourceId).catch(() => relativeRegistration.sourceMember));
+      } else {
+        loadData();
+      }
     } catch (err: any) {
       setConfirmModalConfig({
         isOpen: true,
@@ -1026,6 +1228,8 @@ export const MembersPage: React.FC = () => {
         description: err.message || (editingMember ? "Failed to update member profile." : "Failed to create member record."),
         onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
       });
+    } finally {
+      setIsSavingMember(false);
     }
   };
 
@@ -1062,6 +1266,8 @@ export const MembersPage: React.FC = () => {
 
   const handleCreateHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingHousehold) return;
+
     if (!householdForm.name.trim()) {
       setConfirmModalConfig({
         isOpen: true,
@@ -1075,7 +1281,7 @@ export const MembersPage: React.FC = () => {
       return;
     }
 
-    const dupHousehold = households.find(h => h.name.toLowerCase().trim() === householdForm.name.toLowerCase().trim());
+    const dupHousehold = households.find(h => h.id !== editingHousehold?.id && h.name.toLowerCase().trim() === householdForm.name.toLowerCase().trim());
     if (dupHousehold) {
       setConfirmModalConfig({
         isOpen: true,
@@ -1089,24 +1295,72 @@ export const MembersPage: React.FC = () => {
       return;
     }
 
+    const fName = householdForm.father_name?.trim() || "";
+    const mName = householdForm.mother_name?.trim() || "";
+    const gName = householdForm.guardian_name?.trim() || "";
+    const findMemberId = (name: string) => {
+      const norm = normalizeName(name);
+      return availableFamilyMembers.find(m => normalizeName(memberName(m)) === norm)?.id || null;
+    };
+
+    const parentsList: HouseholdFamilyMember[] = [];
+    if (fName) {
+      parentsList.push({ name: fName, relationship: "Father", member_id: findMemberId(fName) });
+    }
+    if (mName) {
+      parentsList.push({ name: mName, relationship: "Mother", member_id: findMemberId(mName) });
+    }
+    if (gName) parentsList.push({ name: gName, relationship: "Guardian", member_id: findMemberId(gName) });
+    for (const parent of parentsList) {
+      const saved = editingHousehold?.family_members?.find(entry => entry.member_id === parent.member_id && parent.member_id);
+      if (saved?.aliases?.length) parent.aliases = saved.aliases;
+    }
+
+    const othersList = householdFamilyDraft
+      .map(({ name, relationship, member_id, aliases }) => ({
+        name: name.trim(),
+        relationship: relationship || "Family Member",
+        member_id: member_id || null,
+        ...(aliases?.length ? { aliases } : {})
+      }))
+      .filter(entry => Boolean(entry.name));
+
+    const family = [...parentsList, ...othersList];
+    const familyNames = family.map(entry => normalizeName(entry.name));
+
+    if (othersList.some(entry => !entry.name || entry.name.length > 255) || new Set(familyNames).size !== familyNames.length) {
+      setHouseholdFamilyError("Please ensure all family member names are valid and remove any duplicate entries.");
+      return;
+    }
+
     try {
-      await api.createHousehold({
-        ...householdForm,
-        name: householdForm.name.trim()
-      });
+      setIsSavingHousehold(true);
+      const payload = {
+        name: householdForm.name.trim(),
+        address: householdForm.address || null,
+        primary_contact_phone: householdForm.primary_contact_phone || null,
+        father_name: fName || null,
+        mother_name: mName || null,
+        guardian_name: gName || null,
+        family_members: family
+      };
+      if (editingHousehold) await api.updateHousehold(editingHousehold.id, payload);
+      else await api.createHousehold(payload);
       setIsAddHouseholdModalOpen(false);
-      setHouseholdForm({ name: "", address: "", primary_contact_phone: "" });
+      setEditingHousehold(null);
       loadData();
     } catch (err: any) {
       setConfirmModalConfig({
         isOpen: true,
-        title: "Failed to Create Household",
+        title: "Failed to Save Household",
         type: "danger",
         confirmText: "Close",
         cancelText: null,
         description: err.message || "Please check the household details and try again.",
         onConfirm: () => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))
       });
+    } finally {
+      setIsSavingHousehold(false);
     }
   };
 
@@ -1123,7 +1377,7 @@ export const MembersPage: React.FC = () => {
           <p className="text-xs text-charcoal/80">
             Promote <strong>{member.first_name} {member.last_name}</strong> (Age {member.age}) from <strong>{member.ministry_name}</strong> to <strong>{nextMinistry?.name} Ministry</strong>?
           </p>
-          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-950 font-medium">
+          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-2.5 text-[12px] text-amber-950 font-medium">
             Once promoted, the aging-out notification will be automatically cleared.
           </div>
         </div>
@@ -1165,7 +1419,7 @@ export const MembersPage: React.FC = () => {
     setGreetingMember(member);
     const turning = member.turning_age || ((member.age ?? 0) + 1);
     setGreetingMessage(
-      `Happy ${turning}th Birthday, ${member.first_name}! 🎂 "The Lord bless you and keep you; the Lord make His face shine upon you and be gracious to you!" (Numbers 6:24-25). Praying for God's abundant peace, joy, and spiritual blessing upon your life!`
+      `Happy ${turning}th Birthday, ${member.first_name}!"The Lord bless you and keep you; the Lord make His face shine upon you and be gracious to you!"(Numbers 6:24-25). Praying for God's abundant peace, joy, and spiritual blessing upon your life!`
     );
     setGreetingSuccess(false);
   };
@@ -1210,7 +1464,8 @@ export const MembersPage: React.FC = () => {
 
   // Autocomplete suggestions for "Who Invites You in DPC?"
   const memberSuggestions = React.useMemo(() => {
-    return [...members]
+    const source = allChurchMembers.length > 0 ? allChurchMembers : members;
+    return [...source]
       .filter((m) => m && (m.first_name || m.last_name))
       .sort((a, b) => {
         const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
@@ -1232,11 +1487,12 @@ export const MembersPage: React.FC = () => {
           ].filter(Boolean)
         };
       });
-  }, [members]);
+  }, [allChurchMembers, members]);
 
   // Autocomplete suggestions for Spouse / Partner Search
   const spouseMemberSuggestions = React.useMemo(() => {
-    return members
+    const source = allChurchMembers.length > 0 ? allChurchMembers : members;
+    return source
       .filter((m) => m && (!editingMember || m.id !== editingMember.id) && (m.first_name || m.last_name))
       .sort((a, b) => {
         const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
@@ -1258,38 +1514,11 @@ export const MembersPage: React.FC = () => {
           ].filter(Boolean)
         };
       });
-  }, [members, editingMember]);
-
-  // Autocomplete suggestions for Parents / Family Linking
-  const parentMemberSuggestions = React.useMemo(() => {
-    return members
-      .filter((m) => m && (!editingMember || m.id !== editingMember.id) && (m.first_name || m.last_name))
-      .sort((a, b) => {
-        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
-        return nameA.localeCompare(nameB);
-      })
-      .map((m) => {
-        const fn = m.first_name || "";
-        const ln = m.last_name || "";
-        const household = households.find(h => h.id === m.household_id);
-        return {
-          title: `${fn} ${ln}`.trim(),
-          category: household ? `🏡 ${household.name}` : (m.ministry_name ? `${m.ministry_name} Ministry` : "DPC Member"),
-          subtitle: `${m.gender || "Member"} • ${m.age ? `${m.age} yrs old` : 'Adult'}${m.address ? ` • ${m.address}` : ''}`,
-          aliases: [
-            fn,
-            ln,
-            `${ln}, ${fn}`.trim(),
-            fn ? `${fn[0]}. ${ln}`.trim() : ln
-          ].filter(Boolean)
-        };
-      });
-  }, [members, editingMember, households]);
+  }, [allChurchMembers, members, editingMember]);
 
   // Find who invited the currently selected member
   const inviterMember = selectedMember?.invited_by
-    ? members.find((m) => {
+    ? (allChurchMembers.length > 0 ? allChurchMembers : members).find((m) => {
       const fullName = `${m.first_name} ${m.last_name}`.toLowerCase().trim();
       const target = selectedMember.invited_by!.toLowerCase().trim();
       return fullName === target || target.includes(fullName) || fullName.includes(target);
@@ -1298,7 +1527,7 @@ export const MembersPage: React.FC = () => {
 
   // Find all members who were invited BY the currently selected member
   const disciplesInvitedByMember = selectedMember
-    ? members.filter((m) => {
+    ? (allChurchMembers.length > 0 ? allChurchMembers : members).filter((m) => {
       if (!m.invited_by || m.id === selectedMember.id) return false;
       const thisFullName = `${selectedMember.first_name} ${selectedMember.last_name}`.toLowerCase().trim();
       const thisFirstLastReversed = `${selectedMember.last_name} ${selectedMember.first_name}`.toLowerCase().trim();
@@ -1316,7 +1545,39 @@ export const MembersPage: React.FC = () => {
     })
     : [];
 
+  // Filtered list for the "People Invited by Member" modal
+  const filteredModalInvitedDisciples = useMemo(() => {
+    if (!disciplesInvitedByMember || disciplesInvitedByMember.length === 0) return [];
+    return disciplesInvitedByMember.filter((m) => {
+      const query = invitedModalSearch.toLowerCase().trim();
+      const matchesSearch =
+        !query ||
+        `${m.first_name || ""} ${m.last_name || ""}`.toLowerCase().includes(query) ||
+        (m.contact_phone && m.contact_phone.includes(query)) ||
+        (m.ministry_name && m.ministry_name.toLowerCase().includes(query)) ||
+        (m.address && m.address.toLowerCase().includes(query)) ||
+        (m.age && String(m.age).includes(query));
+
+      const matchesMinistry =
+        invitedModalMinistryFilter === "all" ||
+        (m.ministry_name && m.ministry_name.toLowerCase() === invitedModalMinistryFilter.toLowerCase());
+
+      return matchesSearch && matchesMinistry;
+    });
+  }, [disciplesInvitedByMember, invitedModalSearch, invitedModalMinistryFilter]);
+
+  // Distinct ministries for filter pills inside the modal
+  const invitedMemberMinistries = useMemo(() => {
+    const minSet = new Set<string>();
+    disciplesInvitedByMember.forEach((m) => {
+      if (m.ministry_name) minSet.add(m.ministry_name);
+    });
+    return Array.from(minSet);
+  }, [disciplesInvitedByMember]);
+
   const canEdit = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
+  const guideData = useGuideDataState("members", { loading, count: totalRecords, filtered: Boolean(searchQuery || filterMinistry || membershipFilter !== "all" || birthdayFilter !== "all"), retry: () => loadData() });
+
   if (loading && members.length === 0) {
     return <MembersPageSkeleton />;
   }
@@ -1333,8 +1594,8 @@ export const MembersPage: React.FC = () => {
           <p className="text-xs text-charcoal/80 leading-relaxed">
             Are you sure you want to automatically transition all <strong>{agingOutCount} aging-out disciples</strong> to their age-appropriate ministries?
           </p>
-          <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3 text-[11px] text-amber-950 text-left space-y-1">
-            <span className="font-black block text-amber-900">Example Automatic Transition:</span>
+          <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3 text-[12px] text-amber-950 text-left space-y-1">
+            <span className="font-medium block text-amber-900">Example Automatic Transition:</span>
             <p>Disciples aged 17–18 currently registered in <strong>Highschool (13–16)</strong> will be promoted to <strong>Youth Ministry (17–26 yrs)</strong>.</p>
           </div>
         </div>
@@ -1388,15 +1649,15 @@ export const MembersPage: React.FC = () => {
 
         <div className="relative z-10 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-black uppercase tracking-wider backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <Users className="w-3.5 h-3.5 text-amber-300" />
               <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Church-Wide Directory"}</span>
             </div>
-            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-bold px-3 py-1 rounded-full backdrop-blur-md">
+            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
               {totalRecords} Active Records
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
             Members & Family Directory
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
@@ -1407,28 +1668,21 @@ export const MembersPage: React.FC = () => {
         {/* Action Buttons */}
         {canEdit && (
           <div className="relative z-10 flex items-center gap-2.5 flex-wrap shrink-0">
-            <button
-              onClick={() => setIsAddHouseholdModalOpen(true)}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
+            <button data-guide="household-create"
+              onClick={() => openHouseholdForm()}
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
             >
               <Home className="w-4 h-4 text-amber-300" />
               <span>New Household</span>
             </button>
-            <button
+            <button data-guide="member-import"
               type="button"
               onClick={handleOpenAddWithImport}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-black px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
               title="Import and analyze member registration form photo or document"
             >
               <FileUp className="w-4 h-4 text-sky-300" />
               <span>Import Form / File</span>
-            </button>
-            <button
-              onClick={handleOpenAdd}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <Plus className="w-4 h-4 text-indigo-950" />
-              <span>Add Member</span>
             </button>
           </div>
         )}
@@ -1443,21 +1697,21 @@ export const MembersPage: React.FC = () => {
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="text-xs sm:text-sm font-black text-rose-950">
+                <h4 className="text-xs sm:text-sm font-semibold text-rose-950">
                   {agingOutCount} Member(s) Ready for Ministry Promotion
                 </h4>
-                <span className="text-[10px] bg-rose-600 text-white font-black px-2 py-0.2 rounded-full uppercase tracking-wider">
+                <span className="text-[12px] bg-rose-600 text-white font-medium px-2 py-0.2 rounded-full uppercase tracking-wider">
                   Aging Out
                 </span>
               </div>
-              <p className="text-[11px] text-charcoal/70 mt-0.5">
+              <p className="text-[12px] text-charcoal/70 mt-0.5">
                 These disciples have exceeded their current ministry's age limit (e.g. Highschool 13-16 → Youth 17-26).
               </p>
             </div>
           </div>
           <button
             onClick={handleAutoTransition}
-            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2"
+            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2"
           >
             <TrendingUp className="w-3.5 h-3.5 text-amber-300" />
             <span>Auto-Promote All ({agingOutCount}) to Next Ministry</span>
@@ -1466,21 +1720,21 @@ export const MembersPage: React.FC = () => {
       )}
 
       {/* Tabs, Search & Birthday Filter Bar */}
-      <div className="space-y-3">
-        <div className="bg-white/95 p-3.5 rounded-3xl border border-indigo-100/90 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3.5">
+      <div ref={directoryToolbarRef} data-directory-toolbar className="sticky top-0 z-30 space-y-2 rounded-3xl bg-ivory-light py-2">
+        <div className="bg-white p-3 rounded-3xl border border-indigo-100/90 shadow-sm flex flex-wrap items-center justify-between gap-3">
           {/* Tab switchers */}
-          <div className="flex items-center bg-indigo-50/60 p-1.5 rounded-2xl w-full md:w-auto border border-indigo-100/60">
-            <button
+          <div className="flex items-center bg-indigo-50/60 p-1.5 rounded-2xl w-full xl:w-auto border border-indigo-100/60">
+            <button data-guide="members-tab"
               onClick={() => setActiveTab("members")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${activeTab === "members" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-charcoal/60 hover:text-indigo-950"
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${activeTab === "members" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-muted hover:text-indigo-950"
                 }`}
             >
               <Users className="w-3.5 h-3.5 text-indigo-700" />
               <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Disciples (${totalRecords})` : `All Members (${totalRecords})`}</span>
             </button>
-            <button
+            <button data-guide="households-tab"
               onClick={() => setActiveTab("households")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${activeTab === "households" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-charcoal/60 hover:text-indigo-950"
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${activeTab === "households" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-muted hover:text-indigo-950"
                 }`}
             >
               <Home className="w-3.5 h-3.5 text-amber-600" />
@@ -1489,12 +1743,14 @@ export const MembersPage: React.FC = () => {
           </div>
 
           {/* Search & Filter */}
-          <div className="flex items-center gap-2.5 w-full md:w-auto">
-            <div className="relative flex-1 md:w-64">
-              <Search className="w-4 h-4 text-charcoal/40 absolute left-3.5 top-3" />
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
+            <div className="relative flex-1 min-w-[160px] xl:w-56">
+              <Search className="w-4 h-4 text-muted absolute left-3.5 top-3" />
               <input
                 type="text"
                 placeholder="Search by name, email..."
+                aria-label="Search members"
+                data-guide="member-search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && loadData()}
@@ -1503,16 +1759,17 @@ export const MembersPage: React.FC = () => {
             </div>
 
             {coordinatorMinistryId ? (
-              <div className="bg-indigo-50 border border-indigo-200 text-indigo-950 px-3.5 py-2 rounded-2xl text-xs font-black flex items-center gap-2 shrink-0">
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-950 px-3.5 py-2 rounded-2xl text-xs font-medium flex items-center gap-2 shrink-0">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{coordinatorMinistryName} Ministry</span>
-                <span className="text-[10px] text-indigo-700 font-bold">(Assigned)</span>
+                <span className="text-[12px] text-indigo-700 font-medium">(Assigned)</span>
               </div>
             ) : (
               <select
+                aria-label="Filter by ministry"
                 value={filterMinistry}
                 onChange={(e) => setFilterMinistry(e.target.value)}
-                className="bg-ivory-light/60 px-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo font-bold text-indigo-950 transition-all cursor-pointer"
+                className="bg-ivory-light/60 px-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo font-medium text-indigo-950 transition-all cursor-pointer"
               >
                 <option value="">All Ministries</option>
                 {ministries.map((m) => (
@@ -1522,6 +1779,17 @@ export const MembersPage: React.FC = () => {
                 ))}
               </select>
             )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={handleOpenAdd}
+                data-guide="member-add"
+                className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-3 py-2 rounded-xl text-xs shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Member</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1529,24 +1797,24 @@ export const MembersPage: React.FC = () => {
         {activeTab === "members" && (
           <div className="space-y-2">
             {/* Status Categories */}
-            <div className="flex items-center gap-1.5 flex-wrap bg-white/95 p-2.5 rounded-2xl border border-indigo-100/90 shadow-2xs text-xs">
-              <span className="font-black text-indigo-950 flex items-center gap-1.5 mr-1 text-[11px] uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap bg-white p-2.5 rounded-2xl border border-indigo-100/90 shadow-2xs text-xs [&>*]:shrink-0">
+              <span className="font-medium text-indigo-950 flex items-center gap-1.5 mr-1 text-[12px] uppercase tracking-wider">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
                 <span>Status:</span>
               </span>
               {[
-                { id: "all", label: "All Members", icon: "👥", countText: "" },
+                { id: "all", label: "All Members", icon: <><UIUsers aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></>, countText: "" },
                 { id: "baptized_regular", label: "Baptized Regular", color: "text-indigo-950 bg-indigo-50 border-indigo-200" },
                 { id: "unbaptized_regular", label: "Regular (Unbaptized)", color: "text-sky-950 bg-sky-50 border-sky-200" },
                 { id: "guest", label: "Guests / Visitors", color: "text-amber-950 bg-amber-50 border-amber-300" },
                 { id: "inactive", label: "Inactive / Absent", color: "text-slate-700 bg-slate-100 border-slate-300" },
-                { id: "warning", label: "Warning (1–2 Absences)", color: "text-amber-900 bg-amber-50 border-amber-300 font-black" },
-                { id: "action_required", label: "Action Required (2–3+ Absences)", color: "text-rose-950 bg-rose-50 border-rose-300 font-black" },
+                { id: "warning", label: "Warning (1–2 Absences)", color: "text-amber-900 bg-amber-50 border-amber-300 font-medium" },
+                { id: "action_required", label: "Action Required (2–3+ Absences)", color: "text-rose-950 bg-rose-50 border-rose-300 font-medium" },
               ].map(pill => (
                 <button
                   key={pill.id}
                   onClick={() => setMembershipFilter(pill.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${membershipFilter === pill.id
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${membershipFilter === pill.id
                     ? "bg-indigo-900 text-white shadow-xs border border-indigo-800 scale-[1.02]"
                     : "bg-white text-charcoal/70 hover:bg-indigo-50/60 border border-indigo-100"
                     }`}
@@ -1559,7 +1827,7 @@ export const MembersPage: React.FC = () => {
               {membershipFilter !== "all" && (
                 <button
                   onClick={() => setMembershipFilter("all")}
-                  className="text-[11px] text-rose-600 font-bold hover:underline ml-auto flex items-center gap-1 cursor-pointer"
+                  className="text-[12px] text-rose-600 font-medium hover:underline ml-auto flex items-center gap-1 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" /> Clear Status Filter
                 </button>
@@ -1567,8 +1835,8 @@ export const MembersPage: React.FC = () => {
             </div>
 
             {/* Birthday Celebrant Quick Filters */}
-            <div className="flex items-center gap-2 flex-wrap bg-white/80 p-2.5 rounded-2xl border border-indigo-100/80 shadow-2xs text-xs">
-              <span className="font-black text-indigo-950 flex items-center gap-1.5 mr-1 text-[11px] uppercase tracking-wider">
+            <div data-guide="member-birthday-filter" className="flex items-center gap-2 overflow-x-auto whitespace-nowrap bg-white p-2.5 rounded-2xl border border-indigo-100/80 shadow-2xs text-xs [&>*]:shrink-0">
+              <span className="font-medium text-indigo-950 flex items-center gap-1.5 mr-1 text-[12px] uppercase tracking-wider">
                 <Cake className="w-3.5 h-3.5 text-rose-500" />
                 <span>Milestones:</span>
               </span>
@@ -1581,7 +1849,7 @@ export const MembersPage: React.FC = () => {
                 <button
                   key={pill.id}
                   onClick={() => setBirthdayFilter(pill.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${birthdayFilter === pill.id
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${birthdayFilter === pill.id
                     ? "bg-amber-400 text-indigo-950 shadow-xs border border-amber-300"
                     : "bg-white text-charcoal/70 hover:bg-gray-100 border border-indigo-100"
                     }`}
@@ -1592,9 +1860,10 @@ export const MembersPage: React.FC = () => {
               ))}
 
               <select
+                aria-label="Filter by birth month"
                 value={birthdayFilter.startsWith("month_") ? birthdayFilter : ""}
                 onChange={(e) => setBirthdayFilter(e.target.value || "all")}
-                className="bg-white px-3 py-1.5 rounded-xl text-xs border border-indigo-100 font-bold text-indigo-950 focus:outline-none cursor-pointer"
+                className="bg-white px-3 py-1.5 rounded-xl text-xs border border-indigo-100 font-medium text-indigo-950 focus:outline-none cursor-pointer"
               >
                 <option value="">Filter by Birth Month...</option>
                 {[
@@ -1610,7 +1879,7 @@ export const MembersPage: React.FC = () => {
               {birthdayFilter !== "all" && (
                 <button
                   onClick={() => setBirthdayFilter("all")}
-                  className="text-[11px] text-rose-600 font-bold hover:underline ml-auto flex items-center gap-1 cursor-pointer"
+                  className="text-[12px] text-rose-600 font-medium hover:underline ml-auto flex items-center gap-1 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" /> Reset Milestone
                 </button>
@@ -1626,46 +1895,53 @@ export const MembersPage: React.FC = () => {
           <TableSkeleton rows={8} columns={7} />
         ) : (
           <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-indigo-50/70 text-indigo-950 uppercase text-[10px] font-black tracking-wider border-b border-indigo-100">
+            <div
+              ref={memberListRef}
+              role="region"
+              aria-label="Member directory"
+              tabIndex={0}
+              className="overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 focus-visible:-outline-offset-2"
+              style={{ maxHeight: memberListMaxHeight ?? "60vh" }}
+            >
+              <table className="w-full min-w-[1100px] text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-indigo-50 text-indigo-950 uppercase text-[12px] font-medium tracking-wider border-b border-indigo-100">
                   <tr>
-                    <th className="p-4">Member Name</th>
-                    <th className="p-4">Ministry</th>
-                    <th className="p-4">Age / Birthday</th>
-                    <th className="p-4">Household</th>
-                    <th className="p-4">Medical / Notes</th>
-                    <th className="p-4">Status & Health</th>
-                    <th className="p-4 text-right">Actions</th>
+                    <th scope="col" className="p-4">Member Name</th>
+                    <th scope="col" className="p-4">Ministry</th>
+                    <th scope="col" className="p-4">Age / Birthday</th>
+                    <th scope="col" className="p-4">Household</th>
+                    <th scope="col" className="p-4">Medical / Notes</th>
+                    <th scope="col" className="p-4">Status & Health</th>
+                    <th scope="col" className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-indigo-50">
                   {displayedMembers.map((m) => (
-                    <tr
+                    <tr data-guide="member-details"
                       key={m.id}
                       onClick={() => setSelectedMember(m)}
                       className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
                     >
-                      <td className="p-4 font-bold text-indigo-950 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-800 text-white font-black flex items-center justify-center text-xs shadow-2xs ring-2 ring-white shrink-0">
+                      <td className="p-4 text-indigo-950 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-800 text-white font-medium flex items-center justify-center text-xs shadow-2xs ring-2 ring-white shrink-0">
                           {m.first_name?.[0] || ""}{m.last_name?.[0] || ""}
                         </div>
                         <div>
-                          <div className="text-xs font-black text-indigo-950 group-hover:text-amber-600 transition-colors flex items-center gap-1.5 flex-wrap">
+                          <div className="text-xs font-medium text-indigo-950 group-hover:text-amber-600 transition-colors flex items-center gap-1.5 flex-wrap">
                             <span>{m.first_name} {m.last_name}</span>
                             {m.civil_status === "Married" && (
                               <span
-                                className="inline-flex items-center gap-1 text-[9px] bg-amber-100 text-amber-950 border border-amber-300 font-black px-1.5 py-0.2 rounded-md shadow-2xs"
+                                className="inline-flex items-center gap-1 text-[12px] bg-amber-100 text-amber-950 border border-amber-300 font-medium px-1.5 py-0.2 rounded-md shadow-2xs"
                                 title={m.spouse_name ? `Married to ${m.spouse_name}` : "Married"}
                               >
-                                <span>💍</span>
+                                <span><UIHeartHandshake aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></span>
                                 <span>{m.spouse_name ? `Spouse: ${m.spouse_name.split(" ")[0]}` : "Married"}</span>
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-charcoal/50">{m.contact_email || m.contact_phone || "No direct contact"}</div>
+                          <div className="text-[12px] text-muted">{m.contact_email || m.contact_phone || "No direct contact"}</div>
                           {m.bible_study_group_name && (
-                            <div className="text-[10px] text-indigo-700 font-semibold flex items-center gap-1 mt-0.5">
+                            <div className="text-[12px] text-indigo-700 font-medium flex items-center gap-1 mt-0.5">
                               <BookOpen className="w-2.5 h-2.5 text-indigo-600" />
                               <span className="truncate max-w-[150px]">{m.bible_study_group_name}</span>
                             </div>
@@ -1679,9 +1955,9 @@ export const MembersPage: React.FC = () => {
                             className="w-3 h-3 rounded-full shadow-inner ring-1 ring-white shrink-0"
                             style={{ backgroundColor: m.ministry_color || "#2C3968" }}
                           />
-                          <span className="font-bold text-indigo-950">{m.ministry_name || "Unassigned"}</span>
+                          <span className="font-medium text-indigo-950">{m.ministry_name || "Unassigned"}</span>
                           {m.is_aging_out && (
-                            <span className="bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse shadow-2xs">
+                            <span className="bg-rose-600 text-white text-[12px] font-medium px-2 py-0.5 rounded-full animate-pulse shadow-2xs">
                               Aging Out
                             </span>
                           )}
@@ -1689,21 +1965,21 @@ export const MembersPage: React.FC = () => {
                       </td>
 
                       <td className="p-4">
-                        <div className="font-black text-indigo-950">{m.age} years old</div>
-                        <div className="text-[10px] text-charcoal/50 flex items-center gap-1.5 mt-0.5">
+                        <div className="font-medium text-indigo-950">{m.age} years old</div>
+                        <div className="text-[12px] text-muted flex items-center gap-1.5 mt-0.5">
                           <span>{m.birth_month_name ? `${m.birth_month_name} ${m.birth_day}` : m.birthdate}</span>
                           {m.is_birthday_today ? (
-                            <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-bounce shadow-2xs">
+                            <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[12px] font-medium px-2 py-0.5 rounded-full animate-bounce shadow-2xs">
                               <Cake className="w-2.5 h-2.5 text-amber-300" />
                               <span>TODAY!</span>
                             </span>
                           ) : m.is_birthday_this_week ? (
-                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 text-[9px] font-black px-2 py-0.5 rounded-md border border-amber-300">
+                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 text-[12px] font-medium px-2 py-0.5 rounded-md border border-amber-300">
                               <Calendar className="w-2.5 h-2.5 text-amber-700" />
                               <span>in {m.days_until_birthday}d</span>
                             </span>
                           ) : m.is_birthday_this_month ? (
-                            <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-rose-200">
+                            <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-800 text-[12px] font-medium px-1.5 py-0.5 rounded-md border border-rose-200">
                               <Cake className="w-2.5 h-2.5 text-rose-500" />
                               <span>This month</span>
                             </span>
@@ -1713,23 +1989,23 @@ export const MembersPage: React.FC = () => {
 
                       <td className="p-4">
                         {m.household_name ? (
-                          <div className="font-bold text-indigo-950 flex items-center gap-1.5">
+                          <div className="font-medium text-indigo-950 flex items-center gap-1.5">
                             <Home className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <span>{m.household_name}</span>
                           </div>
                         ) : (
-                          <span className="text-charcoal/40 italic font-medium">Individual</span>
+                          <span className="text-muted">Individual</span>
                         )}
                       </td>
 
                       <td className="p-4">
                         {m.medical_notes ? (
-                          <span className="bg-rose-50 border border-rose-200 text-rose-900 font-bold px-2.5 py-0.5 rounded-lg text-[10px] flex items-center gap-1.5 max-w-xs truncate">
+                          <span className="bg-rose-50 border border-rose-200 text-rose-900 font-medium px-2.5 py-0.5 rounded-lg text-[12px] flex items-center gap-1.5 max-w-xs truncate">
                             <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                             <span>{m.medical_notes}</span>
                           </span>
                         ) : (
-                          <span className="text-charcoal/40 text-[10px] font-medium">None</span>
+                          <span className="text-muted text-[12px] font-medium">None</span>
                         )}
                       </td>
 
@@ -1738,22 +2014,22 @@ export const MembersPage: React.FC = () => {
                         <div className="space-y-1">
                           {/* Hybrid Status Badge */}
                           {m.status === "visitor" || m.membership_type === "guest" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
 
                               <span>Guest / Visitor</span>
                             </span>
                           ) : m.status === "inactive" || m.membership_type === "inactive" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
 
                               <span>Inactive / Absent</span>
                             </span>
                           ) : m.is_baptized || m.baptism_status === "baptized" || m.membership_type === "baptized_regular" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-950 border border-indigo-200 shadow-2xs">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-indigo-50 text-indigo-950 border border-indigo-200 shadow-2xs">
 
                               <span>Baptized Regular</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-sky-50 text-sky-950 border border-sky-200 shadow-2xs">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-sky-50 text-sky-950 border border-sky-200 shadow-2xs">
 
                               <span>Regular (Unbaptized)</span>
                             </span>
@@ -1763,14 +2039,14 @@ export const MembersPage: React.FC = () => {
                           {m.status !== "inactive" && m.status !== "visitor" && (
                             m.attendance_health === "action_required" || (m.consecutive_absences && m.consecutive_absences >= 3) ? (
                               <div>
-                                <span className="inline-flex items-center gap-1 text-[9px] font-black bg-rose-100 text-rose-950 border border-rose-300 px-2 py-0.5 rounded-md animate-pulse shadow-2xs" title="Consecutive absences in Sunday Service / Bible Study">
+                                <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-rose-100 text-rose-950 border border-rose-300 px-2 py-0.5 rounded-md animate-pulse shadow-2xs" title="Consecutive absences in Sunday Service / Bible Study">
                                   <AlertCircle className="w-3 h-3 text-rose-600" />
                                   <span>Action Required: {m.consecutive_absences ? `${m.consecutive_absences} Absences` : "Absent 3+ wks"}</span>
                                 </span>
                               </div>
                             ) : m.attendance_health === "warning" || (m.consecutive_absences && m.consecutive_absences >= 1) ? (
                               <div>
-                                <span className="inline-flex items-center gap-1 text-[9px] font-black bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs" title="Recent absence in Sunday Service or Bible Study">
+                                <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs" title="Recent absence in Sunday Service or Bible Study">
                                   <AlertTriangle className="w-3 h-3 text-amber-700" />
                                   <span>Warning: {m.consecutive_absences ? `${m.consecutive_absences} Absence${m.consecutive_absences > 1 ? "s" : ""}` : "Missed Service"}</span>
                                 </span>
@@ -1820,12 +2096,12 @@ export const MembersPage: React.FC = () => {
                           >
                             <Gift className="w-3.5 h-3.5 text-amber-600" />
                           </button>
-                          <button
+                          <button data-guide="member-details"
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedMember(m);
                             }}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-black text-xs px-3 py-1.5 rounded-xl border border-indigo-200/80 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-medium text-xs px-3 py-1.5 rounded-xl border border-indigo-200/80 transition-all active:scale-95 cursor-pointer shadow-2xs"
                           >
                             Details
                           </button>
@@ -1864,13 +2140,13 @@ export const MembersPage: React.FC = () => {
             </div>
 
             {/* Modern Pagination Bar */}
-            <div className="p-4 bg-white border-t border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div ref={memberPaginationRef} className="p-4 bg-white border-t border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-3 text-charcoal/70 flex-wrap">
                 <span>
-                  Showing <strong className="text-indigo-950 font-black">{totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong> to <strong className="text-indigo-950 font-black">{Math.min(currentPage * pageSize, totalRecords)}</strong> of <strong className="text-indigo-950 font-black">{totalRecords}</strong> members
+                  Showing <strong className="text-indigo-950 font-medium">{totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1}</strong> to <strong className="text-indigo-950 font-medium">{Math.min(currentPage * pageSize, totalRecords)}</strong> of <strong className="text-indigo-950 font-medium">{totalRecords}</strong> members
                 </span>
                 <div className="flex items-center gap-1.5 ml-1">
-                  <span className="text-[11px] text-charcoal/50">Rows:</span>
+                  <span className="text-[12px] text-muted">Rows:</span>
                   <select
                     value={pageSize}
                     onChange={(e) => {
@@ -1878,7 +2154,7 @@ export const MembersPage: React.FC = () => {
                       setPageSize(newSize);
                       setCurrentPage(1);
                     }}
-                    className="bg-slate-50 border border-indigo-100 rounded-lg px-2 py-1 text-xs font-bold text-indigo-950 focus:outline-hidden focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                    className="bg-slate-50 border border-indigo-100 rounded-lg px-2 py-1 text-xs font-medium text-indigo-950 focus:outline-hidden focus:ring-1 focus:ring-amber-500 cursor-pointer"
                   >
                     <option value={15}>15</option>
                     <option value={30}>30</option>
@@ -1895,7 +2171,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(1)}
                     disabled={currentPage === 1 || loading}
                     title="First Page"
-                    className="p-1.5 rounded-xl border border-indigo-100 text-charcoal/60 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronsLeft className="w-4 h-4" />
                   </button>
@@ -1905,7 +2181,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1 || loading}
                     title="Previous Page"
-                    className="p-1.5 rounded-xl border border-indigo-100 text-charcoal/60 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -1920,11 +2196,11 @@ export const MembersPage: React.FC = () => {
 
                         return (
                           <React.Fragment key={pageNumber}>
-                            {showEllipsis && <span className="px-1 text-charcoal/40 font-black">...</span>}
+                            {showEllipsis && <span className="px-1 text-muted font-medium">...</span>}
                             <button
                               type="button"
                               onClick={() => handlePageChange(pageNumber)}
-                              className={`w-8 h-8 rounded-xl font-black text-xs transition-all cursor-pointer ${currentPage === pageNumber
+                              className={`w-8 h-8 rounded-xl font-medium text-xs transition-all cursor-pointer ${currentPage === pageNumber
                                 ? "bg-amber-400 text-indigo-950 shadow-xs border border-amber-300 scale-105"
                                 : "bg-white text-charcoal/70 hover:bg-indigo-50/70 border border-indigo-100"
                                 }`}
@@ -1941,7 +2217,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages || loading}
                     title="Next Page"
-                    className="p-1.5 rounded-xl border border-indigo-100 text-charcoal/60 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -1951,7 +2227,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(totalPages)}
                     disabled={currentPage === totalPages || loading}
                     title="Last Page"
-                    className="p-1.5 rounded-xl border border-indigo-100 text-charcoal/60 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronsRight className="w-4 h-4" />
                   </button>
@@ -1972,36 +2248,39 @@ export const MembersPage: React.FC = () => {
                       <Home className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="font-black text-sm text-indigo-950">{h.name}</h3>
-                      <p className="text-[10px] text-charcoal/50">{h.address || "Address unlisted"}</p>
+                      <h3 className="font-semibold text-sm text-indigo-950">{h.name}</h3>
+                      <p className="text-[12px] text-muted">{h.address || "Address unlisted"}</p>
                     </div>
                   </div>
-                  <span className="text-xs font-black bg-indigo-50 text-indigo-950 px-3 py-1 rounded-full border border-indigo-100">
-                    {h.members?.length || 0} Members
+                  <span className="text-xs font-medium bg-indigo-50 text-indigo-950 px-3 py-1 rounded-full border border-indigo-100">
+                    {householdFamily(h).entries.length} Family Members
                   </span>
                 </div>
 
                 {h.primary_contact_phone && (
                   <div className="text-xs text-charcoal/70 flex items-center gap-1.5 my-2.5 bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
                     <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="font-mono text-[11px] font-bold text-indigo-950">{h.primary_contact_phone}</span>
+                    <span className="font-mono text-[12px] font-medium text-indigo-950">{h.primary_contact_phone}</span>
                   </div>
                 )}
 
                 {/* Family Members list */}
                 <div className="mt-3.5 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-charcoal/50">Family Tree & Ministries</p>
-                  {h.members && [...h.members].sort((a, b) => `${a.first_name || ""} ${a.last_name || ""}`.trim().localeCompare(`${b.first_name || ""} ${b.last_name || ""}`.trim())).map((fam) => (
-                    <div key={fam.id} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-ivory-light/70 border border-indigo-50/80">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-indigo-950">{fam.first_name} {fam.last_name}</span>
-                        <span className="text-[10px] text-charcoal/50 font-medium">({fam.age} yrs)</span>
+                  <p className="text-[12px] font-medium uppercase tracking-wider text-muted">Family Tree & Ministries</p>
+                  {householdFamily(h).entries.map((entry) => (
+                    <div key={entry.member?.id || entry.name} className="flex items-center justify-between gap-2 text-xs p-2.5 rounded-xl bg-ivory-light/70 border border-indigo-50/80">
+                      <div className="min-w-0">
+                        <span className="font-medium text-indigo-950">{entry.name}</span>
+                        {entry.member?.age != null && <span className="ml-2 text-[12px] text-muted font-medium">({entry.member.age} yrs)</span>}
+                        {entry.relationship !== "Family Member" && <span className="block text-[12px] text-indigo-700">{entry.relationship}</span>}
                       </div>
-                      <span className="text-[10px] font-black text-indigo-950 bg-white border border-indigo-100 px-2 py-0.5 rounded-md shadow-2xs">
-                        {fam.ministry_name}
-                      </span>
+                      {entry.member?.ministry_name && <span className="shrink-0 text-[12px] font-medium text-indigo-950 bg-white border border-indigo-100 px-2 py-0.5 rounded-md shadow-2xs">{entry.member.ministry_name}</span>}
                     </div>
                   ))}
+                  {!h.father_name && !h.mother_name && <p className="text-[12px] text-muted">Set the father or mother to reflect them in applications.</p>}
+                  <button data-guide="household-edit" type="button" onClick={() => openHouseholdForm(h)} className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 hover:underline cursor-pointer">
+                    <Pencil className="w-3.5 h-3.5" /> Edit household & family
+                  </button>
                 </div>
               </div>
             </div>
@@ -2012,29 +2291,29 @@ export const MembersPage: React.FC = () => {
       {/* Member Details Centered Modal */}
       {selectedMember && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl lg:max-w-3xl bg-white rounded-3xl shadow-2xl p-6 sm:p-8 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-indigo-50">
+          <ModalPanel data-modal-panel className="w-full max-w-2xl lg:max-w-3xl bg-white rounded-3xl shadow-2xl p-6 sm:p-8 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100 animate-in fade-in zoom-in duration-200">
+            <div data-modal-header className="flex items-center justify-between pb-4 border-b border-indigo-50">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-900 text-white font-black text-xl flex items-center justify-center shadow-md ring-4 ring-indigo-50 shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-900 text-white font-medium text-xl flex items-center justify-center shadow-md ring-4 ring-indigo-50 shrink-0">
                   {selectedMember.first_name?.[0] || ""}{selectedMember.last_name?.[0] || ""}
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-xl font-black text-indigo-950">{selectedMember.first_name} {selectedMember.last_name}</h2>
+                    <h2 className="text-xl font-semibold text-indigo-950">{selectedMember.first_name} {selectedMember.last_name}</h2>
                     {selectedMember.status === "visitor" || selectedMember.membership_type === "guest" ? (
-                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 uppercase tracking-wider border border-amber-300 shadow-2xs">
+                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 uppercase tracking-wider border border-amber-300 shadow-2xs">
                         Guest / Visitor
                       </span>
                     ) : selectedMember.status === "inactive" || selectedMember.membership_type === "inactive" ? (
-                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase tracking-wider border border-slate-300 shadow-2xs">
+                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase tracking-wider border border-slate-300 shadow-2xs">
                         Inactive / Absent
                       </span>
                     ) : selectedMember.is_baptized || selectedMember.baptism_status === "baptized" || selectedMember.membership_type === "baptized_regular" ? (
-                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-950 uppercase tracking-wider border border-indigo-300 shadow-2xs">
+                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-950 uppercase tracking-wider border border-indigo-300 shadow-2xs">
                         Baptized Regular Member
                       </span>
                     ) : (
-                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-950 uppercase tracking-wider border border-sky-300 shadow-2xs">
+                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-950 uppercase tracking-wider border border-sky-300 shadow-2xs">
                         Regular Member (Unbaptized)
                       </span>
                     )}
@@ -2044,7 +2323,7 @@ export const MembersPage: React.FC = () => {
                       className="w-2.5 h-2.5 rounded-full shadow-inner ring-1 ring-white"
                       style={{ backgroundColor: selectedMember.ministry_color || "#2C3968" }}
                     />
-                    <span className="text-xs font-bold text-charcoal/70">
+                    <span className="text-xs font-medium text-charcoal/70">
                       {selectedMember.ministry_name || "Unassigned Ministry"}
                     </span>
                   </div>
@@ -2052,7 +2331,7 @@ export const MembersPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setSelectedMember(null)}
-                className="p-2 rounded-xl hover:bg-gray-100 text-charcoal/50 hover:text-indigo-950 transition-colors cursor-pointer"
+                className="p-2 rounded-xl hover:bg-gray-100 text-muted hover:text-indigo-950 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2061,7 +2340,7 @@ export const MembersPage: React.FC = () => {
             {/* Aging Out Promo Alert Banner if applicable */}
             {selectedMember.is_aging_out && (
               <div className="bg-rose-50/70 border border-rose-300 rounded-2xl p-4 text-xs space-y-2">
-                <div className="flex items-center gap-2 font-black text-rose-950">
+                <div className="flex items-center gap-2 font-medium text-rose-950">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>Member is Aging Out of Current Ministry</span>
                 </div>
@@ -2075,7 +2354,7 @@ export const MembersPage: React.FC = () => {
                       <button
                         key={nextM.id}
                         onClick={() => handlePromoteMinistry(selectedMember, nextM.id)}
-                        className="bg-rose-600 hover:bg-rose-700 text-white font-black px-3.5 py-1.5 rounded-xl text-xs shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-medium px-3.5 py-1.5 rounded-xl text-xs shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
                       >
                         <TrendingUp className="w-3.5 h-3.5 text-white" />
                         <span>Promote to {nextM.name} Ministry</span>
@@ -2088,7 +2367,7 @@ export const MembersPage: React.FC = () => {
             {/* Telemetry Card: Membership Classification & Attendance Health */}
             <div className="p-4 bg-indigo-50/30 rounded-2xl border border-indigo-200/90 shadow-2xs space-y-3 text-xs">
               <div className="flex items-center justify-between pb-2 border-b border-indigo-100/80">
-                <div className="flex items-center gap-2 font-black text-indigo-950 text-xs">
+                <div className="flex items-center gap-2 font-medium text-indigo-950 text-xs">
                   <ShieldCheck className="w-4 h-4 text-indigo-700" />
                   <span>Membership Classification & Attendance Health</span>
                 </div>
@@ -2100,7 +2379,7 @@ export const MembersPage: React.FC = () => {
                     setAttendanceSummaryInitialTab("overview");
                     setAttendanceSummaryMember(target);
                   }}
-                  className="text-[11px] font-black text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-[12px] font-medium text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <Calendar className="w-3 h-3 text-indigo-600" />
                   <span>Full Attendance Tracker</span>
@@ -2112,32 +2391,32 @@ export const MembersPage: React.FC = () => {
                 <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl flex items-start gap-2.5 text-slate-800">
                   <AlertCircle className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="block font-black text-xs text-slate-900">Inactive / Absent Record</strong>
-                    <span className="text-[11px]">This member is currently tagged as Inactive. Pastoral follow-up or visitation recommended.</span>
+                    <strong className="block font-medium text-xs text-slate-900">Inactive / Absent Record</strong>
+                    <span className="text-[12px]">This member is currently tagged as Inactive. Pastoral follow-up or visitation recommended.</span>
                   </div>
                 </div>
               ) : selectedMember.attendance_health === "action_required" || (selectedMember.consecutive_absences && selectedMember.consecutive_absences >= 3) ? (
                 <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-rose-950">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 animate-pulse" />
                   <div>
-                    <strong className="block font-black text-xs text-rose-900">🔴 Action Required: 2–3+ Consecutive Absences</strong>
-                    <span className="text-[11px]">Member has missed {selectedMember.consecutive_absences || "3+"} consecutive services and small group sessions. Immediate pastoral follow-up or contact is recommended!</span>
+                    <strong className="block font-medium text-xs text-rose-900"><UICircleX aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Action Required: 2–3+ Consecutive Absences</strong>
+                    <span className="text-[12px]">Member has missed {selectedMember.consecutive_absences || "3+"} consecutive services and small group sessions. Immediate pastoral follow-up or contact is recommended!</span>
                   </div>
                 </div>
               ) : selectedMember.attendance_health === "warning" || (selectedMember.consecutive_absences && selectedMember.consecutive_absences >= 1) ? (
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-amber-950">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="block font-black text-xs text-amber-900">🟡 Warning: Recent Service Absence</strong>
-                    <span className="text-[11px]">Member missed {selectedMember.consecutive_absences || "a recent"} Sunday service / small group session. An encouragement or check-in message is suggested.</span>
+                    <strong className="block font-medium text-xs text-amber-900"><UIClock aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Warning: Recent Service Absence</strong>
+                    <span className="text-[12px]">Member missed {selectedMember.consecutive_absences || "a recent"} Sunday service / small group session. An encouragement or check-in message is suggested.</span>
                   </div>
                 </div>
               ) : (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-emerald-950">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="block font-black text-xs text-emerald-900">🟢 Healthy & Active Attendee</strong>
-                    <span className="text-[11px]">Regular active participant in Sunday Divine Services and fellowship activities.</span>
+                    <strong className="block font-medium text-xs text-emerald-900"><UICircleCheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Healthy & Active Attendee</strong>
+                    <span className="text-[12px]">Regular active participant in Sunday Divine Services and fellowship activities.</span>
                   </div>
                 </div>
               )}
@@ -2145,12 +2424,12 @@ export const MembersPage: React.FC = () => {
               {/* Telemetry Metric Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
                 <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Baptism</span>
-                  <div className="font-black text-xs text-indigo-950 flex items-center gap-1 mt-0.5">
+                  <span className="text-[12px] text-muted block font-medium">Baptism</span>
+                  <div className="font-medium text-xs text-indigo-950 flex items-center gap-1 mt-0.5">
                     {selectedMember.is_baptized || selectedMember.baptism_status === "baptized" ? (
                       <span className="text-emerald-700 flex items-center gap-1">
-                        <span>✝️ Baptized</span>
-                        {selectedMember.baptism_date && <span className="text-[10px] text-charcoal/50">({selectedMember.baptism_date})</span>}
+                        <span><UIChurch aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Baptized</span>
+                        {selectedMember.baptism_date && <span className="text-[12px] text-muted">({selectedMember.baptism_date})</span>}
                       </span>
                     ) : selectedMember.baptism_status === "candidate" || selectedMember.baptism_status === "scheduled" ? (
                       <span className="text-cyan-700 flex items-center gap-1">
@@ -2158,25 +2437,25 @@ export const MembersPage: React.FC = () => {
                         <span>Candidate</span>
                       </span>
                     ) : (
-                      <span className="text-charcoal/60">Not Baptized</span>
+                      <span className="text-muted">Not Baptized</span>
                     )}
                   </div>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Last Present Attendance</span>
-                  <span className="font-black text-xs text-indigo-950 mt-0.5 block">
+                  <span className="text-[12px] text-muted block font-medium">Last Present Attendance</span>
+                  <span className="font-medium text-xs text-indigo-950 mt-0.5 block">
                     {selectedMember.last_attended_date ? selectedMember.last_attended_date : "No check-in record"}
                   </span>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Bible Study Small Group</span>
-                  <span className="font-black text-xs text-indigo-950 mt-0.5 block truncate">
+                  <span className="text-[12px] text-muted block font-medium">Bible Study Small Group</span>
+                  <span className="font-medium text-xs text-indigo-950 mt-0.5 block truncate">
                     {selectedMember.bible_study_group_name ? selectedMember.bible_study_group_name : "Not enrolled"}
                   </span>
                   {selectedMember.bible_study_leader_name && (
-                    <span className="text-[9px] text-indigo-700 font-bold block">Leader: {selectedMember.bible_study_leader_name}</span>
+                    <span className="text-[12px] text-indigo-700 font-medium block">Leader: {selectedMember.bible_study_leader_name}</span>
                   )}
                 </div>
               </div>
@@ -2186,49 +2465,49 @@ export const MembersPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               {/* Card 1: Member Demographics */}
               <div className="p-4 bg-ivory-light/70 rounded-2xl border border-indigo-100/70 space-y-2">
-                <p className="font-black text-indigo-950 text-[10px] uppercase tracking-wider">Demographics</p>
+                <p className="font-medium text-indigo-950 text-[12px] uppercase tracking-wider">Personal Details</p>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Age:</span>
-                  <span className="font-black text-indigo-950">{selectedMember.age} years old</span>
+                  <span className="text-muted">Age:</span>
+                  <span className="font-medium text-indigo-950">{selectedMember.age} years old</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Birthdate:</span>
-                  <span className="font-bold text-charcoal">{selectedMember.birthdate}</span>
+                  <span className="text-muted">Birthdate:</span>
+                  <span className="font-medium text-charcoal">{selectedMember.birthdate}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Gender:</span>
-                  <span className="font-bold text-charcoal">{selectedMember.gender || "Unspecified"}</span>
+                  <span className="text-muted">Gender:</span>
+                  <span className="font-medium text-charcoal">{selectedMember.gender || "Unspecified"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Civil Status:</span>
-                  <span className="font-black text-indigo-950">
-                    {selectedMember.civil_status === "Married" ? "💍 Married" : (selectedMember.civil_status || "Single")}
+                  <span className="text-muted">Civil Status:</span>
+                  <span className="font-medium text-indigo-950">
+                    {selectedMember.civil_status === "Married" ? <><UIHeartHandshake aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Married</> : (selectedMember.civil_status || "Single")}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Grade Level:</span>
-                  <span className="font-bold text-charcoal">{selectedMember.grade_level || "N/A"}</span>
+                  <span className="text-muted">Grade Level:</span>
+                  <span className="font-medium text-charcoal">{selectedMember.grade_level || "N/A"}</span>
                 </div>
               </div>
 
               {/* Card 2: Household & Ministry */}
               <div className="p-4 bg-ivory-light/70 rounded-2xl border border-indigo-100/70 space-y-2">
-                <p className="font-black text-indigo-950 text-[10px] uppercase tracking-wider">Household & Ministry</p>
+                <p className="font-medium text-indigo-950 text-[12px] uppercase tracking-wider">Household & Ministry</p>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Household:</span>
-                  <span className="font-black text-indigo-950">{selectedMember.household_name || "Individual"}</span>
+                  <span className="text-muted">Household:</span>
+                  <span className="font-medium text-indigo-950">{selectedMember.household_name || "Individual"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Current Ministry:</span>
-                  <span className="font-black text-indigo-950">{selectedMember.ministry_name || "None"}</span>
+                  <span className="text-muted">Current Ministry:</span>
+                  <span className="font-medium text-indigo-950">{selectedMember.ministry_name || "None"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Email:</span>
-                  <span className="font-bold text-charcoal truncate max-w-[140px]">{selectedMember.contact_email || "N/A"}</span>
+                  <span className="text-muted">Email:</span>
+                  <span className="font-medium text-charcoal truncate max-w-[140px]">{selectedMember.contact_email || "N/A"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-charcoal/60">Phone:</span>
-                  <span className="font-bold text-charcoal">{selectedMember.contact_phone || "N/A"}</span>
+                  <span className="text-muted">Phone:</span>
+                  <span className="font-medium text-charcoal">{selectedMember.contact_phone || "N/A"}</span>
                 </div>
               </div>
             </div>
@@ -2237,27 +2516,25 @@ export const MembersPage: React.FC = () => {
             {(selectedMember.civil_status === "Married" || selectedMember.spouse_name || selectedMember.spouse_id) && (
               <div className="p-4 bg-amber-50 rounded-2xl border border-amber-300/80 shadow-2xs space-y-2.5 text-xs">
                 <div className="flex items-center justify-between pb-2 border-b border-amber-200/80">
-                  <span className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
+                  <span className="font-medium text-amber-950 flex items-center gap-1.5 text-xs">
                     <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
                     <span>Spouse & Marriage Information</span>
                   </span>
-                  <span className="text-[10px] bg-amber-500 text-white font-black px-2.5 py-0.5 rounded-full shadow-2xs">
-                    💍 Married • Junior Adult Scope
+                  <span className="text-[12px] bg-amber-500 text-white font-medium px-2.5 py-0.5 rounded-full shadow-2xs"><UIHeartHandshake aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Married • Junior Adult Scope
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 bg-white/90 p-3 rounded-xl border border-amber-200 shadow-2xs flex-wrap">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-amber-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                      💍
+                    <div className="w-9 h-9 rounded-full bg-amber-600 text-white font-medium text-xs flex items-center justify-center shrink-0 shadow-2xs"><UIHeartHandshake aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" />
                     </div>
                     <div>
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Married To (Spouse)</span>
-                      <h4 className="font-black text-xs text-indigo-950">
+                      <span className="text-[12px] text-muted block font-medium">Married To (Spouse)</span>
+                      <h4 className="font-semibold text-xs text-indigo-950">
                         {selectedMember.spouse_name || (selectedMember.linked_spouse_first_name ? `${selectedMember.linked_spouse_first_name} ${selectedMember.linked_spouse_last_name}` : "Registered Spouse")}
                       </h4>
                       {selectedMember.linked_spouse_ministry_name && (
-                        <span className="text-[10px] text-indigo-700 font-bold">
+                        <span className="text-[12px] text-indigo-700 font-medium">
                           {selectedMember.linked_spouse_ministry_name} Ministry
                         </span>
                       )}
@@ -2274,7 +2551,7 @@ export const MembersPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setSelectedMember(spouseObj)}
-                          className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-black text-[11px] transition-all flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
+                          className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-medium text-[12px] transition-all flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
                         >
                           <span>View Spouse Profile</span>
                           <ArrowRight className="w-3 h-3" />
@@ -2290,22 +2567,22 @@ export const MembersPage: React.FC = () => {
             {/* Card 3: Birthday & Milestone Celebration */}
             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200/80 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-black text-indigo-950 flex items-center gap-1.5 text-xs">
+                <span className="font-medium text-indigo-950 flex items-center gap-1.5 text-xs">
                   <Cake className="w-4 h-4 text-rose-500" />
                   <span>Birthday & Milestone Celebration</span>
                 </span>
                 {selectedMember.is_birthday_today ? (
-                  <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full animate-bounce shadow-2xs">
+                  <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[12px] font-medium px-2.5 py-0.5 rounded-full animate-bounce shadow-2xs">
                     <Cake className="w-3 h-3 text-amber-300" />
                     <span>TODAY!</span>
                   </span>
                 ) : selectedMember.is_birthday_this_week ? (
-                  <span className="inline-flex items-center gap-1 bg-amber-400 text-indigo-950 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
+                  <span className="inline-flex items-center gap-1 bg-amber-400 text-indigo-950 text-[12px] font-medium px-2.5 py-0.5 rounded-full shadow-2xs">
                     <Calendar className="w-3 h-3 text-indigo-900" />
                     <span>In {selectedMember.days_until_birthday} days!</span>
                   </span>
                 ) : selectedMember.is_birthday_this_month ? (
-                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-amber-300">
+                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 text-[12px] font-medium px-2.5 py-0.5 rounded-full border border-amber-300">
                     <Cake className="w-3 h-3 text-amber-700" />
                     <span>This Month</span>
                   </span>
@@ -2314,20 +2591,20 @@ export const MembersPage: React.FC = () => {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 <div className="bg-white/90 p-2.5 rounded-xl border border-amber-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Birth Date</span>
-                  <span className="font-black text-indigo-950">
+                  <span className="text-[12px] text-muted block font-medium">Birth Date</span>
+                  <span className="font-medium text-indigo-950">
                     {selectedMember.birth_month_name ? `${selectedMember.birth_month_name} ${selectedMember.birth_day}` : selectedMember.birthdate}
                   </span>
                 </div>
                 <div className="bg-white/90 p-2.5 rounded-xl border border-amber-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Next Turning Age</span>
-                  <span className="font-black text-indigo-950">
+                  <span className="text-[12px] text-muted block font-medium">Next Turning Age</span>
+                  <span className="font-medium text-indigo-950">
                     {selectedMember.turning_age || ((selectedMember.age ?? 0) + 1)} yrs old
                   </span>
                 </div>
                 <div className="bg-white/90 p-2.5 rounded-xl border border-amber-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Countdown</span>
-                  <span className="font-black text-amber-700 flex items-center gap-1">
+                  <span className="text-[12px] text-muted block font-medium">Countdown</span>
+                  <span className="font-medium text-amber-700 flex items-center gap-1">
                     {selectedMember.days_until_birthday !== undefined ? (
                       selectedMember.days_until_birthday === 0 ? (
                         <>
@@ -2343,7 +2620,7 @@ export const MembersPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleOpenGreeting(selectedMember)}
-                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs py-2.5 px-4 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs py-2.5 px-4 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
               >
                 <Gift className="w-4 h-4 text-indigo-950" />
                 <span>Send Birthday Blessing / Announcement</span>
@@ -2358,10 +2635,10 @@ export const MembersPage: React.FC = () => {
                     <Droplets className="w-4 h-4 text-cyan-600 fill-cyan-300" />
                   </div>
                   <div>
-                    <span className="font-black text-indigo-950 text-xs block">
+                    <span className="font-medium text-indigo-950 text-xs block">
                       Annual Attendance & Baptism Ceremony
                     </span>
-                    <span className="text-[10px] text-charcoal/60">
+                    <span className="text-[12px] text-muted">
                       Sunday service attendance consistency and baptism ceremony milestone
                     </span>
                   </div>
@@ -2376,7 +2653,7 @@ export const MembersPage: React.FC = () => {
                       setAttendanceSummaryInitialTab("overview");
                       setAttendanceSummaryMember(target);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-indigo-800  text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                    className="px-3.5 py-1.5 rounded-xl bg-indigo-800  text-white font-medium text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
                   >
                     <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
                     <span>Attendance Rates & Streaks</span>
@@ -2389,7 +2666,7 @@ export const MembersPage: React.FC = () => {
                       setAttendanceSummaryInitialTab("monthly");
                       setAttendanceSummaryMember(target);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-cyan-700  text-white font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                    className="px-3.5 py-1.5 rounded-xl bg-cyan-700  text-white font-medium text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
                   >
                     <Calendar className="w-3.5 h-3.5 text-cyan-200" />
                     <span>Open Full-Year Attendance</span>
@@ -2399,40 +2676,40 @@ export const MembersPage: React.FC = () => {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 <div className="bg-white/90 p-2.5 rounded-xl border border-cyan-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Baptism Status</span>
-                  <span className="font-black text-indigo-950 flex items-center gap-1">
+                  <span className="text-[12px] text-muted block font-medium">Baptism Status</span>
+                  <span className="font-medium text-indigo-950 flex items-center gap-1">
                     {selectedMember.baptism_status === "candidate" || selectedMember.baptism_status === "scheduled" ? (
                       <>
                         <span className="w-2 h-2 rounded-full bg-cyan-500 animate-ping" />
-                        <span className="text-cyan-700">🌊 Ceremony Candidate</span>
+                        <span className="text-cyan-700"><UIWaves aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Ceremony Candidate</span>
                       </>
                     ) : selectedMember.is_baptized || selectedMember.baptism_status === "baptized" ? (
                       <>
-                        <span>✝️</span>
+                        <span><UIChurch aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></span>
                         <span className="text-emerald-700">Baptized</span>
                       </>
                     ) : (
-                      <span className="text-charcoal/60">⚪ Not Yet Baptized</span>
+                      <span className="text-muted"><UICircle aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Not Yet Baptized</span>
                     )}
                   </span>
                 </div>
 
                 <div className="bg-white/90 p-2.5 rounded-xl border border-cyan-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Ceremony Date</span>
-                  <span className="font-black text-indigo-950">
+                  <span className="text-[12px] text-muted block font-medium">Ceremony Date</span>
+                  <span className="font-medium text-indigo-950">
                     {selectedMember.baptism_date || "Not set / scheduled"}
                   </span>
                 </div>
 
                 <div className="bg-white/90 p-2.5 rounded-xl border border-cyan-100 shadow-2xs">
-                  <span className="text-[10px] text-charcoal/50 block font-bold">Readiness / Alert</span>
-                  <span className="font-black text-indigo-950 flex items-center gap-1">
+                  <span className="text-[12px] text-muted block font-medium">Readiness / Alert</span>
+                  <span className="font-medium text-indigo-950 flex items-center gap-1">
                     {selectedMember.baptism_status === "candidate" || selectedMember.baptism_status === "scheduled" ? (
-                      <span className="text-cyan-800 font-black">🔔 Alert Triggered</span>
+                      <span className="text-cyan-800 font-medium"><UIBell aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Alert Triggered</span>
                     ) : selectedMember.is_baptized ? (
-                      <span className="text-emerald-700 font-black">✅ Completed</span>
+                      <span className="text-emerald-700 font-medium"><UICircleCheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Completed</span>
                     ) : (
-                      <span className="text-amber-800 font-bold">Pending Evaluation</span>
+                      <span className="text-amber-800 font-medium">Pending Evaluation</span>
                     )}
                   </span>
                 </div>
@@ -2440,15 +2717,15 @@ export const MembersPage: React.FC = () => {
             </div>
 
             {/* Official Application Card Details */}
-            {(selectedMember.address || selectedMember.guardian_names || selectedMember.school_name || selectedMember.program_major || selectedMember.occupation || selectedMember.hobbies || selectedMember.invited_by || selectedMember.previous_church || selectedMember.facebook_account || selectedMember.family_details || selectedMember.class_schedule || selectedMember.application_date) && (
+            {(selectedMember.address || selectedGuardian || selectedMember.school_name || selectedMember.program_major || selectedMember.occupation || selectedMember.hobbies || selectedMember.invited_by || selectedMember.previous_church || selectedMember.facebook_account || selectedFamilyDetails || selectedMember.class_schedule || selectedMember.application_date) && (
               <div className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs space-y-3 text-xs">
                 <div className="flex items-center justify-between pb-2.5 border-b border-indigo-50">
-                  <span className="font-black text-indigo-950 flex items-center gap-1.5 text-xs">
+                  <span className="font-medium text-indigo-950 flex items-center gap-1.5 text-xs">
                     <FileText className="w-4 h-4 text-indigo-700" />
                     <span>Application for Membership Card</span>
                   </span>
                   {selectedMember.application_date && (
-                    <span className="text-[10px] bg-indigo-50 text-indigo-950 px-2.5 py-0.5 rounded-md font-bold border border-indigo-100">
+                    <span className="text-[12px] bg-indigo-50 text-indigo-950 px-2.5 py-0.5 rounded-md font-medium border border-indigo-100">
                       Applied: {selectedMember.application_date}
                     </span>
                   )}
@@ -2459,74 +2736,71 @@ export const MembersPage: React.FC = () => {
                     <div className="sm:col-span-2 flex items-start gap-2 bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
                       <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
                       <div>
-                        <span className="text-[10px] text-charcoal/50 block font-bold">Address</span>
-                        <span className="text-indigo-950 font-bold">{selectedMember.address}</span>
+                        <span className="text-[12px] text-muted block font-medium">Address</span>
+                        <span className="text-indigo-950 font-medium">{selectedMember.address}</span>
                       </div>
                     </div>
                   )}
 
-                  {selectedMember.guardian_names && (
+                  {/* Structured Family Members & Household */}
+                  {selectedFamily.entries.length > 0 ? (
+                    <MemberFamilySection member={selectedMember} household={selectedHousehold} canEdit={canEdit}
+                      onViewMember={setSelectedMember} onRegister={setRelativeChoice} />
+                  ) : (selectedGuardian || selectedMember.guardian_phone) ? (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Parents / Guardians</span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.guardian_names}</span>
-                      {selectedMember.guardian_phone && (
-                        <span className="text-indigo-700 block text-[11px] font-bold">{selectedMember.guardian_phone}</span>
+                      <span className="text-[12px] text-muted block font-medium">Parents / Emergency Contact</span>
+                      <span className="text-indigo-950 font-medium">{selectedGuardian || "Unlisted"}</span>
+                      {selectedGuardianPhone && (
+                        <span className="text-indigo-700 block text-[12px] font-medium">{selectedGuardianPhone}</span>
                       )}
                     </div>
-                  )}
-
-                  {selectedMember.family_details && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Family Members</span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.family_details}</span>
-                    </div>
-                  )}
+                  ) : null}
 
                   {selectedMember.school_name && (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">
+                      <span className="text-[12px] text-muted block font-medium">
                         {selectedMember.occupation ? "School / College Graduated" : "School / College"}
                       </span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.school_name}</span>
+                      <span className="text-indigo-950 font-medium">{selectedMember.school_name}</span>
                       {selectedMember.program_major && (
-                        <span className="text-indigo-700 block text-[11px] font-bold">{selectedMember.program_major}</span>
+                        <span className="text-indigo-700 block text-[12px] font-medium">{selectedMember.program_major}</span>
                       )}
                     </div>
                   )}
 
                   {selectedMember.occupation && (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Occupation / Workplace</span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.occupation}</span>
+                      <span className="text-[12px] text-muted block font-medium">Occupation / Workplace</span>
+                      <span className="text-indigo-950 font-medium">{selectedMember.occupation}</span>
                     </div>
                   )}
 
                   {selectedMember.class_schedule && (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">
+                      <span className="text-[12px] text-muted block font-medium">
                         {selectedMember.occupation ? "Work / Availability Schedule" : "Class Schedule"}
                       </span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.class_schedule}</span>
+                      <span className="text-indigo-950 font-medium">{selectedMember.class_schedule}</span>
                     </div>
                   )}
 
                   {selectedMember.hobbies && (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Hobbies</span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.hobbies}</span>
+                      <span className="text-[12px] text-muted block font-medium">Hobbies</span>
+                      <span className="text-indigo-950 font-medium">{selectedMember.hobbies}</span>
                     </div>
                   )}
 
                   {selectedMember.invited_by && (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Who Invited in DPC?</span>
+                      <span className="text-[12px] text-muted block font-medium">Who Invited in DPC?</span>
                       <div className="flex items-center justify-between gap-1 mt-0.5">
-                        <span className="text-indigo-950 font-black">{selectedMember.invited_by}</span>
+                        <span className="text-indigo-950 font-medium">{selectedMember.invited_by}</span>
                         {inviterMember && (
                           <button
                             type="button"
                             onClick={() => setSelectedMember(inviterMember)}
-                            className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer flex items-center gap-0.5"
+                            className="text-[12px] text-indigo-600 hover:text-indigo-800 font-medium underline cursor-pointer flex items-center gap-0.5"
                           >
                             <span>View Inviter</span>
                             <ArrowRight className="w-2.5 h-2.5" />
@@ -2538,15 +2812,15 @@ export const MembersPage: React.FC = () => {
 
                   {selectedMember.previous_church && (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Previous Church</span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.previous_church}</span>
+                      <span className="text-[12px] text-muted block font-medium">Previous Church</span>
+                      <span className="text-indigo-950 font-medium">{selectedMember.previous_church}</span>
                     </div>
                   )}
 
                   {selectedMember.facebook_account && (
                     <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
-                      <span className="text-[10px] text-charcoal/50 block font-bold">Facebook Account</span>
-                      <span className="text-indigo-950 font-bold">{selectedMember.facebook_account}</span>
+                      <span className="text-[12px] text-muted block font-medium">Facebook Account</span>
+                      <span className="text-indigo-950 font-medium">{selectedMember.facebook_account}</span>
                     </div>
                   )}
                 </div>
@@ -2555,62 +2829,95 @@ export const MembersPage: React.FC = () => {
 
             {/* Outreach & Discipleship Tree: People Invited by this Member */}
             <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-indigo-50">
+              <div className="flex items-center justify-between pb-2 border-b border-indigo-50 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-700">
                     <Users className="w-4 h-4" />
                   </span>
                   <div>
-                    <h3 className="font-black text-xs text-indigo-950">
+                    <h3 className="font-semibold text-xs text-indigo-950">
                       Discipleship & Outreach: People Invited by {selectedMember.first_name}
                     </h3>
-                    <p className="text-[10px] text-charcoal/50">
+                    <p className="text-[12px] text-muted">
                       Members and attendees brought into DPC through {selectedMember.first_name}'s invitation
                     </p>
                   </div>
                 </div>
-                <span className="text-xs font-black bg-indigo text-white px-3 py-1 rounded-full shadow-2xs">
-                  {disciplesInvitedByMember.length} {disciplesInvitedByMember.length === 1 ? "Invited Person" : "Invited People"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium bg-indigo text-white px-3 py-1 rounded-full shadow-2xs">
+                    {disciplesInvitedByMember.length} {disciplesInvitedByMember.length === 1 ? "Invited Person" : "Invited People"}
+                  </span>
+                  {disciplesInvitedByMember.length > 4 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvitedModalSearch("");
+                        setInvitedModalMinistryFilter("all");
+                        setIsInvitedMembersModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-white hover:bg-indigo-100 text-indigo-700 hover:text-indigo-950 font-medium text-[12px] border border-indigo-200 transition-all flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      <span>See More ({disciplesInvitedByMember.length})</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {disciplesInvitedByMember.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {disciplesInvitedByMember.map((invited) => (
-                    <div
-                      key={invited.id}
-                      onClick={() => setSelectedMember(invited)}
-                      className="p-3 bg-white rounded-xl border border-indigo-100/90 hover:border-indigo-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-indigo-800 text-white text-xs font-black flex items-center justify-center shrink-0 shadow-2xs">
-                          {invited.first_name?.[0] || ""}{invited.last_name?.[0] || ""}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-bold text-xs text-indigo-950 truncate group-hover:text-amber-600 transition-colors">
-                            {invited.first_name} {invited.last_name}
-                          </div>
-                          <div className="text-[10px] text-charcoal/50 flex items-center gap-1.5 mt-0.5">
-                            <span className="font-semibold text-indigo-800">{invited.ministry_name || "Member"}</span>
-                            <span>•</span>
-                            <span>{invited.age} yrs old</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="text-[10px] font-black text-indigo-600 group-hover:text-indigo-900 group-hover:translate-x-0.5 transition-all flex items-center gap-1 shrink-0 ml-2"
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {disciplesInvitedByMember.slice(0, 4).map((invited) => (
+                      <div
+                        key={invited.id}
+                        onClick={() => setSelectedMember(invited)}
+                        className="p-3 bg-white rounded-xl border border-indigo-100/90 hover:border-indigo-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
                       >
-                        <span>Profile</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-indigo-800 text-white text-xs font-medium flex items-center justify-center shrink-0 shadow-2xs">
+                            {invited.first_name?.[0] || ""}{invited.last_name?.[0] || ""}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-xs text-indigo-950 truncate group-hover:text-amber-600 transition-colors">
+                              {invited.first_name} {invited.last_name}
+                            </div>
+                            <div className="text-[12px] text-muted flex items-center gap-1.5 mt-0.5">
+                              <span className="font-medium text-indigo-800">{invited.ministry_name || "Member"}</span>
+                              <span>•</span>
+                              <span>{invited.age} yrs old</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="text-[12px] font-medium text-indigo-600 group-hover:text-indigo-900 group-hover:translate-x-0.5 transition-all flex items-center gap-1 shrink-0 ml-2"
+                        >
+                          <span>Profile</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {disciplesInvitedByMember.length > 4 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvitedModalSearch("");
+                        setInvitedModalMinistryFilter("all");
+                        setIsInvitedMembersModalOpen(true);
+                      }}
+                      className="w-full p-2.5 bg-white hover:bg-indigo-100/80 text-indigo-900 font-medium text-xs rounded-xl border border-indigo-200/90 hover:border-indigo-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs group"
+                    >
+                      <span>+ View {disciplesInvitedByMember.length - 4} more invited {disciplesInvitedByMember.length - 4 === 1 ? "person" : "people"} (Open Full List)</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-indigo-600 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  )}
                 </div>
               ) : (
-                <div className="p-3.5 bg-ivory-light/50 rounded-xl border border-dashed border-indigo-200/80 text-center text-charcoal/50 text-xs">
-                  <p className="font-medium text-[11px]">
+                <div className="p-3.5 bg-ivory-light/50 rounded-xl border border-dashed border-indigo-200/80 text-center text-muted text-xs">
+                  <p className="font-medium text-[12px]">
                     No members or visitors currently registered under {selectedMember.first_name}'s invitation.
                   </p>
                 </div>
@@ -2620,32 +2927,32 @@ export const MembersPage: React.FC = () => {
             {/* Medical / Allergy Alert Box */}
             {selectedMember.medical_notes && (
               <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-2xl text-xs space-y-1.5">
-                <span className="font-black text-rose-950 flex items-center gap-1.5">
+                <span className="font-medium text-rose-950 flex items-center gap-1.5">
                   <AlertCircle className="w-4 h-4 text-rose-600" />
                   <span>Medical & Special Care Instructions:</span>
                 </span>
-                <p className="text-rose-950 font-bold bg-white p-3 rounded-xl border border-rose-100 shadow-2xs">
+                <p className="text-rose-950 font-medium bg-white p-3 rounded-xl border border-rose-100 shadow-2xs">
                   {selectedMember.medical_notes}
                 </p>
               </div>
             )}
 
             {/* Modal Footer */}
-            <div className="pt-3 border-t border-indigo-50 flex items-center justify-between gap-2 flex-wrap">
+            <div data-modal-footer className="pt-3 border-t border-indigo-50 flex items-center justify-between gap-2 flex-wrap">
               {canEdit ? (
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setDeleteConfirmMember(selectedMember)}
-                    className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-2xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-medium rounded-2xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <Trash2 className="w-4 h-4 text-rose-600" />
                     <span>Delete Record</span>
                   </button>
-                  <button
+                  <button data-guide="member-edit"
                     type="button"
                     onClick={() => handleOpenEdit(selectedMember)}
-                    className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 font-bold rounded-2xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 font-medium rounded-2xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <Pencil className="w-4 h-4 text-indigo-600" />
                     <span>Edit Record</span>
@@ -2654,10 +2961,200 @@ export const MembersPage: React.FC = () => {
               ) : <div />}
 
               <button
-                onClick={() => setSelectedMember(null)}
-                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-charcoal font-black rounded-2xl text-xs transition-colors cursor-pointer"
+                onClick={() => {
+                  setSelectedMember(null);
+                  setIsInvitedMembersModalOpen(false);
+                }}
+                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-charcoal font-medium rounded-2xl text-xs transition-colors cursor-pointer"
               >
                 Close Profile
+              </button>
+            </div>
+          </ModalPanel>
+        </div>,
+        document.body
+      )}
+
+      {/* Discipleship & Outreach Full Modal: People Invited by Member */}
+      {isInvitedMembersModalOpen && selectedMember && createPortal(
+        <div className="fixed inset-0 z-[120] bg-charcoal/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div data-modal-panel className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+            {/* Modal Header */}
+            <div data-modal-header className="p-5 sm:p-6 bg-gradient-to-r from-indigo-950 via-indigo-900 to-indigo-950 text-white border-b border-indigo-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-white/10 text-amber-300 border border-white/15 shadow-inner">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-semibold text-white">
+                      People Invited by {selectedMember.first_name} {selectedMember.last_name}
+                    </h2>
+                    <span className="text-xs bg-amber-400 text-indigo-950 font-semibold px-2.5 py-0.5 rounded-full shadow-2xs">
+                      {disciplesInvitedByMember.length} Total
+                    </span>
+                  </div>
+                  <p className="text-xs text-indigo-200 mt-0.5">
+                    Full discipleship & outreach tree of members brought to DPC through their personal invitation
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInvitedMembersModalOpen(false)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search & Ministry Filters Bar */}
+            <div className="p-4 bg-indigo-50/50 border-b border-indigo-100 space-y-3 shrink-0">
+              <div className="relative">
+                <Search className="w-4 h-4 text-indigo-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search invited member by name, phone, age, ministry..."
+                  value={invitedModalSearch}
+                  onChange={(e) => setInvitedModalSearch(e.target.value)}
+                  className="w-full bg-white pl-9 pr-8 py-2.5 rounded-xl border border-indigo-200 text-xs font-medium text-charcoal shadow-2xs placeholder:text-muted focus:outline-none focus:border-indigo"
+                />
+                {invitedModalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setInvitedModalSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-charcoal cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Ministry Filter Pills if there are multiple ministries */}
+              {invitedMemberMinistries.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5 text-xs">
+                  <span className="text-[12px] text-muted font-medium shrink-0 flex items-center gap-1 mr-1">
+                    <Filter className="w-3 h-3 text-indigo-600" />
+                    <span>Filter:</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setInvitedModalMinistryFilter("all")}
+                    className={`px-3 py-1 rounded-xl text-[12px] font-medium transition-all cursor-pointer whitespace-nowrap border ${invitedModalMinistryFilter === "all"
+                        ? "bg-indigo-600 text-white border-indigo-700 shadow-2xs"
+                        : "bg-white text-charcoal/80 border-gray-200 hover:bg-indigo-50 hover:border-indigo-200"
+                      }`}
+                  >
+                    All ({disciplesInvitedByMember.length})
+                  </button>
+                  {invitedMemberMinistries.map((minName) => {
+                    const count = disciplesInvitedByMember.filter(
+                      (m) => m.ministry_name?.toLowerCase() === minName.toLowerCase()
+                    ).length;
+                    return (
+                      <button
+                        key={minName}
+                        type="button"
+                        onClick={() => setInvitedModalMinistryFilter(minName)}
+                        className={`px-3 py-1 rounded-xl text-[12px] font-medium transition-all cursor-pointer whitespace-nowrap border ${invitedModalMinistryFilter.toLowerCase() === minName.toLowerCase()
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-2xs"
+                            : "bg-white text-charcoal/80 border-gray-200 hover:bg-indigo-50 hover:border-indigo-200"
+                          }`}
+                      >
+                        {minName} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Member Cards List (Scrollable) */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 max-h-[50vh] custom-scrollbar flex-1">
+              {filteredModalInvitedDisciples.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {filteredModalInvitedDisciples.map((invited) => (
+                    <div
+                      key={invited.id}
+                      onClick={() => {
+                        setSelectedMember(invited);
+                        setIsInvitedMembersModalOpen(false);
+                      }}
+                      className="p-3 bg-white rounded-2xl border border-indigo-100 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group bg-gradient-to-br hover:from-indigo-50/40 hover:to-white"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-indigo-800 text-white text-xs font-semibold flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                          {invited.first_name?.[0] || ""}{invited.last_name?.[0] || ""}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-xs text-indigo-950 truncate group-hover:text-amber-600 transition-colors">
+                            {invited.first_name} {invited.last_name}
+                          </div>
+                          <div className="text-[12px] text-muted flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className="font-medium text-indigo-800 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
+                              {invited.ministry_name || "Member"}
+                            </span>
+                            <span>•</span>
+                            <span>{invited.age} yrs old</span>
+                            {invited.gender && (
+                              <>
+                                <span>•</span>
+                                <span>{invited.gender}</span>
+                              </>
+                            )}
+                          </div>
+                          {invited.contact_phone && (
+                            <div className="text-[11px] text-muted flex items-center gap-1 mt-1">
+                              <Phone className="w-3 h-3 text-emerald-600" />
+                              <span>{invited.contact_phone}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="px-2.5 py-1.5 rounded-xl bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white text-indigo-700 font-medium text-[12px] transition-all flex items-center gap-1 shrink-0 ml-2 shadow-2xs"
+                      >
+                        <span>Profile</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-muted space-y-2 bg-ivory-light/40 rounded-2xl border border-dashed border-indigo-200">
+                  <Users className="w-8 h-8 text-indigo-300 mx-auto" />
+                  <p className="font-medium text-xs text-charcoal">
+                    No invited members match your current filter
+                  </p>
+                  {invitedModalSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvitedModalSearch("");
+                        setInvitedModalMinistryFilter("all");
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 underline font-medium cursor-pointer"
+                    >
+                      Reset Search Filters
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div data-modal-footer className="p-4 bg-gray-50 border-t border-indigo-100 flex items-center justify-between gap-3 text-xs shrink-0">
+              <span className="text-muted font-medium text-[12px]">
+                Showing <strong>{filteredModalInvitedDisciples.length}</strong> of <strong>{disciplesInvitedByMember.length}</strong> invited members
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsInvitedMembersModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-charcoal font-medium text-xs transition-colors cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>
@@ -2669,14 +3166,14 @@ export const MembersPage: React.FC = () => {
       {/* Delete Member Confirmation Modal */}
       {deleteConfirmMember && createPortal(
         <div className="fixed inset-0 z-[110] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center gap-3">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-100 animate-in fade-in zoom-in-95 duration-150">
+            <div data-modal-header className="flex items-center gap-3">
               <div className="p-3 rounded-2xl bg-rose-100 text-rose-600 shrink-0">
                 <Trash2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-black text-charcoal">Delete Member Record</h3>
-                <p className="text-xs text-charcoal/60">This action will remove the record permanently.</p>
+                <h3 className="text-base font-semibold text-charcoal">Delete Member Record</h3>
+                <p className="text-xs text-muted">This action will remove the record permanently.</p>
               </div>
             </div>
 
@@ -2684,17 +3181,17 @@ export const MembersPage: React.FC = () => {
               <p>
                 Are you sure you want to delete <strong>{deleteConfirmMember.first_name} {deleteConfirmMember.last_name}</strong>?
               </p>
-              <p className="text-[11px] text-rose-800">
+              <p className="text-[12px] text-rose-800">
                 Ministry: <strong>{deleteConfirmMember.ministry_name || "Unassigned"}</strong> • Age: <strong>{deleteConfirmMember.age || "N/A"} yrs</strong>
               </p>
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-2">
+            <div data-modal-footer className="pt-2 flex items-center justify-end gap-2">
               <button
                 type="button"
                 disabled={isDeleting}
                 onClick={() => setDeleteConfirmMember(null)}
-                className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-bold text-xs transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-medium text-xs transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -2702,7 +3199,7 @@ export const MembersPage: React.FC = () => {
                 type="button"
                 disabled={isDeleting}
                 onClick={() => handleDeleteMember(null)}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isDeleting ? (
                   <>
@@ -2717,17 +3214,15 @@ export const MembersPage: React.FC = () => {
                 )}
               </button>
             </div>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
+      {relativeChoice && <RelativeRegistrationModal context={relativeChoice} households={households}
+        onClose={() => setRelativeChoice(null)} onCreate={relationship => registerRelative(relativeChoice, relationship)}
+        onLink={(member, relationship) => linkRelative(relativeChoice, member, relationship)} />}
       {isAddModalOpen && createPortal(
         (() => {
-          const currentModalMinistryId = formData.ministry_id
-            ? Number(formData.ministry_id)
-            : (coordinatorMinistryId || suggestedMinistryInfo?.ministry?.id || null);
-          const currentModalMinistry = effectiveMinistries.find(m => m.id === currentModalMinistryId) || suggestedMinistryInfo?.ministry || null;
-          const currentMinName = (currentModalMinistry?.name || "").toLowerCase();
           const isKinder = currentMinName.includes("kinder");
           const isElementary = currentMinName.includes("elem");
           const isHighSchool = currentMinName.includes("high") || currentMinName.includes("school");
@@ -2735,6 +3230,11 @@ export const MembersPage: React.FC = () => {
           const isYoungAdult = currentMinName.includes("young");
           const isJuniorAdult = currentMinName.includes("junior");
           const isOldAdult = currentMinName.includes("old") || currentMinName.includes("senior");
+          const renderFamilyDetails = (label = "Family Members (Parents & siblings)", placeholder = "e.g. Parents, 2 siblings") => (
+            <MemberFamilyDetailsField household={linkedHousehold} details={formData.family_details}
+              onDetailsChange={details => setFormData(prev => ({ ...prev, family_details: details }))}
+              label={label} placeholder={placeholder} />
+          );
 
           const getMinistryRequirementSummary = (name?: string) => {
             const n = (name || "").toLowerCase();
@@ -2750,1531 +3250,1278 @@ export const MembersPage: React.FC = () => {
 
           return (
             <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-2xl lg:max-w-3xl w-full p-6 sm:p-8 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150 border border-indigo-100/80">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base sm:text-lg font-bold text-charcoal flex items-center gap-2">
-                    {editingMember ? <Pencil className="w-5 h-5 text-amber-600" /> : <Users className="w-5 h-5 text-indigo" />}
-                    <span>{editingMember ? `Edit Member: ${editingMember.first_name} ${editingMember.last_name}` : "Add New Member Record"}</span>
-                  </h2>
-                  <button onClick={() => setIsAddModalOpen(false)} className="p-1.5 text-charcoal/50 hover:bg-gray-100 rounded-xl cursor-pointer transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* DPC Physical Form Synchronized Header */}
-                <div className="bg-indigo-950 p-3.5 rounded-2xl text-white shadow-xs border border-indigo-800 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 block">
-                      Daet Presbyterian Church
-                    </span>
-                    <h3 className="text-sm font-black text-amber-300 flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-amber-400" />
-                      <span>Application for Membership</span>
-                      {currentModalMinistry && (
-                        <span className="text-white text-xs font-semibold">• {currentModalMinistry.name}</span>
-                      )}
-                    </h3>
-                  </div>
-                  <span className="text-[10px] bg-white/10 text-indigo-200 px-2 py-0.5 rounded-md border border-white/20 font-medium">
-                    Paper Form Sync
-                  </span>
-                </div>
-
-                {/* Target Ministry Application Form Type Dropdown (Admin Selector / Coordinator Scope) */}
-                <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/90 shadow-2xs space-y-2.5">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-indigo-700" />
-                      <span>Application Form Type (Target Ministry):</span>
-                    </label>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white text-indigo-900 border border-indigo-200 shadow-2xs">
-                      {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Manual Ministry Selected" : "Auto-Detect by Birthday")}
-                    </span>
+              <div className={`flex items-center justify-center gap-5 w-full ${registrationStep === "partner" ? "max-w-[1400px]" : "max-w-3xl"}`}>
+                <ModalPanel data-modal-panel role={registrationStep === "member" ? "dialog" : undefined} aria-modal={registrationStep === "member" ? true : undefined} aria-label={editingMember ? "Edit Member" : "Add New Member Record"}
+                  inert={registrationStep === "partner" || isSavingMember}
+                  className={`bg-white rounded-3xl w-full min-w-0 p-6 sm:p-8 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto border border-indigo-100/80 ${registrationStep === "partner" ? "hidden xl:flex xl:flex-1 brightness-90" : ""}`}>
+                  {createNewSpouseRecord && <p className="text-[12px] font-medium uppercase tracking-widest text-indigo-600">Step 1 of 2 · Main Member</p>}
+                  <div data-modal-header className="flex items-center justify-between">
+                    <h2 className="text-base sm:text-lg font-semibold text-charcoal flex items-center gap-2">
+                      {editingMember ? <Pencil className="w-5 h-5 text-amber-600" /> : <Users className="w-5 h-5 text-indigo" />}
+                      <span>{editingMember ? `Edit Member: ${editingMember.first_name} ${editingMember.last_name}` : "Add New Member Record"}</span>
+                    </h2>
+                    <button onClick={closeMemberForm} className="p-1.5 text-muted hover:bg-gray-100 rounded-xl cursor-pointer transition-colors">
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
 
-                  {coordinatorMinistryId ? (
-                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 font-bold text-xs flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Locked to <strong>{coordinatorMinistryName} Ministry Form</strong> (Coordinator Scope)</span>
-                    </div>
-                  ) : (
-                    <select
-                      value={formData.ministry_id}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData(prev => ({ ...prev, ministry_id: val }));
-                      }}
-                      className="w-full bg-white p-2.5 rounded-xl border border-indigo-200 focus:outline-none focus:border-indigo font-bold text-indigo-950 shadow-2xs cursor-pointer text-xs"
-                    >
-                      <option value="">Auto-Detect by Birthday (Default & Recommended)</option>
-                      {effectiveMinistries.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} Application Form ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All Ages'})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-
-                  {/* Active Form Type & Requirement Summary Banner */}
-                  <div className="p-2.5 rounded-xl bg-white/90 border border-indigo-100 flex items-start gap-2 text-[11px] text-indigo-950 font-medium shadow-2xs">
-                    <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                  {/* DPC Physical Form Synchronized Header */}
+                  <div className="bg-indigo-950 p-3.5 rounded-2xl text-white shadow-xs border border-indigo-800 flex items-center justify-between">
                     <div>
-                      {currentModalMinistry ? (
-                        <span>
-                          Active Form: <strong className="text-indigo-900">{currentModalMinistry.name} Ministry</strong> — {getMinistryRequirementSummary(currentModalMinistry.name)}.
-                        </span>
-                      ) : (
-                        <span className="text-charcoal/70">
-                          Enter birthday below or pick a ministry above to load the exact paper application fields.
-                        </span>
-                      )}
+                      <span className="text-[12px] font-medium uppercase tracking-widest text-indigo-300 block">
+                        Daet Presbyterian Church
+                      </span>
+                      <h3 className="text-sm font-semibold text-amber-300 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-amber-400" />
+                        <span>Application for Membership</span>
+                        {currentModalMinistry && (
+                          <span className="text-white text-xs font-medium">• {currentModalMinistry.name}</span>
+                        )}
+                      </h3>
                     </div>
+                    <span className="text-[12px] bg-white/10 text-indigo-200 px-2 py-0.5 rounded-md border border-white/20 font-medium">
+                      Paper Form Sync
+                    </span>
                   </div>
-                </div>
 
-
-
-                <form onSubmit={handleSubmitMember} className="space-y-4 text-xs">
-                  {/* Membership Classification & Water Baptism Settings */}
-                  <div className="p-3.5 bg-indigo-50/70 rounded-2xl border border-indigo-200/90 space-y-3">
+                  {/* Target Ministry Application Form Type Dropdown (Admin Selector / Coordinator Scope) */}
+                  {relativeRegistration && <p className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950">
+                    Registering <strong>{relativeRegistration.name}</strong> from <strong>{relativeRegistration.household.name}</strong>. Check the complete name, birthday, and address before saving.
+                  </p>}
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/90 shadow-2xs space-y-2.5">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <label className="font-black text-xs text-indigo-950 flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-indigo-700" />
-                        <span>Membership Classification & Baptism Status</span>
+                      <label className="font-medium text-indigo-950 text-xs flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-indigo-700" />
+                        <span>Application Form Type (Target Ministry):</span>
                       </label>
-                      {/* Live Resulting Status Pill */}
-                      {formData.status === "visitor" ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-amber-100 text-amber-950 border border-amber-300 px-2.5 py-0.5 rounded-full shadow-2xs">
-                          Guest / Visitor
-                        </span>
-                      ) : formData.status === "inactive" ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-300 px-2.5 py-0.5 rounded-full shadow-2xs">
-                          Inactive / Absent
-                        </span>
-                      ) : formData.baptism_status === "baptized" || formData.is_baptized ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-indigo-100 text-indigo-950 border border-indigo-300 px-2.5 py-0.5 rounded-full shadow-2xs">
-                          Baptized Regular Member
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black bg-sky-100 text-sky-950 border border-sky-300 px-2.5 py-0.5 rounded-full shadow-2xs">
-                          Regular Member (Unbaptized)
-                        </span>
-                      )}
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-md bg-white text-indigo-900 border border-indigo-200 shadow-2xs">
+                        {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Manual Ministry Selected" : "Auto-Detect by Birthday")}
+                      </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="block text-[11px] font-bold text-charcoal/80 mb-1">Base Membership Status</label>
-                        <select
-                          value={formData.status}
-                          onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                          className="w-full bg-white p-2 rounded-xl border border-indigo-200 font-bold text-xs text-indigo-950 focus:outline-none focus:border-indigo cursor-pointer shadow-2xs"
-                        >
-                          <option value="active">Active Regular Member</option>
-                          <option value="visitor">Guest / Visitor (Bisita)</option>
-                          <option value="inactive">Inactive / For Follow-up (Di-aktibo)</option>
-                        </select>
+                    {coordinatorMinistryId ? (
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 font-medium text-xs flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Locked to <strong>{coordinatorMinistryName} Ministry Form</strong> (Coordinator Scope)</span>
                       </div>
-
-                      <div>
-                        <label className="block text-[11px] font-bold text-charcoal/80 mb-1">Baptism Status</label>
-                        <select
-                          value={formData.baptism_status || (formData.is_baptized ? "baptized" : "not_baptized")}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setFormData(prev => ({
-                              ...prev,
-                              baptism_status: val,
-                              is_baptized: val === "baptized"
-                            }));
-                          }}
-                          className="w-full bg-white p-2 rounded-xl border border-indigo-200 font-bold text-xs text-indigo-950 focus:outline-none focus:border-indigo cursor-pointer shadow-2xs"
-                        >
-                          <option value="baptized">Baptized</option>
-                          <option value="not_baptized">Not Baptized</option>
-                          <option value="candidate">Baptism Candidate</option>
-                          <option value="scheduled">Scheduled for Baptism</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {(formData.baptism_status === "baptized" || formData.is_baptized) && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-indigo-100/60">
-                        <div>
-                          <label className="block text-[10px] font-bold text-charcoal/70 mb-0.5">Baptism Date (Optional)</label>
-                          <input
-                            type="date"
-                            value={formData.baptism_date || ""}
-                            onChange={(e) => setFormData(prev => ({ ...prev, baptism_date: e.target.value }))}
-                            className="w-full bg-white p-1.5 rounded-xl border border-indigo-200 text-xs font-bold text-indigo-950"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-charcoal/70 mb-0.5">Baptism Notes / Officiating</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Baptized at DPC Pool"
-                            value={formData.baptism_notes || ""}
-                            onChange={(e) => setFormData(prev => ({ ...prev, baptism_notes: e.target.value }))}
-                            className="w-full bg-white p-1.5 rounded-xl border border-indigo-200 text-xs text-charcoal"
-                          />
-                        </div>
-                      </div>
+                    ) : (
+                      <select data-guide="member-ministry"
+                        value={formData.ministry_id}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const selectedMin = effectiveMinistries.find(m => String(m.id) === String(val));
+                          const minName = (selectedMin?.name || "").toLowerCase();
+                          const isJA = minName.includes("junior");
+                          const isOA = minName.includes("old") || minName.includes("senior");
+                          setFormData(prev => ({
+                            ...prev,
+                            ministry_id: val,
+                            civil_status: (isJA || isOA)
+                              ? (prev.civil_status === "Widowed" ? "Widowed" : "Married")
+                              : "Single",
+                            ...((!isJA && !isOA) ? { spouse_name: "", spouse_id: "" } : {})
+                          }));
+                          if (isJA || isOA) {
+                            if (householdMode === "none") setHouseholdMode("create_new");
+                          }
+                          if (!isJA && !isOA) {
+                            setCreateNewSpouseRecord(false);
+                            setRegistrationStep("member");
+                          }
+                        }}
+                        className="w-full bg-white p-2.5 rounded-xl border border-indigo-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 shadow-2xs cursor-pointer text-xs"
+                      >
+                        <option value="">Auto-Detect by Birthday (Default & Recommended)</option>
+                        {effectiveMinistries.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} Application Form ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All Ages'})
+                          </option>
+                        ))}
+                      </select>
                     )}
-                  </div>
-                  {/* Full Name & Birthday Side-by-Side */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-                    {/* Full Name with Live Duplicate Warning & Sample Guide */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block font-bold text-charcoal/70">Full Name *</label>
-                        <span className="text-[10px] text-charcoal/50 font-medium">First M.I. Last</span>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Mark Andrie M. Remot"
-                          value={fullNameInput}
-                          onChange={(e) => handleFullNameChange(e.target.value)}
-                          className={`w-full bg-ivory-light p-2.5 rounded-xl border text-xs font-bold transition-all focus:outline-none pr-9 ${liveDuplicateMember
-                            ? "border-amber-400 bg-amber-50/40 text-amber-950 focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
-                            : fullNameInput.trim().length >= 2 && !isCheckingDuplicate
-                              ? "border-emerald-300 bg-emerald-50/20 focus:border-emerald-500"
-                              : "border-gray-200 focus:border-indigo"
-                            }`}
-                        />
-                        <div className="absolute right-2.5 top-2.5 pointer-events-none flex items-center">
-                          {isCheckingDuplicate ? (
-                            <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-                          ) : liveDuplicateMember ? (
-                            <AlertTriangle className="w-4 h-4 text-amber-500" />
-                          ) : fullNameInput.trim().length >= 2 ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                          ) : null}
-                        </div>
-                      </div>
 
-                      {/* Sample format guide */}
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-charcoal/60 px-1">
-                        <span>Sample: <strong className="text-charcoal/80">Juan M. Dela Cruz</strong></span>
-                        <span className="text-charcoal/40">(Given Name + M.I. + Surname)</span>
-                      </div>
-
-                      {/* Live Duplicate Warning */}
-                      {liveDuplicateMember && (
-                        <div className="mt-2 p-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-[11px] flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                          <div className="leading-tight">
-                            <p className="font-bold text-amber-900">Name already registered in database!</p>
-                            <p className="text-[10px] text-amber-800 mt-0.5">
-                              <strong>{liveDuplicateMember.first_name} {liveDuplicateMember.last_name}</strong>
-                              {liveDuplicateMember.ministry_name ? ` • ${liveDuplicateMember.ministry_name} Ministry` : ''}
-                              {liveDuplicateMember.birthdate ? ` • Age: ${calculateClientAge(liveDuplicateMember.birthdate)}` : ''}
-                              {` • ID #${liveDuplicateMember.id}`}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Birthdate & Real-time Auto-Suggestion */}
-                    <div>
-                      <DatePickerInput
-                        label="Birthday (Calculates Age & Auto-suggests Ministry)"
-                        required
-                        value={formData.birthdate}
-                        onChange={(val) => handleBirthdateChange(val)}
-                        placeholder="Select birthdate"
-                      />
-                      {suggestedMinistryInfo && (
-                        <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-1.5 text-xs">
-                          <span className="font-bold text-emerald-950 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Age: {suggestedMinistryInfo.age} yrs</span>
+                    {/* Active Form Type & Requirement Summary Banner */}
+                    <div className="p-2.5 rounded-xl bg-white/90 border border-indigo-100 flex items-start gap-2 text-[12px] text-indigo-950 font-medium shadow-2xs">
+                      <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        {currentModalMinistry ? (
+                          <span>
+                            Active Form: <strong className="text-indigo-900">{currentModalMinistry.name} Ministry</strong> — {getMinistryRequirementSummary(currentModalMinistry.name)}.
                           </span>
-                          <span className="font-black text-indigo-950 bg-white px-2 py-0.5 rounded-md shadow-2xs border border-indigo-200 text-[11px]">
-                            {suggestedMinistryInfo.ministry?.name || "General"} Ministry
+                        ) : (
+                          <span className="text-charcoal/70">
+                            Enter birthday below or pick a ministry above to load the exact paper application fields.
                           </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Gender & Application Date (for Non-Kinder/Non-Elementary) */}
-                  {(!isKinder && !isElementary) && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">Gender *</label>
-                        <select
-                          value={formData.gender}
-                          onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                          className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo h-[41px] text-xs font-bold"
-                        >
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                        </select>
-                      </div>
-                      <div>
-                        <DatePickerInput
-                          label="Date of Application"
-                          value={formData.application_date}
-                          onChange={(val) => setFormData({ ...formData, application_date: val })}
-                          placeholder="Select application date"
-                        />
-                      </div>
-                    </div>
-                  )}
 
-                  {/* Civil Status / Marital Status Selector (Visible for Adult Ministries or when Married) */}
-                  {(isJuniorAdult || isOldAdult || isYoungAdult || formData.civil_status === "Married") && (
-                    <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
+
+                  <form data-guide="member-application" ref={memberFormRef} onSubmit={handleSubmitMember} className="space-y-4 text-xs">
+                    {/* Membership Classification & Water Baptism Settings */}
+                    <div className="p-3.5 bg-indigo-50/70 rounded-2xl border border-indigo-200/90 space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
-                          <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
-                          <span>Civil Status / Marital Status:</span>
+                        <label className="font-medium text-xs text-indigo-950 flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-indigo-700" />
+                          <span>Membership Classification & Baptism Status</span>
                         </label>
-                        {formData.civil_status === "Married" && (
-                          <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs flex items-center gap-1">
-                            <Heart className="w-3 h-3 text-white" />
-                            <span>Auto-routed to Junior Adult Ministry</span>
+                        {/* Live Resulting Status Pill */}
+                        {formData.status === "visitor" ? (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-amber-100 text-amber-950 border border-amber-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            Guest / Visitor
+                          </span>
+                        ) : formData.status === "inactive" ? (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-slate-100 text-slate-700 border border-slate-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            Inactive / Absent
+                          </span>
+                        ) : formData.baptism_status === "baptized" || formData.is_baptized ? (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-indigo-100 text-indigo-950 border border-indigo-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            Baptized Regular Member
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-sky-100 text-sky-950 border border-sky-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+                            Regular Member (Unbaptized)
                           </span>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {[
-                          { id: "Single", label: "Single" },
-                          { id: "Married", label: "💍 Married", isSpecial: true },
-                          { id: "Widowed", label: "Widowed" },
-                          { id: "Separated", label: "Separated" }
-                        ].map((item) => (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[12px] font-medium text-charcoal/80 mb-1">Base Membership Status</label>
+                          <select data-guide="member-status"
+                            value={formData.status}
+                            onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                            className="w-full bg-white p-2 rounded-xl border border-indigo-200 font-medium text-xs text-indigo-950 focus:outline-none focus:border-indigo cursor-pointer shadow-2xs"
+                          >
+                            <option value="active">Active Regular Member</option>
+                            <option value="visitor">Guest / Visitor (Bisita)</option>
+                            <option value="inactive">Inactive / For Follow-up (Di-aktibo)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[12px] font-medium text-charcoal/80 mb-1">Baptism Status</label>
+                          <select data-guide="member-baptism"
+                            value={formData.baptism_status || (formData.is_baptized ? "baptized" : "not_baptized")}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData(prev => ({
+                                ...prev,
+                                baptism_status: val,
+                                is_baptized: val === "baptized"
+                              }));
+                            }}
+                            className="w-full bg-white p-2 rounded-xl border border-indigo-200 font-medium text-xs text-indigo-950 focus:outline-none focus:border-indigo cursor-pointer shadow-2xs"
+                          >
+                            <option value="baptized">Baptized</option>
+                            <option value="not_baptized">Not Baptized</option>
+                            <option value="candidate">Baptism Candidate</option>
+                            <option value="scheduled">Scheduled for Baptism</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {(formData.baptism_status === "baptized" || formData.is_baptized) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-indigo-100/60">
+                          <div>
+                            <label className="block text-[12px] font-medium text-charcoal/70 mb-0.5">Baptism Date (Optional)</label>
+                            <input
+                              type="date"
+                              value={formData.baptism_date || ""}
+                              onChange={(e) => setFormData(prev => ({ ...prev, baptism_date: e.target.value }))}
+                              className="w-full bg-white p-1.5 rounded-xl border border-indigo-200 text-xs font-medium text-indigo-950"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[12px] font-medium text-charcoal/70 mb-0.5">Baptism Notes / Officiating</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Baptized at DPC Pool"
+                              value={formData.baptism_notes || ""}
+                              onChange={(e) => setFormData(prev => ({ ...prev, baptism_notes: e.target.value }))}
+                              className="w-full bg-white p-1.5 rounded-xl border border-indigo-200 text-xs text-charcoal"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Full Name & Birthday Side-by-Side */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                      {/* Full Name with Live Duplicate Warning & Sample Guide */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block font-medium text-charcoal/70">Full Name *</label>
+                          <span className="text-[12px] text-muted font-medium">First M.I. Last</span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Mark Andrie M. Remot"
+                            data-guide="member-name"
+                            value={fullNameInput}
+                            onChange={(e) => handleFullNameChange(e.target.value)}
+                            className={`w-full bg-ivory-light p-2.5 rounded-xl border text-xs font-medium transition-all focus:outline-none pr-9 ${liveDuplicateMember
+                              ? "border-amber-400 bg-amber-50/40 text-amber-950 focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
+                              : duplicateCheck.state.status === "success"
+                                ? "border-emerald-300 bg-emerald-50/20 focus:border-emerald-500"
+                                : "border-gray-200 focus:border-indigo"
+                              }`}
+                          />
+                          <div className="absolute right-2.5 top-2.5 pointer-events-none flex items-center">
+                            {isCheckingDuplicate ? (
+                              <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                            ) : liveDuplicateMember ? (
+                              <AlertTriangle className="w-4 h-4 text-amber-500" />
+                            ) : duplicateCheck.state.status === "success" ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {/* Sample format guide */}
+                        <div className="mt-1 flex items-center justify-between text-[12px] text-muted px-1">
+                          <span>Sample: <strong className="text-charcoal/80">Juan M. Dela Cruz</strong></span>
+                          <span className="text-muted">(Given Name + M.I. + Surname)</span>
+                        </div>
+
+                        {/* Live Duplicate Warning */}
+                        {duplicateCheck.state.status === "error" && <div className="ui-error mt-2 space-y-2">
+                          <p role="alert">The duplicate check could not finish. {duplicateCheck.state.error}</p>
+                          <Button size="sm" onClick={duplicateCheck.retry}>Retry name check</Button>
+                        </div>}
+                        {liveDuplicateMember && (
+                          <div className="mt-2 p-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-[12px] flex items-start gap-2 shadow-2xs animate-in fade-in duration-150">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="leading-tight">
+                              <p className="font-medium text-amber-900">Name already registered in database!</p>
+                              <p className="text-[12px] text-amber-800 mt-0.5">
+                                <strong>{liveDuplicateMember.first_name} {liveDuplicateMember.last_name}</strong>
+                                {liveDuplicateMember.ministry_name ? ` • ${liveDuplicateMember.ministry_name} Ministry` : ''}
+                                {liveDuplicateMember.birthdate ? ` • Age: ${calculateClientAge(liveDuplicateMember.birthdate)}` : ''}
+                                {` • ID #${liveDuplicateMember.id}`}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Birthdate & Real-time Auto-Suggestion */}
+                      <div data-guide="member-birthday">
+                        <DatePickerInput
+                          label="Birthday (Calculates Age & Auto-suggests Ministry)"
+                          required
+                          value={formData.birthdate}
+                          onChange={(val) => handleBirthdateChange(val)}
+                          placeholder="Select birthdate"
+                        />
+                        {suggestedMinistryInfo && (
+                          <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between flex-wrap gap-1.5 text-xs">
+                            <span className="font-medium text-emerald-950 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Age: {suggestedMinistryInfo.age} yrs</span>
+                            </span>
+                            <span className="font-medium text-indigo-950 bg-white px-2 py-0.5 rounded-md shadow-2xs border border-indigo-200 text-[12px]">
+                              {suggestedMinistryInfo.ministry?.name || "General"} Ministry
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Gender & Application Date (for Non-Kinder/Non-Elementary) */}
+                    {(!isKinder && !isElementary) && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-medium text-charcoal/70 mb-1">Gender *</label>
+                          <select
+                            value={formData.gender}
+                            onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                            className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo h-[41px] text-xs font-medium"
+                          >
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                          </select>
+                        </div>
+                        <div>
+                          <DatePickerInput
+                            label="Date of Application"
+                            value={formData.application_date}
+                            onChange={(val) => setFormData({ ...formData, application_date: val })}
+                            placeholder="Select application date"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Civil Status / Marital Status Selector (Applicable ONLY for Junior Adult and Old Adult Ministries) */}
+                    {(isJuniorAdult || isOldAdult) && (
+                      <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/90 shadow-2xs space-y-2.5 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <label className="font-medium text-indigo-950 text-xs flex items-center gap-1.5">
+                            <Heart className="w-4 h-4 text-rose-500 fill-rose-100" />
+                            <span>Civil Status / Marital Status:</span>
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { id: "Married", label: "Married", isSpecial: true },
+                            { id: "Widowed", label: "Widowed" }
+                          ].map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleCivilStatusChange(item.id)}
+                              className={`py-2 px-2.5 rounded-xl font-medium text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${(formData.civil_status === item.id || (item.id === "Married" && formData.civil_status !== "Widowed"))
+                                ? item.isSpecial
+                                  ? "bg-amber-500 text-white border-amber-600 shadow-xs scale-[1.02]"
+                                  : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                                : "bg-white text-charcoal/80 border-gray-200 hover:bg-amber-50/40 hover:border-amber-300"
+                                }`}
+                            >
+                              {item.id === "Married" && <Heart aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />}
+                              <span>{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* When Married is Active: Show Spouse Search & Sub-Form Card */}
+                        {(formData.civil_status === "Married" || formData.civil_status !== "Widowed") && (
+                          <div className="mt-3 p-3.5 rounded-2xl bg-white border border-amber-300/90 shadow-2xs space-y-3 animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between pb-2 border-b border-amber-100 flex-wrap gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm"><UIHeartHandshake aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></span>
+                                <span className="font-medium text-xs text-indigo-950">Spouse / Partner in Marriage</span>
+                              </div>
+                              <span className="text-[12px] bg-amber-100 text-amber-900 font-medium px-2 py-0.5 rounded-md">
+                                Couples & Family Ministry
+                              </span>
+                            </div>
+
+                            {/* Selected Spouse Confirmation Badge (if matched/chosen) */}
+                            {formData.spouse_name && !createNewSpouseRecord ? (
+                              <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-full bg-amber-500 text-white font-medium text-xs flex items-center justify-center shadow-2xs"><UIHeartHandshake aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" />
+                                  </div>
+                                  <div>
+                                    <span className="text-[12px] text-muted block font-medium">Linked Spouse</span>
+                                    <span className="font-medium text-xs text-indigo-950">{formData.spouse_name}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData(prev => ({ ...prev, spouse_name: "", spouse_id: "" }));
+                                    setSpouseSearchQuery("");
+                                  }}
+                                  className="text-[12px] font-medium text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                                >
+                                  Change / Remove
+                                </button>
+                              </div>
+                            ) : !createNewSpouseRecord ? (
+                              <div className="space-y-2">
+                                <SearchableAutocomplete
+                                  label="Search Spouse in Church Directory"
+                                  value={spouseSearchQuery}
+                                  onChange={(val) => {
+                                    setSpouseSearchQuery(val);
+                                  }}
+                                  onSelect={(item) => {
+                                    const source = allChurchMembers.length > 0 ? allChurchMembers : members;
+                                    const matched = source.find(
+                                      (m) => `${m.first_name || ""} ${m.last_name || ""}`.toLowerCase().trim() === item.title.toLowerCase().trim()
+                                    );
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      spouse_name: item.title,
+                                      spouse_id: matched ? String(matched.id) : ""
+                                    }));
+                                    setSpouseSearchQuery("");
+                                  }}
+                                  placeholder="Type to search existing member (e.g. Maria Clara)..."
+                                  suggestions={spouseMemberSuggestions}
+                                  icon={<Heart className="w-3.5 h-3.5 text-rose-500" />}
+                                />
+
+                                <div className="flex items-center justify-between pt-1">
+                                  <span className="text-[12px] text-muted">
+                                    Can't find spouse in the list?
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCreateNewSpouseRecord(true);
+                                      setFormData(prev => ({ ...prev, spouse_id: "", spouse_name: "" }));
+                                      setSpouseSearchQuery("");
+                                      setSpouseFormData(prev => ({
+                                        ...prev,
+                                        last_name: prev.last_name || formData.last_name,
+                                        gender: formData.gender === "Male" ? "Female" : "Male"
+                                      }));
+                                    }}
+                                    className="text-[12px] font-medium text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <span>+ Register Spouse as New Member</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {createNewSpouseRecord && (
+                              <div className="p-3 bg-indigo-50/40 rounded-xl border border-indigo-200 space-y-2">
+                                <span className="font-medium text-indigo-950">Step 2 · Partner registration</span>
+                                <p className="text-[12px] text-charcoal/70">
+                                  {spouseFormData.first_name ? `${spouseFormData.first_name} ${spouseFormData.last_name} · ` : ""}
+                                  Finish this member's details, then continue to the separate partner form.
+                                </p>
+                                <button type="button" onClick={() => setCreateNewSpouseRecord(false)} className="text-[12px] font-medium text-indigo-600 hover:underline">
+                                  Switch back to Search
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Address (Cascading Philippine PSGC Selector) */}
+                    <AddressPicker
+                      label="Present Address"
+                      required
+                      value={formData.address}
+                      onChange={(addr) => setFormData((prev) => ({ ...prev, address: addr }))}
+                    />
+
+                    {/* Ministry Assignment */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-medium text-charcoal/70 text-xs">Ministry Assignment</label>
+                        <span className="text-[12px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-medium">
+                          {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Assigned" : "Auto-Assigned by Age")}
+                        </span>
+                      </div>
+                      <select data-guide="member-ministry"
+                        value={coordinatorMinistryId ? String(coordinatorMinistryId) : formData.ministry_id}
+                        onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
+                        disabled={!!coordinatorMinistryId}
+                        className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal disabled:opacity-90 disabled:bg-gray-100 text-xs"
+                      >
+                        {coordinatorMinistryId ? (
+                          <option value={coordinatorMinistryId}>{coordinatorMinistryName} Ministry (Assigned)</option>
+                        ) : (
+                          <>
+                            <option value="">Auto-Assign by Age</option>
+                            {ministries.map((m) => (
+                              <option key={m.id} value={m.id}>{m.name} ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All'})</option>
+                            ))}
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Enhanced Household & Family Linkage Section */}
+                    <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <label className="font-medium text-indigo-950 text-xs flex items-center gap-1.5">
+                            <Home className="w-4 h-4 text-indigo-700" />
+                            <span>Household & Family Linkage:</span>
+                          </label>
+                          <p className="text-[12px] text-muted mt-0.5">
+                            {(isJuniorAdult || isOldAdult)
+                              ? "Choose a registered household or create a new family household."
+                              : "Choose a registered household or register as an individual profile."}
+                          </p>
+                        </div>
+
+                        {/* Mode Badge Indicator */}
+                        <span className="text-[12px] font-medium px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-950 shadow-2xs">
+                          {householdMode === "create_new" && <><UIPlus aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> New Household</>}
+                          {householdMode === "existing" && <><UIClipboardList aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Existing Household</>}
+                          {householdMode === "none" && <><UIUserRound aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Individual</>}
+                        </span>
+                      </div>
+
+                      {/* Mode Switcher Buttons */}
+                      <div className={`grid ${relativeRegistration ? "grid-cols-1" : "grid-cols-2"} gap-1.5 text-xs`}>
+                        {(relativeRegistration ? [{ id: "existing", label: "Select List", icon: Clipboard, desc: "This family's household" }] : (isJuniorAdult || isOldAdult)
+                          ? [
+                            { id: "create_new", label: "Create New", icon: Plus, desc: "For new family", isHighlighted: formData.civil_status === "Married" },
+                            { id: "existing", label: "Select List", icon: Clipboard, desc: "Pick household" }
+                          ]
+                          : [
+                            { id: "existing", label: "Select List", icon: Clipboard, desc: "Pick household" },
+                            { id: "none", label: "Individual", icon: UIUserRound, desc: "No household linked" }
+                          ]
+                        ).map((item) => (
                           <button
                             key={item.id}
                             type="button"
-                            onClick={() => handleCivilStatusChange(item.id)}
-                            className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${formData.civil_status === item.id
-                              ? item.isSpecial
+                            onClick={() => {
+                              if (relativeRegistration) return;
+                              setHouseholdMode(item.id as "create_new" | "existing" | "none");
+                              setRegistrationFamilyMembers([]);
+                              setHouseholdRegistrationRole("");
+                              if (item.id === "create_new" && !newHouseholdName) {
+                                setNewHouseholdName(`${formData.last_name ? `${formData.last_name} Household` : "New Family Household"}`);
+                              }
+                            }}
+                            className={`py-2 px-2 rounded-xl font-medium text-[12px] transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${householdMode === item.id
+                              ? item.isHighlighted
                                 ? "bg-amber-500 text-white border-amber-600 shadow-xs scale-[1.02]"
                                 : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
-                              : "bg-white text-charcoal/80 border-gray-200 hover:bg-amber-50/40 hover:border-amber-300"
+                              : item.isHighlighted
+                                ? "bg-amber-50/80 text-amber-950 border-amber-300 hover:bg-amber-100"
+                                : "bg-white text-charcoal/80 border-gray-200 hover:bg-indigo-50/50 hover:border-indigo-300"
                               }`}
                           >
-                            <span>{item.label}</span>
+                            <span className="inline-flex items-center gap-1.5 font-medium"><item.icon aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />{item.label}</span>
                           </button>
                         ))}
                       </div>
 
-                      {/* When Married is Active: Show Spouse Search & Sub-Form Card */}
-                      {formData.civil_status === "Married" && (
-                        <div className="mt-3 p-3.5 rounded-2xl bg-white border border-amber-300/90 shadow-2xs space-y-3 animate-in fade-in duration-150">
-                          <div className="flex items-center justify-between pb-2 border-b border-amber-100 flex-wrap gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm">💍</span>
-                              <span className="font-black text-xs text-indigo-950">Spouse / Partner in Marriage</span>
-                            </div>
-                            <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md">
-                              Couples & Family Ministry
+                      {/* Mode 2: Create New Household */}
+                      {canCreateHousehold && householdMode === "create_new" && (
+                        <div className="p-3 bg-white rounded-xl border border-amber-200 space-y-2.5 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-amber-950 flex items-center gap-1.5">
+                              <Plus className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Create New Family Household Record</span>
+                            </span>
+                            <span className="text-[12px] bg-amber-100 text-amber-900 font-medium px-2 py-0.5 rounded-md">
+                              Independent Family
                             </span>
                           </div>
 
-                          {/* Selected Spouse Confirmation Badge (if matched/chosen) */}
-                          {formData.spouse_name && !createNewSpouseRecord ? (
-                            <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-full bg-amber-500 text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                                  💍
-                                </div>
-                                <div>
-                                  <span className="text-[10px] text-charcoal/50 block font-bold">Linked Spouse</span>
-                                  <span className="font-black text-xs text-indigo-950">{formData.spouse_name}</span>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setFormData(prev => ({ ...prev, spouse_name: "", spouse_id: "" }))}
-                                className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
-                              >
-                                Change / Remove
-                              </button>
-                            </div>
-                          ) : !createNewSpouseRecord ? (
-                            <div className="space-y-2">
-                              <SearchableAutocomplete
-                                label="Search Spouse in Church Directory"
-                                value={formData.spouse_name}
-                                onChange={(val) => {
-                                  const matched = members.find(
-                                    (m) => `${m.first_name} ${m.last_name}`.toLowerCase().trim() === val.toLowerCase().trim()
-                                  );
-                                  setFormData(prev => ({
-                                    ...prev,
-                                    spouse_name: val,
-                                    spouse_id: matched ? String(matched.id) : ""
-                                  }));
-                                }}
-                                placeholder="Type to search existing member (e.g. Maria Clara)..."
-                                suggestions={spouseMemberSuggestions}
-                                icon={<Heart className="w-3.5 h-3.5 text-rose-500" />}
-                              />
+                          <div>
+                            <label className="block text-[12px] font-medium text-charcoal/80 mb-1">
+                              Household / Family Name *
+                            </label>
+                            <input
+                              type="text"
+                              required={householdMode === "create_new"}
+                              placeholder="e.g. Dela Cruz Household / Juan & Maria Family"
+                              value={newHouseholdName}
+                              onChange={(e) => setNewHouseholdName(e.target.value)}
+                              className="w-full bg-ivory-light p-2.5 rounded-xl border border-amber-300 text-xs font-medium text-indigo-950 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
 
-                              <div className="flex items-center justify-between pt-1">
-                                <span className="text-[11px] text-charcoal/50">
-                                  Can't find spouse in the list?
+                          <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[12px] text-amber-950 flex items-start gap-1.5">
+                            <Home className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                            <span>
+                              Upon saving, a new household <strong>"{newHouseholdName || `${formData.last_name || 'New'} Household`}"</strong> will be created at the address above. Both this member and spouse (if married) will be automatically assigned to it.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Mode 3: Select Existing Household */}
+                      {householdMode === "existing" && (
+                        <div className="p-3 bg-white rounded-xl border border-indigo-100 space-y-2 animate-in fade-in duration-150">
+                          <label className="block text-xs font-medium text-indigo-950 mb-1">
+                            Select Registered Household:
+                          </label>
+                          <select data-guide="member-household"
+                            value={formData.household_id}
+                            disabled={!!relativeRegistration}
+                            onChange={(e) => {
+                              const id = e.target.value;
+                              setFormData(prev => {
+                                const previous = households.find(h => h.id === Number(prev.household_id));
+                                const household = households.find(h => h.id === Number(id));
+                                return {
+                                  ...prev, household_id: id,
+                                  address: !prev.address.trim() || prev.address === previous?.address ? household?.address || prev.address : prev.address
+                                };
+                              });
+                              setRegistrationFamilyMembers([]);
+                              setHouseholdRegistrationRole("");
+                            }}
+                            className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-indigo-950 cursor-pointer"
+                          >
+                            <option value="">-- Choose Existing Household --</option>
+                            {households.map((h) => (
+                              <option key={h.id} value={h.id}> {h.name} ({h.member_count || 0} family members)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {((canCreateHousehold && householdMode === "create_new") || householdMode === "existing") && (
+                        <HouseholdRegistrationFields
+                          key={householdMode}
+                          members={(allChurchMembers.length ? allChurchMembers : members).filter(member =>
+                            member.id !== editingMember?.id && member.id !== Number(formData.spouse_id))}
+                          households={households}
+                          household={householdMode === "existing" ? households.find(household => household.id === Number(formData.household_id)) : undefined}
+                          name={memberName(formData)}
+                          householdName={newHouseholdName}
+                          isEditing={!!editingMember}
+                          role={householdRegistrationRole}
+                          onRoleChange={setHouseholdRegistrationRole}
+                          requireRelationship={householdMode === "existing"}
+                          replacingRelativeName={relativeRegistration?.name}
+                          allowFamilyLinking={canCreateHousehold && householdMode === "create_new"}
+                          family={householdMode === "create_new" ? registrationFamilyMembers : []}
+                          onFamilyChange={setRegistrationFamilyMembers}
+                          onJoinHousehold={id => {
+                            setHouseholdMode("existing");
+                            setRegistrationFamilyMembers([]);
+                            setFormData(prev => ({ ...prev, household_id: String(id) }));
+                          }}
+                          spouseName={formData.spouse_name || (createNewSpouseRecord ? memberName(spouseFormData) : "")}
+                        />
+                      )}
+
+                      {/* Mode 4: Individual */}
+                      {householdMode === "none" && (
+                        <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-[12px] text-charcoal/70 flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                          <span>This member will be registered as a standalone individual profile (no household linked).</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Contact Phone & Email */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block font-medium text-charcoal/70">Contact No *</label>
+                          <span className={`text-[12px] font-medium ${formData.contact_phone.length === 11 ? "text-emerald-600" : "text-muted"}`}>
+                            {formData.contact_phone.length}/11 digits
+                          </span>
+                        </div>
+                        <input data-guide="member-contact"
+                          type="tel"
+                          required={!isKinder}
+                          maxLength={11}
+                          placeholder="e.g. 09123456789"
+                          value={formData.contact_phone}
+                          onChange={(e) => setFormData({ ...formData, contact_phone: sanitizePhoneInput(e.target.value) })}
+                          className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-medium text-charcoal/70 mb-1">Contact Email</label>
+                        <input
+                          type="email"
+                          placeholder="e.g. member@email.com"
+                          value={formData.contact_email}
+                          onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                          className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* ========================================================= */}
+                    {/* DYNAMIC MINISTRY FORM SECTIONS (MATCHING PAPER FORMS)     */}
+                    {/* ========================================================= */}
+
+                    {householdMode !== "none" && (
+                      <div className="space-y-2">
+                        {useHouseholdGuardian && <p className="text-[12px] text-muted">Parents/guardian reflects the father first, then the mother, then the guardian. Edit the household to change these names.</p>}
+                      </div>
+                    )}
+
+                    {(isKinder || isElementary || (!isHighSchool && !isYouth && !isYoungAdult && !isJuniorAdult && !isOldAdult)) && renderFamilyDetails()}
+
+                    {/* 1. Kinder Ministry Form Fields */}
+                    {isKinder && (
+                      <div className="bg-amber-50/60 p-3.5 rounded-xl border border-amber-200 space-y-3">
+                        <h4 className="font-semibold text-amber-950 text-xs flex items-center gap-1.5">
+                          <span>Kinder Ministry Application Requirements</span>
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div data-guide="member-guardian">
+                            <label className="block font-medium text-charcoal/70 mb-1">
+                              Name of parents or guardian (relatives) *
+                            </label>
+                            <input
+                              type="text"
+                              required={isKinder}
+                              placeholder="e.g. Juan & Maria Bautista"
+                              value={applicationGuardianName}
+                              readOnly={useHouseholdGuardian}
+                              onChange={(e) => handleGuardianNameChange(e.target.value)}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block font-medium text-charcoal/70">
+                                Contact number of parents *
+                              </label>
+                              {applicationGuardianPhone && (
+                                <span className={`text-[12px] font-medium ${applicationGuardianPhone.length === 11 ? "text-emerald-600" : "text-muted"}`}>
+                                  {applicationGuardianPhone.length}/11
                                 </span>
+                              )}
+                            </div>
+                            <input
+                              type="tel"
+                              required={isKinder}
+                              maxLength={11}
+                              placeholder="e.g. 09123456789"
+                              value={applicationGuardianPhone}
+                              readOnly={useHouseholdGuardian && !!linkedFamily.primaryPhone}
+                              onChange={(e) => {
+                                const cleaned = sanitizePhoneInput(e.target.value);
+                                setFormData({
+                                  ...formData,
+                                  guardian_phone: cleaned,
+                                  contact_phone: formData.contact_phone || cleaned
+                                });
+                              }}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block font-medium text-charcoal/70 mb-1">
+                            Medical / Allergy Notes (Crucial for Kinder) *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Peanut allergy, Asthma inhaler, None"
+                            value={formData.medical_notes}
+                            onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
+                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2. Elementary Ministry Form Fields */}
+                    {isElementary && (
+                      <div className="bg-blue-50/60 p-3.5 rounded-xl border border-blue-200 space-y-3">
+                        <h4 className="font-semibold text-blue-950 text-xs flex items-center gap-1.5">
+                          <span>Elementary Ministry Application Requirements</span>
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <SearchableAutocomplete
+                              label="Who Invites You in DPC? (Invitee)"
+                              value={formData.invited_by}
+                              onChange={(val) => setFormData({ ...formData, invited_by: val })}
+                              placeholder="Search member name or type custom..."
+                              suggestions={memberSuggestions}
+                              icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                            />
+                          </div>
+                          <div data-guide="member-guardian">
+                            <label className="block font-medium text-charcoal/70 mb-1">
+                              Name of Parents or Guardian
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Mr. & Mrs. Santos"
+                              value={applicationGuardianName}
+                              readOnly={useHouseholdGuardian}
+                              onChange={(e) => handleGuardianNameChange(e.target.value)}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block font-medium text-charcoal/70 mb-1">
+                            Medical / Allergy Notes
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mild asthma, None"
+                            value={formData.medical_notes}
+                            onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
+                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. High School Ministry (Matches Photo 2) */}
+                    {isHighSchool && (
+                      <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-emerald-950 text-xs flex items-center gap-1.5">
+                            <GraduationCap className="w-4 h-4 text-emerald-700" />
+                            <span>High School Application Card Fields</span>
+                          </h4>
+                          <span className="text-[12px] bg-white text-emerald-800 font-medium px-2 py-0.5 rounded border border-emerald-200">
+                            Physical Form Match
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <SearchableAutocomplete
+                              label="School"
+                              required={isHighSchool}
+                              value={formData.school_name}
+                              onChange={(val) => setFormData({ ...formData, school_name: val })}
+                              placeholder="e.g. CNNHS / Daet National High School"
+                              suggestions={PHILIPPINE_HIGH_SCHOOLS}
+                              icon={<School className="w-3.5 h-3.5 text-emerald-600" />}
+                            />
+                          </div>
+                          <div>
+                            <SearchableAutocomplete
+                              label="Year / Grade Level"
+                              required={isHighSchool}
+                              value={formData.grade_level}
+                              onChange={(val) => setFormData({ ...formData, grade_level: val })}
+                              placeholder="e.g. Grade 9 / Grade 11 - STEM"
+                              suggestions={HIGH_SCHOOL_GRADE_LEVELS}
+                              icon={<GraduationCap className="w-3.5 h-3.5 text-emerald-600" />}
+                            />
+                          </div>
+                        </div>
+
+                        {renderFamilyDetails("Family Members (Parents and number of siblings)", "e.g. Parents, 2 siblings")}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Hobbies</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Playing badminton, reading, studying"
+                              value={formData.hobbies}
+                              onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                          <div>
+                            <SearchableAutocomplete
+                              label="Who Invites You in DPC?"
+                              value={formData.invited_by}
+                              onChange={(val) => setFormData({ ...formData, invited_by: val })}
+                              placeholder="Search member name or type custom..."
+                              suggestions={memberSuggestions}
+                              icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. Youth Ministry Form Fields (Ages 18-26: Supports Students & Graduates) */}
+                    {isYouth && (
+                      <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-200 space-y-3.5">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <h4 className="font-semibold text-indigo-950 text-xs flex items-center gap-1.5">
+                            <GraduationCap className="w-4 h-4 text-indigo-700" />
+                            <span>Youth Ministry Application Form (Ages 18–26)</span>
+                          </h4>
+                          <span className="text-[12px] bg-white text-indigo-800 font-medium px-2 py-0.5 rounded border border-indigo-200 shadow-2xs">
+                            Youth Scope (18–26)
+                          </span>
+                        </div>
+
+                        {/* Educational / Career Status Switcher */}
+                        <div className="p-1 bg-white/90 rounded-xl border border-indigo-200/80 flex items-center gap-1 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => setYouthStatus("student")}
+                            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${youthStatus === "student"
+                              ? "bg-indigo-600 text-white shadow-xs"
+                              : "text-indigo-950/70 hover:text-indigo-900 hover:bg-indigo-50/60"
+                              }`}
+                          >
+                            <School className="w-3.5 h-3.5" />
+                            <span><UIGraduationCap aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Currently in College / University</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setYouthStatus("graduated");
+                              setFormData(prev => ({ ...prev, class_schedule: "" }));
+                            }}
+                            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${youthStatus === "graduated"
+                              ? "bg-indigo-600 text-white shadow-xs"
+                              : "text-indigo-950/70 hover:text-indigo-900 hover:bg-indigo-50/60"
+                              }`}
+                          >
+                            <Briefcase className="w-3.5 h-3.5" />
+                            <span><UIBriefcase aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> College Graduate</span>
+                          </button>
+                        </div>
+
+                        {/* Dynamic Fields for Student vs Graduate */}
+                        {youthStatus === "student" ? (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <SearchableAutocomplete
+                                  label="College / University"
+                                  value={formData.school_name}
+                                  onChange={(val) => setFormData({ ...formData, school_name: val })}
+                                  placeholder="e.g. CNSC / Mabini Colleges / LCCD"
+                                  suggestions={PHILIPPINE_COLLEGES_UNIVERSITIES}
+                                  apiEndpoint="http://universities.hipolabs.com/search?country=Philippines"
+                                  icon={<School className="w-3.5 h-3.5 text-indigo-600" />}
+                                />
+                              </div>
+                              <div>
+                                <SearchableAutocomplete
+                                  label="Degree Program and Major"
+                                  value={formData.program_major}
+                                  onChange={(val) => setFormData({ ...formData, program_major: val })}
+                                  placeholder="e.g. BS Information Technology, BS Nursing"
+                                  suggestions={PHILIPPINE_DEGREE_PROGRAMS}
+                                  icon={<BookOpen className="w-3.5 h-3.5 text-indigo-600" />}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Class Schedule Builder - Exclusively for College Students */}
+                            <div>
+                              <ClassSchedulePicker
+                                label="Class Schedule"
+                                value={formData.class_schedule}
+                                onChange={(val) => setFormData({ ...formData, class_schedule: val })}
+                                placeholder="e.g. MWF 8:00 AM - 12:00 PM, Th-F 1:00 PM - 5:00 PM"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <SearchableAutocomplete
+                                  label="College / University Graduated From"
+                                  value={formData.school_name}
+                                  onChange={(val) => setFormData({ ...formData, school_name: val })}
+                                  placeholder="e.g. CNSC / Mabini Colleges / SLSU / PLM"
+                                  suggestions={PHILIPPINE_COLLEGES_UNIVERSITIES}
+                                  apiEndpoint="http://universities.hipolabs.com/search?country=Philippines"
+                                  icon={<School className="w-3.5 h-3.5 text-indigo-600" />}
+                                />
+                              </div>
+                              <div>
+                                <SearchableAutocomplete
+                                  label="Degree / Course Completed"
+                                  value={formData.program_major}
+                                  onChange={(val) => setFormData({ ...formData, program_major: val })}
+                                  placeholder="e.g. BS Information Technology, BS Accountancy, AB Comm"
+                                  suggestions={PHILIPPINE_DEGREE_PROGRAMS}
+                                  icon={<BookOpen className="w-3.5 h-3.5 text-indigo-600" />}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Work Status Selector: With Work vs No Work */}
+                            <div className="space-y-2.5 bg-white/90 p-3 rounded-2xl border border-indigo-100 shadow-2xs">
+                              <label className="block font-medium text-indigo-950 text-xs flex items-center gap-1.5">
+                                <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Employment Status</span>
+                              </label>
+
+                              <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setCreateNewSpouseRecord(true);
-                                    setFormData(prev => ({ ...prev, spouse_id: "", spouse_name: "" }));
-                                    setSpouseFormData(prev => ({
-                                      ...prev,
-                                      last_name: prev.last_name || formData.last_name,
-                                      gender: formData.gender === "Male" ? "Female" : "Male"
-                                    }));
+                                    setGradWorkStatus("with_work");
+                                    if (!formData.occupation || formData.occupation === "No Work") {
+                                      setFormData({ ...formData, occupation: "", class_schedule: "" });
+                                    }
                                   }}
-                                  className="text-[11px] font-black text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${gradWorkStatus === "with_work"
+                                    ? "bg-indigo-600 text-white shadow-xs font-medium"
+                                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                    }`}
                                 >
-                                  <span>+ Register Spouse as New Member</span>
+                                  <Briefcase className="w-3.5 h-3.5" />
+                                  <span>With Work / Employed</span>
                                 </button>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {/* Inline Partner Registration Card (if not in member directory) */}
-                          {createNewSpouseRecord && (
-                            <div className="p-3.5 bg-indigo-50/40 rounded-xl border border-indigo-200 space-y-3 animate-in fade-in duration-150">
-                              <div className="flex items-center justify-between pb-1.5 border-b border-indigo-100">
-                                <span className="font-black text-xs text-indigo-950 flex items-center gap-1.5">
-                                  <span>📝 Register Partner as New Member</span>
-                                </span>
                                 <button
                                   type="button"
-                                  onClick={() => setCreateNewSpouseRecord(false)}
-                                  className="text-[10px] font-bold text-charcoal/60 hover:text-charcoal cursor-pointer"
+                                  onClick={() => {
+                                    setGradWorkStatus("no_work");
+                                    setFormData({ ...formData, occupation: "", class_schedule: "" });
+                                  }}
+                                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${gradWorkStatus === "no_work"
+                                    ? "bg-indigo-600 text-white shadow-xs font-medium"
+                                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                                    }`}
                                 >
-                                  ✕ Switch back to Search
+                                  <span>No Work / Currently Looking</span>
                                 </button>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner First Name *
+                              {gradWorkStatus === "with_work" ? (
+                                <div className="pt-1">
+                                  <label className="block font-medium text-charcoal/70 mb-1 text-[12px]">
+                                    Current Occupation / Workplace
                                   </label>
                                   <input
                                     type="text"
-                                    required={createNewSpouseRecord}
-                                    placeholder="e.g. Maria"
-                                    value={spouseFormData.first_name}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, first_name: e.target.value })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                                    placeholder="e.g. Software Developer, Nurse, Teacher, BPO, Freelancer"
+                                    value={formData.occupation}
+                                    onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
                                   />
                                 </div>
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner Last Name *
-                                  </label>
-                                  <input
-                                    type="text"
-                                    required={createNewSpouseRecord}
-                                    placeholder="e.g. Almadrones"
-                                    value={spouseFormData.last_name}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, last_name: e.target.value })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                                <div>
-                                  <DatePickerInput
-                                    label="Partner Birthday"
-                                    required={createNewSpouseRecord}
-                                    value={spouseFormData.birthdate}
-                                    onChange={(val) => setSpouseFormData({ ...spouseFormData, birthdate: val })}
-                                    placeholder="Select birthday"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner Gender *
-                                  </label>
-                                  <select
-                                    value={spouseFormData.gender}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, gender: e.target.value })}
-                                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo h-[41px] text-xs font-bold"
-                                  >
-                                    <option value="Female">Female</option>
-                                    <option value="Male">Male</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <DatePickerInput
-                                    label="Date of Application"
-                                    value={spouseFormData.application_date}
-                                    onChange={(val) => setSpouseFormData({ ...spouseFormData, application_date: val })}
-                                    placeholder="Select application date"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Contact & Socials */}
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                                <div>
-                                  <div className="flex items-center justify-between mb-1">
-                                    <label className="block font-bold text-charcoal/70 text-[11px]">
-                                      Partner Contact Phone
-                                    </label>
-                                    {spouseFormData.contact_phone && (
-                                      <span className={`text-[10px] font-bold ${spouseFormData.contact_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
-                                        {spouseFormData.contact_phone.length}/11
-                                      </span>
-                                    )}
+                              ) : (
+                                <div className="pt-0.5">
+                                  <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-2.5 text-[12px] text-amber-900 font-medium flex items-center gap-2">
+                                    <span><UIInfo aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Graduate currently not working (e.g. Board Exam Reviewee, Job Seeking, or taking time off).</span>
                                   </div>
-                                  <input
-                                    type="tel"
-                                    maxLength={11}
-                                    placeholder="e.g. 09123456789"
-                                    value={spouseFormData.contact_phone}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, contact_phone: sanitizePhoneInput(e.target.value) })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold"
-                                  />
                                 </div>
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner Contact Email
-                                  </label>
-                                  <input
-                                    type="email"
-                                    placeholder="e.g. partner@email.com"
-                                    value={spouseFormData.contact_email}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, contact_email: e.target.value })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner Facebook Account
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Fb: Maria Clara"
-                                    value={spouseFormData.facebook_account}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, facebook_account: e.target.value })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Junior Adult Card Fields: Occupation, Hobbies, Family Details */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner Occupation
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Teacher, Office staff, Nurse, Business"
-                                    value={spouseFormData.occupation}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, occupation: e.target.value })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Partner Hobbies
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Cooking, reading, music, gardening"
-                                    value={spouseFormData.hobbies}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, hobbies: e.target.value })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                  />
-                                </div>
-                              </div>
-
-                              <div>
-                                <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                  Partner Family Members / Children
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Children: Juan Jr., Mateo, Sophia"
-                                  value={spouseFormData.family_details}
-                                  onChange={(e) => setSpouseFormData({ ...spouseFormData, family_details: e.target.value })}
-                                  className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                />
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                <div>
-                                  <SearchableAutocomplete
-                                    label="Who Invites Partner in DPC?"
-                                    value={spouseFormData.invited_by}
-                                    onChange={(val) => setSpouseFormData({ ...spouseFormData, invited_by: val })}
-                                    placeholder="Search member name or type custom..."
-                                    suggestions={memberSuggestions}
-                                    icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                    Previous Religion / Church Attended
-                                  </label>
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Roman Catholic / Baptist / None"
-                                    value={spouseFormData.previous_church}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, previous_church: e.target.value })}
-                                    className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                  />
-                                </div>
-                              </div>
-
-                              <div>
-                                <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                  Partner Medical / Allergy Notes
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Asthma, Seafood allergy, None"
-                                  value={spouseFormData.medical_notes}
-                                  onChange={(e) => setSpouseFormData({ ...spouseFormData, medical_notes: e.target.value })}
-                                  className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                />
-                              </div>
-
-                              {/* Address Option */}
-                              <div className="p-2.5 bg-white rounded-xl border border-indigo-100 space-y-2">
-                                <label className="flex items-center gap-2 cursor-pointer select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={spouseFormData.same_address_as_member}
-                                    onChange={(e) => setSpouseFormData({ ...spouseFormData, same_address_as_member: e.target.checked })}
-                                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                  />
-                                  <span className="text-xs font-bold text-indigo-950">
-                                    Same present address as primary member
-                                  </span>
-                                </label>
-
-                                {!spouseFormData.same_address_as_member && (
-                                  <div className="pt-1">
-                                    <AddressPicker
-                                      label="Partner Present Address"
-                                      value={spouseFormData.address}
-                                      onChange={(addr) => setSpouseFormData((prev) => ({ ...prev, address: addr }))}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="p-2 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-950 flex items-center gap-1.5 font-medium">
-                                <Info className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                                <span>
-                                  Both member records will be automatically created in the <strong>Junior Adult Ministry</strong> and linked as husband & wife / spouses.
-                                </span>
-                              </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Address (Cascading Philippine PSGC Selector) */}
-                  <AddressPicker
-                    label="Present Address"
-                    required
-                    value={formData.address}
-                    onChange={(addr) => setFormData((prev) => ({ ...prev, address: addr }))}
-                  />
-
-                  {/* Ministry Assignment */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="font-bold text-charcoal/70 text-xs">Ministry Assignment</label>
-                      <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-bold">
-                        {coordinatorMinistryId ? "Coordinator Scope" : (formData.ministry_id ? "Assigned" : "Auto-Assigned by Age")}
-                      </span>
-                    </div>
-                    <select
-                      value={coordinatorMinistryId ? String(coordinatorMinistryId) : formData.ministry_id}
-                      onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
-                      disabled={!!coordinatorMinistryId}
-                      className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal disabled:opacity-90 disabled:bg-gray-100 text-xs"
-                    >
-                      {coordinatorMinistryId ? (
-                        <option value={coordinatorMinistryId}>{coordinatorMinistryName} Ministry (Assigned)</option>
-                      ) : (
-                        <>
-                          <option value="">Auto-Assign by Age</option>
-                          {ministries.map((m) => (
-                            <option key={m.id} value={m.id}>{m.name} ({m.min_age ? `${m.min_age}-${m.max_age || '+'} yrs` : 'All'})</option>
-                          ))}
-                        </>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Enhanced Household & Family Linkage Section */}
-                  <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200 shadow-2xs space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div>
-                        <label className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
-                          <Home className="w-4 h-4 text-indigo-700" />
-                          <span>Household & Family Linkage:</span>
-                        </label>
-                        <p className="text-[10px] text-charcoal/60 mt-0.5">
-                          {formData.civil_status === "Married"
-                            ? "💍 Recommended: Create a new household for this new couple / family, or link to family."
-                            : "👨‍👩‍👧 Recommended: Link to parents' household or create an independent household."}
-                        </p>
-                      </div>
-
-                      {/* Mode Badge Indicator */}
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-950 shadow-2xs">
-                        {householdMode === "link_parents" && "👨‍👩‍👧 Link to Parents"}
-                        {householdMode === "create_new" && "➕ New Household"}
-                        {householdMode === "existing" && "📋 Existing Household"}
-                        {householdMode === "none" && "👤 Individual"}
-                      </span>
-                    </div>
-
-                    {/* 4 Mode Switcher Buttons */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
-                      {[
-                        { id: "link_parents", label: "👨‍👩‍👧 Link Parents", desc: "Link with parents" },
-                        { id: "create_new", label: "➕ Create New", desc: "For new family", isHighlighted: formData.civil_status === "Married" },
-                        { id: "existing", label: "📋 Select List", desc: "Pick household" },
-                        { id: "none", label: "👤 Individual", desc: "No household" }
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setHouseholdMode(item.id as any);
-                            if (item.id === "create_new" && !newHouseholdName) {
-                              setNewHouseholdName(`${formData.last_name ? `${formData.last_name} Household` : "New Family Household"}`);
-                            }
-                          }}
-                          className={`py-2 px-2 rounded-xl font-bold text-[11px] transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${householdMode === item.id
-                            ? item.isHighlighted
-                              ? "bg-amber-500 text-white border-amber-600 shadow-xs scale-[1.02]"
-                              : "bg-indigo-600 text-white border-indigo-700 shadow-xs"
-                            : item.isHighlighted
-                              ? "bg-amber-50/80 text-amber-950 border-amber-300 hover:bg-amber-100"
-                              : "bg-white text-charcoal/80 border-gray-200 hover:bg-indigo-50/50 hover:border-indigo-300"
-                            }`}
-                        >
-                          <span className="font-black">{item.label}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Mode 1: Link to Parents */}
-                    {householdMode === "link_parents" && (
-                      <div className="p-3 bg-white rounded-xl border border-indigo-100 space-y-2.5 animate-in fade-in duration-150">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>Search & Link to Parent in Church:</span>
-                          </span>
-                          {selectedParentMember && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedParentMember(null);
-                                setParentSearchName("");
-                              }}
-                              className="text-[10px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer"
-                            >
-                              Clear Selection
-                            </button>
-                          )}
-                        </div>
-
-                        {selectedParentMember ? (
-                          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                                👨‍👩‍👧
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-emerald-800 font-bold block uppercase tracking-wider">
-                                  Linked Parent / Family Head
-                                </span>
-                                <h4 className="font-black text-xs text-indigo-950">
-                                  {selectedParentMember.first_name} {selectedParentMember.last_name}
-                                  {selectedParentMember.ministry_name && ` (${selectedParentMember.ministry_name})`}
-                                </h4>
-                                <p className="text-[11px] text-charcoal/70 mt-0.5">
-                                  {selectedParentMember.household_name ? (
-                                    <span>Household: <strong>{selectedParentMember.household_name}</strong></span>
-                                  ) : (
-                                    <span className="text-amber-800 font-medium">Will auto-create <strong>{selectedParentMember.last_name} Household</strong> for family</span>
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                            <span className="text-[10px] bg-emerald-100 text-emerald-950 font-black px-2 py-0.5 rounded-md border border-emerald-300">
-                              Linked
-                            </span>
-                          </div>
-                        ) : (
-                          <SearchableAutocomplete
-                            label="Parent Name (Father / Mother / Guardian in DPC)"
-                            value={parentSearchName}
-                            onChange={(val) => handleSelectParent(val)}
-                            placeholder="Type parent's name to search church members..."
-                            suggestions={parentMemberSuggestions}
-                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                          />
+                          </>
                         )}
 
-                        <div className="text-[10px] text-charcoal/60 bg-ivory-light/80 p-2 rounded-lg border border-indigo-50 flex items-center gap-1.5">
-                          <Info className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                          <span>
-                            Linking a parent automatically attaches this member to their parent's household and syncs guardian information.
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Mode 2: Create New Household */}
-                    {householdMode === "create_new" && (
-                      <div className="p-3 bg-white rounded-xl border border-amber-200 space-y-2.5 animate-in fade-in duration-150">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                            <Plus className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Create New Family Household Record</span>
-                          </span>
-                          <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md">
-                            Independent Family
-                          </span>
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-charcoal/80 mb-1">
-                            Household / Family Name *
-                          </label>
-                          <input
-                            type="text"
-                            required={householdMode === "create_new"}
-                            placeholder="e.g. Dela Cruz Household / Juan & Maria Family"
-                            value={newHouseholdName}
-                            onChange={(e) => setNewHouseholdName(e.target.value)}
-                            className="w-full bg-ivory-light p-2.5 rounded-xl border border-amber-300 text-xs font-bold text-indigo-950 focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-
-                        <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-950 flex items-start gap-1.5">
-                          <Home className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
-                          <span>
-                            Upon saving, a new household <strong>"{newHouseholdName || `${formData.last_name || 'New'} Household`}"</strong> will be created at the address above. Both this member and spouse (if married) will be automatically assigned to it.
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Mode 3: Select Existing Household */}
-                    {householdMode === "existing" && (
-                      <div className="p-3 bg-white rounded-xl border border-indigo-100 space-y-2 animate-in fade-in duration-150">
-                        <label className="block text-xs font-bold text-indigo-950 mb-1">
-                          Select Registered Household:
-                        </label>
-                        <select
-                          value={formData.household_id}
-                          onChange={(e) => setFormData({ ...formData, household_id: e.target.value })}
-                          className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-xs text-indigo-950 cursor-pointer"
-                        >
-                          <option value="">-- Choose Existing Household --</option>
-                          {households.map((h) => (
-                            <option key={h.id} value={h.id}>
-                              🏡 {h.name} ({h.member_count || 0} family members)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Mode 4: Individual */}
-                    {householdMode === "none" && (
-                      <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-[11px] text-charcoal/70 flex items-center gap-1.5">
-                        <Info className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                        <span>This member will be registered as a standalone individual profile (no household linked).</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Contact Phone & Email */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block font-bold text-charcoal/70">Contact No *</label>
-                        <span className={`text-[10px] font-bold ${formData.contact_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
-                          {formData.contact_phone.length}/11 digits
-                        </span>
-                      </div>
-                      <input
-                        type="tel"
-                        required={!isKinder}
-                        maxLength={11}
-                        placeholder="e.g. 09123456789"
-                        value={formData.contact_phone}
-                        onChange={(e) => setFormData({ ...formData, contact_phone: sanitizePhoneInput(e.target.value) })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-bold text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-charcoal/70 mb-1">Contact Email</label>
-                      <input
-                        type="email"
-                        placeholder="e.g. member@email.com"
-                        value={formData.contact_email}
-                        onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  {/* ========================================================= */}
-                  {/* DYNAMIC MINISTRY FORM SECTIONS (MATCHING PAPER FORMS)     */}
-                  {/* ========================================================= */}
-
-                  {/* 1. Kinder Ministry Form Fields */}
-                  {isKinder && (
-                    <div className="bg-amber-50/60 p-3.5 rounded-xl border border-amber-200 space-y-3">
-                      <h4 className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
-                        <span>Kinder Ministry Application Requirements</span>
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">
-                            Name of parents or guardian (relatives) *
-                          </label>
-                          <input
-                            type="text"
-                            required={isKinder}
-                            placeholder="e.g. Juan & Maria Bautista"
-                            value={formData.guardian_names}
-                            onChange={(e) => setFormData({ ...formData, guardian_names: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block font-bold text-charcoal/70">
-                              Contact number of parents *
-                            </label>
-                            {formData.guardian_phone && (
-                              <span className={`text-[10px] font-bold ${formData.guardian_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
-                                {formData.guardian_phone.length}/11
-                              </span>
-                            )}
-                          </div>
-                          <input
-                            type="tel"
-                            required={isKinder}
-                            maxLength={11}
-                            placeholder="e.g. 09123456789"
-                            value={formData.guardian_phone}
-                            onChange={(e) => {
-                              const cleaned = sanitizePhoneInput(e.target.value);
-                              setFormData({
-                                ...formData,
-                                guardian_phone: cleaned,
-                                contact_phone: formData.contact_phone || cleaned
-                              });
-                            }}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">
-                          Medical / Allergy Notes (Crucial for Kinder) *
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Peanut allergy, Asthma inhaler, None"
-                          value={formData.medical_notes}
-                          onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 2. Elementary Ministry Form Fields */}
-                  {isElementary && (
-                    <div className="bg-blue-50/60 p-3.5 rounded-xl border border-blue-200 space-y-3">
-                      <h4 className="font-bold text-blue-950 text-xs flex items-center gap-1.5">
-                        <span>Elementary Ministry Application Requirements</span>
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <SearchableAutocomplete
-                            label="Who Invites You in DPC? (Invitee)"
-                            value={formData.invited_by}
-                            onChange={(val) => setFormData({ ...formData, invited_by: val })}
-                            placeholder="Search member name or type custom..."
-                            suggestions={memberSuggestions}
-                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">
-                            Name of Parents or Guardian
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Mr. & Mrs. Santos"
-                            value={formData.guardian_names}
-                            onChange={(e) => setFormData({ ...formData, guardian_names: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">
-                          Medical / Allergy Notes
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Mild asthma, None"
-                          value={formData.medical_notes}
-                          onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. High School Ministry (Matches Photo 2) */}
-                  {isHighSchool && (
-                    <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
-                          <GraduationCap className="w-4 h-4 text-emerald-700" />
-                          <span>High School Application Card Fields</span>
-                        </h4>
-                        <span className="text-[10px] bg-white text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200">
-                          Physical Form Match
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <SearchableAutocomplete
-                            label="School"
-                            required={isHighSchool}
-                            value={formData.school_name}
-                            onChange={(val) => setFormData({ ...formData, school_name: val })}
-                            placeholder="e.g. CNNHS / Daet National High School"
-                            suggestions={PHILIPPINE_HIGH_SCHOOLS}
-                            icon={<School className="w-3.5 h-3.5 text-emerald-600" />}
-                          />
-                        </div>
-                        <div>
-                          <SearchableAutocomplete
-                            label="Year / Grade Level"
-                            required={isHighSchool}
-                            value={formData.grade_level}
-                            onChange={(val) => setFormData({ ...formData, grade_level: val })}
-                            placeholder="e.g. Grade 9 / Grade 11 - STEM"
-                            suggestions={HIGH_SCHOOL_GRADE_LEVELS}
-                            icon={<GraduationCap className="w-3.5 h-3.5 text-emerald-600" />}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">
-                          Family Members (Parents and number of siblings)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Parents, 2 siblings"
-                          value={formData.family_details}
-                          onChange={(e) => setFormData({ ...formData, family_details: e.target.value })}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Hobbies</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Playing badminton, reading, studying"
-                            value={formData.hobbies}
-                            onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
-                        </div>
-                        <div>
-                          <SearchableAutocomplete
-                            label="Who Invites You in DPC?"
-                            value={formData.invited_by}
-                            onChange={(val) => setFormData({ ...formData, invited_by: val })}
-                            placeholder="Search member name or type custom..."
-                            suggestions={memberSuggestions}
-                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 4. Youth Ministry Form Fields (Ages 18-26: Supports Students & Graduates) */}
-                  {isYouth && (
-                    <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-200 space-y-3.5">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <h4 className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
-                          <GraduationCap className="w-4 h-4 text-indigo-700" />
-                          <span>Youth Ministry Application Form (Ages 18–26)</span>
-                        </h4>
-                        <span className="text-[10px] bg-white text-indigo-800 font-bold px-2 py-0.5 rounded border border-indigo-200 shadow-2xs">
-                          Youth Scope (18–26)
-                        </span>
-                      </div>
-
-                      {/* Educational / Career Status Switcher */}
-                      <div className="p-1 bg-white/90 rounded-xl border border-indigo-200/80 flex items-center gap-1 shadow-2xs">
-                        <button
-                          type="button"
-                          onClick={() => setYouthStatus("student")}
-                          className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${youthStatus === "student"
-                            ? "bg-indigo-600 text-white shadow-xs"
-                            : "text-indigo-950/70 hover:text-indigo-900 hover:bg-indigo-50/60"
-                            }`}
-                        >
-                          <School className="w-3.5 h-3.5" />
-                          <span>🎓 Currently in College / University</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setYouthStatus("graduated");
-                            setFormData(prev => ({ ...prev, class_schedule: "" }));
-                          }}
-                          className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${youthStatus === "graduated"
-                            ? "bg-indigo-600 text-white shadow-xs"
-                            : "text-indigo-950/70 hover:text-indigo-900 hover:bg-indigo-50/60"
-                            }`}
-                        >
-                          <Briefcase className="w-3.5 h-3.5" />
-                          <span>💼 College Graduate</span>
-                        </button>
-                      </div>
-
-                      {/* Dynamic Fields for Student vs Graduate */}
-                      {youthStatus === "student" ? (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <SearchableAutocomplete
-                                label="College / University"
-                                value={formData.school_name}
-                                onChange={(val) => setFormData({ ...formData, school_name: val })}
-                                placeholder="e.g. CNSC / Mabini Colleges / LCCD"
-                                suggestions={PHILIPPINE_COLLEGES_UNIVERSITIES}
-                                apiEndpoint="http://universities.hipolabs.com/search?country=Philippines"
-                                icon={<School className="w-3.5 h-3.5 text-indigo-600" />}
-                              />
-                            </div>
-                            <div>
-                              <SearchableAutocomplete
-                                label="Degree Program and Major"
-                                value={formData.program_major}
-                                onChange={(val) => setFormData({ ...formData, program_major: val })}
-                                placeholder="e.g. BS Information Technology, BS Nursing"
-                                suggestions={PHILIPPINE_DEGREE_PROGRAMS}
-                                icon={<BookOpen className="w-3.5 h-3.5 text-indigo-600" />}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Class Schedule Builder - Exclusively for College Students */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {renderFamilyDetails("Family Members (Parents & siblings)", "e.g. Parents + 2 siblings")}
                           <div>
-                            <ClassSchedulePicker
-                              label="Class Schedule"
-                              value={formData.class_schedule}
-                              onChange={(val) => setFormData({ ...formData, class_schedule: val })}
-                              placeholder="e.g. MWF 8:00 AM - 12:00 PM, Th-F 1:00 PM - 5:00 PM"
+                            <label className="block font-medium text-charcoal/70 mb-1">Hobbies & Talents</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Music, Guitar, Reading, Basketball"
+                              value={formData.hobbies}
+                              onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
                             />
                           </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <SearchableAutocomplete
-                                label="College / University Graduated From"
-                                value={formData.school_name}
-                                onChange={(val) => setFormData({ ...formData, school_name: val })}
-                                placeholder="e.g. CNSC / Mabini Colleges / SLSU / PLM"
-                                suggestions={PHILIPPINE_COLLEGES_UNIVERSITIES}
-                                apiEndpoint="http://universities.hipolabs.com/search?country=Philippines"
-                                icon={<School className="w-3.5 h-3.5 text-indigo-600" />}
-                              />
-                            </div>
-                            <div>
-                              <SearchableAutocomplete
-                                label="Degree / Course Completed"
-                                value={formData.program_major}
-                                onChange={(val) => setFormData({ ...formData, program_major: val })}
-                                placeholder="e.g. BS Information Technology, BS Accountancy, AB Comm"
-                                suggestions={PHILIPPINE_DEGREE_PROGRAMS}
-                                icon={<BookOpen className="w-3.5 h-3.5 text-indigo-600" />}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Work Status Selector: With Work vs No Work */}
-                          <div className="space-y-2.5 bg-white/90 p-3 rounded-2xl border border-indigo-100 shadow-2xs">
-                            <label className="block font-bold text-indigo-950 text-xs flex items-center gap-1.5">
-                              <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>Employment Status</span>
-                            </label>
-
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setGradWorkStatus("with_work");
-                                  if (!formData.occupation || formData.occupation === "No Work") {
-                                    setFormData({ ...formData, occupation: "", class_schedule: "" });
-                                  }
-                                }}
-                                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${gradWorkStatus === "with_work"
-                                  ? "bg-indigo-600 text-white shadow-xs font-black"
-                                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                                  }`}
-                              >
-                                <Briefcase className="w-3.5 h-3.5" />
-                                <span>With Work / Employed</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setGradWorkStatus("no_work");
-                                  setFormData({ ...formData, occupation: "", class_schedule: "" });
-                                }}
-                                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${gradWorkStatus === "no_work"
-                                  ? "bg-indigo-600 text-white shadow-xs font-black"
-                                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                                  }`}
-                              >
-                                <span>No Work / Currently Looking</span>
-                              </button>
-                            </div>
-
-                            {gradWorkStatus === "with_work" ? (
-                              <div className="pt-1">
-                                <label className="block font-bold text-charcoal/70 mb-1 text-[11px]">
-                                  Current Occupation / Workplace
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Software Developer, Nurse, Teacher, BPO, Freelancer"
-                                  value={formData.occupation}
-                                  onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
-                                  className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                                />
-                              </div>
-                            ) : (
-                              <div className="pt-0.5">
-                                <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-2.5 text-[11px] text-amber-900 font-medium flex items-center gap-2">
-                                  <span>ℹ️ Graduate currently not working (e.g. Board Exam Reviewee, Job Seeking, or taking time off).</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">
-                            Family Members (Parents & siblings)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Parents + 2 siblings"
-                            value={formData.family_details}
-                            onChange={(e) => setFormData({ ...formData, family_details: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
                         </div>
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Hobbies & Talents</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Music, Guitar, Reading, Basketball"
-                            value={formData.hobbies}
-                            onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <SearchableAutocomplete
+                              label="Who Invites You in DPC?"
+                              value={formData.invited_by}
+                              onChange={(val) => setFormData({ ...formData, invited_by: val })}
+                              placeholder="Search member name or type custom..."
+                              suggestions={memberSuggestions}
+                              icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Previous Church Attended</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Daet Baptist / Catholic / None"
+                              value={formData.previous_church}
+                              onChange={(e) => setFormData({ ...formData, previous_church: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
                         </div>
                       </div>
+                    )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <SearchableAutocomplete
-                            label="Who Invites You in DPC?"
-                            value={formData.invited_by}
-                            onChange={(val) => setFormData({ ...formData, invited_by: val })}
-                            placeholder="Search member name or type custom..."
-                            suggestions={memberSuggestions}
-                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                          />
+                    {/* 5. Young Adult Ministry Form Fields */}
+                    {isYoungAdult && (
+                      <div className="bg-purple-50/60 p-3.5 rounded-xl border border-purple-200 space-y-3">
+                        <h4 className="font-semibold text-purple-950 text-xs flex items-center gap-1.5">
+                          <Briefcase className="w-4 h-4 text-purple-700" />
+                          <span>Young Adult Application Card Fields</span>
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Occupation / Workplace</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Software Engineer / Accountant / Teacher"
+                              value={formData.occupation}
+                              onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                          {renderFamilyDetails("Family Members (Parents & siblings)", "e.g. Parents, 1 brother")}
                         </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Hobbies</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Coffee brewing, hiking, reading"
+                              value={formData.hobbies}
+                              onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                          <div>
+                            <SearchableAutocomplete
+                              label="Who Invites You in DPC?"
+                              value={formData.invited_by}
+                              onChange={(val) => setFormData({ ...formData, invited_by: val })}
+                              placeholder="Search member name or type custom..."
+                              suggestions={memberSuggestions}
+                              icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                            />
+                          </div>
+                        </div>
+
                         <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Previous Church Attended</label>
+                          <label className="block font-medium text-charcoal/70 mb-1">Previous Religion / Church</label>
                           <input
                             type="text"
-                            placeholder="e.g. Daet Baptist / Catholic / None"
+                            placeholder="e.g. Roman Catholic / Seventh-day Adventist / None"
                             value={formData.previous_church}
                             onChange={(e) => setFormData({ ...formData, previous_church: e.target.value })}
                             className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
                           />
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* 5. Young Adult Ministry Form Fields */}
-                  {isYoungAdult && (
-                    <div className="bg-purple-50/60 p-3.5 rounded-xl border border-purple-200 space-y-3">
-                      <h4 className="font-bold text-purple-950 text-xs flex items-center gap-1.5">
-                        <Briefcase className="w-4 h-4 text-purple-700" />
-                        <span>Young Adult Application Card Fields</span>
-                      </h4>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Occupation / Workplace</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Software Engineer / Accountant / Teacher"
-                            value={formData.occupation}
-                            onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
+                    {/* 6. Junior Adult Ministry (Matches Photo 1) */}
+                    {isJuniorAdult && (
+                      <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-amber-950 text-xs flex items-center gap-1.5">
+                            <Briefcase className="w-4 h-4 text-amber-700" />
+                            <span>Junior Adult Application Card Fields</span>
+                          </h4>
+                          <span className="text-[12px] bg-white text-amber-900 font-medium px-2 py-0.5 rounded border border-amber-200">
+                            Physical Card Match
+                          </span>
                         </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Occupation</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Office staff"
+                              value={formData.occupation}
+                              onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Facebook Account</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Fb: Zettsu"
+                              value={formData.facebook_account}
+                              onChange={(e) => setFormData({ ...formData, facebook_account: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                        </div>
+
+                        {renderFamilyDetails("Family Members", "e.g. Ziahannah Sky V. Deterra")}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Hobbies</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Reading & cooking"
+                              value={formData.hobbies}
+                              onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                          <div>
+                            <SearchableAutocomplete
+                              label="Who Invites You in DPC?"
+                              value={formData.invited_by}
+                              onChange={(val) => setFormData({ ...formData, invited_by: val })}
+                              placeholder="Search member name or type custom..."
+                              suggestions={memberSuggestions}
+                              icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 7. Old Adult / Senior Ministry */}
+                    {isOldAdult && (
+                      <div className="bg-rose-50/60 p-3.5 rounded-xl border border-rose-200 space-y-3">
+                        <h4 className="font-semibold text-rose-950 text-xs flex items-center gap-1.5">
+                          <span>Senior / Old Adult Application Card Fields</span>
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-medium text-charcoal/70 mb-1">Occupation / Status</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Retired / Homemaker / Self-employed"
+                              value={formData.occupation}
+                              onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                              className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                            />
+                          </div>
+                          <div>
+                            <SearchableAutocomplete
+                              label="Who Invites You in DPC?"
+                              value={formData.invited_by}
+                              onChange={(val) => setFormData({ ...formData, invited_by: val })}
+                              placeholder="Search member name or type custom..."
+                              suggestions={memberSuggestions}
+                              icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
+                            />
+                          </div>
+                        </div>
+
+                        {renderFamilyDetails("Family Members / Living With", "e.g. Living with son/daughter and grandchildren")}
+
                         <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">
-                            Family Members (Parents & siblings)
+                          <label className="block font-medium text-charcoal/70 mb-1">
+                            Medical / Health Maintenance Instructions
                           </label>
                           <input
                             type="text"
-                            placeholder="e.g. Parents, 1 brother"
-                            value={formData.family_details}
-                            onChange={(e) => setFormData({ ...formData, family_details: e.target.value })}
+                            placeholder="e.g. Hypertension maintenance, Needs walking assistance"
+                            value={formData.medical_notes}
+                            onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
                             className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
                           />
                         </div>
                       </div>
+                    )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Hobbies</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Coffee brewing, hiking, reading"
-                            value={formData.hobbies}
-                            onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
-                        </div>
-                        <div>
-                          <SearchableAutocomplete
-                            label="Who Invites You in DPC?"
-                            value={formData.invited_by}
-                            onChange={(val) => setFormData({ ...formData, invited_by: val })}
-                            placeholder="Search member name or type custom..."
-                            suggestions={memberSuggestions}
-                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                          />
-                        </div>
-                      </div>
-
+                    {/* Default Fallback for General / Unmatched */}
+                    {(!isKinder && !isElementary && !isHighSchool && !isYouth && !isYoungAdult && !isJuniorAdult && !isOldAdult) && (
                       <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">Previous Religion / Church</label>
+                        <label className="block font-medium text-charcoal/70 mb-1">Medical / Allergy Notes</label>
                         <input
                           type="text"
-                          placeholder="e.g. Roman Catholic / Seventh-day Adventist / None"
-                          value={formData.previous_church}
-                          onChange={(e) => setFormData({ ...formData, previous_church: e.target.value })}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 6. Junior Adult Ministry (Matches Photo 1) */}
-                  {isJuniorAdult && (
-                    <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
-                          <Briefcase className="w-4 h-4 text-amber-700" />
-                          <span>Junior Adult Application Card Fields</span>
-                        </h4>
-                        <span className="text-[10px] bg-white text-amber-900 font-bold px-2 py-0.5 rounded border border-amber-200">
-                          Physical Card Match
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Occupation</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Office staff"
-                            value={formData.occupation}
-                            onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Facebook Account</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Fb: Zettsu"
-                            value={formData.facebook_account}
-                            onChange={(e) => setFormData({ ...formData, facebook_account: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">Family Members</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Ziahannah Sky V. Deterra"
-                          value={formData.family_details}
-                          onChange={(e) => setFormData({ ...formData, family_details: e.target.value })}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Hobbies</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Reading & cooking"
-                            value={formData.hobbies}
-                            onChange={(e) => setFormData({ ...formData, hobbies: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
-                        </div>
-                        <div>
-                          <SearchableAutocomplete
-                            label="Who Invites You in DPC?"
-                            value={formData.invited_by}
-                            onChange={(val) => setFormData({ ...formData, invited_by: val })}
-                            placeholder="Search member name or type custom..."
-                            suggestions={memberSuggestions}
-                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 7. Old Adult / Senior Ministry */}
-                  {isOldAdult && (
-                    <div className="bg-rose-50/60 p-3.5 rounded-xl border border-rose-200 space-y-3">
-                      <h4 className="font-bold text-rose-950 text-xs flex items-center gap-1.5">
-                        <span>Senior / Old Adult Application Card Fields</span>
-                      </h4>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-charcoal/70 mb-1">Occupation / Status</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Retired / Homemaker / Self-employed"
-                            value={formData.occupation}
-                            onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
-                            className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                          />
-                        </div>
-                        <div>
-                          <SearchableAutocomplete
-                            label="Who Invites You in DPC?"
-                            value={formData.invited_by}
-                            onChange={(val) => setFormData({ ...formData, invited_by: val })}
-                            placeholder="Search member name or type custom..."
-                            suggestions={memberSuggestions}
-                            icon={<Users className="w-3.5 h-3.5 text-indigo-600" />}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">Family Members / Living With</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Living with son/daughter and grandchildren"
-                          value={formData.family_details}
-                          onChange={(e) => setFormData({ ...formData, family_details: e.target.value })}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-charcoal/70 mb-1">
-                          Medical / Health Maintenance Instructions
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Hypertension maintenance, Needs walking assistance"
+                          placeholder="e.g. Peanut allergy, Asthma inhaler"
                           value={formData.medical_notes}
                           onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
-                          className="w-full bg-white p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                          className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
                         />
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Default Fallback for General / Unmatched */}
-                  {(!isKinder && !isElementary && !isHighSchool && !isYouth && !isYoungAdult && !isJuniorAdult && !isOldAdult) && (
-                    <div>
-                      <label className="block font-bold text-charcoal/70 mb-1">Medical / Allergy Notes</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Peanut allergy, Asthma inhaler"
-                        value={formData.medical_notes}
-                        onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
-                        className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                      />
+                    <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={closeMemberForm}
+                        className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal hover:bg-gray-200"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        data-guide="member-save"
+                        className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium shadow-md flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>{isSavingMember ? "Saving..." : createNewSpouseRecord ? "Continue to Partner" : editingMember ? "Save Changes" : "Save Application Record"}</span>
+                      </button>
                     </div>
-                  )}
-
-                  <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddModalOpen(false)}
-                      className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>{editingMember ? "Save Changes" : "Save Application Record"}</span>
-                    </button>
-                  </div>
-                </form>
+                  </form>
+                </ModalPanel>
+                {registrationStep === "partner" && createNewSpouseRecord && (
+                  <PartnerRegistrationModal spouseFormData={spouseFormData} setSpouseFormData={setSpouseFormData}
+                    formData={formData} household={linkedHousehold} memberName={fullNameInput} memberSuggestions={memberSuggestions}
+                    onBack={backToMember} onSubmit={handleSubmitMember} isSaving={isSavingMember} />
+                )}
               </div>
             </div>
           );
@@ -4282,75 +4529,258 @@ export const MembersPage: React.FC = () => {
         document.body
       )}
 
-      {/* Add Household Modal */}
+      {/* Add / Edit Household Modal */}
       {isAddHouseholdModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-4 border border-indigo-100">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-charcoal flex items-center gap-2">
-                <Home className="w-5 h-5 text-amber-600" />
-                <span>Create Household Family Group</span>
-              </h2>
-              <button onClick={() => setIsAddHouseholdModalOpen(false)} className="p-1.5 text-charcoal/50 hover:bg-gray-100 rounded-xl cursor-pointer transition-colors">
+          <ModalPanel data-modal-panel role="dialog" aria-modal="true" aria-label={editingHousehold ? "Edit Household" : "Create Household"} className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl space-y-5 border border-indigo-100 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            {/* Modal Header */}
+            <div data-modal-header className="flex items-center justify-between pb-3 border-b border-indigo-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/80 shadow-2xs">
+                  <Home className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-charcoal">
+                    {editingHousehold ? "Edit Household & Family" : "Create Household Family Group"}
+                  </h2>
+                  <p className="text-[12px] text-muted">Manage household address, parents, and family members</p>
+                </div>
+              </div>
+              <button onClick={() => setIsAddHouseholdModalOpen(false)} className="p-1.5 text-muted hover:bg-gray-100 rounded-xl cursor-pointer transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateHousehold} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-charcoal/70 mb-1">Household Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. The Rodriguez Family"
-                  value={householdForm.name}
-                  onChange={(e) => setHouseholdForm({ ...householdForm, name: e.target.value })}
-                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
-                />
-              </div>
-              <div>
-                <AddressPicker
-                  label="Primary Street Address"
-                  value={householdForm.address}
-                  onChange={(addr) => setHouseholdForm((prev) => ({ ...prev, address: addr }))}
-                />
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-charcoal/70">Family Emergency Contact Phone</label>
-                  {householdForm.primary_contact_phone && (
-                    <span className={`text-[10px] font-bold ${householdForm.primary_contact_phone.length === 11 ? "text-emerald-600" : "text-charcoal/40"}`}>
-                      {householdForm.primary_contact_phone.length}/11
-                    </span>
-                  )}
+            <form data-guide="household-form" onSubmit={handleCreateHousehold} className="space-y-4 text-xs">
+              {/* Section 1: Household Details */}
+              <div className="p-4 bg-indigo-50/40 rounded-2xl border border-indigo-100/90 space-y-3">
+                <span className="font-semibold text-xs text-indigo-950 flex items-center gap-1.5">
+                  <Home className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Household Information</span>
+                </span>
+
+                <div>
+                  <label className="block font-medium text-charcoal/70 mb-1">Household Name *</label>
+                  <input data-guide="household-name"
+                    type="text"
+                    required
+                    placeholder="e.g. The Remot Family or Antonio Remot Household"
+                    value={householdForm.name}
+                    onChange={(e) => setHouseholdForm({ ...householdForm, name: e.target.value })}
+                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal shadow-2xs"
+                  />
                 </div>
-                <input
-                  type="tel"
-                  maxLength={11}
-                  placeholder="e.g. 09123456789"
-                  value={householdForm.primary_contact_phone}
-                  onChange={(e) => setHouseholdForm({ ...householdForm, primary_contact_phone: sanitizePhoneInput(e.target.value) })}
-                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-bold"
-                />
+
+                <div>
+                  <AddressPicker
+                    label="Primary Street Address"
+                    value={householdForm.address}
+                    onChange={(addr) => setHouseholdForm((prev) => ({ ...prev, address: addr }))}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-medium text-charcoal/70">Family Emergency Contact Phone</label>
+                    {householdForm.primary_contact_phone && (
+                      <span className={`text-[12px] font-medium ${householdForm.primary_contact_phone.length === 11 ? "text-emerald-600" : "text-muted"}`}>
+                        {householdForm.primary_contact_phone.length}/11
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="tel"
+                    maxLength={11}
+                    placeholder="e.g. 09123456789"
+                    value={householdForm.primary_contact_phone}
+                    onChange={(e) => setHouseholdForm({ ...householdForm, primary_contact_phone: sanitizePhoneInput(e.target.value) })}
+                    className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal shadow-2xs"
+                  />
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              {/* Section 2: Parents / Household Heads */}
+              <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-200/90 space-y-3">
+                <div>
+                  <span className="font-semibold text-xs text-amber-950 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Parents / Household Heads</span>
+                  </span>
+                  <p className="text-[12px] text-muted mt-0.5">
+                    Search church members or enter a parent's full name.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div data-guide="household-parents">
+                    <SearchableAutocomplete
+                      label="Father's Name"
+                      value={householdForm.father_name}
+                      onChange={(name) => setHouseholdForm((prev) => ({ ...prev, father_name: name }))}
+                      onSelect={(item) => setHouseholdForm((prev) => ({ ...prev, father_name: item.title }))}
+                      placeholder="e.g. Antonio Remot"
+                      suggestions={availableFamilyMembers.map(memberName)}
+                      allowManualToggle={false}
+                    />
+                  </div>
+
+                  <div>
+                    <SearchableAutocomplete
+                      label="Mother's Name"
+                      value={householdForm.mother_name}
+                      onChange={(name) => setHouseholdForm((prev) => ({ ...prev, mother_name: name }))}
+                      onSelect={(item) => setHouseholdForm((prev) => ({ ...prev, mother_name: item.title }))}
+                      placeholder="e.g. Marites Remot"
+                      suggestions={availableFamilyMembers.map(memberName)}
+                      allowManualToggle={false}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <SearchableAutocomplete
+                label="Guardian's Name (optional)"
+                value={householdForm.guardian_name}
+                onChange={name => setHouseholdForm(prev => ({ ...prev, guardian_name: name }))}
+                onSelect={item => setHouseholdForm(prev => ({ ...prev, guardian_name: item.title }))}
+                suggestions={availableFamilyMembers.map(memberName)}
+                placeholder="Search guardian or type full name..."
+                allowManualToggle={false}
+              />
+
+              {/* Section 3: Children & Other Family Members */}
+              <div className="p-4 bg-white rounded-2xl border border-indigo-100 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-indigo-50 flex-wrap gap-2">
+                  <div>
+                    <h3 data-guide="household-family" className="font-semibold text-xs text-indigo-950 flex items-center gap-1.5">
+                      <span>Children & Other Family Members</span>
+                    </h3>
+                    <p className="text-[12px] text-muted">
+                      Add children, siblings, grandparents, or relatives in this home
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isSavingHousehold}
+                    onClick={() => {
+                      const entry = { key: ++familyRowCounter.current, name: "", relationship: "Son", member_id: null };
+                      setHouseholdFamilyDraft((prev) => [...prev, entry]);
+                      setHouseholdFamilyError("");
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-medium text-xs border border-indigo-200 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Add Family Member</span>
+                  </button>
+                </div>
+
+                {householdFamilyError && (
+                  <p role="alert" className="text-xs text-rose-600 font-medium bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                    {householdFamilyError}
+                  </p>
+                )}
+
+                {householdFamilyDraft.length === 0 ? (
+                  <div className="p-4 text-center text-muted bg-ivory-light/40 rounded-xl border border-dashed border-indigo-100">
+                    <p className="text-[12px]">No other family members added yet. Click <strong>"+ Add Family Member"</strong> to add children or relatives.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {householdFamilyDraft.map((entry, index) => {
+                      const matchedMember = availableFamilyMembers.find((m) => m.id === entry.member_id || normalizeName(memberName(m)) === normalizeName(entry.name));
+                      return (
+                        <div key={entry.key} role="group" aria-label={`Family member ${index + 1}`} className="p-3 rounded-2xl bg-ivory-light/80 border border-indigo-100 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-semibold text-indigo-900 bg-indigo-100/70 px-2 py-0.5 rounded-md">
+                                #{index + 1}
+                              </span>
+                              {matchedMember ? (
+                                <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 font-medium px-2 py-0.5 rounded-md"><UICheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> DPC Member: {matchedMember.ministry_name || "Member"}{matchedMember.age ? ` (${matchedMember.age} yrs)` : ""}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted font-medium">Family Relative</span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={isSavingHousehold}
+                              onClick={() => {
+                                setHouseholdFamilyDraft((prev) => prev.filter((row) => row.key !== entry.key));
+                                setHouseholdFamilyError("");
+                              }}
+                              className="p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Remove member"
+                              aria-label={`Remove family member ${index + 1}`}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="sm:col-span-2">
+                              <SearchableAutocomplete
+                                label="Member Name"
+                                required
+                                value={entry.name}
+                                onChange={(name) => updateHouseholdFamilyName(entry.key, name)}
+                                onSelect={(item) => updateHouseholdFamilyName(entry.key, item.title)}
+                                placeholder="Search member or type full name..."
+                                allowManualToggle={false}
+                                suggestions={availableFamilyMembers
+                                  .filter((member) => !householdFamilyDraft.some((row) => row.key !== entry.key && row.member_id === member.id))
+                                  .map((member) => ({ title: memberName(member), subtitle: `${member.ministry_name || "Church Member"}${member.age ? ` • ${member.age} yrs` : ""}` }))}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[12px] font-medium text-charcoal/70 mb-1">
+                                Relationship
+                              </label>
+                              <select
+                                value={entry.relationship}
+                                onChange={(e) =>
+                                  setHouseholdFamilyDraft((prev) =>
+                                    prev.map((row) => (row.key === entry.key ? { ...row, relationship: e.target.value } : row))
+                                  )
+                                }
+                                className="w-full p-2 rounded-xl bg-white border border-gray-200 text-xs font-medium text-charcoal focus:outline-none focus:border-indigo shadow-2xs h-[37px]"
+                              >
+                                {familyRelationships.map((rel) => (
+                                  <option key={rel} value={rel}>
+                                    {rel}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div data-modal-footer className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddHouseholdModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 font-semibold text-charcoal hover:bg-gray-200"
+                  className="px-4 py-2 rounded-xl bg-gray-100 font-medium text-charcoal hover:bg-gray-200 transition-colors cursor-pointer text-xs"
                 >
                   Cancel
                 </button>
-                <button
+                <button data-guide="household-save"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-bold shadow-md"
+                  disabled={isSavingHousehold}
+                  className="px-5 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium shadow-md transition-all active:scale-95 cursor-pointer text-xs disabled:opacity-50"
                 >
-                  Create Household
+                  {isSavingHousehold ? "Saving..." : editingHousehold ? "Save Household" : "Create Household"}
                 </button>
               </div>
             </form>
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}
@@ -4358,22 +4788,22 @@ export const MembersPage: React.FC = () => {
       {/* Birthday Greeting Modal */}
       {greetingMember && createPortal(
         <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200">
-            <div className="mb-4 flex items-center justify-between">
+          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200">
+            <div data-modal-header className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="p-2 rounded-xl bg-amber-100 text-amber-700">
                   <Cake className="w-5 h-5" />
                 </span>
                 <div>
-                  <h3 className="font-bold text-base text-charcoal">Send Birthday Blessing</h3>
-                  <p className="text-xs text-charcoal/50">
+                  <h3 className="font-semibold text-base text-charcoal">Send Birthday Blessing</h3>
+                  <p className="text-xs text-muted">
                     To {greetingMember.first_name} {greetingMember.last_name} (Turning {greetingMember.turning_age || ((greetingMember.age ?? 0) + 1)})
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setGreetingMember(null)}
-                className="p-1.5 rounded-xl hover:bg-gray-100 text-charcoal/50 hover:text-charcoal cursor-pointer transition-colors"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-muted hover:text-charcoal cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -4384,15 +4814,15 @@ export const MembersPage: React.FC = () => {
                 <div className="w-12 h-12 rounded-full bg-sage-100 text-sage-700 mx-auto flex items-center justify-center">
                   <Check className="w-6 h-6" />
                 </div>
-                <h4 className="font-bold text-charcoal text-base">Birthday Blessing Posted!</h4>
-                <p className="text-xs text-charcoal/60">
+                <h4 className="font-semibold text-charcoal text-base">Birthday Blessing Posted!</h4>
+                <p className="text-xs text-muted">
                   A celebratory blessing has been published to the church announcement board.
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-charcoal mb-1.5">
+                  <label className="block text-xs font-medium text-charcoal mb-1.5">
                     Pastoral Message & Scripture Blessing
                   </label>
                   <textarea
@@ -4406,7 +4836,7 @@ export const MembersPage: React.FC = () => {
 
                 {/* Quick Scripture Presets */}
                 <div>
-                  <span className="text-[11px] font-semibold text-charcoal/60 block mb-1.5">
+                  <span className="text-[12px] font-medium text-muted block mb-1.5">
                     Insert Scripture Verse:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -4434,10 +4864,10 @@ export const MembersPage: React.FC = () => {
                         onClick={() => {
                           const turning = greetingMember.turning_age || ((greetingMember.age ?? 0) + 1);
                           setGreetingMessage(
-                            `Happy ${turning}th Birthday, ${greetingMember.first_name}! 🎂 ${item.verse} Praying God's richest blessings over your life!`
+                            `Happy ${turning}th Birthday, ${greetingMember.first_name}!  ${item.verse} Praying God's richest blessings over your life!`
                           );
                         }}
-                        className="text-[10px] font-medium bg-indigo-50 text-indigo hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-100 transition-colors"
+                        className="text-[12px] font-medium bg-indigo-50 text-indigo hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-100 transition-colors"
                       >
                         {item.label}
                       </button>
@@ -4449,7 +4879,7 @@ export const MembersPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setGreetingMember(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-charcoal/70 hover:bg-gray-100"
+                    className="px-4 py-2 rounded-xl text-xs font-medium text-charcoal/70 hover:bg-gray-100"
                   >
                     Cancel
                   </button>
@@ -4457,7 +4887,7 @@ export const MembersPage: React.FC = () => {
                     type="button"
                     onClick={handleSendGreeting}
                     disabled={sendingGreeting || !greetingMessage.trim()}
-                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-medium text-xs px-4 py-2 rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{sendingGreeting ? "Posting..." : "Publish Blessing"}</span>
@@ -4465,7 +4895,7 @@ export const MembersPage: React.FC = () => {
                 </div>
               </div>
             )}
-          </div>
+          </ModalPanel>
         </div>,
         document.body
       )}

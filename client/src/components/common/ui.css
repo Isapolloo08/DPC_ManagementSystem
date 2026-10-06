@@ -1,0 +1,87 @@
+/* Semantic aliases of the existing DPC palette; the palette owns both themes. */
+@layer base {
+  :root {
+    --ui-surface: rgb(var(--surface-white-DEFAULT));
+    --ui-subtle: rgb(var(--surface-indigo-50));
+    --ui-text: rgb(var(--ink-charcoal-DEFAULT));
+    --ui-heading: rgb(var(--ink-indigo-900));
+    --ui-muted: rgb(var(--ink-muted-DEFAULT));
+    --ui-border: rgb(var(--line-gray-300));
+    --ui-accent: theme('colors.indigo.600');
+    --ui-accent-hover: theme('colors.indigo.700');
+    --ui-accent-text: theme('colors.white');
+    --ui-focus: rgb(var(--ink-indigo-500));
+    --ui-warning-text: rgb(var(--ink-amber-800));
+    --ui-error-text: rgb(var(--ink-rose-700));
+    --ui-error-surface: rgb(var(--surface-rose-50));
+    --ui-space-1: 0.25rem;
+    --ui-space-2: 0.5rem;
+    --ui-space-3: 0.75rem;
+    --ui-space-4: 1rem;
+    --ui-space-5: 1.25rem;
+    --ui-radius-control: 0.75rem;
+    --ui-radius-panel: 1.5rem;
+  }
+}
+
+@layer components {
+  .ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-control);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background-color 150ms, border-color 150ms;
+  }
+  .ui-button--md { min-height: 2.75rem; padding: var(--ui-space-2) var(--ui-space-4); }
+  .ui-button--sm { min-height: 2.25rem; padding: var(--ui-space-1) var(--ui-space-3); }
+  .ui-button--icon { width: 2.75rem; min-width: 2.75rem; height: 2.75rem; }
+  .ui-button--primary { background: var(--ui-accent); color: var(--ui-accent-text); }
+  .ui-button--primary:hover:not(:disabled) { background: var(--ui-accent-hover); }
+  .ui-button--secondary { background: var(--ui-surface); color: var(--ui-heading); border-color: var(--ui-border); }
+  .ui-button--secondary:hover:not(:disabled), .ui-button--ghost:hover:not(:disabled) { background: var(--ui-subtle); }
+  .ui-button--ghost { background: transparent; color: var(--ui-muted); }
+  .ui-button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .ui-button:focus-visible, .ui-input:focus-visible, .ui-dialog:focus-visible {
+    outline: 2px solid var(--ui-focus);
+    outline-offset: 2px;
+  }
+  .ui-field { display: block; color: var(--ui-heading); font-size: 0.8125rem; font-weight: 500; }
+  .ui-input {
+    display: block;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: var(--ui-space-2) var(--ui-space-3);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-control);
+    color: var(--ui-text);
+    background: var(--ui-surface);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+  .ui-input:disabled { opacity: 0.65; cursor: not-allowed; }
+  .ui-input[readonly] { background: var(--ui-subtle); }
+  .ui-input[aria-invalid="true"] { border-color: var(--ui-error-text); }
+  .ui-help { color: var(--ui-muted); font-size: 0.8125rem; line-height: 1.5; font-weight: 400; }
+  .ui-error { color: var(--ui-error-text); background: var(--ui-error-surface); border-radius: var(--ui-radius-control); padding: var(--ui-space-3); font-size: 0.8125rem; }
+  .ui-dialog-backdrop { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; padding: var(--ui-space-4); background: rgb(19 25 44 / 0.6); }
+  .ui-dialog { color: var(--ui-text); background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-panel); box-shadow: 0 16px 48px rgb(0 0 0 / 0.2); }
+  .ui-dialog-title { font-size: 1rem; line-height: 1.5; font-weight: 600; color: var(--ui-heading); overflow-wrap: anywhere; }
+  .ui-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ui-space-2); }
+  .ui-candidate-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--ui-border); }
+  .ui-candidate { display: grid; gap: var(--ui-space-2); padding: var(--ui-space-3) 0; border-bottom: 1px solid var(--ui-border); }
+  .ui-candidate-name { font-weight: 600; color: var(--ui-heading); overflow-wrap: anywhere; }
+  @media (max-width: 480px) {
+    .ui-dialog-actions > .ui-button { flex: 1 1 auto; }
+    .ui-button--sm { min-height: 2.75rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-button { transition: none; }
+  }
+}
