@@ -5,6 +5,7 @@ import { db } from '../db/schema';
 import { authMiddleware, requireRoles, AuthRequest } from '../middleware/auth';
 import { validDate, validateVisit, visitStatuses, manilaToday } from '../services/plannedVisits';
 import { logger } from '../utils/logger';
+import { queueVisitConfirmation, visitFollowUp, VisitReceiptRow } from '../services/visitConfirmation';
 
 const router = Router();
 export const visitSubmissionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many visit requests. Please try again in 15 minutes.' } });
@@ -17,20 +18,23 @@ router.post('/', visitSubmissionLimiter, async (req, res) => {
   if (Object.keys(errors).length) return res.status(400).json({ error: 'Please check the form.', fields: errors });
   const hash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
   try {
-    const existing = await db.get<{ receipt_id: string; payload_hash: string }>('SELECT receipt_id, payload_hash FROM planned_visits WHERE submission_token = $1', [body.submission_token]);
-    if (existing) {
-      if (existing.payload_hash !== hash) return res.status(409).json({ error: 'This submission token was already used for different details. Please submit again.' });
-      return res.status(201).json({ receipt_id: existing.receipt_id, message: 'We’ve received your visit plan. We look forward to welcoming you.' });
-    }
-    if (data.visit_date < manilaToday()) return res.status(400).json({ error: 'Please check the form.', fields: { visit_date: 'Choose today or an upcoming Sunday.' } });
-    const result = await db.get<{ receipt_id: string; payload_hash: string }>(`
+    const outcome = await db.transaction(async client => {
+      const existing = await client.query<VisitReceiptRow>('SELECT receipt_id, payload_hash, created_at FROM planned_visits WHERE submission_token = $1', [body.submission_token]);
+      let result = existing.rows[0];
+      if (!result && data.visit_date < manilaToday()) return { kind: 'past' as const };
+      if (!result) result = (await client.query<VisitReceiptRow>(`
       INSERT INTO planned_visits (receipt_id, submission_token, payload_hash, visit_date, party, bringing_children, child_age_groups, full_name, email, phone, questions)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       ON CONFLICT (submission_token) DO UPDATE SET submission_token = EXCLUDED.submission_token
-      RETURNING receipt_id, payload_hash
-    `, [randomUUID(), body.submission_token, hash, data.visit_date, data.party, data.bringing_children, data.child_age_groups, data.full_name, data.email, data.phone, data.questions]);
-    if (result.payload_hash !== hash) return res.status(409).json({ error: 'This submission token was already used for different details. Please submit again.' });
-    return res.status(201).json({ receipt_id: result.receipt_id, message: 'We’ve received your visit plan. We look forward to welcoming you.' });
+      RETURNING receipt_id, payload_hash, created_at
+    `, [randomUUID(), body.submission_token, hash, data.visit_date, data.party, data.bringing_children, data.child_age_groups, data.full_name, data.email, data.phone, data.questions])).rows[0];
+      if (result.payload_hash !== hash) return { kind: 'conflict' as const };
+      const confirmation_email = await queueVisitConfirmation(client, data, result);
+      return { kind: 'saved' as const, result, confirmation_email };
+    });
+    if (outcome.kind === 'past') return res.status(400).json({ error: 'Please check the form.', fields: { visit_date: 'Choose today or an upcoming Sunday.' } });
+    if (outcome.kind === 'conflict') return res.status(409).json({ error: 'This submission token was already used for different details. Please submit again.' });
+    return res.status(201).json({ receipt_id: outcome.result.receipt_id, message: 'We’ve received your visit plan. We look forward to welcoming you.', confirmation_email: outcome.confirmation_email, follow_up: visitFollowUp(data.visit_date, outcome.result.created_at) });
   } catch {
     logger.error('Failed to save planned visit');
     return res.status(503).json({ error: 'We couldn’t save your visit plan. Please try again. Your guide is still available.' });

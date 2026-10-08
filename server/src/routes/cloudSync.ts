@@ -5,12 +5,12 @@ import {
   testCloudConnection,
   saveCloudDbUrl,
   pushLocalToCloud,
-  pullCloudToLocal,
-  getCloudDbUrl
+  pullCloudToLocal
 } from "../db/cloudSyncService";
 import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
+let syncInProgress = false;
 
 // Require login for all cloud sync operations
 router.use(authMiddleware, requireRoles("Admin"));
@@ -80,23 +80,7 @@ router.post("/test", async (req: AuthRequest, res: Response) => {
  * Push local database records -> Supabase Cloud
  */
 router.post("/push", async (req: AuthRequest, res: Response) => {
-  try {
-    const userName = req.user?.name || "Administrator";
-
-    emitRealtimeEvent("cloudSync:started", { direction: "push", user: userName });
-
-    const result = await pushLocalToCloud(userName, (progress) => {
-      emitRealtimeEvent("cloudSync:progress", progress);
-    });
-
-    emitRealtimeEvent("cloudSync:completed", { direction: "push", ...result });
-
-    res.json(result);
-  } catch (err: any) {
-    console.error("Cloud Push error:", err);
-    emitRealtimeEvent("cloudSync:failed", { direction: "push", error: err.message });
-    res.status(500).json({ error: err.message || "Failed to push database to Cloud" });
-  }
+  await handleTransfer("push", req, res);
 });
 
 /**
@@ -104,23 +88,35 @@ router.post("/push", async (req: AuthRequest, res: Response) => {
  * Pull database records from Supabase Cloud -> Local Database
  */
 router.post("/pull", async (req: AuthRequest, res: Response) => {
+  await handleTransfer("pull", req, res);
+});
+
+async function handleTransfer(direction: "push" | "pull", req: AuthRequest, res: Response) {
+  if (syncInProgress) {
+    res.status(409).json({ error: "A cloud sync is already running. Wait for it to finish before retrying." });
+    return;
+  }
+  syncInProgress = true;
+  const controller = new AbortController();
+  const onDisconnect = () => { if (!res.writableEnded) controller.abort(); };
+  res.on("close", onDisconnect);
   try {
     const userName = req.user?.name || "Administrator";
-
-    emitRealtimeEvent("cloudSync:started", { direction: "pull", user: userName });
-
-    const result = await pullCloudToLocal(userName, (progress) => {
+    emitRealtimeEvent("cloudSync:started", { direction, user: userName });
+    const transfer = direction === "push" ? pushLocalToCloud : pullCloudToLocal;
+    const result = await transfer(userName, (progress) => {
       emitRealtimeEvent("cloudSync:progress", progress);
-    });
-
-    emitRealtimeEvent("cloudSync:completed", { direction: "pull", ...result });
-
-    res.json(result);
+    }, controller.signal);
+    emitRealtimeEvent("cloudSync:completed", { direction, ...result });
+    if (!res.headersSent && !res.destroyed) res.json(result);
   } catch (err: any) {
-    console.error("Cloud Pull error:", err);
-    emitRealtimeEvent("cloudSync:failed", { direction: "pull", error: err.message });
-    res.status(500).json({ error: err.message || "Failed to pull database from Cloud" });
+    console.error(`Cloud ${direction} error:`, err);
+    emitRealtimeEvent("cloudSync:failed", { direction, error: err.message });
+    if (!res.headersSent && !res.destroyed) res.status(500).json({ error: err.message || "Cloud sync failed" });
+  } finally {
+    res.off("close", onDisconnect);
+    syncInProgress = false;
   }
-});
+}
 
 export default router;

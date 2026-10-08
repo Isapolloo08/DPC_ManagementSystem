@@ -1,6 +1,8 @@
 import postgres from "postgres";
+import fs from "fs";
 import { db, sql } from "./schema";
-import { cleanDbConnectionString } from "./schema";
+import { cleanDbConnectionString, getMigrationFilePath } from "./schema";
+import { transferTables } from "./cloudSyncTransfer";
 
 export interface SyncCountComparison {
   table: string;
@@ -32,7 +34,6 @@ export interface TableSyncConfig {
   name: string;
   label: string;
   conflictTarget: string;
-  updateCols: string[];
   isSerial?: boolean;
 }
 
@@ -40,40 +41,29 @@ export interface TableSyncConfig {
  * Ordered list of all tables with specific unique constraints for foreign-key-safe replication
  */
 export const SYNC_TABLES: TableSyncConfig[] = [
-  { name: "roles", label: "Roles", conflictTarget: "name", updateCols: [], isSerial: true },
-  { name: "ministries", label: "Ministries", conflictTarget: "name", updateCols: ["min_age", "max_age", "description", "color"], isSerial: true },
-  { name: "system_lookups", label: "Lookups", conflictTarget: "type, name", updateCols: ["description", "color", "sort_order", "is_active"], isSerial: true },
-  { name: "system_settings", label: "Settings", conflictTarget: "key", updateCols: ["value", "category", "updated_at"], isSerial: false },
-  { name: "users", label: "User Accounts", conflictTarget: "email", updateCols: ["name", "username", "password_hash", "role_id"], isSerial: true },
-  { name: "user_ministries", label: "Staff Ministries", conflictTarget: "user_id, ministry_id", updateCols: [], isSerial: true },
-  { name: "households", label: "Households", conflictTarget: "id", updateCols: ["name", "address", "primary_contact_phone"], isSerial: true },
-  { 
-    name: "members", 
-    label: "Church Members", 
-    conflictTarget: "id", 
-    updateCols: [
-      "first_name", "last_name", "birthdate", "gender", "contact_email", "contact_phone",
-      "household_id", "ministry_id", "user_id", "status", "photo_url", "medical_notes",
-      "grade_level", "address", "guardian_names", "guardian_phone", "invited_by",
-      "school_name", "program_major", "class_schedule", "occupation", "hobbies",
-      "previous_church", "facebook_account", "family_details", "application_date",
-      "civil_status", "spouse_name", "spouse_id"
-    ], 
-    isSerial: true 
-  },
-  { name: "duty_teams", label: "Duty Teams", conflictTarget: "id", updateCols: ["name", "ministry_id", "leader_id", "leader_name", "color", "order_seq", "tasks_checklist"], isSerial: true },
-  { name: "duty_team_members", label: "Duty Members", conflictTarget: "team_id, member_id", updateCols: ["role"], isSerial: true },
-  { name: "duty_schedules", label: "Duty Schedules", conflictTarget: "id", updateCols: ["duty_date", "team_id", "ministry_id", "status", "notes", "completed_at"], isSerial: true },
-  { name: "dishwashing_roster", label: "Dishwashing", conflictTarget: "id", updateCols: ["schedule_date", "assigned_member_ids", "assigned_member_names", "status", "notes", "completed_at"], isSerial: true },
-  { name: "bible_study_groups", label: "Bible Study Groups", conflictTarget: "id", updateCols: ["name", "description", "curriculum", "ministry_id", "leader_name", "leader_contact", "meeting_day", "meeting_time", "location", "category", "max_capacity"], isSerial: true },
-  { name: "bible_study_topics", label: "Curriculum Topics", conflictTarget: "id", updateCols: ["title", "total_chapters", "summary_notes"], isSerial: true },
-  { name: "bible_study_members", label: "Group Roster", conflictTarget: "id", updateCols: ["group_id", "member_id", "role"], isSerial: true },
-  { name: "events", label: "Events", conflictTarget: "id", updateCols: ["ministry_id", "title", "description", "start_time", "end_time", "location", "created_by"], isSerial: true },
-  { name: "event_registrations", label: "Event RSVPs", conflictTarget: "event_id, member_id", updateCols: ["user_id", "guests_count", "status"], isSerial: true },
-  { name: "announcements", label: "Announcements", conflictTarget: "id", updateCols: ["title", "body", "ministry_id", "created_by", "is_pinned"], isSerial: true },
-  { name: "attendance", label: "Attendance Records", conflictTarget: "id", updateCols: ["member_id", "ministry_id", "event_id", "checked_in_at", "checked_in_by", "security_tag", "checked_out_at", "checked_out_by", "notes"], isSerial: true },
-  { name: "services", label: "Service Calendar", conflictTarget: "service_date, service_type", updateCols: ["title", "status", "notes", "updated_at"], isSerial: true },
-  { name: "audit_logs", label: "Audit Logs", conflictTarget: "id", updateCols: ["user_id", "action", "target_table", "target_id", "details"], isSerial: true }
+  { name: "roles", label: "Roles", conflictTarget: "name", isSerial: true },
+  { name: "ministries", label: "Ministries", conflictTarget: "name", isSerial: true },
+  { name: "system_lookups", label: "Lookups", conflictTarget: "type, name", isSerial: true },
+  { name: "system_settings", label: "Settings", conflictTarget: "key", isSerial: false },
+  { name: "users", label: "User Accounts", conflictTarget: "email", isSerial: true },
+  { name: "user_ministries", label: "Staff Ministries", conflictTarget: "user_id, ministry_id", isSerial: true },
+  { name: "households", label: "Households", conflictTarget: "id", isSerial: true },
+  { name: "members", label: "Church Members", conflictTarget: "id", isSerial: true },
+  { name: "duty_teams", label: "Duty Teams", conflictTarget: "id", isSerial: true },
+  { name: "duty_team_members", label: "Duty Members", conflictTarget: "team_id, member_id", isSerial: true },
+  { name: "duty_schedules", label: "Duty Schedules", conflictTarget: "id", isSerial: true },
+  { name: "bible_study_groups", label: "Bible Study Groups", conflictTarget: "id", isSerial: true },
+  { name: "dishwashing_roster", label: "Dishwashing", conflictTarget: "id", isSerial: true },
+  { name: "bible_study_topics", label: "Curriculum Topics", conflictTarget: "id", isSerial: true },
+  { name: "bible_study_group_transitions", label: "Group Transitions", conflictTarget: "id", isSerial: true },
+  { name: "bible_study_group_transition_sources", label: "Transition Source Groups", conflictTarget: "transition_id, source_group_id", isSerial: true },
+  { name: "bible_study_members", label: "Group Roster", conflictTarget: "id", isSerial: true },
+  { name: "events", label: "Events", conflictTarget: "id", isSerial: true },
+  { name: "event_registrations", label: "Event RSVPs", conflictTarget: "event_id, member_id", isSerial: true },
+  { name: "announcements", label: "Announcements", conflictTarget: "id", isSerial: true },
+  { name: "attendance", label: "Attendance Records", conflictTarget: "id", isSerial: true },
+  { name: "services", label: "Service Calendar", conflictTarget: "service_date, service_type", isSerial: true },
+  { name: "audit_logs", label: "Audit Logs", conflictTarget: "id", isSerial: true }
 ];
 
 /**
@@ -126,6 +116,7 @@ export function createCloudClient(url: string) {
     max: 2,
     connect_timeout: 15,
     idle_timeout: 10,
+    prepare: false, // Compatible with Supabase transaction poolers.
     ssl: isSupabaseOrRemote ? "require" : undefined,
     onnotice: () => {}
   });
@@ -214,8 +205,8 @@ export async function getCloudSyncStatus(): Promise<CloudSyncStatusResponse> {
     `;
 
     const [localRes, cloudRes] = await Promise.all([
-      sql.unsafe(multiCountQuery).catch(() => [{}]),
-      cloudSql.unsafe(multiCountQuery).catch(() => [{}])
+      sql.unsafe(multiCountQuery),
+      cloudSql.unsafe(multiCountQuery)
     ]);
 
     const localRow = localRes[0] || {};
@@ -258,279 +249,90 @@ export async function getCloudSyncStatus(): Promise<CloudSyncStatusResponse> {
   }
 }
 
-/**
- * Helper to execute upsert on a target PostgreSQL connection
- */
-async function executeTableUpsert(
-  targetSql: any,
-  tableConfig: TableSyncConfig,
-  rows: any[]
-): Promise<number> {
-  const { name: table, conflictTarget, updateCols, isSerial } = tableConfig;
-  if (!rows || rows.length === 0) return 0;
-
-  const targetCols = conflictTarget.split(",").map(c => `"${c.trim()}"`).join(", ");
-  let inserted = 0;
-
-  for (const row of rows) {
-    const keys = Object.keys(row);
-    const values = Object.values(row);
-
-    if (keys.length === 0) continue;
-
-    const cols = keys.map(k => `"${k}"`).join(", ");
-    const placeholders = keys.map((_, idx) => `$${idx + 1}`).join(", ");
-
-    let query = `INSERT INTO "${table}" (${cols}) VALUES (${placeholders})`;
-
-    if (updateCols && updateCols.length > 0) {
-      const availableUpdates = updateCols
-        .filter(col => keys.includes(col))
-        .map(col => `"${col}" = EXCLUDED."${col}"`)
-        .join(", ");
-
-      if (availableUpdates) {
-        query += ` ON CONFLICT (${targetCols}) DO UPDATE SET ${availableUpdates}`;
-      } else {
-        query += ` ON CONFLICT (${targetCols}) DO NOTHING`;
+/** Push and pull share the same atomic, identity-aware transfer path. */
+async function synchronize(
+  direction: "push" | "pull",
+  syncedByName: string,
+  onProgress?: (update: SyncProgressUpdate) => void,
+  signal?: AbortSignal
+): Promise<{ success: boolean; syncedTables: number; totalRows: number; message: string }> {
+  const cloudUrl = await getCloudDbUrl();
+  if (!cloudUrl) throw new Error("No Cloud Database URL configured. Please configure your Supabase URL in Settings.");
+  const cloudSql = createCloudClient(cloudUrl);
+  const source = direction === "push" ? sql : cloudSql;
+  const target = direction === "push" ? cloudSql : sql;
+  try {
+    const result = await target.begin(async (tx: any) => {
+      await tx.unsafe("SET LOCAL statement_timeout = '30s'");
+      await tx.unsafe("SET LOCAL lock_timeout = '5s'");
+      const [lock] = await tx.unsafe("SELECT pg_try_advisory_xact_lock(728194, 1) AS locked");
+      if (!lock.locked) throw new Error("Another cloud sync is already writing to this database. Retry when it finishes.");
+      if (direction === "push") {
+        onProgress?.({ step: "schema", current: 0, total: SYNC_TABLES.length, percentage: 0,
+          message: "Checking cloud schema compatibility..." });
+        const compatibilityColumns = await tx.unsafe(`SELECT column_name FROM information_schema.columns
+          WHERE table_schema = current_schema() AND
+            ((table_name = 'users' AND column_name IN ('bible_language', 'reading_start'))
+              OR (table_name = 'bible_study_groups' AND column_name = 'leader_user_id'))`);
+        // Avoid taking an ALTER TABLE lock during every subsequent transfer.
+        if (compatibilityColumns.length < 3) {
+          const migration = getMigrationFilePath("015_cloud_sync_columns.sql");
+          if (!migration) throw new Error("Missing cloud sync compatibility migration 015. Rebuild the server before retrying.");
+          await tx.unsafe(fs.readFileSync(migration, "utf8"));
+        }
       }
-    } else {
-      query += ` ON CONFLICT (${targetCols}) DO NOTHING`;
-    }
-
-    const cleanValues = values.map(val => {
-      if (val === undefined) return null;
-      if (val instanceof Date) return val.toISOString();
-      return val;
+      const counts = await source.begin(async (readTx: any) => {
+        await readTx.unsafe("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        await readTx.unsafe("SET LOCAL statement_timeout = '30s'");
+        return transferTables(readTx, tx, SYNC_TABLES, direction, onProgress, signal);
+      });
+      if (signal?.aborted) throw new Error("Cloud sync cancelled because the client disconnected. No transfer was committed.");
+      await writeSyncMetadata(tx, direction, syncedByName);
+      if (direction === "pull") {
+        await writeSyncAudit(tx, direction, syncedByName, counts.totalRows, counts.syncedTables);
+      }
+      if (signal?.aborted) throw new Error("Cloud sync cancelled because the client disconnected. No transfer was committed.");
+      return counts;
     });
 
-    try {
-      await targetSql.unsafe(query, cleanValues as any);
-      inserted++;
-    } catch (rowErr: any) {
-      // Smart Auto-Repair: If foreign key constraint failed on user_id (e.g. in audit_logs or events created_by from old deleted users),
-      // set user_id / created_by to null so the record is preserved without violating FK constraints
-      if (rowErr.message?.includes("violates foreign key constraint")) {
-        if (keys.includes("user_id")) {
-          try {
-            const userIdx = keys.indexOf("user_id");
-            const retryValues = [...cleanValues];
-            retryValues[userIdx] = null;
-            await targetSql.unsafe(query, retryValues as any);
-            inserted++;
-            continue;
-          } catch {}
-        }
-        if (keys.includes("created_by")) {
-          try {
-            const cbIdx = keys.indexOf("created_by");
-            const retryValues = [...cleanValues];
-            retryValues[cbIdx] = null;
-            await targetSql.unsafe(query, retryValues as any);
-            inserted++;
-            continue;
-          } catch {}
-        }
-      }
-
-      // Fallback: If conflict on primary key fails due to a secondary unique constraint, try simple ignore
+    // A push commits on the cloud first. Local metadata can only describe that
+    // successful commit; failures here must not falsely report a rolled-back push.
+    let metadataWarning = "";
+    if (direction === "push") {
       try {
-        const fallbackQuery = `INSERT INTO "${table}" (${cols}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`;
-        await targetSql.unsafe(fallbackQuery, cleanValues as any);
-        inserted++;
-      } catch (fbErr: any) {
-        console.warn(`⚠️ Warning: skipped row in ${table}:`, rowErr.message);
+        await sql.begin(async (tx: any) => {
+          await writeSyncMetadata(tx, direction, syncedByName);
+          await writeSyncAudit(tx, direction, syncedByName, result.totalRows, result.syncedTables);
+        });
+      } catch {
+        metadataWarning = " Cloud transfer committed, but local sync history could not be updated.";
       }
     }
-  }
-
-  // Reset sequence if table is serial
-  if (isSerial) {
-    try {
-      await targetSql.unsafe(`
-        SELECT setval(
-          pg_get_serial_sequence('${table}', 'id'),
-          COALESCE((SELECT MAX(id) FROM "${table}"), 1)
-        )
-      `);
-    } catch {}
-  }
-
-  return inserted;
-}
-
-/**
- * PUSH: Synchronize all data from Local Master DB -> Supabase Cloud DB
- */
-export async function pushLocalToCloud(
-  syncedByName: string,
-  onProgress?: (update: SyncProgressUpdate) => void
-): Promise<{ success: boolean; syncedTables: number; totalRows: number; message: string }> {
-  const cloudUrl = await getCloudDbUrl();
-  if (!cloudUrl) {
-    throw new Error("No Cloud Database URL configured. Please configure your Supabase URL in Settings.");
-  }
-
-  const cloudSql = createCloudClient(cloudUrl);
-  let totalRows = 0;
-  let syncedTables = 0;
-
-  try {
-    const totalSteps = SYNC_TABLES.length;
-
-    for (let i = 0; i < SYNC_TABLES.length; i++) {
-      const tableConfig = SYNC_TABLES[i];
-      const { name: table, label } = tableConfig;
-      const stepNum = i + 1;
-      const pct = Math.round((stepNum / totalSteps) * 100);
-
-      if (onProgress) {
-        onProgress({
-          step: table,
-          current: stepNum,
-          total: totalSteps,
-          percentage: pct,
-          message: `Reading local ${label}...`
-        });
-      }
-
-      // Fetch all local rows
-      const localRows = await sql.unsafe(`SELECT * FROM ${table}`);
-      
-      if (localRows && localRows.length > 0) {
-        await executeTableUpsert(cloudSql, tableConfig, localRows);
-        totalRows += localRows.length;
-      }
-
-      syncedTables++;
-
-      if (onProgress) {
-        onProgress({
-          step: table,
-          current: stepNum,
-          total: totalSteps,
-          percentage: pct,
-          message: `Synced ${localRows?.length || 0} ${label} to Cloud`
-        });
-      }
-    }
-
-    // Update sync timestamps
-    const nowIso = new Date().toISOString();
-    await db.exec(`
-      INSERT INTO system_settings (key, value, category, updated_at) VALUES 
-        ('cloud_last_synced_at', '${nowIso}', 'cloud_sync', CURRENT_TIMESTAMP),
-        ('cloud_last_synced_by', '${syncedByName.replace(/'/g, "''")}', 'cloud_sync', CURRENT_TIMESTAMP),
-        ('cloud_last_sync_direction', 'push', 'cloud_sync', CURRENT_TIMESTAMP)
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
-    `);
-
-    try {
-      await cloudSql.unsafe(`
-        INSERT INTO system_settings (key, value, category, updated_at) VALUES 
-          ('cloud_last_synced_at', '${nowIso}', 'cloud_sync', CURRENT_TIMESTAMP),
-          ('cloud_last_synced_by', '${syncedByName.replace(/'/g, "''")}', 'cloud_sync', CURRENT_TIMESTAMP),
-          ('cloud_last_sync_direction', 'push', 'cloud_sync', CURRENT_TIMESTAMP)
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
-      `);
-    } catch {}
-
-    // Record audit log
-    await db.exec(`
-      INSERT INTO audit_logs (action, target_table, details)
-      VALUES ('CLOUD_PUSH', 'all', 'Synchronized ${totalRows} records across ${syncedTables} tables to Supabase Cloud by ${syncedByName.replace(/'/g, "''")}')
-    `);
-
-    return {
-      success: true,
-      syncedTables,
-      totalRows,
-      message: `Successfully pushed ${totalRows} records across ${syncedTables} tables to Supabase Cloud.`
-    };
+    return { success: true, ...result,
+      message: `Successfully ${direction === "push" ? "pushed" : "pulled"} ${result.totalRows} records across ${result.syncedTables} tables ${direction === "push" ? "to Supabase Cloud" : "into Local Database"}.${metadataWarning}` };
   } finally {
-    await cloudSql.end().catch(() => {});
+    await cloudSql.end({ timeout: 5 }).catch(() => {});
   }
 }
 
-/**
- * PULL: Download all data from Supabase Cloud DB -> Local Master DB
- */
-export async function pullCloudToLocal(
-  syncedByName: string,
-  onProgress?: (update: SyncProgressUpdate) => void
-): Promise<{ success: boolean; syncedTables: number; totalRows: number; message: string }> {
-  const cloudUrl = await getCloudDbUrl();
-  if (!cloudUrl) {
-    throw new Error("No Cloud Database URL configured. Please configure your Supabase URL in Settings.");
-  }
+async function writeSyncMetadata(target: any, direction: "push" | "pull", name: string) {
+  await target.unsafe(`INSERT INTO system_settings (key, value, category, updated_at) VALUES
+    ('cloud_last_synced_at', $1, 'cloud_sync', CURRENT_TIMESTAMP),
+    ('cloud_last_synced_by', $2, 'cloud_sync', CURRENT_TIMESTAMP),
+    ('cloud_last_sync_direction', $3, 'cloud_sync', CURRENT_TIMESTAMP)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+    [new Date().toISOString(), name, direction]);
+}
 
-  const cloudSql = createCloudClient(cloudUrl);
-  let totalRows = 0;
-  let syncedTables = 0;
+async function writeSyncAudit(target: any, direction: "push" | "pull", name: string, totalRows: number, tables: number) {
+  await target.unsafe(`INSERT INTO audit_logs (action, target_table, details) VALUES ($1, 'all', $2)`,
+    [direction === "push" ? "CLOUD_PUSH" : "CLOUD_PULL", `Synchronized ${totalRows} records across ${tables} tables by ${name}`]);
+}
 
-  try {
-    const totalSteps = SYNC_TABLES.length;
+export function pushLocalToCloud(name: string, onProgress?: (update: SyncProgressUpdate) => void, signal?: AbortSignal) {
+  return synchronize("push", name, onProgress, signal);
+}
 
-    for (let i = 0; i < SYNC_TABLES.length; i++) {
-      const tableConfig = SYNC_TABLES[i];
-      const { name: table, label } = tableConfig;
-      const stepNum = i + 1;
-      const pct = Math.round((stepNum / totalSteps) * 100);
-
-      if (onProgress) {
-        onProgress({
-          step: table,
-          current: stepNum,
-          total: totalSteps,
-          percentage: pct,
-          message: `Fetching ${label} from Cloud...`
-        });
-      }
-
-      // Fetch all cloud rows
-      const cloudRows = await cloudSql.unsafe(`SELECT * FROM "${table}"`);
-
-      if (cloudRows && cloudRows.length > 0) {
-        await executeTableUpsert(sql, tableConfig, cloudRows);
-        totalRows += cloudRows.length;
-      }
-
-      syncedTables++;
-
-      if (onProgress) {
-        onProgress({
-          step: table,
-          current: stepNum,
-          total: totalSteps,
-          percentage: pct,
-          message: `Imported ${cloudRows?.length || 0} ${label} to Local DB`
-        });
-      }
-    }
-
-    // Update sync timestamps
-    const nowIso = new Date().toISOString();
-    await db.exec(`
-      INSERT INTO system_settings (key, value, category, updated_at) VALUES 
-        ('cloud_last_synced_at', '${nowIso}', 'cloud_sync', CURRENT_TIMESTAMP),
-        ('cloud_last_synced_by', '${syncedByName.replace(/'/g, "''")}', 'cloud_sync', CURRENT_TIMESTAMP),
-        ('cloud_last_sync_direction', 'pull', 'cloud_sync', CURRENT_TIMESTAMP)
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
-    `);
-
-    // Record audit log
-    await db.exec(`
-      INSERT INTO audit_logs (action, target_table, details)
-      VALUES ('CLOUD_PULL', 'all', 'Imported ${totalRows} records from Supabase Cloud to Local DB by ${syncedByName.replace(/'/g, "''")}')
-    `);
-
-    return {
-      success: true,
-      syncedTables,
-      totalRows,
-      message: `Successfully pulled ${totalRows} records from Supabase Cloud into Local Database.`
-    };
-  } finally {
-    await cloudSql.end().catch(() => {});
-  }
+export function pullCloudToLocal(name: string, onProgress?: (update: SyncProgressUpdate) => void, signal?: AbortSignal) {
+  return synchronize("pull", name, onProgress, signal);
 }

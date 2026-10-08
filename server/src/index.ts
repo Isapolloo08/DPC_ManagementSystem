@@ -34,6 +34,7 @@ import { startNotificationJobs } from "./services/emailOutboxWorker";
 
 import { logger, httpLogger } from "./utils/logger";
 import { initSentry, setupSentryErrorHandler } from "./utils/sentry";
+import { requestTimeout } from "./middleware/requestTimeout";
 
 dotenv.config();
 
@@ -99,15 +100,8 @@ export const authLimiter = rateLimit({
 // Apply general limiter across all /api routes
 app.use("/api", generalLimiter);
 
-// 8. Request Timeout Middleware (15 seconds)
-app.use((_req, res, next) => {
-  res.setTimeout(15000, () => {
-    if (!res.headersSent) {
-      res.status(504).json({ error: "Gateway Timeout: Request exceeded 15 seconds limit" });
-    }
-  });
-  next();
-});
+// 8. Request timeout policy, including long-running cloud transfers.
+app.use(requestTimeout);
 
 // 9. Body Parsers
 app.use(express.json({ limit: "50mb" }));
