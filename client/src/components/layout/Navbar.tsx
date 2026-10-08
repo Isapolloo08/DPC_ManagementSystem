@@ -12,6 +12,7 @@ import { isGuideSandbox } from "../help/sandbox/runtime";
 
 
 const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
+  "plannedvisits": { title: "Planned visits", subtitle: "Visitor plans & welcome follow-up" },
   "dashboard": { title: "Executive Dashboard", subtitle: "Church overview, attendance & KPIs" },
   "leaderportal": { title: "My Bible Study Group", subtitle: "Small group fellowship & spiritual growth" },
   "leader-dashboard": { title: "My Bible Study Group", subtitle: "Small group fellowship & spiritual growth" },

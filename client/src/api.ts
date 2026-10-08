@@ -210,7 +210,24 @@ async function request<T>(endpoint: string, options: RequestInit = {}, maxRetrie
   }
 }
 
+export interface PlannedVisitSummary {
+  id: number; full_name: string; visit_date: string; party: string;
+  status: 'New' | 'Contacted' | 'Visited' | 'Cancelled'; created_at: string;
+}
+export interface PlannedVisit extends PlannedVisitSummary {
+  receipt_id: string; bringing_children: boolean; child_age_groups: string[];
+  email: string | null; phone: string | null; questions: string;
+  consent_at: string; staff_notes: string; updated_at: string;
+}
 export const api = {
+  getPlannedVisits: (filters: { page: number; status: string; visit_date: string }) => {
+    const query = new URLSearchParams({ page: String(filters.page), limit: '20' });
+    if (filters.status) query.set('status', filters.status);
+    if (filters.visit_date) query.set('visit_date', filters.visit_date);
+    return request<{ items: PlannedVisitSummary[]; total: number; page: number; totalPages: number }>(`/planned-visits?${query}`);
+  },
+  getPlannedVisit: (id: number) => request<PlannedVisit>(`/planned-visits/${id}`),
+  updatePlannedVisit: (id: number, data: { status: PlannedVisit['status']; staff_notes: string }) => request<{ message: string }>(`/planned-visits/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Auth
   getSetupStatus: () => request<{ hasUsers: boolean; totalUsers: number; hasAdmin: boolean; totalAdmins: number; isFirstUser: boolean; demoModeEnabled: boolean }>("/auth/setup-status"),
   register: (data: { name: string; username?: string; email: string; password: string }) => request<{ token: string; user: User; isFirstUser: boolean }>("/auth/register", {

@@ -29,6 +29,7 @@ import cloudSyncRouter from "./routes/cloudSync";
 import attendanceLogRouter from "./routes/attendanceLog";
 import servicesRouter from "./routes/services";
 import notificationsRouter from "./routes/notifications";
+import plannedVisitsRouter from "./routes/plannedVisits";
 import { startNotificationJobs } from "./services/emailOutboxWorker";
 
 import { logger, httpLogger } from "./utils/logger";
@@ -184,6 +185,7 @@ app.use("/api/cloud-sync", cloudSyncRouter);
 app.use("/api/attendance-log", attendanceLogRouter);
 app.use("/api/services", servicesRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/planned-visits", plannedVisitsRouter);
 
 // Sentry error handler (must be before any other error middleware)
 setupSentryErrorHandler(app);

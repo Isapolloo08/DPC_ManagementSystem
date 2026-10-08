@@ -316,6 +316,7 @@ const portalSteps = [
 ];
 // Explicit tours for every routed page; no generic whole-workspace fallback.
 const tours: Record<Exclude<NavTab, "leader-dashboard">, GuideStep[]> = {
+  plannedvisits: [{ title: 'Prepare to welcome visitors', text: 'Filter planned visits, open their details, and update follow-up notes and status. Mark Visited only after confirming arrival.', target: 'workspace' }],
   dashboard: [
     s("Review church totals", "dashboard-summary", "Check members, members without groups, small groups, and households. Choose a summary to open the related directory.", { roles: managers }),
     s("Read today's passage", "dashboard-reading", "Review today's assigned reading and use Read to open the chapter reader.", { roles: managers }),

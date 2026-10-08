@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 export type NavTab =
+  | "plannedvisits"
   | "dashboard"
   | "biblereading"
   | "leaderportal"
@@ -86,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
 
   // 1. Super Admin (Full System Access)
   const superAdminNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
+    { id: 'plannedvisits', label: 'Planned visits', icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-600" /> },
     { id: "dashboard", label: "System Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-cyan-500" />, badge: "Super" },
     { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
     { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Live" },
@@ -109,6 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
 
   // 2. Pastor (Executive Pastoral Oversight)
   const pastorNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
+    { id: 'plannedvisits', label: 'Planned visits', icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-600" /> },
     { id: "dashboard", label: "Pastoral Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Pastor" },
     { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
     { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Live" },

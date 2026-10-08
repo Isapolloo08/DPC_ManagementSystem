@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
+    "test:planned-visits": "npm run build && node --test dist/routes/plannedVisits.test.js",
     "copy:migrations": "node -e \"const fs=require('fs'); fs.mkdirSync('dist/db/migrations', {recursive:true}); fs.cpSync('src/db/migrations', 'dist/db/migrations', {recursive:true});\"",
     "build": "tsc && npm run copy:migrations",
     "start": "npm run build && node dist/index.js",

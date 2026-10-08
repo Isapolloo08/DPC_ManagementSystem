@@ -105,6 +105,7 @@ export const welcomeSteps: GuideStep[] = [
 
 type PageHelp = { title: string; description: string; steps: string[] };
 export const pageHelp: Record<NavTab, PageHelp> = {
+  plannedvisits: { title: 'Planned visits', description: 'Review visitors who chose to let the church know they are coming.', steps: ['Filter requests by visit date or status.', 'Choose View to read contact details and questions.', 'Update staff notes and status; mark Visited only after confirming arrival.'] },
   dashboard: { title: "Dashboard", description: "Your church or ministry overview, tailored to your role.", steps: ["Review the summaries and upcoming activities.", "Open a summary or shortcut to see its details.", "Choose Start Here for guided tasks."] },
   "leader-dashboard": { title: "Leader dashboard", description: "Your group's activity and discipleship overview.", steps: ["Review your assigned group's summaries.", "Open My Bible Study Group to manage sessions and disciples."] },
   members: { title: "Members & families", description: "Find member records and manage their church and family details.", steps: ["Search by name and use filters to narrow the directory.", "Open a person to see their profile, household, and attendance.", "Choose Add Member to register someone; check for duplicates first."] },

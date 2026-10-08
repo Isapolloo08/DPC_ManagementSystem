@@ -27,6 +27,7 @@ import { DishwashingPage } from "./pages/DishwashingPage";
 import { LeaderPortalPage } from "./pages/leader";
 import { ProfilePage } from "./pages/ProfilePage";
 import { NotificationsPage } from "./pages/NotificationsPage";
+import { PlannedVisitsPage } from "./pages/PlannedVisitsPage";
 import { ProfileModal } from "./components/profile/ProfileModal";
 import { SystemConfigurationModal } from "./components/common/SystemConfigurationModal";
 import { HelpCenter } from "./components/help/HelpCenter";
@@ -36,6 +37,7 @@ import { allTaskGuides, pageTours } from "./components/help/workflowGuides";
 import { pageHelp, type TaskGuide } from "./components/help/guideContent";
 
 const isTabAllowedForRole = (tab: NavTab, roleName?: string): boolean => {
+  if (tab === 'plannedvisits') return ['Admin', 'Pastor', 'IT Admin'].includes(roleName || '');
   switch (roleName) {
     case "Admin":
     case "Pastor":
@@ -129,6 +131,8 @@ const MainLayout: React.FC<{ initialTab?: NavTab; initialGuide?: TaskGuide; init
     }
 
     switch (currentTab) {
+      case "plannedvisits":
+        return <PlannedVisitsPage />;
       case "dashboard":
       case "leader-dashboard":
         return <DashboardPage onNavigate={setCurrentTab} onOpenChurchProfile={() => { setOpenChurchSettings(true); setCurrentTab('settings'); }} />;
