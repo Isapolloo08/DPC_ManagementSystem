@@ -129,6 +129,61 @@ test("cloud transfers preserve identities, schema fields and atomic failure beha
       assert.equal((await source.unsafe("SELECT value FROM system_settings WHERE key='cloud_database_url'"))[0].value, "source-secret");
     });
 
+    await t.test("roster sync matches group/member pairs across different IDs without losing memberships", async () => {
+      await source.unsafe(`
+        INSERT INTO bible_study_groups (id,name,leader_name,meeting_day,meeting_time,location)
+          VALUES (2,'Second Group','Leader','Sunday','10:00','Church'),(3,'Third Group','Leader','Sunday','10:00','Church');
+        UPDATE bible_study_members SET status='transferred', left_at='2026-10-07', member_name='Updated roster name' WHERE id=1;
+        INSERT INTO bible_study_members (id,group_id,member_id,member_name)
+          VALUES (2,3,1,'New membership'),(3,2,1,'Existing membership'),(4,1,NULL,'Unlinked guest');
+      `);
+      await target.unsafe(`
+        INSERT INTO bible_study_groups (id,name,leader_name,meeting_day,meeting_time,location)
+          VALUES (2,'Second Group','Leader','Sunday','10:00','Church'),(4,'Cloud-only Group','Leader','Sunday','10:00','Church');
+        UPDATE bible_study_members SET id=101 WHERE id=1;
+        INSERT INTO bible_study_members (id,group_id,member_id,member_name)
+          VALUES (1,2,1,'Previous roster name'),(2,4,1,'Cloud-only membership');
+      `);
+      await push();
+      const roster = await target.unsafe("SELECT * FROM bible_study_members ORDER BY id");
+      assert.equal(roster.length, 5);
+      const matched = roster.find(row => row.group_id === 1 && row.member_id === 1)!;
+      assert.equal(matched.id, 101);
+      assert.equal(matched.member_name, 'Updated roster name');
+      assert.equal(matched.status, 'transferred');
+      assert.ok(matched.left_at);
+      assert.equal(matched.transition_id, 1);
+      assert.equal(roster.find(row => row.group_id === 2)!.id, 1);
+      assert.equal(roster.find(row => row.group_id === 4)!.member_name, 'Cloud-only membership');
+      assert.ok(roster.find(row => row.group_id === 3)!.id > 101);
+      assert.equal(roster.find(row => row.member_id == null)!.id, 4);
+      await push();
+      assert.equal(Number((await target.unsafe("SELECT COUNT(*) AS count FROM bible_study_members"))[0].count), 5);
+      await pull();
+      assert.equal(Number((await source.unsafe("SELECT COUNT(*) AS count FROM bible_study_members"))[0].count), 5);
+      assert.equal((await source.unsafe("SELECT id FROM bible_study_members WHERE group_id=1 AND member_id=1"))[0].id, 1);
+      assert.equal((await source.unsafe("SELECT id FROM bible_study_members WHERE group_id=2"))[0].id, 3);
+      assert.equal((await source.unsafe("SELECT id FROM bible_study_members WHERE group_id=3"))[0].id, 2);
+      await pull();
+      assert.equal(Number((await source.unsafe("SELECT COUNT(*) AS count FROM bible_study_members"))[0].count), 5);
+
+      // Ambiguous unlinked IDs must roll back, not overwrite an unrelated
+      // person or create duplicate guest rows on every subsequent sync.
+      await source.unsafe("INSERT INTO bible_study_members (id,group_id,member_name) VALUES (77,1,'Local guest')");
+      await target.unsafe("INSERT INTO bible_study_members (id,group_id,member_name) VALUES (77,2,'Different guest')");
+      const originalName = (await target.unsafe("SELECT name FROM users WHERE username='existing'"))[0].name;
+      await source.unsafe("UPDATE users SET name='Uncommitted change' WHERE username='existing'");
+      await assert.rejects(push(), /identity conflict in bible_study_members.*unlinked source ID 77.*No transfer was committed/);
+      assert.equal((await target.unsafe("SELECT name FROM users WHERE username='existing'"))[0].name, originalName);
+      assert.equal((await target.unsafe("SELECT member_name FROM bible_study_members WHERE id=77"))[0].member_name, 'Different guest');
+      await source.unsafe("UPDATE users SET name=$1 WHERE username='existing'", [originalName]);
+      for (const connection of [source, target]) {
+        await connection.unsafe("DELETE FROM bible_study_members WHERE group_id<>1 OR member_id IS NULL");
+        await connection.unsafe("UPDATE bible_study_members SET id=1 WHERE group_id=1 AND member_id=1");
+        await connection.unsafe("DELETE FROM bible_study_groups WHERE id IN (2,3,4)");
+      }
+    });
+
     await t.test("unknown schema drift fails before data writes", async () => {
       await source.unsafe("ALTER TABLE users ADD COLUMN future_preference TEXT");
       await assert.rejects(push(), /users.future_preference missing on destination/);

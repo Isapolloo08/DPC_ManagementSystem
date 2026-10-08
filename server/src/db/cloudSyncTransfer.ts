@@ -85,7 +85,15 @@ export async function transferTables(
         const usedIds = new Set(existing.map(row => Number(row.id)));
         let nextId = [...existing, ...rows].reduce((max, row) => Math.max(max, Number(row.id)), 0) + 1;
         for (const row of rows) {
-          const matches = existing.filter(candidate => config.name === "users"
+          // Unlinked roster entries have no unique group/member identity.
+          // Keep their existing stable ID; never infer a person from a name or
+          // allocate a fresh ID on every retry of an ambiguous collision.
+          const unlinkedRoster = config.name === "bible_study_members" && row.member_id == null;
+          const occupied = unlinkedRoster ? existing.find(candidate => Number(candidate.id) === Number(row.id)) : undefined;
+          if (occupied && (occupied.member_id != null || occupied.group_id !== row.group_id)) {
+            throw new Error(`Cloud sync identity conflict in ${config.name} for unlinked source ID ${row.id}: the destination ID belongs to a different membership. No transfer was committed. Link the entry to a member before retrying.`);
+          }
+          const matches = unlinkedRoster ? (occupied ? [occupied] : []) : existing.filter(candidate => config.name === "users"
             ? identityColumns.some(key => row[key] != null && candidate[key] === row[key])
             : identityColumns.every(key => row[key] != null && candidate[key] === row[key]));
           if (new Set(matches.map(match => match.id)).size > 1) {

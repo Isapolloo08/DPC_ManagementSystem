@@ -57,7 +57,7 @@ export const SYNC_TABLES: TableSyncConfig[] = [
   { name: "bible_study_topics", label: "Curriculum Topics", conflictTarget: "id", isSerial: true },
   { name: "bible_study_group_transitions", label: "Group Transitions", conflictTarget: "id", isSerial: true },
   { name: "bible_study_group_transition_sources", label: "Transition Source Groups", conflictTarget: "transition_id, source_group_id", isSerial: true },
-  { name: "bible_study_members", label: "Group Roster", conflictTarget: "id", isSerial: true },
+  { name: "bible_study_members", label: "Group Roster", conflictTarget: "group_id, member_id", isSerial: true },
   { name: "events", label: "Events", conflictTarget: "id", isSerial: true },
   { name: "event_registrations", label: "Event RSVPs", conflictTarget: "event_id, member_id", isSerial: true },
   { name: "announcements", label: "Announcements", conflictTarget: "id", isSerial: true },
