@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "./ViewportOverlay";
 import React, { useState, useEffect, useCallback } from "react";
 import { api } from "../../api";
 import { EventItem, EventAttendeeItem, EventAttendanceRosterResponse } from "../../types";
@@ -101,7 +102,7 @@ export const EventAttendanceModal: React.FC<EventAttendanceModalProps> = ({
   const totalRegistered = rosterData?.summary.total_registered || 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-charcoal/60 backdrop-blur-sm animate-fadeIn">
+    <ViewportOverlay className="z-[100] flex items-center justify-center p-3 sm:p-4 bg-charcoal/60 backdrop-blur-sm animate-fadeIn">
       <div data-modal-panel className="bg-white rounded-3xl shadow-2xl border border-stone-200/90 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp">
         
         {/* Header */}
@@ -307,6 +308,6 @@ export const EventAttendanceModal: React.FC<EventAttendanceModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </ViewportOverlay>
   );
 };

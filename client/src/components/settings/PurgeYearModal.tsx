@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useDialogFocus } from "../../hooks/useDialogFocus";
 import { createPortal } from "react-dom";
 import {
   X, ShieldAlert, AlertTriangle, Trash2, CheckCircle2,
@@ -20,11 +21,11 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
   year,
   onConfirmPurge
 }) => {
-  if (!isOpen || !year) return null;
-
   const [inputYear, setInputYear] = useState("");
   const [password, setPassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, isDeleting);
   const [error, setError] = useState<string | null>(null);
 
   // Live records preview for the year to be purged
@@ -156,9 +157,10 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
   const currentTabRecords = yearData[activeTab] || [];
   const totalRecordsToPurge = availableKeys.reduce((acc, k) => acc + (yearData[k]?.length || 0), 0);
 
+  if (!isOpen || !year) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-rose-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div data-modal-panel className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-rose-200 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Purge Data for Year ${year}`} tabIndex={-1} data-modal-panel className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-rose-200 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div data-modal-header className="p-6 border-b border-rose-100 flex items-center justify-between gap-4 bg-rose-50">
@@ -167,7 +169,7 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
               <ShieldAlert className="w-6 h-6" />
             </span>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-semibold text-charcoal">
                   Purge Data for Year {year}
                 </h3>
@@ -182,6 +184,8 @@ export const PurgeYearModal: React.FC<PurgeYearModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close deletion preview"
+            disabled={isDeleting}
             className="p-1.5 rounded-xl hover:bg-slate-100 text-muted hover:text-charcoal transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />

@@ -1,4 +1,5 @@
 import { Image as UIImage, Table2 as UITable2 } from "lucide-react";
+import { withOperation } from "../../services/operationActivity";
 import React, { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -84,7 +85,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
     onClose();
   };
 
-  const processFile = async (file: File) => {
+  const processFile = async (file: File) => withOperation("Analyzing member file…", async () => {
     setSelectedFile(file);
     setSaveError(null);
     setSaveSuccessMessage(null);
@@ -114,7 +115,7 @@ export const MemberImportAnalyzeModal: React.FC<MemberImportAnalyzeModalProps> =
       setParsedMembers([blank]);
       setStep("preview");
     }
-  };
+  }, 1);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

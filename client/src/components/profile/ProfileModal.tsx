@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../common/ViewportOverlay";
 import { CalendarDays as UICalendarDays } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -263,7 +264,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     .toUpperCase();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
+    <ViewportOverlay className="z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
       <div data-modal-panel className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden my-auto flex flex-col max-h-[92vh]">
         {/* HEADER HERO SECTION */}
         <div data-modal-header className="relative bg-indigo-950 text-white p-5 sm:p-7 shrink-0 overflow-hidden">
@@ -942,6 +943,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
           </button>
         </div>
       </div>
-    </div>
+    </ViewportOverlay>
   );
 };

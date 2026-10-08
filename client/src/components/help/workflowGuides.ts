@@ -275,7 +275,8 @@ export const workflowGuides: TaskGuide[] = [
   ]),
   task("purge-year", "Review yearly record deletion", "settings", rootAdmins, "Select a year, inspect affected records, and review deletion authorization.", [
     s("Open data maintenance", "settings-backup_restore", "Choose Backup & Data Management and review yearly data maintenance."),
-    s("Choose the intended year", "purge-year", "Select the year to inspect. Check its affected-record count and keep a backup before deleting records.", { reveal: "settings-backup_restore" }),
+    s("Expand historical records", "backup-purge", "Expand Delete historical records to show the year selector and deletion preview action.", { reveal: "settings-backup_restore" }),
+    s("Choose the intended year", "purge-year", "Select the year to inspect. Check its affected-record count and keep a backup before deleting records.", { reveal: "settings-backup_restore", missing: "Expand Delete historical records to select a year. Annual activity must exist before deletion is available." }),
     s("Inspect the deletion preview", "purge-open", "Open the selected year's deletion preview and inspect the affected tables and record counts. Confirm that it is the intended year."),
     s("Review required authorization", "purge-confirmation", "Read the deletion confirmation and enter the requested year and password authorization only after inspecting the preview.", { missing: "Open the deletion preview for the intended year first." }),
     s("Confirm and verify deletion", "purge-execute", "Choose the final deletion action yourself after reviewing its effect. Wait for completion and check the year-by-year registry.", { missing: "Open the intended year's deletion dialog first." }),

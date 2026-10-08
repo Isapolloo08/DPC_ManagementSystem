@@ -6,6 +6,7 @@ import {
   Eye, RefreshCw, Layers, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { api } from "../../api";
+import { useDialogFocus } from "../../hooks/useDialogFocus";
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -22,11 +23,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   recordCount,
   onSuccess
 }) => {
-  if (!isOpen) return null;
-
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, loading);
 
   // Live Data Preview State
   const [previewTables, setPreviewTables] = useState<Record<string, any[]>>({});
@@ -169,9 +170,10 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const availableKeys = Object.keys(previewTables).filter(k => Array.isArray(previewTables[k]));
   const currentTabRecords = previewTables[activePreviewTab] || [];
 
+  if (!isOpen) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div data-modal-panel className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={isFull ? "Generate Full Database Backup" : `Generate Backup — Year ${year}`} tabIndex={-1} data-modal-panel className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div data-modal-header className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-amber-50/60">
@@ -180,7 +182,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               <Download className="w-6 h-6" />
             </span>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-semibold text-indigo tracking-tight">
                   {isFull ? "Generate Full Database Backup" : `Generate Backup — Year ${year}`}
                 </h3>
@@ -195,6 +197,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close backup"
+            disabled={loading}
             className="p-1.5 rounded-xl hover:bg-slate-100 text-muted hover:text-charcoal transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -352,6 +356,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               </label>
               <input
                 type="password"
+                aria-label="Account password"
                 placeholder="Enter your current account password"
                 value={password}
                 onChange={(e) => {

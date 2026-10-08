@@ -4,6 +4,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* A shared activity cue stays visible above pages and dialog portals. */
+@keyframes global-operation-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+.global-operation-progress {
+  animation: global-operation-progress 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-operation-progress { animation: none; width: 100%; }
+  .global-operation-indicator .animate-spin { animation: none; }
+}
+
 /* Modal headers and actions stay visible; only the content area scrolls. */
 .modal-layout-panel {
   flex-direction: column;

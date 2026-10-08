@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -551,7 +552,7 @@ export const LoginPage: React.FC = () => {
 
       {/* MASTER ADMINISTRATOR SETUP MODAL */}
       {showAdminModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-indigo-950/80 backdrop-blur-md overflow-y-auto animate-fade-in">
+        <ViewportOverlay className="z-[100] flex items-center justify-center p-4 sm:p-6 bg-indigo-950/80 backdrop-blur-md overflow-y-auto animate-fade-in">
           <ModalPanel className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-amber-300/80 p-6 sm:p-8 space-y-5 animate-scale-up my-auto">
             {/* Close Button */}
             <div data-modal-header className="space-y-5"><button
@@ -706,7 +707,7 @@ export const LoginPage: React.FC = () => {
               </div>
             </form>
           </ModalPanel>
-        </div>
+        </ViewportOverlay>
       )}
 
     </div>

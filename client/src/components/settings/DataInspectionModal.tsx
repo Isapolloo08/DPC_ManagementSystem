@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { useDialogFocus } from "../../hooks/useDialogFocus";
 import { createPortal } from "react-dom";
 import {
   X, Database, Calendar, Users, Clock, MessageSquare,
@@ -32,13 +33,13 @@ export const DataInspectionModal: React.FC<DataInspectionModalProps> = ({
   onExportYear,
   onDeleteYear
 }) => {
-  if (!isOpen) return null;
-
   // Available table keys with non-empty or registered tables
   const tableKeys = Object.keys(data).filter(k => Array.isArray(data[k]));
   const [activeTable, setActiveTable] = useState<string>(tableKeys[0] || "attendance");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"table" | "json">("table");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, false);
 
   React.useEffect(() => {
     if (tableKeys.length > 0 && !tableKeys.includes(activeTable)) {
@@ -86,9 +87,10 @@ export const DataInspectionModal: React.FC<DataInspectionModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  if (!isOpen) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div data-modal-panel className="bg-white rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title || (year ? `Data Inspector — Year ${year}` : "Data Inspector & Backup Preview")} tabIndex={-1} data-modal-panel className="bg-white rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden">
         
         {/* Header */}
         <div data-modal-header className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-indigo-50/50">
@@ -97,7 +99,7 @@ export const DataInspectionModal: React.FC<DataInspectionModalProps> = ({
               <Database className="w-6 h-6" />
             </span>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-xl font-semibold text-indigo tracking-tight">
                   {title || (year ? `Data Inspector — Year ${year}` : "Data Inspector & Backup Preview")}
                 </h2>
@@ -113,7 +115,7 @@ export const DataInspectionModal: React.FC<DataInspectionModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {year && onExportYear && (
               <button
                 onClick={() => onExportYear(year)}
@@ -136,6 +138,7 @@ export const DataInspectionModal: React.FC<DataInspectionModalProps> = ({
             )}
             <button
               onClick={onClose}
+              aria-label="Close data inspector"
               className="p-2 rounded-xl hover:bg-indigo-100/70 text-muted hover:text-charcoal transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />

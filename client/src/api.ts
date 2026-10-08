@@ -1,4 +1,5 @@
 import { isGuideSandbox } from "./components/help/sandbox/runtime";
+import { requestActivity, withOperation } from "./services/operationActivity";
 import {
   Ministry, User, Role, Member, Household, AttendanceRecord, AttendanceRosterItem,
   EventItem, Announcement,
@@ -120,6 +121,11 @@ async function sleep(ms: number): Promise<void> {
  * Robust HTTP client with Exponential Backoff + Jitter retry for network & 5xx errors
  */
 async function request<T>(endpoint: string, options: RequestInit = {}, maxRetries = 3): Promise<T> {
+  const activity = requestActivity(endpoint, options.method);
+  return withOperation(activity.message, () => performRequest<T>(endpoint, options, maxRetries), activity.priority);
+}
+
+async function performRequest<T>(endpoint: string, options: RequestInit, maxRetries: number): Promise<T> {
   if (isGuideSandbox()) {
     const { demoRequest } = await import("./components/help/sandbox/demoApi");
     return demoRequest(endpoint, options) as Promise<T>;
@@ -1033,7 +1039,7 @@ export const api = {
     return request<AttendanceLogResponse>(`/attendance-log${queryString}`, { signal });
   },
 
-  exportAttendanceLogCsv: async (filters: AttendanceLogFilters = {}) => {
+  exportAttendanceLogCsv: async (filters: AttendanceLogFilters = {}) => withOperation("Preparing attendance export…", async () => {
     const params = new URLSearchParams();
     if (filters.from) params.set("from", filters.from);
     if (filters.to) params.set("to", filters.to);
@@ -1067,7 +1073,7 @@ export const api = {
       throw new Error(errText);
     }
     return res.blob();
-  },
+  }, 1),
 
   // Service Calendar Management
   getServices: (params: { from?: string; to?: string; type?: string; status?: string } = {}) => {

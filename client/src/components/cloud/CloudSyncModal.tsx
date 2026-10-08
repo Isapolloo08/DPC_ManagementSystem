@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../common/ViewportOverlay";
 import { ArrowRight as UIArrowRight } from "lucide-react";
 import { ModalPanel } from "../common/ModalPanel";
 import React, { useState, useEffect } from "react";
@@ -185,7 +186,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/60 backdrop-blur-xs animate-fade-in">
+    <ViewportOverlay className="z-[100] flex items-center justify-center p-4 bg-charcoal/60 backdrop-blur-xs animate-fade-in">
       <div data-modal-panel className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
         
         {/* Header */}
@@ -498,7 +499,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
 
       {/* Confirmation Dialog for Push / Pull */}
       {confirmAction && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-charcoal/70 backdrop-blur-xs animate-fade-in">
+        <ViewportOverlay className="z-[110] flex items-center justify-center p-4 bg-charcoal/70 backdrop-blur-xs animate-fade-in">
           <ModalPanel data-modal-panel className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-w-md w-full space-y-4 animate-scale-up">
             <div data-modal-header className="flex items-center gap-3">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
@@ -541,9 +542,9 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
               </button>
             </div>
           </ModalPanel>
-        </div>
+        </ViewportOverlay>
       )}
 
-    </div>
+    </ViewportOverlay>
   );
 };

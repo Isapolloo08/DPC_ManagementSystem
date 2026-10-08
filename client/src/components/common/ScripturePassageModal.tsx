@@ -1,4 +1,6 @@
+import { ViewportOverlay } from "./ViewportOverlay";
 import React, { useState, useEffect } from "react";
+import { withOperation } from "../../services/operationActivity";
 import { X, BookOpen, ChevronLeft, ChevronRight, ExternalLink, Check, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
 import { BibleChapterReference, DayReading } from "../../utils/bibleReadingPlan";
 
@@ -42,7 +44,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
     }
   }, [isOpen, selectedChapterIndex, dayReading]);
 
-  const loadChapterText = async (book: string, chapter: number) => {
+  const loadChapterText = async (book: string, chapter: number) => withOperation("Loading Bible passage…", async () => {
     setLoading(true);
     setFetchError(null);
     setChapterContent(null);
@@ -67,7 +69,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  });
 
   if (!isOpen || !currentChapter) return null;
 
@@ -75,7 +77,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
   const youVersionNivUrl = `https://www.bible.com/search/bible?q=${encodeURIComponent(`${currentChapter.book} ${currentChapter.chapter} NIV`)}`;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+    <ViewportOverlay className="z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
       <div data-modal-panel className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
@@ -277,6 +279,6 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </ViewportOverlay>
   );
 };

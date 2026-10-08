@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../common/ViewportOverlay";
 import { CircleX as UICircleX } from "lucide-react";
 import { ModalPanel } from "../common/ModalPanel";
 import React, { useState, useEffect, useMemo } from "react";
@@ -1490,7 +1491,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
 
       {/* WALK-IN REGISTRATION MODAL */}
       {isWalkInModalOpen && (
-        <div className="fixed inset-0 z-50 bg-charcoal/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <ViewportOverlay className="z-[110] bg-charcoal/60 backdrop-blur-xs flex items-center justify-center p-4">
           <ModalPanel data-modal-panel className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-stone-200 max-h-[90vh] flex flex-col animate-fadeIn">
             <div data-modal-header className="flex items-center justify-between pb-3 border-b border-stone-100">
               <div className="flex items-center gap-2.5">
@@ -1587,7 +1588,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
               </button>
             </div>
           </ModalPanel>
-        </div>
+        </ViewportOverlay>
       )}
     </div>
   );

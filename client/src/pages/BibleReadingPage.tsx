@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import React, { useState, useMemo, useEffect } from "react";
 import {
   BookOpen, Calendar, Search, Printer,
@@ -478,7 +479,7 @@ export const BibleReadingPage: React.FC = () => {
 
       {/* Printable Schedule Modal */}
       {isPrinting && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+        <ViewportOverlay className="z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
           <div data-modal-panel className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col overflow-hidden">
             <div data-modal-header className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
@@ -524,7 +525,7 @@ export const BibleReadingPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </ViewportOverlay>
       )}
 
       {/* Church Schedule Alignment Modal */}

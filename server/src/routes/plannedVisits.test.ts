@@ -11,6 +11,7 @@ import { db } from '../db/schema';
 import { JWT_SECRET } from '../middleware/auth';
 import { validateVisit, manilaToday } from '../services/plannedVisits';
 import { visitFollowUp, visitConfirmationEmail } from '../services/visitConfirmation';
+import * as emailWorker from '../services/emailOutboxWorker';
 
 const futureSunday = '2099-01-04';
 const valid = () => ({ submission_token: randomUUID(), visit_date: futureSunday, party: 'Just me', bringing_children: false, child_age_groups: [], full_name: 'Test Visitor', email: 'visitor@example.test', phone: '', questions: '', consent: true, website: '' });
@@ -40,6 +41,7 @@ test('confirmation includes the visit schedule, escapes names, and handles Satur
 
 // Real persistence in a temporary local schema only; never initialize or change production tables.
 test('HTTP submission, PostgreSQL persistence, retries, staff permissions and auditing', async t => {
+  const delivery = t.mock.method(emailWorker, 'processEmailOutbox', async () => {});
   const schema = 'visit_test_' + randomUUID().replace(/-/g, '');
   const local = new Pool({ host: '127.0.0.1', port: 5432, user: 'postgres', password: 'admin123', database: 'chms_db', connectionTimeoutMillis: 2000 });
   try { await local.query('SELECT 1'); } catch { await local.end(); t.skip('Local PostgreSQL test connection unavailable'); return; }
@@ -75,6 +77,7 @@ test('HTTP submission, PostgreSQL persistence, retries, staff permissions and au
     const post = async (body: object, reset = true) => { if (reset) visitSubmissionLimiter.resetKey('127.0.0.1'); return fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); };
     const payload = valid();
     const first = await post(payload); assert.equal(first.status, 201); const receipt = await first.json() as { receipt_id: string; confirmation_email: string; follow_up: { date: string } };
+    assert.equal(delivery.mock.callCount(), 1, 'delivery starts immediately after a saved submission');
     assert.deepEqual(Object.keys(receipt).sort(), ['confirmation_email', 'follow_up', 'message', 'receipt_id']);
     assert.equal(receipt.confirmation_email, 'queued'); assert.equal(receipt.follow_up.date, '2099-01-03');
     const duplicate = await post(payload); assert.equal((await duplicate.json() as { receipt_id: string }).receipt_id, receipt.receipt_id);
@@ -86,6 +89,12 @@ test('HTTP submission, PostgreSQL persistence, retries, staff permissions and au
     const queued = (await store.query('SELECT * FROM email_outbox ORDER BY id LIMIT 1')).rows[0];
     assert.equal(queued.to_email, payload.email); assert.match(queued.body_html, /Saturday, January 3, 2099/);
     await store.query("UPDATE email_outbox SET status='sent' WHERE id=$1", [queued.id]);
+    const statusRequest = (token: string = payload.submission_token) => fetch(base + '/confirmation-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submission_token: token, receipt_id: receipt.receipt_id }) });
+    const emailStatus = await statusRequest(); assert.equal(emailStatus.status, 200);
+    assert.deepEqual(await emailStatus.json(), { confirmation_email: 'sent' });
+    assert.equal(emailStatus.headers.get('cache-control'), 'no-store');
+    assert.equal((await statusRequest(randomUUID())).status, 404);
+    assert.equal((await statusRequest('bad')).status, 400);
     assert.equal((await (await post(payload)).json() as { confirmation_email: string }).confirmation_email, 'sent');
     await store.query("UPDATE email_outbox SET status='failed' WHERE id=$1", [queued.id]);
     assert.equal((await (await post(payload)).json() as { confirmation_email: string }).confirmation_email, 'failed');

@@ -72,7 +72,7 @@ export async function getNotificationEmailSettings(): Promise<NotificationEmailS
     smtpUser: process.env.SMTP_USER || values.get(KEYS.smtpUser) || "",
     smtpPassword: process.env.SMTP_PASSWORD || storedPassword,
     fromName: process.env.SMTP_FROM_NAME || values.get(KEYS.fromName) || "Daet Presbyterian Church",
-    fromEmail: process.env.SMTP_FROM_EMAIL || values.get(KEYS.fromEmail) || values.get(KEYS.smtpUser) || "",
+    fromEmail: process.env.SMTP_FROM_EMAIL || values.get(KEYS.fromEmail) || process.env.SMTP_USER || values.get(KEYS.smtpUser) || "",
     pastorEmail: values.get(KEYS.pastorEmail) || process.env.PASTOR_EMAIL || ""
   };
 }

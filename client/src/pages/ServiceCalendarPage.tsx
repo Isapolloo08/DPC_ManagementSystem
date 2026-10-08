@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -625,7 +626,7 @@ export const ServiceCalendarPage: React.FC = () => {
 
       {/* Add / Edit Service Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/50 backdrop-blur-sm animate-fadeIn">
+        <ViewportOverlay className="z-[100] flex items-center justify-center p-4 bg-charcoal/50 backdrop-blur-sm animate-fadeIn">
           <ModalPanel data-modal-panel className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-stone-200 space-y-5">
             <div data-modal-header className="flex items-center justify-between pb-3 border-b border-stone-100">
               <h3 className="text-lg font-semibold text-charcoal">
@@ -724,7 +725,7 @@ export const ServiceCalendarPage: React.FC = () => {
               </div>
             </form>
           </ModalPanel>
-        </div>
+        </ViewportOverlay>
       )}
     </div>
   );

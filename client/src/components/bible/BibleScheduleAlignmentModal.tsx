@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../common/ViewportOverlay";
 import React, { useState, useEffect } from "react";
 import {
   X, Sliders, BookmarkCheck, Check, RotateCcw,
@@ -70,7 +71,7 @@ export const BibleScheduleAlignmentModal: React.FC<BibleScheduleAlignmentModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+    <ViewportOverlay className="z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
       <div data-modal-panel className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* Modal Header */}
@@ -237,6 +238,6 @@ export const BibleScheduleAlignmentModal: React.FC<BibleScheduleAlignmentModalPr
         </div>
 
       </div>
-    </div>
+    </ViewportOverlay>
   );
 };

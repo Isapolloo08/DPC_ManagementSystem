@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { withOperation } from "../../services/operationActivity";
 import { createPortal } from "react-dom";
 import {
   MapPin,
@@ -293,91 +294,93 @@ const FLORES_JACOB_RAW_URL =
 async function loadFloresJacobDataset(): Promise<boolean> {
   if (memoryCache.rawDatasetLoaded) return true;
 
-  const urls = [FLORES_JACOB_CDN_URL, FLORES_JACOB_RAW_URL];
+  return withOperation("Loading address options…", async () => {
+    const urls = [FLORES_JACOB_CDN_URL, FLORES_JACOB_RAW_URL];
 
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (!data || typeof data !== "object") continue;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (!data || typeof data !== "object") continue;
 
-      const provinceList: PSGCItem[] = [];
-      const provinceSet = new Set<string>();
+        const provinceList: PSGCItem[] = [];
+        const provinceSet = new Set<string>();
 
-      // Iterate all regions in the flores-jacob dataset
-      Object.keys(data).forEach((regionKey) => {
-        const regionObj = data[regionKey];
-        if (!regionObj || !regionObj.province_list) return;
+        // Iterate all regions in the flores-jacob dataset
+        Object.keys(data).forEach((regionKey) => {
+          const regionObj = data[regionKey];
+          if (!regionObj || !regionObj.province_list) return;
 
-        const pList = regionObj.province_list;
-        Object.keys(pList).forEach((rawProvName) => {
-          const provTitle = toTitleCase(rawProvName);
-          const provObj = pList[rawProvName];
-          if (!provObj) return;
+          const pList = regionObj.province_list;
+          Object.keys(pList).forEach((rawProvName) => {
+            const provTitle = toTitleCase(rawProvName);
+            const provObj = pList[rawProvName];
+            if (!provObj) return;
 
-          const provKey = provTitle.toLowerCase();
-          if (!provinceSet.has(provKey)) {
-            provinceSet.add(provKey);
-            provinceList.push({
-              code: rawProvName,
-              name: provTitle,
-              islandGroup: getIslandGroup(provTitle)
-            });
-          }
+            const provKey = provTitle.toLowerCase();
+            if (!provinceSet.has(provKey)) {
+              provinceSet.add(provKey);
+              provinceList.push({
+                code: rawProvName,
+                name: provTitle,
+                islandGroup: getIslandGroup(provTitle)
+              });
+            }
 
-          // Build cities/municipalities for this province
-          const munList = provObj.municipality_list;
-          if (munList) {
-            const cityItems: PSGCItem[] = Object.keys(munList).map((rawMunName) => {
-              const munTitle = toTitleCase(rawMunName);
-              const munObj = munList[rawMunName];
-              const munKey = `${provKey}_${munTitle.toLowerCase()}`;
+            // Build cities/municipalities for this province
+            const munList = provObj.municipality_list;
+            if (munList) {
+              const cityItems: PSGCItem[] = Object.keys(munList).map((rawMunName) => {
+                const munTitle = toTitleCase(rawMunName);
+                const munObj = munList[rawMunName];
+                const munKey = `${provKey}_${munTitle.toLowerCase()}`;
 
-              // Build barangays for this municipality
-              if (munObj && Array.isArray(munObj.barangay_list)) {
-                const bgyItems: PSGCItem[] = munObj.barangay_list.map((rawBgyName: string, bIdx: number) => ({
-                  code: `${rawMunName}_${bIdx}`,
-                  name: toTitleCase(rawBgyName)
-                }));
-                memoryCache.barangaysByCity[munKey] = bgyItems;
-                memoryCache.barangaysByCity[munTitle.toLowerCase()] = bgyItems;
-                memoryCache.barangaysByCity[rawMunName] = bgyItems;
-              }
+                // Build barangays for this municipality
+                if (munObj && Array.isArray(munObj.barangay_list)) {
+                  const bgyItems: PSGCItem[] = munObj.barangay_list.map((rawBgyName: string, bIdx: number) => ({
+                    code: `${rawMunName}_${bIdx}`,
+                    name: toTitleCase(rawBgyName)
+                  }));
+                  memoryCache.barangaysByCity[munKey] = bgyItems;
+                  memoryCache.barangaysByCity[munTitle.toLowerCase()] = bgyItems;
+                  memoryCache.barangaysByCity[rawMunName] = bgyItems;
+                }
 
-              return {
-                code: rawMunName,
-                name: munTitle,
-                provinceCode: rawProvName
-              };
-            });
+                return {
+                  code: rawMunName,
+                  name: munTitle,
+                  provinceCode: rawProvName
+                };
+              });
 
-            cityItems.sort((a, b) => a.name.localeCompare(b.name));
-            memoryCache.citiesByProvince[rawProvName] = cityItems;
-            memoryCache.citiesByProvince[provKey] = cityItems;
-          }
+              cityItems.sort((a, b) => a.name.localeCompare(b.name));
+              memoryCache.citiesByProvince[rawProvName] = cityItems;
+              memoryCache.citiesByProvince[provKey] = cityItems;
+            }
+          });
         });
-      });
 
-      // Include Metro Manila if present or ensure NCR entries
-      if (!provinceSet.has("metro manila (ncr)") && !provinceSet.has("metro manila")) {
-        provinceList.push({
-          code: NCR_REGION_CODE,
-          name: "Metro Manila (NCR)",
-          islandGroup: "Luzon"
-        });
+        // Include Metro Manila if present or ensure NCR entries
+        if (!provinceSet.has("metro manila (ncr)") && !provinceSet.has("metro manila")) {
+          provinceList.push({
+            code: NCR_REGION_CODE,
+            name: "Metro Manila (NCR)",
+            islandGroup: "Luzon"
+          });
+        }
+
+        provinceList.sort((a, b) => a.name.localeCompare(b.name));
+        memoryCache.provinces = provinceList;
+        memoryCache.rawDatasetLoaded = true;
+        return true;
+      } catch {
+        // Try next mirror
       }
-
-      provinceList.sort((a, b) => a.name.localeCompare(b.name));
-      memoryCache.provinces = provinceList;
-      memoryCache.rawDatasetLoaded = true;
-      return true;
-    } catch {
-      // Try next mirror
     }
-  }
 
-  return false;
+    return false;
+  });
 }
 
 // =========================================================================

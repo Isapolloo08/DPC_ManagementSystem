@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import { CalendarDays as UICalendarDays, Check as UICheck, MapPin as UIMapPin, RefreshCw as UIRefreshCw } from "lucide-react";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useState, useEffect } from "react";
@@ -1058,7 +1059,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* ADD / EDIT EVENT OR CELEBRATION MODAL */}
       {/* ==================================================== */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <ViewportOverlay className="bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-xl w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 overflow-hidden">
 
             {/* Modal Header */}
@@ -1438,14 +1439,14 @@ export const SundayEventsCyclePage: React.FC = () => {
 
             </form>
           </ModalPanel>
-        </div>
+        </ViewportOverlay>
       )}
 
       {/* ==================================================== */}
       {/* SCHEDULE ON MAIN EVENTS CALENDAR MODAL (for Annual recurring) */}
       {/* ==================================================== */}
       {syncingEvent && (
-        <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <ViewportOverlay className="bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 p-6 space-y-4">
 
             <div data-modal-header className="flex items-start justify-between gap-3 pb-3 border-b border-indigo-50">
@@ -1567,7 +1568,7 @@ export const SundayEventsCyclePage: React.FC = () => {
             </div>
 
           </ModalPanel>
-        </div>
+        </ViewportOverlay>
       )}
 
 

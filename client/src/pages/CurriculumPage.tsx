@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -636,9 +637,9 @@ export const CurriculumPage: React.FC = () => {
           return (
             <>
               {/* Backdrop for mobile */}
-              <div
+              <ViewportOverlay
                 onClick={() => setIsInspectorOpen(false)}
-                className="lg:hidden fixed inset-0 z-40 bg-indigo-950/60 backdrop-blur-xs animate-in fade-in duration-200"
+                className="lg:hidden z-40 bg-indigo-950/60 backdrop-blur-xs animate-in fade-in duration-200"
               />
 
               {/* Inspector Container */}

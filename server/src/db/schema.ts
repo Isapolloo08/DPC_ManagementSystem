@@ -878,6 +878,9 @@ export async function initSchema() {
       const cloudSyncMigration = getMigrationFilePath("015_cloud_sync_columns.sql");
       if (!cloudSyncMigration) throw new Error("Missing cloud sync compatibility migration 015");
       await sql.unsafe(fs.readFileSync(cloudSyncMigration, "utf-8"));
+      const emailRetryMigration = getMigrationFilePath("016_email_retry_schedule.sql");
+      if (!emailRetryMigration) throw new Error("Missing email retry migration 016");
+      await sql.unsafe(fs.readFileSync(emailRetryMigration, "utf-8"));
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {
         message: err?.message,

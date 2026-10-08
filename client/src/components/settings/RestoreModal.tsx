@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { useDialogFocus } from "../../hooks/useDialogFocus";
 import { createPortal } from "react-dom";
 import {
   X, UploadCloud, FileText, CheckCircle2, AlertTriangle,
@@ -18,8 +19,6 @@ export const RestoreModal: React.FC<RestoreModalProps> = ({
   onClose,
   onRestoreSuccess
 }) => {
-  if (!isOpen) return null;
-
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<any | null>(null);
   const [previewInfo, setPreviewInfo] = useState<BackupPreviewResponse | null>(null);
@@ -27,6 +26,8 @@ export const RestoreModal: React.FC<RestoreModalProps> = ({
   const [restoreMode, setRestoreMode] = useState<"replace" | "merge">("replace");
   const [password, setPassword] = useState("");
   const [isRestoring, setIsRestoring] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, isRestoring);
   const [error, setError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
 
@@ -79,9 +80,10 @@ export const RestoreModal: React.FC<RestoreModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-indigo-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div data-modal-panel className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Restore Database from Backup" tabIndex={-1} data-modal-panel className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div data-modal-header className="p-6 border-b border-indigo-100 flex items-center justify-between gap-4 bg-indigo-50/50">
@@ -100,6 +102,8 @@ export const RestoreModal: React.FC<RestoreModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close restore"
+            disabled={isRestoring}
             className="p-2 rounded-xl hover:bg-indigo-100/70 text-muted hover:text-charcoal transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -113,6 +117,7 @@ export const RestoreModal: React.FC<RestoreModalProps> = ({
           <div data-guide="restore-file" className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-2xl p-6 text-center transition-all bg-indigo-50/30 relative">
             <input
               type="file"
+              aria-label="Backup JSON file"
               accept=".json"
               onChange={handleFileChange}
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"

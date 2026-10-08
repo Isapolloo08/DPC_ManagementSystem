@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { withOperation } from "../../services/operationActivity";
 import { createPortal } from "react-dom";
 import { Search, ChevronDown, Check, X, School, GraduationCap, BookOpen, Layers, Edit3, PlusCircle } from "lucide-react";
 
@@ -85,7 +86,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
     if (!apiEndpoint || !navigator.onLine) return;
     let mounted = true;
 
-    const fetchRemote = async () => {
+    const fetchRemote = async () => withOperation("Loading suggestions…", async () => {
       try {
         const res = await fetch(apiEndpoint);
         if (!res.ok) return;
@@ -104,7 +105,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
       } catch (err) {
         // Graceful fallback to bundled suggestions
       }
-    };
+    });
 
     fetchRemote();
     return () => {

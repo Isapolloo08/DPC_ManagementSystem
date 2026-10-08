@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../common/ViewportOverlay";
 import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { ChurchLogo } from "../common/ChurchLogo";
@@ -244,8 +245,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
     <>
       {/* Mobile Drawer Backdrop Overlay */}
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden transition-opacity"
+        <ViewportOverlay
+          className="bg-black/50 backdrop-blur-xs z-40 md:hidden transition-opacity"
           onClick={onClose}
           aria-hidden="true"
         />

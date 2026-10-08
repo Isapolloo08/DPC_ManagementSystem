@@ -569,7 +569,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
 
 
       {/* Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className={`relative overflow-hidden rounded-3xl bg-slate-900 text-white border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 ${activeTab === "backup_restore" ? "p-5 lg:px-7" : "p-6 lg:p-8 shadow-xl"}`}>
         <img
           src="/container_bg.jpg"
           alt=""
@@ -579,17 +579,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
         <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="space-y-2 relative z-10">
-          <div className="flex items-center gap-2.5 flex-wrap">
+          {activeTab !== "backup_restore" && <div className="flex items-center gap-2.5 flex-wrap">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
               <Sliders className="w-3.5 h-3.5 text-amber-300" />
               <span>Church Configuration & Master Tables</span>
             </div>
-          </div>
+          </div>}
           <h1 className="text-2xl lg:text-3xl font-semibold text-white tracking-tight">
-            System Settings & Lookups
+            {activeTab === "backup_restore" ? "Backup & Data Management" : "System Settings & Lookups"}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
-            Configure church profile, ministry master lookups, member statuses, rooms, sanctuaries, and relationships.
+            {activeTab === "backup_restore" ? "Protect church records, manage backups, and keep your data organized." : "Configure church profile, ministry master lookups, member statuses, rooms, sanctuaries, and relationships."}
           </p>
         </div>
       </div>
@@ -678,6 +678,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
       </div>
 
       {/* Header Banner */}
+      {activeTab !== "backup_restore" && (
       <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
         <div className="absolute right-0 top-0 w-80 h-80 bg-transparent rounded-full blur-2xl pointer-events-none"></div>
 
@@ -719,6 +720,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
         </div>
       </div>
 
+      )}
       {/* Main Workspace for Selected Tab */}
       <div className="space-y-6">
 
@@ -1248,13 +1250,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
               <p className="text-[12px] text-slate-400">At-risk, Sunday streak, duty, and dishwashing rules are ready for their later event hooks. Absence and reschedule events are active now.</p>
             </div>
           </div>
-        )}
-
-        {/* ==================================================== */}
-        {/* 8. BACKUP, RESTORE & DATA MANAGEMENT TAB */}
-        {/* ==================================================== */}
-        {activeTab === "backup_restore" && (
-          <BackupManagementSection onShowToast={showToast} />
         )}
 
         {/* ==================================================== */}

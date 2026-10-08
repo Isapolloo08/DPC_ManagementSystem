@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { withOperation } from "../../services/operationActivity";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -83,7 +84,7 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
     }
   }, [isOpen]);
 
-  const handleScanWifi = async () => {
+  const handleScanWifi = async () => withOperation("Finding local server…", async () => {
     setScanningWifi(true);
     setDiscoveredServer(null);
     setTestStatus(null);
@@ -127,9 +128,9 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
         details: "Ensure the Master PC is running and connected to the same Wi-Fi network."
       });
     }
-  };
+  });
 
-  const handleTestConnection = async (targetOverride?: string) => {
+  const handleTestConnection = async (targetOverride?: string) => withOperation("Testing server connection…", async () => {
     setTesting(true);
     setTestStatus(null);
     setSavedSuccess(false);
@@ -181,7 +182,7 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
     } finally {
       setTesting(false);
     }
-  };
+  });
 
   const handleSave = (customIp?: string) => {
     const rawTarget = typeof customIp === "string" ? customIp : ipAddress;
@@ -196,7 +197,7 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
 
     // Inform Electron Main Process to update Server & Tray Mode immediately
     if (typeof window !== "undefined" && (window as any).electronAPI?.setServerConfig) {
-      (window as any).electronAPI.setServerConfig({ serverIp: cleanIp }).catch((e: any) => {
+      withOperation("Applying server settings…", () => (window as any).electronAPI.setServerConfig({ serverIp: cleanIp }), 1).catch((e: any) => {
         console.warn("Electron server config sync:", e);
       });
     }
@@ -662,4 +663,3 @@ export const SystemConfigurationModal: React.FC<SystemConfigurationModalProps> =
     document.body
   );
 };
-

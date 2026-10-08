@@ -3,6 +3,7 @@ import { DPCLoadingScreen } from "./components/DPCLoadingScreen";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ToastContainer } from "./components/common/ToastContainer";
+import { GlobalOperationIndicator } from "./components/common/GlobalOperationIndicator";
 import { Navbar } from "./components/layout/Navbar";
 import { Sidebar, NavTab } from "./components/layout/Sidebar";
 
@@ -312,8 +313,10 @@ function GuideSandboxWorkspace() {
 }
 
 export function App() {
-  if (guideSandbox) return <ToastProvider><AuthProvider><GuideSandboxWorkspace /><ToastContainer /></AuthProvider></ToastProvider>;
-  return <LiveApp />;
+  return <>
+    <GlobalOperationIndicator />
+    {guideSandbox ? <ToastProvider><AuthProvider><GuideSandboxWorkspace /><ToastContainer /></AuthProvider></ToastProvider> : <LiveApp />}
+  </>;
 }
 
 export default App;

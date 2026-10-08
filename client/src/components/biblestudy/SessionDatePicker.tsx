@@ -1,3 +1,4 @@
+import { ViewportOverlay } from "../common/ViewportOverlay";
 import { AlertTriangle as UIAlertTriangle } from "lucide-react";
 /**
  * SessionDatePicker.tsx
@@ -837,7 +838,7 @@ export const SessionFlyoutPanel: React.FC<{
       </div>
     ) : (
       // Mobile bottom sheet
-      <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <ViewportOverlay className="z-[110] flex flex-col justify-end">
         <div
           className="fixed inset-0 bg-charcoal/50 backdrop-blur-2xs transition-opacity duration-200 motion-reduce:transition-none"
           onClick={onClose}
@@ -846,7 +847,7 @@ export const SessionFlyoutPanel: React.FC<{
           <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto my-2 shrink-0" />
           <div className="flex-1 min-h-0 flex flex-col">{panelContent}</div>
         </div>
-      </div>
+      </ViewportOverlay>
     );
   }
 

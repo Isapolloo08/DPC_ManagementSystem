@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { withOperation } from "../services/operationActivity";
 import { useGuideDataState } from "../components/help/GuideDataContext";
 import {
   AttendanceLogItem,
@@ -222,7 +223,7 @@ export const AttendanceLogPage: React.FC = () => {
   };
 
   // PDF Export Handler (Dynamic import of jspdf and jspdf-autotable)
-  const handleExportPdf = async () => {
+  const handleExportPdf = async () => withOperation("Generating PDF report…", async () => {
     setIsExportingPdf(true);
     try {
       // 1. Fetch up to 5,000 records with current filters
@@ -383,7 +384,7 @@ export const AttendanceLogPage: React.FC = () => {
     } finally {
       setIsExportingPdf(false);
     }
-  };
+  }, 1);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 

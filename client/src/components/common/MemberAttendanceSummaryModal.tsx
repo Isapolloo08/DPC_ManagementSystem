@@ -2,6 +2,7 @@ import { CalendarDays as UICalendarDays, Circle as UICircle, Waves as UIWaves } 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api";
+import { withOperation } from "../../services/operationActivity";
 import { Member, MemberComprehensiveAttendanceSummary, AttendanceLogItem } from "../../types";
 import {
   X,
@@ -155,7 +156,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
     }
   };
 
-  const handleExportCsv = async () => {
+  const handleExportCsv = async () => withOperation("Preparing member attendance export…", async () => {
     if (!member || !summaryData) return;
     try {
       setIsExporting(true);
@@ -223,7 +224,7 @@ export const MemberAttendanceSummaryModal: React.FC<MemberAttendanceSummaryModal
     } finally {
       setIsExporting(false);
     }
-  };
+  }, 1);
 
   const applyQuickWindow = (weeks: number) => {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());

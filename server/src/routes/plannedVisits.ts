@@ -3,9 +3,10 @@ import rateLimit from 'express-rate-limit';
 import { createHash, randomUUID } from 'node:crypto';
 import { db } from '../db/schema';
 import { authMiddleware, requireRoles, AuthRequest } from '../middleware/auth';
-import { validDate, validateVisit, visitStatuses, manilaToday } from '../services/plannedVisits';
+import { validDate, validateVisit, visitStatuses, manilaToday, uuidPattern } from '../services/plannedVisits';
 import { logger } from '../utils/logger';
 import { queueVisitConfirmation, visitFollowUp, VisitReceiptRow } from '../services/visitConfirmation';
+import { processEmailOutbox } from '../services/emailOutboxWorker';
 
 const router = Router();
 export const visitSubmissionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many visit requests. Please try again in 15 minutes.' } });
@@ -34,11 +35,33 @@ router.post('/', visitSubmissionLimiter, async (req, res) => {
     });
     if (outcome.kind === 'past') return res.status(400).json({ error: 'Please check the form.', fields: { visit_date: 'Choose today or an upcoming Sunday.' } });
     if (outcome.kind === 'conflict') return res.status(409).json({ error: 'This submission token was already used for different details. Please submit again.' });
+    // Start delivery after commit without making the visitor wait for SMTP.
+    if (outcome.confirmation_email === 'queued' || outcome.confirmation_email === 'failed') void processEmailOutbox();
     return res.status(201).json({ receipt_id: outcome.result.receipt_id, message: 'We’ve received your visit plan. We look forward to welcoming you.', confirmation_email: outcome.confirmation_email, follow_up: visitFollowUp(data.visit_date, outcome.result.created_at) });
   } catch {
     logger.error('Failed to save planned visit');
     return res.status(503).json({ error: 'We couldn’t save your visit plan. Please try again. Your guide is still available.' });
   }
+});
+
+const confirmationStatusLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, message: { error: 'Please check your email again shortly.' } });
+router.post('/confirmation-status', confirmationStatusLimiter, async (req, res) => {
+  const { submission_token, receipt_id } = req.body || {};
+  if (typeof submission_token !== 'string' || !uuidPattern.test(submission_token) || typeof receipt_id !== 'string' || !uuidPattern.test(receipt_id)) return res.status(400).json({ error: 'Invalid confirmation request.' });
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    // Both unguessable values are required; return delivery status only.
+    const visit = await db.get<{ confirmation_email: 'queued' | 'sent' | 'failed' | 'not_requested' }>(`
+      SELECT CASE WHEN pv.email IS NULL THEN 'not_requested' WHEN eo.status = 'sent' THEN 'sent'
+        WHEN eo.status = 'failed' THEN 'failed' ELSE 'queued' END AS confirmation_email
+      FROM planned_visits pv
+      LEFT JOIN notification_log nl ON nl.event_type = 'planned_visit_confirmation' AND nl.event_key = pv.receipt_id::text AND nl.channel = 'email' AND nl.recipient = pv.email
+      LEFT JOIN email_outbox eo ON eo.notification_log_id = nl.id
+      WHERE pv.submission_token = $1 AND pv.receipt_id = $2
+    `, [submission_token, receipt_id]);
+    if (!visit) return res.status(404).json({ error: 'Confirmation not found.' });
+    return res.json(visit);
+  } catch { return res.status(503).json({ error: 'Unable to check email status right now.' }); }
 });
 
 router.use(authMiddleware, requireRoles('Admin', 'Pastor'));
