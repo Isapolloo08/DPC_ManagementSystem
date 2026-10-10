@@ -1,7 +1,11 @@
+import { FilterPanel } from "../../components/common/FilterPanel";
+import { PageHeader } from "../../components/common/PageHeader";
+import { GroupPortalSkeleton } from "../../components/common/SkeletonLoader";
 import { ModalPanel } from "../../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import { api } from "../../api";
 import { useGuideDataState } from "../../components/help/GuideDataContext";
 import { useSocketEvent } from "../../socket";
@@ -20,7 +24,7 @@ import { LeaderDashboard } from "./LeaderDashboard";
 import { LeaderMembers } from "./LeaderMembers";
 import { LeaderBibleStudy } from "./LeaderBibleStudy";
 import { LeaderAttendanceMonitor } from "./LeaderAttendanceMonitor";
-import { DashboardSkeleton } from "../../components/common/SkeletonLoader";
+
 import { NavTab } from "../../components/layout/Sidebar";
 import { BibleStudyRescheduleModal } from "../../components/biblestudy/BibleStudyRescheduleModal";
 import {
@@ -30,7 +34,10 @@ import {
   SessionOptionItem
 } from "../../components/biblestudy/SessionDatePicker";
 import { getSessionDates } from "../../utils/sessionDateHelper";
+import { formatDisplayDate } from "../../utils/displayDate";
 import { getScheduleDates, isDateMatchingSchedule } from "../../utils/scheduleHelper";
+import { StudyProgressFields } from "../../components/biblestudy/StudyProgressFields";
+import { LessonNoticeField } from "../../components/biblestudy/LessonNoticeField";
 
 interface LeaderPortalPageProps {
   initialTab?: "dashboard" | "members" | "biblestudy" | "attendance_monitor" | "duty";
@@ -94,9 +101,10 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   const [rollCallNotes, setRollCallNotes] = useState<string>("");
   const [rollCallBook, setRollCallBook] = useState("");
   const [rollCallChapter, setRollCallChapter] = useState("");
+  const [rollCallStage, setRollCallStage] = useState("in_progress");
   const [updateGroupProgress, setUpdateGroupProgress] = useState(false);
   const [latestLoggedSessionDate, setLatestLoggedSessionDate] = useState("");
-  const initialRollCallLesson = useRef({ book: "", chapter: "", update: false });
+  const initialRollCallLesson = useRef({ book: "", chapter: "", stage: "in_progress", update: false });
   const [isSavingRollCall, setIsSavingRollCall] = useState(false);
   const [rollCallSessionsList, setRollCallSessionsList] = useState<SessionOptionItem[]>([]);
   const [isSpecialRollCall, setIsSpecialRollCall] = useState(false);
@@ -122,13 +130,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   // Reschedule Room & Day Inspector Modal State
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
 
-  // Toast feedback
-  const [toastMsg, setToastMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
-
-  const showToast = (text: string, type: "success" | "error" = "success") => {
-    setToastMsg({ text, type });
-    setTimeout(() => setToastMsg(null), 3500);
-  };
+  const { showToast } = useToast();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -196,7 +198,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       setGroupsUserId(user?.id ?? null);
       setAllMembers(mems || []);
       setAnnouncements(anns || []);
-      setStudyTopics(topics?.all || []);
+      setStudyTopics(topics?.topics || topics?.all || []);
 
       const userGroupIds = new Set(rawGroups.map(group => group.id));
       const myDishwashing = (dishRes?.schedule || []).filter((d: SundayDutyScheduleItem) => {
@@ -282,7 +284,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
   const isRollCallDirty = () => {
     const lesson = initialRollCallLesson.current;
-    if (rollCallBook !== lesson.book || rollCallChapter !== lesson.chapter || updateGroupProgress !== lesson.update) return true;
+    if (rollCallBook !== lesson.book || rollCallChapter !== lesson.chapter || rollCallStage !== lesson.stage || updateGroupProgress !== lesson.update) return true;
     const initialAtt = initialRollCallData.current.attendees;
     const keys = Object.keys(rollCallAttendees);
     for (const k of keys) {
@@ -336,17 +338,33 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     setRollCallSessionsList(sessionsWithStatus);
   };
 
-  const canUpdateRollCallProgress = (date: string, sessions: SessionOptionItem[]) =>
-    activeGroup?.status === "active" && date >= latestLoggedSessionDate && !sessions.some(s => s.isLogged && s.date > date);
+  const rollCallProgressBlockReason = (date: string, sessions: SessionOptionItem[], latestDate = latestLoggedSessionDate): string | null => {
+    if (activeGroup?.status !== "active") return "Only active groups can update their current study progress.";
+    const newerDate = sessions.filter(s => s.isLogged && s.date > date).reduce((latest, s) => s.date > latest ? s.date : latest, latestDate);
+    if (date < newerDate) return `A newer attendance session exists (${formatDisplayDate(newerDate)}). Select that session or a later meeting to update the group's current progress. This older session only saves its own lesson.`;
+    const recordedBook = sessions.find(s => s.date === date)?.loggedSession?.topic_title;
+    if (user?.role_name === "Leader" && recordedBook && recordedBook.trim() !== activeGroup.curriculum?.trim()) return "This session uses a different book from the group's current curriculum. A coordinator, pastor or administrator can update the assigned book.";
+    return null;
+  };
 
-  const initializeRollCallLesson = (date: string, session: SessionOptionItem | undefined, sessions: SessionOptionItem[]) => {
+  const canUpdateRollCallProgress = (date: string, sessions: SessionOptionItem[], latestDate = latestLoggedSessionDate) =>
+    rollCallProgressBlockReason(date, sessions, latestDate) === null;
+
+  const initializeRollCallLesson = (date: string, session: SessionOptionItem | undefined, sessions: SessionOptionItem[], latestDate = latestLoggedSessionDate) => {
     const book = session?.loggedSession?.topic_title || activeGroup?.curriculum || "Weekly Bible Study";
     const chapter = session?.loggedSession?.chapter || activeGroup?.current_chapter || "Chapter 1";
-    const update = Boolean(activeGroup?.status === "active" && !sessions.some(s => s.isLogged && s.date > date) && date >= latestLoggedSessionDate);
+    const stage = session?.loggedSession
+      ? session.loggedSession.progress_stage || "in_progress"
+      : activeGroup?.progress_stage || "in_progress";
+    const update = Boolean(canUpdateRollCallProgress(date, sessions, latestDate));
+    const notes = session?.loggedSession ? session.loggedSession.notes || "" : update ? activeGroup?.progress_notes || "" : "";
     setRollCallBook(book);
     setRollCallChapter(chapter);
+    setRollCallStage(stage);
+    setRollCallNotes(notes);
     setUpdateGroupProgress(update);
-    initialRollCallLesson.current = { book, chapter, update };
+    initialRollCallLesson.current = { book, chapter, stage, update };
+    return { notes, update };
   };
 
   const handleOpenRollCall = async () => {
@@ -382,15 +400,11 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
     setIsSpecialRollCall(false);
     setSpecialRollCallReason("");
 
-    // 3. Default selection = latest session that has NO attendance yet; if none missing, default to latest
-    const firstMissing = sessionsWithStatus.find(s => !s.isLogged);
-    const targetSession = firstMissing || sessionsWithStatus[0];
+    // Open the latest meeting, even if logged; older missing meetings are selected explicitly.
+    const targetSession = sessionsWithStatus[0];
     const latestLogged = existingSessions.reduce((latest, session) => session.session_date > latest ? session.session_date : latest, "");
     setLatestLoggedSessionDate(latestLogged);
-    initializeRollCallLesson(targetSession?.date || new Date().toISOString().split("T")[0], targetSession, sessionsWithStatus);
-    const defaultUpdate = Boolean(activeGroup.status === "active" && targetSession && targetSession.date >= latestLogged);
-    setUpdateGroupProgress(defaultUpdate);
-    initialRollCallLesson.current.update = defaultUpdate;
+    const lessonDraft = initializeRollCallLesson(targetSession?.date || new Date().toISOString().split("T")[0], targetSession, sessionsWithStatus, latestLogged);
 
     if (targetSession) {
       setRollCallDate(targetSession.date);
@@ -405,10 +419,9 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           initialAtt[a.member_id] = true;
         });
         setRollCallAttendees(initialAtt);
-        setRollCallNotes(targetSession.loggedSession.notes || "");
         initialRollCallData.current = {
           attendees: { ...initialAtt },
-          notes: targetSession.loggedSession.notes || "",
+          notes: lessonDraft.notes,
           date: targetSession.date,
         };
       } else {
@@ -417,10 +430,9 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
           initialAtt[m.member_id || m.id] = true;
         });
         setRollCallAttendees(initialAtt);
-        setRollCallNotes("");
         initialRollCallData.current = {
           attendees: { ...initialAtt },
-          notes: "",
+          notes: lessonDraft.notes,
           date: targetSession.date,
         };
       }
@@ -432,10 +444,9 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         initialAtt[m.member_id || m.id] = true;
       });
       setRollCallAttendees(initialAtt);
-      setRollCallNotes("");
       initialRollCallData.current = {
         attendees: { ...initialAtt },
-        notes: "",
+        notes: lessonDraft.notes,
         date: today,
       };
     }
@@ -444,7 +455,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   };
 
   const handleSessionChange = (date: string, session?: SessionOptionItem) => {
-    initializeRollCallLesson(date, session, rollCallSessionsList);
+    const lessonDraft = initializeRollCallLesson(date, session, rollCallSessionsList);
     setRollCallDate(date);
     setIsSpecialRollCall(false);
 
@@ -457,10 +468,9 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         initialAtt[a.member_id] = true;
       });
       setRollCallAttendees(initialAtt);
-      setRollCallNotes(session.loggedSession.notes || "");
       initialRollCallData.current = {
         attendees: { ...initialAtt },
-        notes: session.loggedSession.notes || "",
+        notes: lessonDraft.notes,
         date,
       };
     } else {
@@ -469,10 +479,9 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         initialAtt[m.member_id || m.id] = true;
       });
       setRollCallAttendees(initialAtt);
-      setRollCallNotes("");
       initialRollCallData.current = {
         attendees: { ...initialAtt },
-        notes: "",
+        notes: lessonDraft.notes,
         date,
       };
     }
@@ -515,14 +524,15 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         session_date: rollCallDate,
         topic_title: rollCallBook.trim(),
         chapter: rollCallChapter.trim(),
+        progress_stage: rollCallStage,
         update_group_progress: updateGroupProgress,
-        notes: rollCallNotes.trim() || undefined,
+        notes: rollCallNotes.trim(),
         present_member_ids: presentIds,
         is_special: isSpecialRollCall,
         special_reason: isSpecialRollCall ? specialRollCallReason.trim() : undefined,
       });
 
-      showToast(`Weekly Roll-Call for"${activeGroup.name}" on ${rollCallDate} saved successfully!`, "success");
+      showToast(`Weekly Roll-Call for "${activeGroup.name}" on ${rollCallDate} saved successfully!`, "success");
       setIsRollCallModalOpen(false);
       loadLeaderData();
     } catch (err: any) {
@@ -586,13 +596,13 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
   useGuideDataState("assigned-groups", { loading, count: myGroups.length, error: loadError, retry: loadLeaderData });
 
   if (loading) {
-    return <DashboardSkeleton />;
+    return <GroupPortalSkeleton />;
   }
 
   if (!activeGroup) {
     return (
       <section data-guide="my-group-empty" className="space-y-5">
-        <h1 className="text-2xl sm:text-3xl font-semibold text-charcoal">My Bible Study Group</h1>
+        <PageHeader icon={<Users />} title="My Bible Study Group" description="Your group assignments and discipleship activities." />
         <div className="rounded-3xl border border-indigo-100 bg-white p-8 text-center space-y-3">
           <Users className="w-10 h-10 mx-auto text-indigo" />
           <h2 className="text-lg font-semibold text-charcoal">{loadError ? "Unable to load groups" : "No assigned group"}</h2>
@@ -609,20 +619,6 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
   return (
     <div className="space-y-6 pb-12 print:p-0 print:space-y-4">
-      {/* Toast Notification */}
-      {toastMsg && (
-        <div className={`px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between text-xs font-medium animate-in fade-in ${toastMsg.type === "success" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
-          }`}>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-amber-300" />
-            <span>{toastMsg.text}</span>
-          </div>
-          <button onClick={() => setToastMsg(null)} className="p-1 hover:text-gray-200 cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Top Breadcrumb + Status Tag */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 text-xs text-muted font-medium">
@@ -637,70 +633,58 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
       </div>
 
       {/* Header & Group Selector Dropdown */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-charcoal tracking-tight">
-            My Bible Study Group
-          </h1>
-          <p className="text-xs sm:text-sm text-charcoal/70 mt-0.5 max-w-2xl leading-relaxed">
-            Discipleship life groups and flock formation, roll call attendance, and coordinated church service rotations.
-          </p>
-        </div>
+      <PageHeader icon={<Users />} title="My Bible Study Group" description={<>Discipleship life groups and flock formation, roll call attendance, and coordinated church service rotations.</>} actions={<div ref={switcherRef} className="relative shrink-0">
+        <button
+          type="button"
+          aria-label="Switch my Bible study group"
+          data-guide="my-group-switcher"
+          aria-expanded={isGroupSwitcherOpen}
+          onClick={() => setIsGroupSwitcherOpen(!isGroupSwitcherOpen)}
+          className="flex items-center gap-2.5 bg-white border border-indigo-200 hover:border-indigo-400 px-4 py-2.5 rounded-2xl shadow-2xs hover:shadow-md transition-all text-xs font-medium text-charcoal cursor-pointer active:scale-95"
+        >
+          <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo flex items-center justify-center font-medium text-xs">
+            <Users className="w-3.5 h-3.5 text-indigo-700" />
+          </div>
+          <div className="text-left">
+            <div className="text-xs font-medium text-charcoal truncate max-w-[200px]">
+              {activeGroup?.name || "Select Group"}
+            </div>
+            <div className="text-[12px] text-muted font-medium">
+              {activeGroup?.category ? `(${activeGroup.category})` : "Active Life Group"}
+            </div>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-muted transition-transform ${isGroupSwitcherOpen ? "rotate-180" : ""}`} />
+        </button>
 
-        {/* Group Switcher Dropdown */}
-        <div ref={switcherRef} className="relative shrink-0">
-          <button
-            type="button"
-            aria-label="Switch my Bible study group"
-            data-guide="my-group-switcher"
-            aria-expanded={isGroupSwitcherOpen}
-            onClick={() => setIsGroupSwitcherOpen(!isGroupSwitcherOpen)}
-            className="flex items-center gap-2.5 bg-white border border-indigo-200 hover:border-indigo-400 px-4 py-2.5 rounded-2xl shadow-2xs hover:shadow-md transition-all text-xs font-medium text-charcoal cursor-pointer active:scale-95"
-          >
-            <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo flex items-center justify-center font-medium text-xs">
-              <Users className="w-3.5 h-3.5 text-indigo-700" />
+        {isGroupSwitcherOpen && (
+          <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-indigo-100 p-2 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95">
+            <div className="p-2 text-[12px] font-medium text-indigo-950 uppercase tracking-wider flex items-center justify-between">
+              <span>Switch Small Group ({myGroups.length})</span>
             </div>
-            <div className="text-left">
-              <div className="text-xs font-medium text-charcoal truncate max-w-[200px]">
-                {activeGroup?.name || "Select Group"}
-              </div>
-              <div className="text-[12px] text-muted font-medium">
-                {activeGroup?.category ? `(${activeGroup.category})` : "Active Life Group"}
-              </div>
+            <div className="max-h-60 overflow-y-auto py-1 space-y-1">
+              {myGroups.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => {
+                    setSelectedLedGroupId(g.id);
+                    setIsGroupSwitcherOpen(false);
+                  }}
+                  className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${g.id === activeGroup?.id
+                    ? "bg-indigo-50 text-indigo font-medium"
+                    : "hover:bg-gray-50 text-charcoal"
+                    }`}
+                >
+                  <div className="truncate pr-2">
+                    <div className="truncate">{g.name}</div>
+                    <div className="text-[12px] text-muted">{g.category || "General"} • {g.leader_name}</div>
+                  </div>
+                  {g.id === activeGroup?.id && <Check className="w-4 h-4 text-indigo shrink-0" />}
+                </button>
+              ))}
             </div>
-            <ChevronDown className={`w-4 h-4 text-muted transition-transform ${isGroupSwitcherOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {isGroupSwitcherOpen && (
-            <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-indigo-100 p-2 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95">
-              <div className="p-2 text-[12px] font-medium text-indigo-950 uppercase tracking-wider flex items-center justify-between">
-                <span>Switch Small Group ({myGroups.length})</span>
-              </div>
-              <div className="max-h-60 overflow-y-auto py-1 space-y-1">
-                {myGroups.map(g => (
-                  <button
-                    key={g.id}
-                    onClick={() => {
-                      setSelectedLedGroupId(g.id);
-                      setIsGroupSwitcherOpen(false);
-                    }}
-                    className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${g.id === activeGroup?.id
-                      ? "bg-indigo-50 text-indigo font-medium"
-                      : "hover:bg-gray-50 text-charcoal"
-                      }`}
-                  >
-                    <div className="truncate pr-2">
-                      <div className="truncate">{g.name}</div>
-                      <div className="text-[12px] text-muted">{g.category || "General"} • {g.leader_name}</div>
-                    </div>
-                    {g.id === activeGroup?.id && <Check className="w-4 h-4 text-indigo shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </div>} />
 
       {/* Main Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-gray-200/80 pb-3 overflow-x-auto no-scrollbar">
@@ -792,10 +776,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
         <LeaderBibleStudy
           activeGroup={activeGroup}
           groupDisciples={currentMembers}
-          onSaveAttendanceSession={(date, memberIds) => {
-            showToast(`Logged attendance for ${memberIds.length} members on ${date}!`);
-            loadLeaderData();
-          }}
+          onOpenRollCall={handleOpenRollCall}
           onGroupUpdated={loadLeaderData}
         />
       )}
@@ -934,25 +915,22 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
 
                       <fieldset className="shrink-0 space-y-2 p-3 rounded-xl border border-indigo-100 bg-indigo-50/40" disabled={isSavingRollCall}>
                         <legend className="px-1 font-semibold text-indigo-950">Book & chapter covered</legend>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div>
-                            <label htmlFor="roll-call-book" className="block mb-1 font-medium text-charcoal">Book / Study Topic</label>
-                            <input id="roll-call-book" list="roll-call-books" required maxLength={300} value={rollCallBook}
-                              onChange={e => setRollCallBook(e.target.value)} className="w-full bg-white p-2 rounded-lg border border-gray-200 text-charcoal" />
-                            <datalist id="roll-call-books">{studyTopics.map(topic => <option key={topic.id} value={topic.title} />)}</datalist>
-                          </div>
-                          <div>
-                            <label htmlFor="roll-call-chapter" className="block mb-1 font-medium text-charcoal">Chapter / Lesson</label>
-                            <input id="roll-call-chapter" required maxLength={120} value={rollCallChapter}
-                              onChange={e => setRollCallChapter(e.target.value)} placeholder="e.g. Chapter 3" className="w-full bg-white p-2 rounded-lg border border-gray-200 text-charcoal" />
-                          </div>
-                        </div>
+                        <StudyProgressFields
+                          value={{ book: rollCallBook, chapter: rollCallChapter, stage: rollCallStage }}
+                          onChange={value => { setRollCallBook(value.book); setRollCallChapter(value.chapter); setRollCallStage(value.stage); }}
+                          topics={studyTopics}
+                          fallbackBook={activeGroup.curriculum}
+                          fallbackChapters={activeGroup.curriculum_total_chapters}
+                          disabled={isSavingRollCall}
+                          readOnlyBook={user?.role_name === "Leader"}
+                        />
+                        <LessonNoticeField value={rollCallNotes} onChange={setRollCallNotes} disabled={isSavingRollCall} />
                         <label className="flex items-start gap-2 text-charcoal cursor-pointer">
                           <input type="checkbox" checked={updateGroupProgress} disabled={!canUpdateRollCallProgress(rollCallDate, rollCallSessionsList)}
                             onChange={e => setUpdateGroupProgress(e.target.checked)} className="mt-0.5" />
-                          <span>Update the group's current book and chapter when saving attendance</span>
+                          <span>{user?.role_name === "Leader" ? "Update the group's current chapter, stage, and lesson notice when saving attendance" : "Update the group's current book, chapter, stage, and lesson notice when saving attendance"}</span>
                         </label>
-                        {!canUpdateRollCallProgress(rollCallDate, rollCallSessionsList) && <p className="text-muted">This historical session records its own lesson without changing the group's current progress.</p>}
+                        {!canUpdateRollCallProgress(rollCallDate, rollCallSessionsList) && <p className="text-muted">{rollCallProgressBlockReason(rollCallDate, rollCallSessionsList)}</p>}
                       </fieldset>
 
                       {/* Mark Present Disciples Section */}
@@ -994,17 +972,6 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                         </div>
                       </div>
 
-                      {/* Session Notes */}
-                      <div className="shrink-0">
-                        <label className="block font-medium text-charcoal/70 mb-1">Session Notes & Discussion Highlights</label>
-                        <textarea
-                          rows={2}
-                          placeholder="Record chapter discussion highlights or key takeaways from this session..."
-                          value={rollCallNotes}
-                          onChange={(e) => setRollCallNotes(e.target.value)}
-                          className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 text-charcoal focus:outline-none focus:border-indigo text-xs"
-                        />
-                      </div>
                     </div>
 
                     {/* Sticky Footer */}
@@ -1192,7 +1159,8 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
             <form data-guide="my-group-add-form" onSubmit={handleAddMemberToGroup} className="space-y-4 text-xs">
               {/* Search & Filter Controls */}
               <div className="space-y-2.5">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <FilterPanel title="Member filters" summary={[addDiscipleMinistryFilter === "all" ? "All ministries" : addDiscipleMinistryFilter, addDiscipleSearchQuery].filter(Boolean).join(" · ")}>
+                  <div className="filter-panel-layout grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {/* Search Input */}
                   <div className="sm:col-span-2 relative">
                     <Search className="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1231,6 +1199,7 @@ export const LeaderPortalPage: React.FC<LeaderPortalPageProps> = ({
                     </select>
                   </div>
                 </div>
+                </FilterPanel>
 
                 <div className="flex items-center justify-between text-[12px] text-muted px-1 font-medium">
                   <span>

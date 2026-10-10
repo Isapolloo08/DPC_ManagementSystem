@@ -1,16 +1,23 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Bell, Check, CheckCheck, ChevronLeft, ChevronRight, Loader2, MailOpen, Trash2 } from "lucide-react";
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
+import React, { useCallback, useEffect, useState, useRef } from "react";
+import { Bell, Check, CheckCheck, ChevronLeft, ChevronRight, MailOpen, Trash2 } from "lucide-react";
+import { ListSkeleton } from "../components/common/SkeletonLoader";
 import { api } from "../api";
 import { useGuideDataState } from "../components/help/GuideDataContext";
 import { useToast } from "../context/ToastContext";
 import { useSocketEvent } from "../socket";
 import { AppNotification, NotificationEventType } from "../types";
+import { NotificationMessage } from "../components/notifications/NotificationMessage";
 
 interface NotificationsPageProps {
   onNavigate: (tab: string, refId?: number | null) => void;
 }
 
 const TYPE_LABELS: Record<NotificationEventType, string> = {
+  bible_study_update: "Bible study update",
   absence_alert: "Absence alert",
   session_rescheduled: "Session rescheduled",
   at_risk_member: "At-risk member",
@@ -25,28 +32,34 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [type, setType] = useState<NotificationEventType | "">("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const sequence = useRef(0);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const guideData = useGuideDataState("notifications", { loading, count: items.length, filtered: unreadOnly || Boolean(type), retry: () => load() });
 
   const load = useCallback(async () => {
+    const current = ++sequence.current;
     guideData.clearError();
     setLoading(true);
     try {
-      const response = await api.getNotifications({ unread: unreadOnly, type, page, page_size: 20 });
+      const response = await api.getNotifications({ unread: unreadOnly, type, page, page_size: pageSize });
+      if (current !== sequence.current) return;
       setItems(response.items);
+      if (page > Math.max(1, response.totalPages)) setPage(Math.max(1, response.totalPages));
       setTotal(response.total);
       setTotalPages(response.totalPages);
     } catch (error) {
+      if (current !== sequence.current) return;
       guideData.reportError(error);
       showToast(error instanceof Error ? error.message : "Failed to load notifications", "error");
     } finally {
-      setLoading(false);
+      if (current === sequence.current) setLoading(false);
     }
-  }, [page, showToast, type, unreadOnly]);
+  }, [page, pageSize, showToast, type, unreadOnly]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); return () => { sequence.current++; }; }, [load]);
   useEffect(() => setPage(1), [type, unreadOnly]);
   useSocketEvent<AppNotification>("notification:new", () => void load(), [load]);
 
@@ -76,17 +89,14 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate
 
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl bg-indigo-950 text-white p-5 sm:p-7 shadow-xl border border-indigo-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 rounded-2xl bg-amber-400/15 border border-amber-300/30"><Bell className="w-7 h-7 text-amber-300" /></div>
-          <div><h1 className="text-xl sm:text-2xl font-semibold">Notifications</h1><p className="text-xs text-indigo-200 mt-1">Updates addressed to your account and ministry responsibilities.</p></div>
-        </div>
-        <button data-guide="notifications-mark-all" type="button" onClick={() => void markAll()} className="px-4 py-2.5 rounded-xl bg-amber-400 text-indigo-950 text-xs font-medium flex items-center justify-center gap-2 hover:bg-amber-300">
+      <PageHeader icon={<Bell />} title={<>Notifications</>}
+        description={<>Updates addressed to your account and ministry responsibilities.</>}
+        actions={<><Button data-guide="notifications-mark-all" type="button" onClick={() => void markAll()} variant="primary">
           <CheckCheck className="w-4 h-4" /> Mark all as read
-        </button>
-      </div>
+        </Button></>} />
 
-      <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm p-3 flex flex-col sm:flex-row gap-3 sm:items-center">
+      <FilterPanel title="Notification filters" summary={[unreadOnly ? "Unread" : "All notifications", type && TYPE_LABELS[type]].filter(Boolean).join(" · ")}>
+        <div className="filter-panel-layout bg-white rounded-2xl border border-indigo-100 shadow-sm p-3 flex flex-col sm:flex-row gap-3 sm:items-center">
         <div className="inline-flex rounded-xl bg-slate-100 p-1">
           <button data-guide="notifications-all" type="button" onClick={() => setUnreadOnly(false)} className={`px-4 py-2 rounded-lg text-xs font-medium ${!unreadOnly ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>All</button>
           <button data-guide="notifications-unread" type="button" onClick={() => setUnreadOnly(true)} className={`px-4 py-2 rounded-lg text-xs font-medium ${unreadOnly ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>Unread</button>
@@ -97,9 +107,10 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate
         </select>
         <span className="text-[12px] text-slate-500 font-medium">{total} result{total === 1 ? "" : "s"}</span>
       </div>
+      </FilterPanel>
 
       <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm overflow-hidden">
-        {loading ? <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div> : items.length === 0 ? (
+        {loading ? <ListSkeleton label="Loading notifications..." /> : items.length === 0 ? (
           <div className="py-16 text-center"><Bell className="w-10 h-10 mx-auto text-slate-300" /><p className="mt-3 text-sm font-medium text-slate-500">No notifications match this filter.</p></div>
         ) : items.map(notification => (
           <div key={notification.id} className={`p-4 sm:p-5 border-b border-slate-100 last:border-0 flex gap-3 ${notification.is_read ? "bg-white" : "bg-amber-50/40"}`}>
@@ -113,7 +124,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate
                     <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[12px] font-medium">To: {notification.recipient_name}</span>
                   )}
                 </span>
-                <span className="block mt-1 text-xs text-slate-600 whitespace-pre-line leading-relaxed">{notification.message}</span>
+                <NotificationMessage notification={notification} />
                 <span className="block mt-2 text-[12px] text-slate-400">{new Date(notification.created_at).toLocaleString()}</span>
               </span>
             </button>
@@ -125,11 +136,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onNavigate
         ))}
       </div>
 
-      <div className="flex items-center justify-between">
-        <button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium disabled:opacity-40 flex items-center gap-1"><ChevronLeft className="w-4 h-4" /> Previous</button>
-        <span className="text-xs font-medium text-slate-500">Page {page} of {totalPages}</span>
-        <button type="button" disabled={page >= totalPages} onClick={() => setPage(value => value + 1)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium disabled:opacity-40 flex items-center gap-1">Next <ChevronRight className="w-4 h-4" /></button>
-      </div>
+      <Pagination label="notifications" page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={size => { setPageSize(size); setPage(1); }} loading={loading} />
     </div>
   );
 };

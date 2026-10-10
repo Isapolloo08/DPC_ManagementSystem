@@ -1,0 +1,20 @@
+.directory-design { color: var(--text); }
+.shared-layout-sidebar, .shared-layout-sidebar .bg-white { background: var(--surface); border-color: var(--border); }
+.shared-layout-navbar[data-scrolled="true"] { background: var(--surface); border-color: var(--border); }
+.shared-layout-navbar .bg-white { background: var(--surface); border-color: var(--border); }
+:is(.shared-layout-sidebar, .shared-layout-navbar) .text-charcoal { color: var(--text); }
+:is(.shared-layout-sidebar, .shared-layout-navbar) :is(.text-muted, [class*="text-charcoal/"]) { color: var(--text-muted); }
+.shared-layout-navbar [aria-label="Toggle navigation menu"], .shared-layout-sidebar :is([title="Collapse sidebar"], [title="Close Navigation"]) { min-width: 36px; min-height: 36px; }
+:is(.shared-layout-sidebar, .shared-layout-navbar) button { transition: background-color 150ms ease, color 150ms ease; }
+.directory-design :is(.bg-white, .bg-white\/95), .directory-design .page-header, .directory-design .stat-card { background: var(--surface); border-color: var(--border); box-shadow: var(--shadow-card); }
+.directory-design .page-header { background-image: none; }
+.directory-design .page-header-title, .directory-design :is(.text-charcoal, .text-indigo-950) { color: var(--text); }
+.directory-design :is(.text-muted, [class*="text-charcoal/"], .stat-card-description, .stat-card-label, .page-header-description, .page-header-meta) { color: var(--text-muted); }
+.directory-design input::placeholder, .directory-design textarea::placeholder { color: var(--text-muted); opacity: 1; }
+.directory-design :is(input, select, textarea) { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.directory-design :is(button, input, select, textarea, a) { transition: background-color 150ms ease, color 150ms ease; }
+.directory-design :is(button, input, select, textarea, a, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.directory-design .page-header--compact { padding: 20px 24px; }
+.page-header--compact .page-header-title { font-size: 26px; }
+@media (max-width: 639px) { .directory-design .page-header--compact { padding: 16px; } .page-header--compact .page-header-title { font-size: 24px; } }
+@media (prefers-reduced-motion: reduce) { .directory-design *, .directory-design *::before, .directory-design *::after, .shared-layout-sidebar *, .shared-layout-navbar * { transition: none !important; animation: none !important; } }

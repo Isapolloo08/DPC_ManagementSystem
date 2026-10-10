@@ -1,3 +1,10 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { PageHeader } from "../components/common/PageHeader";
+import { MemberRowActions } from "../features/members/components/MemberRowActions";
+import { MemberDeleteDialog } from "../features/members/components/MemberDeleteDialog";
+import './members.css';
+import { Pagination } from "../components/common/Pagination";
+import { usePageControls, useDebouncedValue } from "../hooks/useListPagination";
 import { Bell as UIBell, Briefcase as UIBriefcase, Check as UICheck, Church as UIChurch, Circle as UICircle, CircleCheck as UICircleCheck, CircleX as UICircleX, ClipboardList as UIClipboardList, Clock as UIClock, GraduationCap as UIGraduationCap, HeartHandshake as UIHeartHandshake, House as UIHouse, Info as UIInfo, Phone as UIPhone, Plus as UIPlus, UserRound as UIUserRound, Users as UIUsers, Waves as UIWaves } from "lucide-react";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useRef, useMemo } from "react";
@@ -5,6 +12,10 @@ import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { api } from "../api";
+import type { FamilyLinksInput } from '../types';
+import { ParentsHouseholdFields } from '../features/members/components/ParentsHouseholdFields';
+import { FamilyTreeModal } from '../features/members/components/FamilyTreeModal';
+import { GitBranch } from 'lucide-react';
 import { useGuideDataState } from "../components/help/GuideDataContext";
 import { Member, Household, HouseholdFamilyMember, Ministry } from "../types";
 import {
@@ -37,7 +48,7 @@ import { HouseholdRegistrationFields } from "../features/members/components/Hous
 import { MemberFamilyDetailsField } from "../features/members/components/MemberFamilyDetailsField";
 import { RelativeRegistrationModal } from "../features/members/components/RelativeRegistrationModal";
 import type { RelativeRegistrationContext } from "../features/members/types";
-import { familyRelationships, familyRole, householdFamily, householdFamilyMembers, memberFamily, memberName, normalizeName, HouseholdRole, memberHouseholdRole, parentRoles, relationshipRole } from "../features/members/householdFamily";
+import { familyRelationships, familyRole, householdFamily, householdFamilyMembers, memberFamily, memberName, normalizeName, HouseholdRole, memberHouseholdRole, householdRoleLabels, parentRoles, relationshipRole } from "../features/members/householdFamily";
 import { useMemberDuplicateCheck } from "../features/members/hooks/useMemberDuplicateCheck";
 import { memberRegistrationService } from "../features/members/services/memberRegistrationService";
 import { Button } from "../components/common/Button";
@@ -93,6 +104,12 @@ export const MembersPage: React.FC = () => {
   const [households, setHouseholds] = useState<Household[]>([]);
   const [localMinistries, setLocalMinistries] = useState<Ministry[]>(ministries);
   const [searchQuery, setSearchQuery] = useState("");
+  const householdSearch = useDebouncedValue(searchQuery);
+  const householdPage = usePageControls(householdSearch, 20);
+  const [householdRows, setHouseholdRows] = useState<Household[]>([]);
+  const [householdTotal, setHouseholdTotal] = useState(0);
+  const [householdLoading, setHouseholdLoading] = useState(false);
+  const [directoryRevision, setDirectoryRevision] = useState(0);
   const [filterMinistry, setFilterMinistry] = useState<string>(
     coordinatorMinistryId ? String(coordinatorMinistryId) : (selectedMinistryId ? String(selectedMinistryId) : "")
   );
@@ -109,6 +126,7 @@ export const MembersPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isAddHouseholdModalOpen, setIsAddHouseholdModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const [birthdayFilter, setBirthdayFilter] = useState<string>("all");
 
@@ -291,12 +309,19 @@ export const MembersPage: React.FC = () => {
   const [parentNameDirty, setParentNameDirty] = useState(false);
   const [spouseSearchQuery, setSpouseSearchQuery] = useState<string>("");
   const [householdRegistrationRole, setHouseholdRegistrationRole] = useState<HouseholdRole | "">("");
+  useEffect(() => {
+    if (formData.civil_status === 'Married' && ['father','mother'].includes(householdRegistrationRole)) {
+      setHouseholdRegistrationRole(householdRegistrationRole === 'father' ? 'husband' : 'wife');
+    }
+  }, [formData.civil_status, householdRegistrationRole]);
   const [registrationFamilyMembers, setRegistrationFamilyMembers] = useState<HouseholdFamilyMember[]>([]);
+  const [familyLinks,setFamilyLinks] = useState<FamilyLinksInput|undefined>();
+  const [treeHousehold,setTreeHousehold] = useState<Household|null>(null);
 
   const linkedHousehold = householdMode === "existing"
     ? households.find(h => h.id === Number(formData.household_id)) : undefined;
   const linkedFamily = householdFamily(linkedHousehold);
-  const isHouseholdParent = parentRoles.includes(householdRegistrationRole as any) ||
+  const isHouseholdParent = [...parentRoles,'husband','wife'].includes(householdRegistrationRole as any) ||
     (!!linkedHousehold && !!familyRole(linkedHousehold, memberName(formData)));
   const useHouseholdGuardian = !!linkedFamily.primaryParent && !parentNameDirty && !isHouseholdParent;
   const applicationGuardianName = useHouseholdGuardian ? linkedFamily.primaryParent : formData.guardian_names;
@@ -314,8 +339,12 @@ export const MembersPage: React.FC = () => {
 
   const openHouseholdForm = (household: Household | null = null) => {
     setEditingHousehold(household);
-    const fName = household?.father_name?.trim() || "";
-    const mName = household?.mother_name?.trim() || "";
+    let fName = household?.father_name?.trim() || "";
+    let mName = household?.mother_name?.trim() || "";
+    const head = household?.members?.find(member => normalizeName(memberName(member)) === normalizeName(fName || mName));
+    const spouse = head && household?.members?.find(member => member.id === head.spouse_id || member.spouse_id === head.id);
+    if (spouse && fName && !mName) mName = memberName(spouse);
+    else if (spouse && mName && !fName) fName = memberName(spouse);
     const gName = household?.guardian_name?.trim() || "";
     const isParent = (n: string) => {
       const norm = normalizeName(n);
@@ -359,7 +388,7 @@ export const MembersPage: React.FC = () => {
   const memberListRef = useRef<HTMLDivElement>(null);
   const memberPaginationRef = useRef<HTMLDivElement>(null);
   const [memberListMaxHeight, setMemberListMaxHeight] = useState<number>();
-  const isInitialMemberLoad = loading && members.length === 0;
+  const isInitialMemberLoad = loading && !hasLoaded;
 
   useEffect(() => {
     const toolbar = directoryToolbarRef.current;
@@ -391,7 +420,8 @@ export const MembersPage: React.FC = () => {
     : (coordinatorMinistryId || suggestedMinistryInfo?.ministry?.id || null);
   const currentModalMinistry = effectiveMinistries.find(m => m.id === currentModalMinistryId) || suggestedMinistryInfo?.ministry || null;
   const currentMinName = (currentModalMinistry?.name || "").toLowerCase();
-  const canCreateHousehold = currentMinName.includes("junior") || currentMinName.includes("old") || currentMinName.includes("senior");
+  const isJuniorAdult = currentMinName.includes("junior");
+  const canCreateHousehold = isJuniorAdult || currentMinName.includes("old") || currentMinName.includes("senior");
 
   useEffect(() => {
     if (isAddModalOpen && householdMode === "create_new" && !canCreateHousehold) {
@@ -423,6 +453,7 @@ export const MembersPage: React.FC = () => {
   }, [filterMinistry, coordinatorMinistryId, currentPage, pageSize]);
 
   useSocketEvent("households:changed", () => {
+    setDirectoryRevision(value => value + 1);
     loadData(currentPage);
   });
 
@@ -430,7 +461,36 @@ export const MembersPage: React.FC = () => {
     loadData(currentPage);
   });
 
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setHouseholdLoading(true);
+    api.getHouseholdsPage({ page: householdPage.page, limit: householdPage.pageSize, search: householdSearch }, controller.signal).then(result => {
+      if (!active) return;
+      const rows = Array.isArray(result) ? result : result.data;
+      setHouseholdRows(Array.isArray(result) ? rows.slice((householdPage.page - 1) * householdPage.pageSize, householdPage.page * householdPage.pageSize) : rows);
+      setHouseholdTotal(Array.isArray(result) ? result.length : result.pagination.total);
+      setHouseholds(current => [...current.filter(item => !rows.some(row => row.id === item.id)), ...rows]);
+      if (!Array.isArray(result) && result.pagination.page !== householdPage.page) householdPage.setPage(result.pagination.page);
+    }).catch(error => { if (active) guideData.reportError(error); }).finally(() => { if (active) setHouseholdLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [householdPage.page, householdPage.pageSize, householdSearch, directoryRevision]);
+
+  // Family and relationship tools need their reference options only while open.
+  useEffect(() => {
+    if (!isAddModalOpen && !isAddHouseholdModalOpen && !selectedMember && !treeHousehold && !relativeChoice && !relativeRegistration) return;
+    let active = true;
+    Promise.all([api.getMembers(), api.getHouseholds()]).then(([membersResult, householdResult]) => {
+      if (!active) return;
+      setAllChurchMembers(Array.isArray(membersResult) ? membersResult : membersResult.data || []);
+      setHouseholds(householdResult);
+    }).catch(error => { if (active) guideData.reportError(error); });
+    return () => { active = false; };
+  }, [isAddModalOpen, isAddHouseholdModalOpen, selectedMember?.id, treeHousehold?.id, relativeChoice, relativeRegistration, directoryRevision]);
+
+  const memberRequestSequence = useRef(0);
   const loadData = async (pageToFetch: number = currentPage) => {
+    const sequence = ++memberRequestSequence.current;
     guideData.clearError();
     try {
       setLoading(true);
@@ -441,7 +501,7 @@ export const MembersPage: React.FC = () => {
       const isHealthFilter = ["warning", "action_required"].includes(membershipFilter);
       const isMembershipTypeFilter = ["baptized_regular", "unbaptized_regular", "guest", "inactive"].includes(membershipFilter);
 
-      const [mRes, hList, minList, allMemsRes] = await Promise.all([
+      const [mRes, minList, householdResult] = await Promise.all([
         api.getMembers({
           ministry_id: activeMinistryParam,
           search: searchQuery || undefined,
@@ -451,10 +511,14 @@ export const MembersPage: React.FC = () => {
           page: pageToFetch,
           limit: pageSize
         }),
-        api.getHouseholds(),
         api.getMinistries().catch(() => []),
-        api.getMembers().catch(() => [])
+        api.getHouseholdsPage({ page: householdPage.page, limit: householdPage.pageSize, search: householdSearch })
       ]);
+      if (sequence !== memberRequestSequence.current) return;
+      const householdList = Array.isArray(householdResult) ? householdResult : householdResult.data;
+      setHouseholdRows(Array.isArray(householdResult) ? householdList.slice((householdPage.page - 1) * householdPage.pageSize, householdPage.page * householdPage.pageSize) : householdList);
+      setHouseholdTotal(Array.isArray(householdResult) ? householdResult.length : householdResult.pagination.total);
+      setHouseholds(current => [...current.filter(item => !householdList.some(row => row.id === item.id)), ...householdList]);
 
       if (mRes && typeof mRes === "object" && "data" in mRes) {
         setMembers(mRes.data || []);
@@ -467,22 +531,17 @@ export const MembersPage: React.FC = () => {
         setTotalPages(Math.ceil(mRes.length / pageSize) || 1);
       }
 
-      if (allMemsRes) {
-        const fullList = Array.isArray(allMemsRes) ? allMemsRes : ((allMemsRes as any)?.data || []);
-        if (fullList.length > 0) {
-          setAllChurchMembers(fullList);
-        }
-      }
-
-      setHouseholds(hList);
       if (minList && minList.length > 0) {
         setLocalMinistries(minList);
       }
     } catch (err) {
       console.error("Failed to load members/households:", err);
-      guideData.reportError(err);
+      if (sequence === memberRequestSequence.current) guideData.reportError(err);
     } finally {
-      setLoading(false);
+      if (sequence === memberRequestSequence.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
   };
 
@@ -601,6 +660,7 @@ export const MembersPage: React.FC = () => {
   };
 
   const handleOpenAdd = () => {
+    setFamilyLinks(undefined);
     setRelativeRegistration(null);
     setEditingMember(null);
     setHouseholdRegistrationRole("");
@@ -776,6 +836,7 @@ export const MembersPage: React.FC = () => {
   };
 
   const handleOpenEdit = (member: Member) => {
+    setFamilyLinks(undefined);
     setRelativeRegistration(null);
     setHouseholdRegistrationRole("");
     setRegistrationFamilyMembers([]);
@@ -1126,10 +1187,15 @@ export const MembersPage: React.FC = () => {
         finalHouseholdId = null;
       }
 
+      if (isJuniorAdult && familyLinks === undefined) {
+        showToast('Wait for parent links to load, or retry if loading failed.', 'error');
+        return;
+      }
       const payload: any = {
+        ...(isJuniorAdult ? { family_links: familyLinks } : {}),
         ...formData,
-        guardian_names: registerHousehold && parentRoles.includes(householdRegistrationRole as any) ? formData.guardian_names || null : applicationGuardianName || null,
-        guardian_phone: registerHousehold && parentRoles.includes(householdRegistrationRole as any) ? formData.guardian_phone || null : applicationGuardianPhone || null,
+        guardian_names: registerHousehold && [...parentRoles,'husband','wife'].includes(householdRegistrationRole as any) ? formData.guardian_names || null : applicationGuardianName || null,
+        guardian_phone: registerHousehold && [...parentRoles,'husband','wife'].includes(householdRegistrationRole as any) ? formData.guardian_phone || null : applicationGuardianPhone || null,
         family_details: applicationFamilyDetails || null,
         first_name: effectiveFirstName,
         last_name: effectiveLastName,
@@ -1305,10 +1371,10 @@ export const MembersPage: React.FC = () => {
 
     const parentsList: HouseholdFamilyMember[] = [];
     if (fName) {
-      parentsList.push({ name: fName, relationship: "Father", member_id: findMemberId(fName) });
+      parentsList.push({ name: fName, relationship: "Husband", member_id: findMemberId(fName) });
     }
     if (mName) {
-      parentsList.push({ name: mName, relationship: "Mother", member_id: findMemberId(mName) });
+      parentsList.push({ name: mName, relationship: "Wife", member_id: findMemberId(mName) });
     }
     if (gName) parentsList.push({ name: gName, relationship: "Guardian", member_id: findMemberId(gName) });
     for (const parent of parentsList) {
@@ -1578,7 +1644,7 @@ export const MembersPage: React.FC = () => {
   const canEdit = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
   const guideData = useGuideDataState("members", { loading, count: totalRecords, filtered: Boolean(searchQuery || filterMinistry || membershipFilter !== "all" || birthdayFilter !== "all"), retry: () => loadData() });
 
-  if (loading && members.length === 0) {
+  if (isInitialMemberLoad) {
     return <MembersPageSkeleton />;
   }
 
@@ -1634,59 +1700,27 @@ export const MembersPage: React.FC = () => {
   };
 
   const agingOutCount = members.filter(m => m.is_aging_out).length;
+  const followUpCount = members.filter(m => m.status !== "inactive" && m.status !== "visitor" &&
+    (m.attendance_health === "action_required" || (m.consecutive_absences && m.consecutive_absences >= 3))).length;
 
   return (
-    <div className="space-y-6">
+    <div className="members-page directory-design space-y-6">
       {/* Header & Controls Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 space-y-2">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <Users className="w-3.5 h-3.5 text-amber-300" />
-              <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Church-Wide Directory"}</span>
-            </div>
-            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
-              {totalRecords} Active Records
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
-            Members & Family Directory
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-            Individual member profiles, households, birthdays, medical alerts, and age-based ministry tracking.
-          </p>
-        </div>
-
-        {/* Action Buttons */}
-        {canEdit && (
+      <PageHeader icon={<Users />} title={<>Members & Family Directory</>}
+        description={<>Individual member profiles, households, birthdays, medical alerts, and age-based ministry tracking.</>}
+        meta={<>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Church-wide directory"} · {totalRecords} active records</>}
+        actions={<>{canEdit && (
           <div className="relative z-10 flex items-center gap-2.5 flex-wrap shrink-0">
-            <button data-guide="household-create"
-              onClick={() => openHouseholdForm()}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
-            >
-              <Home className="w-4 h-4 text-amber-300" />
+            <Button data-guide="household-create" onClick={() => openHouseholdForm()} variant="secondary">
+              <Home className="w-4 h-4 " />
               <span>New Household</span>
-            </button>
-            <button data-guide="member-import"
-              type="button"
-              onClick={handleOpenAddWithImport}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
-              title="Import and analyze member registration form photo or document"
-            >
-              <FileUp className="w-4 h-4 text-sky-300" />
+            </Button>
+            <Button data-guide="member-import" type="button" onClick={handleOpenAddWithImport} title="Import and analyze member registration form photo or document" variant="secondary">
+              <FileUp className="w-4 h-4 " />
               <span>Import Form / File</span>
-            </button>
+            </Button>
           </div>
-        )}
-      </div>
+        )}</>} />
 
       {/* Aging-Out Quick Promotion Banner */}
       {agingOutCount > 0 && canEdit && (
@@ -1720,15 +1754,15 @@ export const MembersPage: React.FC = () => {
       )}
 
       {/* Tabs, Search & Birthday Filter Bar */}
-      <div ref={directoryToolbarRef} data-directory-toolbar className="sticky top-0 z-30 space-y-2 rounded-3xl bg-ivory-light py-2">
-        <div className="bg-white p-3 rounded-3xl border border-indigo-100/90 shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <div ref={directoryToolbarRef} data-directory-toolbar className="sticky top-0 z-30 space-y-2 rounded-3xl bg-[var(--surface-2)] py-2">
+        <div className="bg-white p-3 rounded-2xl border border-stone-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
           {/* Tab switchers */}
-          <div className="flex items-center bg-indigo-50/60 p-1.5 rounded-2xl w-full xl:w-auto border border-indigo-100/60">
+          <div className="page-tabs flex items-center bg-indigo-50/60 p-1.5 rounded-2xl w-full xl:w-auto border border-indigo-100/60">
             <button data-guide="members-tab"
               onClick={() => setActiveTab("members")}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${activeTab === "members" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-muted hover:text-indigo-950"
                 }`}
-            >
+             aria-pressed={activeTab === "members"}>
               <Users className="w-3.5 h-3.5 text-indigo-700" />
               <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Disciples (${totalRecords})` : `All Members (${totalRecords})`}</span>
             </button>
@@ -1736,14 +1770,32 @@ export const MembersPage: React.FC = () => {
               onClick={() => setActiveTab("households")}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${activeTab === "households" ? "bg-white text-indigo-950 shadow-xs border border-indigo-100" : "text-muted hover:text-indigo-950"
                 }`}
-            >
+             aria-pressed={activeTab === "households"}>
               <Home className="w-3.5 h-3.5 text-amber-600" />
-              <span>Households ({households.length})</span>
+              <span>Households ({householdTotal})</span>
             </button>
           </div>
 
           {/* Search & Filter */}
-          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
+          <div className="flex flex-wrap items-center gap-2">
+
+            {canEdit && (
+              <Button variant="primary"
+                type="button"
+                onClick={handleOpenAdd}
+                data-guide="member-add"
+                className="whitespace-nowrap shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Member</span>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Membership Status & Attendance Health Filter Bar */}
+        <FilterPanel title="Directory filters" summary={[searchQuery, filterMinistry && ministries.find(m => String(m.id) === String(filterMinistry))?.name, activeTab === "members" && (membershipFilter === "all" ? "All members" : membershipFilter.replace(/_/g, " ")), activeTab === "members" && birthdayFilter !== "all" && birthdayFilter.replace(/_/g, " ")].filter(Boolean).join(" · ") || "All households"}>
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[160px] xl:w-56">
               <Search className="w-4 h-4 text-muted absolute left-3.5 top-3" />
               <input
@@ -1754,7 +1806,7 @@ export const MembersPage: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && loadData()}
-                className="w-full bg-ivory-light/60 pl-10 pr-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo focus:bg-white transition-all"
+                className="w-full bg-[var(--surface-2)] pl-10 pr-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo focus:bg-white transition-all"
               />
             </div>
 
@@ -1769,7 +1821,7 @@ export const MembersPage: React.FC = () => {
                 aria-label="Filter by ministry"
                 value={filterMinistry}
                 onChange={(e) => setFilterMinistry(e.target.value)}
-                className="bg-ivory-light/60 px-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo font-medium text-indigo-950 transition-all cursor-pointer"
+                className="bg-[var(--surface-2)] px-3.5 py-2 rounded-2xl text-xs border border-indigo-100 focus:outline-none focus:border-indigo font-medium text-indigo-950 transition-all cursor-pointer"
               >
                 <option value="">All Ministries</option>
                 {ministries.map((m) => (
@@ -1779,23 +1831,9 @@ export const MembersPage: React.FC = () => {
                 ))}
               </select>
             )}
-            {canEdit && (
-              <button
-                type="button"
-                onClick={handleOpenAdd}
-                data-guide="member-add"
-                className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-3 py-2 rounded-xl text-xs shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Member</span>
-              </button>
-            )}
           </div>
-        </div>
-
-        {/* Membership Status & Attendance Health Filter Bar */}
-        {activeTab === "members" && (
-          <div className="space-y-2">
+          {activeTab === "members" && (
+          <div className="filter-panel-layout space-y-2">
             {/* Status Categories */}
             <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap bg-white p-2.5 rounded-2xl border border-indigo-100/90 shadow-2xs text-xs [&>*]:shrink-0">
               <span className="font-medium text-indigo-950 flex items-center gap-1.5 mr-1 text-[12px] uppercase tracking-wider">
@@ -1813,6 +1851,7 @@ export const MembersPage: React.FC = () => {
               ].map(pill => (
                 <button
                   key={pill.id}
+                  aria-pressed={membershipFilter === pill.id}
                   onClick={() => setMembershipFilter(pill.id)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${membershipFilter === pill.id
                     ? "bg-indigo-900 text-white shadow-xs border border-indigo-800 scale-[1.02]"
@@ -1886,7 +1925,8 @@ export const MembersPage: React.FC = () => {
               )}
             </div>
           </div>
-        )}
+          )}
+        </FilterPanel>
       </div>
 
       {/* Main Content Area */}
@@ -1894,7 +1934,14 @@ export const MembersPage: React.FC = () => {
         loading && members.length === 0 ? (
           <TableSkeleton rows={8} columns={7} />
         ) : (
-          <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
+          <div className="members-table-card bg-white/95 rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="members-follow-up-bar">
+              <button type="button" className="members-follow-up-chip" data-count={followUpCount} aria-pressed={membershipFilter === "action_required"}
+                title="Show members needing action. Count reflects the currently loaded page."
+                onClick={() => setMembershipFilter("action_required")}>
+                <AlertCircle size={14} aria-hidden="true" />{followUpCount} need follow-up on this page
+              </button>
+            </div>
             <div
               ref={memberListRef}
               role="region"
@@ -1903,7 +1950,7 @@ export const MembersPage: React.FC = () => {
               className="overflow-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 focus-visible:-outline-offset-2"
               style={{ maxHeight: memberListMaxHeight ?? "60vh" }}
             >
-              <table className="w-full min-w-[1100px] text-left text-xs">
+              <table className="members-table w-full min-w-[1100px] text-left text-xs">
                 <thead className="sticky top-0 z-10 bg-indigo-50 text-indigo-950 uppercase text-[12px] font-medium tracking-wider border-b border-indigo-100">
                   <tr>
                     <th scope="col" className="p-4">Member Name</th>
@@ -1953,7 +2000,7 @@ export const MembersPage: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <span
                             className="w-3 h-3 rounded-full shadow-inner ring-1 ring-white shrink-0"
-                            style={{ backgroundColor: m.ministry_color || "#2C3968" }}
+                            style={{ backgroundColor: m.ministry_color || "var(--navy)" }}
                           />
                           <span className="font-medium text-indigo-950">{m.ministry_name || "Unassigned"}</span>
                           {m.is_aging_out && (
@@ -2014,42 +2061,42 @@ export const MembersPage: React.FC = () => {
                         <div className="space-y-1">
                           {/* Hybrid Status Badge */}
                           {m.status === "visitor" || m.membership_type === "guest" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
+<Badge variant="warning" className="member-badge member-badge--guest">
 
                               <span>Guest / Visitor</span>
-                            </span>
+                            </Badge>
                           ) : m.status === "inactive" || m.membership_type === "inactive" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+<Badge variant="neutral" className="member-badge member-badge--inactive">
 
                               <span>Inactive / Absent</span>
-                            </span>
+                            </Badge>
                           ) : m.is_baptized || m.baptism_status === "baptized" || m.membership_type === "baptized_regular" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-indigo-50 text-indigo-950 border border-indigo-200 shadow-2xs">
+<Badge variant="info" className="member-badge member-badge--baptized">
 
                               <span>Baptized Regular</span>
-                            </span>
+                            </Badge>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-sky-50 text-sky-950 border border-sky-200 shadow-2xs">
+<Badge variant="info" className="member-badge member-badge--regular">
 
                               <span>Regular (Unbaptized)</span>
-                            </span>
+                            </Badge>
                           )}
 
                           {/* Attendance Health / Inactivity Warning Pills */}
                           {m.status !== "inactive" && m.status !== "visitor" && (
                             m.attendance_health === "action_required" || (m.consecutive_absences && m.consecutive_absences >= 3) ? (
                               <div>
-                                <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-rose-100 text-rose-950 border border-rose-300 px-2 py-0.5 rounded-md animate-pulse shadow-2xs" title="Consecutive absences in Sunday Service / Bible Study">
-                                  <AlertCircle className="w-3 h-3 text-rose-600" />
-                                  <span>Action Required: {m.consecutive_absences ? `${m.consecutive_absences} Absences` : "Absent 3+ wks"}</span>
-                                </span>
+<Badge variant="danger" className="member-badge member-badge--attention" title={`Action Required: ${m.consecutive_absences ? `${m.consecutive_absences} consecutive absences` : "Absent 3+ weeks"} in Sunday Service / Bible Study`}>
+                                  <AlertCircle className="w-3 h-3" aria-hidden="true" />
+                                  <span>Action Required{m.consecutive_absences ? ` · ${m.consecutive_absences}` : ""}</span>
+                                </Badge>
                               </div>
                             ) : m.attendance_health === "warning" || (m.consecutive_absences && m.consecutive_absences >= 1) ? (
                               <div>
-                                <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs" title="Recent absence in Sunday Service or Bible Study">
-                                  <AlertTriangle className="w-3 h-3 text-amber-700" />
-                                  <span>Warning: {m.consecutive_absences ? `${m.consecutive_absences} Absence${m.consecutive_absences > 1 ? "s" : ""}` : "Missed Service"}</span>
-                                </span>
+<Badge variant="warning" className="member-badge member-badge--attention" title={`Warning: ${m.consecutive_absences ? `${m.consecutive_absences} recent absences` : "Missed service"} in Sunday Service / Bible Study`}>
+                                  <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                                  <span>Warning{m.consecutive_absences ? ` · ${m.consecutive_absences}` : ""}</span>
+                                </Badge>
                               </div>
                             ) : null
                           )}
@@ -2057,81 +2104,11 @@ export const MembersPage: React.FC = () => {
                       </td>
 
                       <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAttendanceSummaryInitialTab("overview");
-                              setAttendanceSummaryMember(m);
-                            }}
-                            title="Attendance Intelligence, Rates & Streaks"
-                            className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 transition-all active:scale-95 shadow-2xs cursor-pointer flex items-center gap-1"
-                          >
-                            <TrendingUp className="w-3.5 h-3.5 text-indigo-700" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAttendanceSummaryInitialTab("milestones");
-                              setAttendanceSummaryMember(m);
-                            }}
-                            title="Water Baptism Milestones & Attendance Tracker"
-                            className="p-2 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-950 border border-cyan-200 transition-all active:scale-95 shadow-2xs cursor-pointer flex items-center gap-1"
-                          >
-                            <Calendar className="w-3.5 h-3.5 text-cyan-700" />
-                            {m.baptism_status === "candidate" || m.baptism_status === "scheduled" ? (
-                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" />
-                            ) : null}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenGreeting(m);
-                            }}
-                            title="Send Birthday Blessing"
-                            className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 transition-all active:scale-95 shadow-2xs cursor-pointer"
-                          >
-                            <Gift className="w-3.5 h-3.5 text-amber-600" />
-                          </button>
-                          <button data-guide="member-details"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedMember(m);
-                            }}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-medium text-xs px-3 py-1.5 rounded-xl border border-indigo-200/80 transition-all active:scale-95 cursor-pointer shadow-2xs"
-                          >
-                            Details
-                          </button>
-                          {canEdit && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenEdit(m);
-                                }}
-                                title="Edit Member Record"
-                                className="p-2 rounded-xl bg-gray-50 hover:bg-indigo-50 text-indigo-950 border border-gray-200 hover:border-indigo-300 transition-all active:scale-95 shadow-2xs cursor-pointer"
-                              >
-                                <Pencil className="w-3.5 h-3.5 text-indigo-600" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeleteConfirmMember(m);
-                                }}
-                                title="Delete Member Record"
-                                className="p-2 rounded-xl bg-gray-50 hover:bg-rose-50 text-rose-600 border border-gray-200 hover:border-rose-300 transition-all active:scale-95 shadow-2xs cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                              </button>
-                            </>
-                          )}
-                        </div>
+                        <MemberRowActions name={memberName(m)} canEdit={canEdit}
+                          onDetails={() => setSelectedMember(m)} onEdit={() => handleOpenEdit(m)}
+                          onOverview={() => { setAttendanceSummaryInitialTab("overview"); setAttendanceSummaryMember(m); }}
+                          onMilestones={() => { setAttendanceSummaryInitialTab("milestones"); setAttendanceSummaryMember(m); }}
+                          onGreeting={() => handleOpenGreeting(m)} onDelete={() => setDeleteConfirmMember(m)} />
                       </td>
                     </tr>
                   ))}
@@ -2171,6 +2148,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(1)}
                     disabled={currentPage === 1 || loading}
                     title="First Page"
+                    aria-label="First Page"
                     className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronsLeft className="w-4 h-4" />
@@ -2181,6 +2159,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1 || loading}
                     title="Previous Page"
+                    aria-label="Previous Page"
                     className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -2217,6 +2196,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages || loading}
                     title="Next Page"
+                    aria-label="Next Page"
                     className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronRight className="w-4 h-4" />
@@ -2227,6 +2207,7 @@ export const MembersPage: React.FC = () => {
                     onClick={() => handlePageChange(totalPages)}
                     disabled={currentPage === totalPages || loading}
                     title="Last Page"
+                    aria-label="Last Page"
                     className="p-1.5 rounded-xl border border-indigo-100 text-muted hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <ChevronsRight className="w-4 h-4" />
@@ -2239,8 +2220,8 @@ export const MembersPage: React.FC = () => {
       ) : (
         /* Households Tab */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {households.map((h) => (
-            <div key={h.id} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm flex flex-col justify-between hover:border-amber-300 transition-all">
+          {householdRows.map((h) => (
+            <div key={h.id} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm flex flex-col justify-between hover:border-amber-300 transition-all">
               <div>
                 <div className="flex items-center justify-between mb-3 pb-3 border-b border-indigo-50">
                   <div className="flex items-center gap-3">
@@ -2258,7 +2239,7 @@ export const MembersPage: React.FC = () => {
                 </div>
 
                 {h.primary_contact_phone && (
-                  <div className="text-xs text-charcoal/70 flex items-center gap-1.5 my-2.5 bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                  <div className="text-xs text-charcoal/70 flex items-center gap-1.5 my-2.5 bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                     <Phone className="w-3.5 h-3.5 text-emerald-600" />
                     <span className="font-mono text-[12px] font-medium text-indigo-950">{h.primary_contact_phone}</span>
                   </div>
@@ -2266,9 +2247,9 @@ export const MembersPage: React.FC = () => {
 
                 {/* Family Members list */}
                 <div className="mt-3.5 space-y-2">
-                  <p className="text-[12px] font-medium uppercase tracking-wider text-muted">Family Tree & Ministries</p>
+                  <p className="text-[12px] font-medium uppercase tracking-wider text-muted">Household members & ministries</p>
                   {householdFamily(h).entries.map((entry) => (
-                    <div key={entry.member?.id || entry.name} className="flex items-center justify-between gap-2 text-xs p-2.5 rounded-xl bg-ivory-light/70 border border-indigo-50/80">
+                    <div key={entry.member?.id || entry.name} className="flex items-center justify-between gap-2 text-xs p-2.5 rounded-xl bg-[var(--surface-2)] border border-indigo-50/80">
                       <div className="min-w-0">
                         <span className="font-medium text-indigo-950">{entry.name}</span>
                         {entry.member?.age != null && <span className="ml-2 text-[12px] text-muted font-medium">({entry.member.age} yrs)</span>}
@@ -2277,10 +2258,11 @@ export const MembersPage: React.FC = () => {
                       {entry.member?.ministry_name && <span className="shrink-0 text-[12px] font-medium text-indigo-950 bg-white border border-indigo-100 px-2 py-0.5 rounded-md shadow-2xs">{entry.member.ministry_name}</span>}
                     </div>
                   ))}
-                  {!h.father_name && !h.mother_name && <p className="text-[12px] text-muted">Set the father or mother to reflect them in applications.</p>}
+                  {!h.father_name && !h.mother_name && <p className="text-[12px] text-muted">Add household heads and record each person's role.</p>}
                   <button data-guide="household-edit" type="button" onClick={() => openHouseholdForm(h)} className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 hover:underline cursor-pointer">
                     <Pencil className="w-3.5 h-3.5" /> Edit household & family
                   </button>
+                  <Button size="sm" onClick={()=>setTreeHousehold(h)}><GitBranch aria-hidden="true" className="w-4 h-4"/>View Family Tree</Button>
                 </div>
               </div>
             </div>
@@ -2288,10 +2270,13 @@ export const MembersPage: React.FC = () => {
         </div>
       )}
 
+      {activeTab === "households" && <Pagination label="households" page={householdPage.page} pageSize={householdPage.pageSize} total={householdTotal} onPageChange={householdPage.setPage} onPageSizeChange={householdPage.setPageSize} loading={householdLoading} />}
+
       {/* Member Details Centered Modal */}
+      {treeHousehold && <FamilyTreeModal household={treeHousehold} households={households} members={allChurchMembers.length?allChurchMembers:members} onClose={()=>setTreeHousehold(null)}/>}
       {selectedMember && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <ModalPanel data-modal-panel className="w-full max-w-2xl lg:max-w-3xl bg-white rounded-3xl shadow-2xl p-6 sm:p-8 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100 animate-in fade-in zoom-in duration-200">
+          <ModalPanel data-modal-panel className="directory-design w-full max-w-2xl lg:max-w-3xl bg-white rounded-3xl shadow-2xl p-6 sm:p-8 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100 animate-in fade-in zoom-in duration-200">
             <div data-modal-header className="flex items-center justify-between pb-4 border-b border-indigo-50">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-indigo-900 text-white font-medium text-xl flex items-center justify-center shadow-md ring-4 ring-indigo-50 shrink-0">
@@ -2301,27 +2286,27 @@ export const MembersPage: React.FC = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl font-semibold text-indigo-950">{selectedMember.first_name} {selectedMember.last_name}</h2>
                     {selectedMember.status === "visitor" || selectedMember.membership_type === "guest" ? (
-                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 uppercase tracking-wider border border-amber-300 shadow-2xs">
+<Badge variant="warning" className="member-badge member-badge--guest">
                         Guest / Visitor
-                      </span>
+                      </Badge>
                     ) : selectedMember.status === "inactive" || selectedMember.membership_type === "inactive" ? (
-                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase tracking-wider border border-slate-300 shadow-2xs">
+<Badge variant="neutral" className="member-badge member-badge--inactive">
                         Inactive / Absent
-                      </span>
+                      </Badge>
                     ) : selectedMember.is_baptized || selectedMember.baptism_status === "baptized" || selectedMember.membership_type === "baptized_regular" ? (
-                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-950 uppercase tracking-wider border border-indigo-300 shadow-2xs">
+<Badge variant="info" className="member-badge member-badge--baptized">
                         Baptized Regular Member
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-950 uppercase tracking-wider border border-sky-300 shadow-2xs">
+<Badge variant="info" className="member-badge member-badge--regular">
                         Regular Member (Unbaptized)
-                      </span>
+                      </Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <span
                       className="w-2.5 h-2.5 rounded-full shadow-inner ring-1 ring-white"
-                      style={{ backgroundColor: selectedMember.ministry_color || "#2C3968" }}
+                      style={{ backgroundColor: selectedMember.ministry_color || "var(--navy)" }}
                     />
                     <span className="text-xs font-medium text-charcoal/70">
                       {selectedMember.ministry_name || "Unassigned Ministry"}
@@ -2464,7 +2449,7 @@ export const MembersPage: React.FC = () => {
             {/* Profile Grid Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               {/* Card 1: Member Demographics */}
-              <div className="p-4 bg-ivory-light/70 rounded-2xl border border-indigo-100/70 space-y-2">
+              <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-indigo-100/70 space-y-2">
                 <p className="font-medium text-indigo-950 text-[12px] uppercase tracking-wider">Personal Details</p>
                 <div className="flex justify-between">
                   <span className="text-muted">Age:</span>
@@ -2491,7 +2476,7 @@ export const MembersPage: React.FC = () => {
               </div>
 
               {/* Card 2: Household & Ministry */}
-              <div className="p-4 bg-ivory-light/70 rounded-2xl border border-indigo-100/70 space-y-2">
+              <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-indigo-100/70 space-y-2">
                 <p className="font-medium text-indigo-950 text-[12px] uppercase tracking-wider">Household & Ministry</p>
                 <div className="flex justify-between">
                   <span className="text-muted">Household:</span>
@@ -2733,7 +2718,7 @@ export const MembersPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   {selectedMember.address && (
-                    <div className="sm:col-span-2 flex items-start gap-2 bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="sm:col-span-2 flex items-start gap-2 bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
                       <div>
                         <span className="text-[12px] text-muted block font-medium">Address</span>
@@ -2747,7 +2732,7 @@ export const MembersPage: React.FC = () => {
                     <MemberFamilySection member={selectedMember} household={selectedHousehold} canEdit={canEdit}
                       onViewMember={setSelectedMember} onRegister={setRelativeChoice} />
                   ) : (selectedGuardian || selectedMember.guardian_phone) ? (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">Parents / Emergency Contact</span>
                       <span className="text-indigo-950 font-medium">{selectedGuardian || "Unlisted"}</span>
                       {selectedGuardianPhone && (
@@ -2757,7 +2742,7 @@ export const MembersPage: React.FC = () => {
                   ) : null}
 
                   {selectedMember.school_name && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">
                         {selectedMember.occupation ? "School / College Graduated" : "School / College"}
                       </span>
@@ -2769,14 +2754,14 @@ export const MembersPage: React.FC = () => {
                   )}
 
                   {selectedMember.occupation && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">Occupation / Workplace</span>
                       <span className="text-indigo-950 font-medium">{selectedMember.occupation}</span>
                     </div>
                   )}
 
                   {selectedMember.class_schedule && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">
                         {selectedMember.occupation ? "Work / Availability Schedule" : "Class Schedule"}
                       </span>
@@ -2785,14 +2770,14 @@ export const MembersPage: React.FC = () => {
                   )}
 
                   {selectedMember.hobbies && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">Hobbies</span>
                       <span className="text-indigo-950 font-medium">{selectedMember.hobbies}</span>
                     </div>
                   )}
 
                   {selectedMember.invited_by && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">Who Invited in DPC?</span>
                       <div className="flex items-center justify-between gap-1 mt-0.5">
                         <span className="text-indigo-950 font-medium">{selectedMember.invited_by}</span>
@@ -2811,14 +2796,14 @@ export const MembersPage: React.FC = () => {
                   )}
 
                   {selectedMember.previous_church && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">Previous Church</span>
                       <span className="text-indigo-950 font-medium">{selectedMember.previous_church}</span>
                     </div>
                   )}
 
                   {selectedMember.facebook_account && (
-                    <div className="bg-ivory-light/60 p-2.5 rounded-xl border border-indigo-50">
+                    <div className="bg-[var(--surface-2)] p-2.5 rounded-xl border border-indigo-50">
                       <span className="text-[12px] text-muted block font-medium">Facebook Account</span>
                       <span className="text-indigo-950 font-medium">{selectedMember.facebook_account}</span>
                     </div>
@@ -2916,7 +2901,7 @@ export const MembersPage: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <div className="p-3.5 bg-ivory-light/50 rounded-xl border border-dashed border-indigo-200/80 text-center text-muted text-xs">
+                <div className="p-3.5 bg-[var(--surface-2)] rounded-xl border border-dashed border-indigo-200/80 text-center text-muted text-xs">
                   <p className="font-medium text-[12px]">
                     No members or visitors currently registered under {selectedMember.first_name}'s invitation.
                   </p>
@@ -2978,7 +2963,7 @@ export const MembersPage: React.FC = () => {
       {/* Discipleship & Outreach Full Modal: People Invited by Member */}
       {isInvitedMembersModalOpen && selectedMember && createPortal(
         <div className="fixed inset-0 z-[120] bg-charcoal/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div data-modal-panel className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+          <div data-modal-panel className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-indigo-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
             {/* Modal Header */}
             <div data-modal-header className="p-5 sm:p-6 bg-gradient-to-r from-indigo-950 via-indigo-900 to-indigo-950 text-white border-b border-indigo-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -3104,7 +3089,7 @@ export const MembersPage: React.FC = () => {
                             )}
                           </div>
                           {invited.contact_phone && (
-                            <div className="text-[11px] text-muted flex items-center gap-1 mt-1">
+                            <div className="text-[12px] text-muted flex items-center gap-1 mt-1">
                               <Phone className="w-3 h-3 text-emerald-600" />
                               <span>{invited.contact_phone}</span>
                             </div>
@@ -3123,7 +3108,7 @@ export const MembersPage: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div className="p-8 text-center text-muted space-y-2 bg-ivory-light/40 rounded-2xl border border-dashed border-indigo-200">
+                <div className="p-8 text-center text-muted space-y-2 bg-[var(--surface-2)] rounded-2xl border border-dashed border-indigo-200">
                   <Users className="w-8 h-8 text-indigo-300 mx-auto" />
                   <p className="font-medium text-xs text-charcoal">
                     No invited members match your current filter
@@ -3164,60 +3149,19 @@ export const MembersPage: React.FC = () => {
 
 
       {/* Delete Member Confirmation Modal */}
-      {deleteConfirmMember && createPortal(
-        <div className="fixed inset-0 z-[110] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-rose-100 animate-in fade-in zoom-in-95 duration-150">
-            <div data-modal-header className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-rose-100 text-rose-600 shrink-0">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-charcoal">Delete Member Record</h3>
-                <p className="text-xs text-muted">This action will remove the record permanently.</p>
-              </div>
-            </div>
-
-            <div className="p-3.5 bg-rose-50/70 rounded-2xl border border-rose-200/80 text-xs text-rose-950 space-y-1">
-              <p>
-                Are you sure you want to delete <strong>{deleteConfirmMember.first_name} {deleteConfirmMember.last_name}</strong>?
-              </p>
-              <p className="text-[12px] text-rose-800">
-                Ministry: <strong>{deleteConfirmMember.ministry_name || "Unassigned"}</strong> • Age: <strong>{deleteConfirmMember.age || "N/A"} yrs</strong>
-              </p>
-            </div>
-
-            <div data-modal-footer className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => setDeleteConfirmMember(null)}
-                className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal font-medium text-xs transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isDeleting}
-                onClick={() => handleDeleteMember(null)}
-                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {isDeleting ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Yes, Delete Member</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </ModalPanel>
-        </div>,
-        document.body
-      )}
+      {deleteConfirmMember && <MemberDeleteDialog onClose={() => setDeleteConfirmMember(null)} busy={isDeleting}
+        footer={<>
+          <Button variant="secondary" data-dialog-autofocus disabled={isDeleting} onClick={() => setDeleteConfirmMember(null)}>Cancel</Button>
+          <Button variant="destructive" disabled={isDeleting} onClick={() => handleDeleteMember(null)}>
+            {isDeleting ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /><span>Deleting...</span></>
+              : <><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /><span>Yes, Delete Member</span></>}
+          </Button>
+        </>}>
+        <div className="member-delete-notice space-y-1">
+          <p>Are you sure you want to delete <strong>{deleteConfirmMember.first_name} {deleteConfirmMember.last_name}</strong>?</p>
+          <p>Ministry: <strong>{deleteConfirmMember.ministry_name || "Unassigned"}</strong> • Age: <strong>{deleteConfirmMember.age || "N/A"} yrs</strong></p>
+        </div>
+      </MemberDeleteDialog>}
       {relativeChoice && <RelativeRegistrationModal context={relativeChoice} households={households}
         onClose={() => setRelativeChoice(null)} onCreate={relationship => registerRelative(relativeChoice, relationship)}
         onLink={(member, relationship) => linkRelative(relativeChoice, member, relationship)} />}
@@ -3228,7 +3172,6 @@ export const MembersPage: React.FC = () => {
           const isHighSchool = currentMinName.includes("high") || currentMinName.includes("school");
           const isYouth = currentMinName.includes("youth") && !currentMinName.includes("adult");
           const isYoungAdult = currentMinName.includes("young");
-          const isJuniorAdult = currentMinName.includes("junior");
           const isOldAdult = currentMinName.includes("old") || currentMinName.includes("senior");
           const renderFamilyDetails = (label = "Family Members (Parents & siblings)", placeholder = "e.g. Parents, 2 siblings") => (
             <MemberFamilyDetailsField household={linkedHousehold} details={formData.family_details}
@@ -3253,7 +3196,7 @@ export const MembersPage: React.FC = () => {
               <div className={`flex items-center justify-center gap-5 w-full ${registrationStep === "partner" ? "max-w-[1400px]" : "max-w-3xl"}`}>
                 <ModalPanel data-modal-panel role={registrationStep === "member" ? "dialog" : undefined} aria-modal={registrationStep === "member" ? true : undefined} aria-label={editingMember ? "Edit Member" : "Add New Member Record"}
                   inert={registrationStep === "partner" || isSavingMember}
-                  className={`bg-white rounded-3xl w-full min-w-0 p-6 sm:p-8 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto border border-indigo-100/80 ${registrationStep === "partner" ? "hidden xl:flex xl:flex-1 brightness-90" : ""}`}>
+                  className={`directory-design bg-white rounded-3xl w-full min-w-0 p-6 sm:p-8 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto border border-indigo-100/80 ${registrationStep === "partner" ? "hidden xl:flex xl:flex-1 brightness-90" : ""}`}>
                   {createNewSpouseRecord && <p className="text-[12px] font-medium uppercase tracking-widest text-indigo-600">Step 1 of 2 · Main Member</p>}
                   <div data-modal-header className="flex items-center justify-between">
                     <h2 className="text-base sm:text-lg font-semibold text-charcoal flex items-center gap-2">
@@ -3369,21 +3312,21 @@ export const MembersPage: React.FC = () => {
                         </label>
                         {/* Live Resulting Status Pill */}
                         {formData.status === "visitor" ? (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-amber-100 text-amber-950 border border-amber-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+<Badge variant="warning" className="member-badge member-badge--guest">
                             Guest / Visitor
-                          </span>
+                          </Badge>
                         ) : formData.status === "inactive" ? (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-slate-100 text-slate-700 border border-slate-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+<Badge variant="neutral" className="member-badge member-badge--inactive">
                             Inactive / Absent
-                          </span>
+                          </Badge>
                         ) : formData.baptism_status === "baptized" || formData.is_baptized ? (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-indigo-100 text-indigo-950 border border-indigo-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+<Badge variant="info" className="member-badge member-badge--baptized">
                             Baptized Regular Member
-                          </span>
+                          </Badge>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-medium bg-sky-100 text-sky-950 border border-sky-300 px-2.5 py-0.5 rounded-full shadow-2xs">
+<Badge variant="info" className="member-badge member-badge--regular">
                             Regular Member (Unbaptized)
-                          </span>
+                          </Badge>
                         )}
                       </div>
 
@@ -3463,7 +3406,7 @@ export const MembersPage: React.FC = () => {
                             data-guide="member-name"
                             value={fullNameInput}
                             onChange={(e) => handleFullNameChange(e.target.value)}
-                            className={`w-full bg-ivory-light p-2.5 rounded-xl border text-xs font-medium transition-all focus:outline-none pr-9 ${liveDuplicateMember
+                            className={`w-full bg-[var(--surface-2)] p-2.5 rounded-xl border text-xs font-medium transition-all focus:outline-none pr-9 ${liveDuplicateMember
                               ? "border-amber-400 bg-amber-50/40 text-amber-950 focus:border-amber-500 focus:ring-1 focus:ring-amber-400"
                               : duplicateCheck.state.status === "success"
                                 ? "border-emerald-300 bg-emerald-50/20 focus:border-emerald-500"
@@ -3539,7 +3482,7 @@ export const MembersPage: React.FC = () => {
                           <select
                             value={formData.gender}
                             onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                            className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo h-[41px] text-xs font-medium"
+                            className="w-full bg-[var(--surface-2)] p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo h-[41px] text-xs font-medium"
                           >
                             <option value="Male">Male</option>
                             <option value="Female">Female</option>
@@ -3709,7 +3652,7 @@ export const MembersPage: React.FC = () => {
                         value={coordinatorMinistryId ? String(coordinatorMinistryId) : formData.ministry_id}
                         onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
                         disabled={!!coordinatorMinistryId}
-                        className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal disabled:opacity-90 disabled:bg-gray-100 text-xs"
+                        className="w-full bg-[var(--surface-2)] p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal disabled:opacity-90 disabled:bg-gray-100 text-xs"
                       >
                         {coordinatorMinistryId ? (
                           <option value={coordinatorMinistryId}>{coordinatorMinistryName} Ministry (Assigned)</option>
@@ -3730,12 +3673,12 @@ export const MembersPage: React.FC = () => {
                         <div>
                           <label className="font-medium text-indigo-950 text-xs flex items-center gap-1.5">
                             <Home className="w-4 h-4 text-indigo-700" />
-                            <span>Household & Family Linkage:</span>
+                            <span>Your household</span>
                           </label>
                           <p className="text-[12px] text-muted mt-0.5">
                             {(isJuniorAdult || isOldAdult)
-                              ? "Choose a registered household or create a new family household."
-                              : "Choose a registered household or register as an individual profile."}
+                              ? "Where you and your family live now. Create a household or join an existing one."
+                              : "Where you live now. Join a household or keep an individual profile."}
                           </p>
                         </div>
 
@@ -3808,15 +3751,31 @@ export const MembersPage: React.FC = () => {
                               placeholder="e.g. Dela Cruz Household / Juan & Maria Family"
                               value={newHouseholdName}
                               onChange={(e) => setNewHouseholdName(e.target.value)}
-                              className="w-full bg-ivory-light p-2.5 rounded-xl border border-amber-300 text-xs font-medium text-indigo-950 focus:outline-none focus:border-amber-500"
+                              className="w-full bg-[var(--surface-2)] p-2.5 rounded-xl border border-amber-300 text-xs font-medium text-indigo-950 focus:outline-none focus:border-amber-500"
                             />
                           </div>
 
                           <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[12px] text-amber-950 flex items-start gap-1.5">
                             <Home className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
                             <span>
-                              Upon saving, a new household <strong>"{newHouseholdName || `${formData.last_name || 'New'} Household`}"</strong> will be created at the address above. Both this member and spouse (if married) will be automatically assigned to it.
+                              Created when you save, using the address above. Your selected or newly registered spouse will be included.
                             </span>
+                          </div>
+                          <div aria-label="Household preview" className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2">
+                            <p className="text-xs font-semibold text-indigo-950">Members in this household</p>
+                            <div className="grid sm:grid-cols-2 gap-2">
+                              <div className="rounded-lg border border-indigo-100 bg-white p-3">
+                                <p className="font-medium text-sm">{memberName(formData).trim() || 'Your name'} — {householdRegistrationRole ? householdRoleLabels[householdRegistrationRole] : 'Household member'}</p>
+                                <p className="text-xs text-muted mt-1">You</p>
+                              </div>
+                              {formData.civil_status === 'Married' && (
+                                <div className="rounded-lg border border-indigo-100 bg-white p-3">
+                                  <p className="font-medium text-sm">{createNewSpouseRecord ? (spouseFormData.first_name.trim() ? `${spouseFormData.first_name} ${spouseFormData.last_name || formData.last_name}` : 'Register spouse in the next step') : (formData.spouse_name || 'Select your spouse above')}</p>
+                                  <p className="text-xs text-muted mt-1">Spouse{createNewSpouseRecord ? ' · New member' : formData.spouse_id ? ' · Registered member' : formData.spouse_name ? ' · Name only' : ''}</p>
+                                </div>
+                              )}
+                            </div>
+                            {registrationFamilyMembers.map(relative=><p key={relative.member_id} className="text-xs">{relative.name} — {relative.relationship}</p>)}
                           </div>
                         </div>
                       )}
@@ -3843,7 +3802,7 @@ export const MembersPage: React.FC = () => {
                               setRegistrationFamilyMembers([]);
                               setHouseholdRegistrationRole("");
                             }}
-                            className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-indigo-950 cursor-pointer"
+                            className="w-full bg-[var(--surface-2)] p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-indigo-950 cursor-pointer"
                           >
                             <option value="">-- Choose Existing Household --</option>
                             {households.map((h) => (
@@ -3865,6 +3824,7 @@ export const MembersPage: React.FC = () => {
                           householdName={newHouseholdName}
                           isEditing={!!editingMember}
                           role={householdRegistrationRole}
+                          married={formData.civil_status === 'Married'}
                           onRoleChange={setHouseholdRegistrationRole}
                           requireRelationship={householdMode === "existing"}
                           replacingRelativeName={relativeRegistration?.name}
@@ -3877,6 +3837,7 @@ export const MembersPage: React.FC = () => {
                             setFormData(prev => ({ ...prev, household_id: String(id) }));
                           }}
                           spouseName={formData.spouse_name || (createNewSpouseRecord ? memberName(spouseFormData) : "")}
+                          showPreview={householdMode !== "create_new"}
                         />
                       )}
 
@@ -3888,6 +3849,8 @@ export const MembersPage: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {isJuniorAdult && <ParentsHouseholdFields key={editingMember?.id||'new'} memberId={editingMember?.id} households={households} members={allChurchMembers.length?allChurchMembers:members} onChange={setFamilyLinks}/>}
 
                     {/* Contact Phone & Email */}
                     <div className="grid grid-cols-2 gap-3">
@@ -3905,7 +3868,7 @@ export const MembersPage: React.FC = () => {
                           placeholder="e.g. 09123456789"
                           value={formData.contact_phone}
                           onChange={(e) => setFormData({ ...formData, contact_phone: sanitizePhoneInput(e.target.value) })}
-                          className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs"
+                          className="w-full bg-[var(--surface-2)] p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs"
                         />
                       </div>
                       <div>
@@ -3915,7 +3878,7 @@ export const MembersPage: React.FC = () => {
                           placeholder="e.g. member@email.com"
                           value={formData.contact_email}
                           onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                          className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+                          className="w-full bg-[var(--surface-2)] p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
                         />
                       </div>
                     </div>
@@ -4318,9 +4281,9 @@ export const MembersPage: React.FC = () => {
 
                     {/* 5. Young Adult Ministry Form Fields */}
                     {isYoungAdult && (
-                      <div className="bg-purple-50/60 p-3.5 rounded-xl border border-purple-200 space-y-3">
-                        <h4 className="font-semibold text-purple-950 text-xs flex items-center gap-1.5">
-                          <Briefcase className="w-4 h-4 text-purple-700" />
+                      <div className="bg-[var(--surface-2)] p-3.5 rounded-xl border border-[var(--border)] space-y-3">
+                        <h4 className="font-semibold text-[color:var(--text)] text-xs flex items-center gap-1.5">
+                          <Briefcase className="w-4 h-4 text-[color:var(--text-muted)]" />
                           <span>Young Adult Application Card Fields</span>
                         </h4>
 
@@ -4493,7 +4456,7 @@ export const MembersPage: React.FC = () => {
                           placeholder="e.g. Peanut allergy, Asthma inhaler"
                           value={formData.medical_notes}
                           onChange={(e) => setFormData({ ...formData, medical_notes: e.target.value })}
-                          className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+                          className="w-full bg-[var(--surface-2)] p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
                         />
                       </div>
                     )}
@@ -4519,7 +4482,7 @@ export const MembersPage: React.FC = () => {
                 </ModalPanel>
                 {registrationStep === "partner" && createNewSpouseRecord && (
                   <PartnerRegistrationModal spouseFormData={spouseFormData} setSpouseFormData={setSpouseFormData}
-                    formData={formData} household={linkedHousehold} memberName={fullNameInput} memberSuggestions={memberSuggestions}
+                    formData={formData} household={linkedHousehold} newHouseholdName={householdMode === 'create_new' ? newHouseholdName : undefined} memberName={fullNameInput} memberSuggestions={memberSuggestions}
                     onBack={backToMember} onSubmit={handleSubmitMember} isSaving={isSavingMember} />
                 )}
               </div>
@@ -4532,7 +4495,7 @@ export const MembersPage: React.FC = () => {
       {/* Add / Edit Household Modal */}
       {isAddHouseholdModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <ModalPanel data-modal-panel role="dialog" aria-modal="true" aria-label={editingHousehold ? "Edit Household" : "Create Household"} className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl space-y-5 border border-indigo-100 max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <ModalPanel data-modal-panel role="dialog" aria-modal="true" aria-label={editingHousehold ? "Edit Household" : "Create Household"} className="directory-design bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl space-y-5 border border-indigo-100 max-h-[90vh] overflow-y-auto custom-scrollbar">
             {/* Modal Header */}
             <div data-modal-header className="flex items-center justify-between pb-3 border-b border-indigo-50">
               <div className="flex items-center gap-2.5">
@@ -4604,17 +4567,17 @@ export const MembersPage: React.FC = () => {
                 <div>
                   <span className="font-semibold text-xs text-amber-950 flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Parents / Household Heads</span>
+                    <span>Couple / Household Heads</span>
                   </span>
                   <p className="text-[12px] text-muted mt-0.5">
-                    Search church members or enter a parent's full name.
+                    Add the husband and wife here, even if they do not have children yet.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div data-guide="household-parents">
                     <SearchableAutocomplete
-                      label="Father's Name"
+                      label="Husband's Name"
                       value={householdForm.father_name}
                       onChange={(name) => setHouseholdForm((prev) => ({ ...prev, father_name: name }))}
                       onSelect={(item) => setHouseholdForm((prev) => ({ ...prev, father_name: item.title }))}
@@ -4626,7 +4589,7 @@ export const MembersPage: React.FC = () => {
 
                   <div>
                     <SearchableAutocomplete
-                      label="Mother's Name"
+                      label="Wife's Name"
                       value={householdForm.mother_name}
                       onChange={(name) => setHouseholdForm((prev) => ({ ...prev, mother_name: name }))}
                       onSelect={(item) => setHouseholdForm((prev) => ({ ...prev, mother_name: item.title }))}
@@ -4658,6 +4621,8 @@ export const MembersPage: React.FC = () => {
                     <p className="text-[12px] text-muted">
                       Add children, siblings, grandparents, or relatives in this home
                     </p>
+                    <p className="text-[12px] text-muted mt-1">Son, Daughter, and Child connect to the couple above as their parents. Leave this list empty if there are no children or other relatives yet.</p>
+                    {editingHousehold && <p className="text-[12px] text-muted mt-1">Removing a registered member unlinks them from this household and clears connections generated from this list. Their profile and manually recorded family relationships are kept.</p>}
                   </div>
                   <button
                     type="button"
@@ -4681,7 +4646,7 @@ export const MembersPage: React.FC = () => {
                 )}
 
                 {householdFamilyDraft.length === 0 ? (
-                  <div className="p-4 text-center text-muted bg-ivory-light/40 rounded-xl border border-dashed border-indigo-100">
+                  <div className="p-4 text-center text-muted bg-[var(--surface-2)] rounded-xl border border-dashed border-indigo-100">
                     <p className="text-[12px]">No other family members added yet. Click <strong>"+ Add Family Member"</strong> to add children or relatives.</p>
                   </div>
                 ) : (
@@ -4689,17 +4654,17 @@ export const MembersPage: React.FC = () => {
                     {householdFamilyDraft.map((entry, index) => {
                       const matchedMember = availableFamilyMembers.find((m) => m.id === entry.member_id || normalizeName(memberName(m)) === normalizeName(entry.name));
                       return (
-                        <div key={entry.key} role="group" aria-label={`Family member ${index + 1}`} className="p-3 rounded-2xl bg-ivory-light/80 border border-indigo-100 space-y-2.5">
+                        <div key={entry.key} role="group" aria-label={`Family member ${index + 1}`} className="p-3 rounded-2xl bg-[var(--surface-2)] border border-indigo-100 space-y-2.5">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[11px] font-semibold text-indigo-900 bg-indigo-100/70 px-2 py-0.5 rounded-md">
+                              <span className="text-[12px] font-semibold text-indigo-900 bg-indigo-100/70 px-2 py-0.5 rounded-md">
                                 #{index + 1}
                               </span>
                               {matchedMember ? (
-                                <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 font-medium px-2 py-0.5 rounded-md"><UICheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> DPC Member: {matchedMember.ministry_name || "Member"}{matchedMember.age ? ` (${matchedMember.age} yrs)` : ""}
+                                <span className="text-[12px] text-emerald-700 bg-emerald-50 border border-emerald-200 font-medium px-2 py-0.5 rounded-md"><UICheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> DPC Member: {matchedMember.ministry_name || "Member"}{matchedMember.age ? ` (${matchedMember.age} yrs)` : ""}
                                 </span>
                               ) : (
-                                <span className="text-[11px] text-muted font-medium">Family Relative</span>
+                                <span className="text-[12px] text-muted font-medium">Family Relative</span>
                               )}
                             </div>
 
@@ -4788,7 +4753,7 @@ export const MembersPage: React.FC = () => {
       {/* Birthday Greeting Modal */}
       {greetingMember && createPortal(
         <div className="fixed inset-0 bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200">
+          <ModalPanel data-modal-panel className="directory-design bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200">
             <div data-modal-header className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="p-2 rounded-xl bg-amber-100 text-amber-700">
@@ -4947,3 +4912,4 @@ export const MembersPage: React.FC = () => {
     </div>
   );
 };
+import { Badge } from "../components/common/Badge";

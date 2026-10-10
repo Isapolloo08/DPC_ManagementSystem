@@ -1,4 +1,5 @@
 import { ViewportOverlay } from "./ViewportOverlay";
+import { ListSkeleton } from "./SkeletonLoader";
 import React, { useState, useEffect } from "react";
 import { withOperation } from "../../services/operationActivity";
 import { X, BookOpen, ChevronLeft, ChevronRight, ExternalLink, Check, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
@@ -169,10 +170,7 @@ export const ScripturePassageModal: React.FC<ScripturePassageModalProps> = ({
         {/* Content Body */}
         <div className="p-6 overflow-y-auto grow space-y-4 font-sans leading-relaxed text-slate-800">
           {loading && (
-            <div className="py-20 flex flex-col items-center justify-center gap-3 text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
-              <p className="text-sm font-sans font-medium text-slate-500">Loading NIV scripture passage...</p>
-            </div>
+            <ListSkeleton count={6} label="Loading NIV scripture passage..." />
           )}
 
           {!loading && fetchError && (

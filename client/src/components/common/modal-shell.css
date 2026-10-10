@@ -1,0 +1,16 @@
+.shared-modal-backdrop { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--dialog-overlay); }
+.shared-modal-shell { width: 100%; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-dialog); }
+.shared-modal-shell--sm { max-width: 480px; }
+.shared-modal-shell--md { max-width: 670px; }
+.shared-modal-shell--lg { max-width: 770px; }
+.shared-modal-heading { display: flex; align-items: center; gap: 12px; padding: 20px; border-bottom: 1px solid var(--border); }
+.shared-modal-heading h2 { color: var(--text); font-size: 18px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.shared-modal-heading p { margin-top: 4px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.shared-modal-icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; background: var(--surface-2); color: var(--text-muted); border-radius: 10px; }
+.shared-modal-icon svg { width: 20px; height: 20px; }
+.shared-modal-shell > .modal-layout-body { padding: 20px; mask-image: linear-gradient(to bottom, black calc(100% - 18px), transparent); }
+.shared-modal-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-top: 1px solid var(--border); }
+.shared-modal-actions > :only-child { margin-left: auto; }
+.shared-modal-shell :is(button, input, textarea, select, a) { transition: background-color 150ms ease, color 150ms ease; }
+@media (max-width: 639px) { .shared-modal-heading, .shared-modal-shell > .modal-layout-body { padding: 16px; } .shared-modal-actions { padding: 12px 16px; } }
+@media (prefers-reduced-motion: reduce) { .shared-modal-shell, .shared-modal-shell * { animation: none !important; transition: none !important; } }

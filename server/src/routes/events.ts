@@ -1,12 +1,28 @@
+import { isCalendarDate, parsePagination, validatePagination } from "../utils/pagination";
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
 
+import { eventMinistryIdsSql, recurringMinistryIdsSql, parseEventMinistries, validateEventMinistries, saveEventMinistries } from '../utils/eventMinistries';
 const router = Router();
+async function requestedMinistries(req: AuthRequest, res: Response, recurring = false, existingId?: number) {
+  try {
+    let ids = parseEventMinistries(req.body, recurring);
+    if (ids === undefined && existingId) {
+      const current = await db.get(recurring
+        ? `SELECT ${recurringMinistryIdsSql('r')} AS ministry_ids FROM recurring_sunday_events r WHERE id=$1`
+        : `SELECT ${eventMinistryIdsSql('e')} AS ministry_ids FROM events e WHERE id=$1`, [existingId]);
+      if (!current) { res.status(404).json({ error: 'Event not found.' }); return null; }
+      ids = current.ministry_ids;
+    }
+    await validateEventMinistries(ids);
+    return ids || [];
+  } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : 'Choose valid target ministries.' }); return null; }
+}
 
 // List events
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", validatePagination, async (req: Request, res: Response) => {
   try {
     const { ministry_id, upcoming, page, limit, search } = req.query;
 
@@ -15,9 +31,16 @@ router.get("/", async (req: Request, res: Response) => {
 
     if (ministry_id) {
       params.push(ministry_id);
-      whereClause += ` AND (e.ministry_id = $${params.length} OR e.ministry_id IS NULL)`;
+      whereClause += ` AND (e.ministry_id IS NULL OR e.ministry_id = $${params.length} OR EXISTS (SELECT 1 FROM event_ministries em WHERE em.event_id=e.id AND em.enabled AND em.ministry_id=$${params.length}))`;
     }
 
+    for (const key of ["from", "to"]) {
+      if (req.query[key]) {
+        if (!isCalendarDate(req.query[key])) return res.status(400).json({ error: "Choose valid calendar dates." });
+        params.push(req.query[key]);
+        whereClause += key === "from" ? ` AND COALESCE(e.end_time, e.start_time) >= ($${params.length}::date::timestamp AT TIME ZONE 'Asia/Manila')` : ` AND e.start_time < (($${params.length}::date + 1)::timestamp AT TIME ZONE 'Asia/Manila')`;
+      }
+    }
     if (upcoming === "true") {
       whereClause += " AND e.start_time >= CURRENT_TIMESTAMP";
     }
@@ -27,29 +50,29 @@ router.get("/", async (req: Request, res: Response) => {
       whereClause += ` AND (e.title ILIKE $${params.length} OR e.description ILIKE $${params.length} OR e.location ILIKE $${params.length})`;
     }
 
-    const isPaginated = page !== undefined || limit !== undefined;
+    const { enabled: isPaginated, page: requestedPage, limit: curLimit } = parsePagination(req.query);
+    let curPage = requestedPage;
     let totalCount = 0;
-    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
-    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
 
     if (isPaginated) {
       const countRes = await db.get<{ total: string | number }>(`
         SELECT COUNT(*) as total FROM events e ${whereClause}
       `, params);
       totalCount = parseInt(String(countRes?.total || 0), 10);
+      curPage = Math.min(curPage, Math.max(1, Math.ceil(totalCount / curLimit)));
     }
 
     let query = `
       SELECT e.id, e.title, e.description, e.start_time, e.end_time, e.location, 
              e.ministry_id, e.created_by, e.created_at,
-             min.name as ministry_name, min.color as ministry_color,
+             COALESCE((SELECT string_agg(m.name, ' + ' ORDER BY m.id) FROM event_ministries em JOIN ministries m ON m.id=em.ministry_id WHERE em.event_id=e.id AND em.enabled), min.name) as ministry_name, min.color as ministry_color, ${eventMinistryIdsSql()} AS ministry_ids,
              u.name as creator_name,
              (SELECT COUNT(*) FROM event_registrations WHERE event_id = e.id AND status = 'registered') as rsvp_count
       FROM events e
       LEFT JOIN ministries min ON e.ministry_id = min.id
       LEFT JOIN users u ON e.created_by = u.id
       ${whereClause}
-      ORDER BY e.start_time ASC
+      ORDER BY e.start_time ASC, e.id ASC
     `;
 
     let events: any[] = [];
@@ -121,7 +144,7 @@ router.get("/recurring-sunday-cycle", async (req: Request, res: Response) => {
     const { ministry_id } = req.query;
 
     let query = `
-      SELECT r.*, min.name as db_ministry_name, min.color as db_ministry_color
+      SELECT r.*, ${recurringMinistryIdsSql()} AS ministry_ids, COALESCE((SELECT string_agg(m.name, ' + ' ORDER BY m.id) FROM recurring_event_ministries em JOIN ministries m ON m.id=em.ministry_id WHERE em.recurring_event_id=r.id AND em.enabled), min.name) as db_ministry_name, min.color as db_ministry_color
       FROM recurring_sunday_events r
       LEFT JOIN ministries min ON r.target_ministry_id = min.id
       WHERE r.is_active = TRUE
@@ -129,7 +152,7 @@ router.get("/recurring-sunday-cycle", async (req: Request, res: Response) => {
     const params: any[] = [];
     if (ministry_id) {
       params.push(ministry_id);
-      query += ` AND (r.target_ministry_id = $${params.length} OR r.target_ministry_id IS NULL)`;
+      query += ` AND (r.target_ministry_id IS NULL OR r.target_ministry_id = $${params.length} OR EXISTS (SELECT 1 FROM recurring_event_ministries em WHERE em.recurring_event_id=r.id AND em.enabled AND em.ministry_id=$${params.length}))`;
     }
     query += " ORDER BY r.month ASC, r.id ASC";
 
@@ -212,7 +235,10 @@ router.post("/recurring-sunday-cycle", authMiddleware, requireRoles("Admin", "Pa
       return res.status(400).json({ error: "A recurring celebration with this title already exists in this month" });
     }
 
-    const result = await db.run(`
+    const ministryIds = await requestedMinistries(req, res, true);
+    if (!ministryIds) return;
+    const result = await db.transaction(async client => {
+      const saved = await client.query(`
       INSERT INTO recurring_sunday_events (
         title, theme_tagline, description, month, week_pattern,
         target_ministry_id, target_ministry_name, color, icon,
@@ -225,13 +251,16 @@ router.post("/recurring-sunday-cycle", authMiddleware, requireRoles("Admin", "Pa
       description || null,
       monthNum,
       week_pattern,
-      target_ministry_id || null,
+      ministryIds[0] || null,
       target_ministry_name || null,
       color,
       icon,
       liturgical_notes || null,
       program_highlights || null
     ]);
+      await saveEventMinistries(client, saved.rows[0].id, ministryIds, true);
+      return { lastInsertRowid: saved.rows[0].id };
+    });
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user?.id || null, "CREATE", "recurring_sunday_events", newId, `Created recurring Sunday event: ${title}`);
@@ -262,7 +291,10 @@ router.put("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", 
       is_active
     } = req.body;
 
-    await db.run(`
+    const ministryIds = await requestedMinistries(req, res, true , id);
+    if (!ministryIds) return;
+    await db.transaction(async client => {
+      const saved = await client.query(`
       UPDATE recurring_sunday_events
       SET title = COALESCE($1, title),
           theme_tagline = COALESCE($2, theme_tagline),
@@ -283,7 +315,7 @@ router.put("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", 
       description,
       month ? Number(month) : null,
       week_pattern,
-      target_ministry_id || null,
+      ministryIds[0] || null,
       target_ministry_name,
       color,
       icon,
@@ -292,6 +324,9 @@ router.put("/recurring-sunday-cycle/:id", authMiddleware, requireRoles("Admin", 
       is_active !== undefined ? is_active : true,
       id
     ]);
+      await saveEventMinistries(client, id, ministryIds, true);
+      return { lastInsertRowid: id };
+    });
 
     await logAuditAction(req.user?.id || null, "UPDATE", "recurring_sunday_events", id, `Updated recurring Sunday event #${id}`);
     emitRealtimeEvent("events:changed", { action: "update_recurring_sunday", id });
@@ -331,7 +366,10 @@ router.post("/recurring-sunday-cycle/:id/sync-to-calendar", authMiddleware, requ
     const startTimeISO = `${projection.dateStr}T${start_time_str}:00`;
     const endTimeISO = `${projection.dateStr}T${end_time_str}:00`;
 
-    const result = await db.run(`
+    const targets = await db.all('SELECT ministry_id FROM recurring_event_ministries WHERE recurring_event_id=$1 AND enabled ORDER BY ministry_id', [id]);
+    const ministryIds = targets.map(row => row.ministry_id);
+    const result = await db.transaction(async client => {
+      const saved = await client.query(`
       INSERT INTO events (title, description, start_time, end_time, location, ministry_id, created_by)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id
@@ -341,9 +379,12 @@ router.post("/recurring-sunday-cycle/:id/sync-to-calendar", authMiddleware, requ
       startTimeISO,
       endTimeISO,
       location,
-      recurring.target_ministry_id || null,
+      ministryIds[0] || null,
       req.user?.id || 1
     ]);
+      await saveEventMinistries(client, saved.rows[0].id, ministryIds);
+      return { lastInsertRowid: saved.rows[0].id };
+    });
 
     const newEventId = result.lastInsertRowid;
     await logAuditAction(req.user?.id || null, "CREATE", "events", newEventId, `Scheduled annual celebration '${recurring.title}' into Church Calendar on ${projection.formatted}`);
@@ -365,7 +406,7 @@ router.post("/recurring-sunday-cycle/:id/sync-to-calendar", authMiddleware, requ
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const event = await db.get(`
-      SELECT e.*, min.name as ministry_name, min.color as ministry_color, u.name as creator_name
+      SELECT e.*, COALESCE((SELECT string_agg(m.name, ' + ' ORDER BY m.id) FROM event_ministries em JOIN ministries m ON m.id=em.ministry_id WHERE em.event_id=e.id AND em.enabled), min.name) as ministry_name, min.color as ministry_color, ${eventMinistryIdsSql()} AS ministry_ids, u.name as creator_name
       FROM events e
       LEFT JOIN ministries min ON e.ministry_id = min.id
       LEFT JOIN users u ON e.created_by = u.id
@@ -414,12 +455,15 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
       return res.status(400).json({ error: "An event with this title on the same date already exists" });
     }
 
-    const result = await db.run(`
+    const ministryIds = await requestedMinistries(req, res, false);
+    if (!ministryIds) return;
+    const result = await db.transaction(async client => {
+      const saved = await client.query(`
       INSERT INTO events (ministry_id, title, description, start_time, end_time, location, created_by)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id
     `, [
-      ministry_id || null,
+      ministryIds[0] || null,
       title.trim(),
       description || null,
       start_time,
@@ -427,6 +471,9 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
       location || null,
       req.user!.id
     ]);
+      await saveEventMinistries(client, saved.rows[0].id, ministryIds, false);
+      return { lastInsertRowid: saved.rows[0].id };
+    });
 
     const newId = result.lastInsertRowid;
     await logAuditAction(req.user!.id, "CREATE", "events", newId, `Created event: ${title}`);
@@ -827,7 +874,10 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
       return res.status(400).json({ error: "End time cannot be earlier than start time" });
     }
 
-    await db.run(`
+    const ministryIds = await requestedMinistries(req, res, false , id);
+    if (!ministryIds) return;
+    await db.transaction(async client => {
+      const saved = await client.query(`
       UPDATE events
       SET ministry_id = $1,
           title = COALESCE($2, title),
@@ -837,7 +887,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
           location = COALESCE($6, location)
       WHERE id = $7
     `, [
-      ministry_id || null,
+      ministryIds[0] || null,
       title ? title.trim() : null,
       description,
       start_time,
@@ -845,6 +895,9 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
       location,
       id
     ]);
+      await saveEventMinistries(client, id, ministryIds, false);
+      return { lastInsertRowid: id };
+    });
 
     await logAuditAction(req.user!.id, "UPDATE", "events", id, `Updated event #${id}`);
     emitRealtimeEvent("events:changed", { action: "update", id });

@@ -3,7 +3,10 @@ import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { calculateAge } from "./ministries";
 import { emitRealtimeEvent } from "../socket";
-import { linkHouseholdFamily, validateFamilyMembers } from "../utils/householdFamily";
+import { linkHouseholdFamily, replaceHouseholdFamily, validateFamilyMembers } from "../utils/householdFamily";
+import { lockFamily } from "../utils/familyTree";
+import { syncRecordedHouseholdChildren } from "../utils/householdTree";
+import { parsePagination, validatePagination } from "../utils/pagination";
 
 const router = Router();
 
@@ -21,7 +24,7 @@ function validateParents(body: any, current: any = {}): string | null {
 }
 
 // List households with member summaries (Optimized: 0 N+1 roundtrips)
-router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: Request, res: Response) => {
+router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), validatePagination, async (req: Request, res: Response) => {
   try {
     const { page, limit, search } = req.query;
 
@@ -33,23 +36,25 @@ router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), 
       whereClause += ` AND (name ILIKE $${params.length} OR address ILIKE $${params.length} OR primary_contact_phone ILIKE $${params.length})`;
     }
 
-    const isPaginated = page !== undefined || limit !== undefined;
+    const pagination = parsePagination(req.query, 20);
+    const isPaginated = pagination.enabled;
     let totalCount = 0;
-    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
-    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
+    let curPage = pagination.page;
+    const curLimit = pagination.limit;
 
     if (isPaginated) {
       const countRes = await db.get<{ total: string | number }>(`
         SELECT COUNT(*) as total FROM households ${whereClause}
       `, params);
       totalCount = parseInt(String(countRes?.total || 0), 10);
+      curPage = Math.min(curPage, Math.max(1, Math.ceil(totalCount / curLimit)));
     }
 
     let query = `
       SELECT id, name, address, primary_contact_phone, father_name, mother_name, guardian_name, family_members, created_at
       FROM households
       ${whereClause}
-      ORDER BY name ASC
+      ORDER BY name ASC, id ASC
     `;
 
     let households: any[] = [];
@@ -66,7 +71,7 @@ router.get("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), 
     let allMembers: any[] = [];
     if (householdIds.length > 0) {
       allMembers = await db.all(`
-        SELECT m.id, m.household_id, m.first_name, m.last_name, m.birthdate, m.gender, m.contact_phone, min.name as ministry_name, min.color as ministry_color
+        SELECT m.id, m.household_id, m.first_name, m.last_name, m.birthdate, m.gender, m.contact_phone, m.spouse_id, m.spouse_name, m.civil_status, min.name as ministry_name, min.color as ministry_color
         FROM members m
         LEFT JOIN ministries min ON m.ministry_id = min.id
         WHERE m.household_id = ANY($1)
@@ -163,6 +168,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
     }
 
     const newId = await db.transaction(async client => {
+      await lockFamily(client);
       const result = await client.query(`
         INSERT INTO households (name, address, primary_contact_phone, father_name, mother_name, guardian_name)
         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
@@ -170,6 +176,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
       const id = result.rows[0].id;
       await linkHouseholdFamily(client, id, family);
       if (family) await client.query("UPDATE households SET family_members = $1::jsonb WHERE id = $2", [JSON.stringify(family), id]);
+      await syncRecordedHouseholdChildren(client, id);
       return id;
     });
     await logAuditAction(req.user?.id || null, "CREATE", "households", newId, `Created household: ${name}`);
@@ -205,8 +212,8 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
     }
 
     await db.transaction(async client => {
+      await lockFamily(client);
       await client.query("SELECT id FROM households WHERE id = $1 FOR UPDATE", [id]);
-      await linkHouseholdFamily(client, Number(id), family);
       await client.query(`
       UPDATE households
       SET name = COALESCE($1, name),
@@ -218,6 +225,10 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
           family_members = COALESCE($7::jsonb, family_members)
       WHERE id = $8
     `, [name?.trim() || null, address, primary_contact_phone, ...parents, family === undefined ? null : JSON.stringify(family), id]);
+      await replaceHouseholdFamily(client, Number(id), family);
+      // linkHouseholdFamily refreshes registered names; persist those corrections too.
+      if (family !== undefined) await client.query("UPDATE households SET family_members=$1::jsonb WHERE id=$2", [JSON.stringify(family), id]);
+      await syncRecordedHouseholdChildren(client, Number(id));
     });
 
     await logAuditAction(req.user?.id || null, "UPDATE", "households", Number(id), `Updated household #${id}`);

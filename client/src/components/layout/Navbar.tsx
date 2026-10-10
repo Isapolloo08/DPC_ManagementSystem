@@ -1,6 +1,7 @@
 import React from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useSocketConnection, } from "../../socket";
+import { Badge } from "../common/Badge";
 import { ChurchLogo } from "../common/ChurchLogo";
 import { WindowControls } from "./WindowControls";
 import { UserCog, Compass } from "lucide-react";
@@ -19,6 +20,10 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   "leader-members": { title: "Lead Group Disciples", subtitle: "Assigned discipleship roster & care" },
   "leader-biblestudy": { title: "Meeting & Curriculum", subtitle: "Curriculum & meeting attendance" },
   "attendance": { title: "Attendance & Check-In", subtitle: "Sunday divine worship & special event check-in kiosks" },
+  "attendancelog": { title: "Attendance Log", subtitle: "Sunday service, Bible Study & special event history" },
+  "servicecalendar": { title: "Service Calendar", subtitle: "Worship service schedules & records" },
+  "biblereading": { title: "Daily Bible Reading", subtitle: "One-year Bible reading plan" },
+  "sundaycycle": { title: "Events & Celebrations", subtitle: "Annual church gatherings & milestones" },
   "members": { title: "Members & Households", subtitle: "7 ministries directory & membership cards" },
   "biblestudy": { title: "Bible Study Groups", subtitle: "Discipleship life groups & schedules" },
   "curriculum": { title: "Topics & Books of Study", subtitle: "Discipleship curriculum tracker" },
@@ -57,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", isScro
   }
 
   return (
-    <header data-scrolled={isScrolled} className={`text-charcoal border-b select-none relative transition-colors duration-300 motion-reduce:transition-none ${isScrolled
+    <header data-scrolled={isScrolled} className={`shared-layout-navbar text-charcoal border-b select-none relative transition-colors duration-300 motion-reduce:transition-none ${isScrolled
       ? "bg-ivory-light/95 border-gray-200/70 backdrop-blur-md"
       : "bg-transparent border-transparent"}`}>
       {/* Top-Right Window Controls (Fixed at top-right desktop window corner) */}
@@ -89,6 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", isScro
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
                 className="md:hidden p-1.5 rounded-xl bg-white hover:bg-gray-100 text-charcoal transition-colors cursor-pointer shrink-0"
                 aria-label="Toggle navigation menu"
+                title="Toggle navigation menu"
                 data-guide="navigation"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,16 +136,12 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab = "dashboard", isScro
               </button>
             )}
             {/* Real-time Socket.IO Live Indicator */}
-            <div
-              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium tracking-wide border transition-all ${isConnected
-                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                }`}
+            <Badge variant={isConnected ? "success" : "warning"} className="hidden sm:inline-flex rounded-full px-2.5 py-1"
               title={isGuideSandbox() ? "Isolated practice workspace with sample data" : isConnected ? "Real-time Socket.IO connected across all church terminals" : "Connecting to real-time server..."}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden="true"></span>
               <span className="hidden lg:inline">{isGuideSandbox() ? "Sample data" : isConnected ? "Live Sync" : "Syncing..."}</span>
-            </div>
+            </Badge>
 
             {onNavigate && (user?.role_name === "Admin" || user?.role_name === "IT Admin" || user?.role_name === "Pastor") && (
               <NotificationBell onNavigate={onNavigate} />

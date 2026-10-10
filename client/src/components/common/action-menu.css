@@ -1,0 +1,8 @@
+.ui-action-menu { position: fixed; z-index: 130; width: 240px; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-dialog); }
+.ui-action-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px; border-radius: 8px; text-align: left; font-size: 12px; color: var(--text-muted); cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
+.ui-action-menu button:hover { background: var(--surface-2); color: var(--text); }
+.ui-action-menu svg { width: 16px; height: 16px; color: inherit; flex-shrink: 0; }
+.ui-action-menu .ui-action-menu-danger { color: var(--status-danger-text); }
+.ui-action-menu .ui-action-menu-danger:hover { color: var(--status-danger-text); background: var(--status-danger-bg); }
+.ui-action-menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .ui-action-menu button { transition: none; } }

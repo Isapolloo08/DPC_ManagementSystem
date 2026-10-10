@@ -20,9 +20,11 @@ interface Props {
   onJoinHousehold: (id: number) => void;
   spouseName?: string;
   replacingRelativeName?: string;
+  showPreview?: boolean;
+  married?: boolean;
 }
 
-export function HouseholdRegistrationFields({ members, households, household, name, householdName, isEditing, role, onRoleChange, requireRelationship = false, allowFamilyLinking = true, family, onFamilyChange, onJoinHousehold, spouseName, replacingRelativeName }: Props) {
+export function HouseholdRegistrationFields({ members, households, household, name, householdName, isEditing, role, onRoleChange, requireRelationship = false, allowFamilyLinking = true, family, onFamilyChange, onJoinHousehold, spouseName, replacingRelativeName, showPreview=true, married=false }: Props) {
   const [query, setQuery] = useState("");
   const results = query.trim() ? members.filter(member =>
     normalizeName(memberName(member)).includes(normalizeName(query)) && !family.some(entry => entry.member_id === member.id)
@@ -44,9 +46,9 @@ export function HouseholdRegistrationFields({ members, households, household, na
           className="ui-input mt-1"
         >
           <option value="">-- Choose your relationship --</option>
-          {householdRoles.map(role => <option key={role} value={role}>{householdRoleLabels[role]}</option>)}
+          {householdRoles.filter(option => !married || !['father','mother'].includes(option)).map(role => <option key={role} value={role}>{householdRoleLabels[role]}</option>)}
         </select>
-        <span className="ui-help block mt-1">Choose how you belong to this family, such as Son, Daughter, Grandfather (Lolo), or Grandmother (Lola).</span>
+        <span className="ui-help block mt-1">{household ? 'Choose your role in the selected household.' : 'Choose Husband or Wife for a married couple. Children and parent links can be recorded separately.'}</span>
       </label>
       {allowFamilyLinking && <div>
         <h4 className="flex items-center gap-1.5 text-xs font-semibold text-indigo-950"><Users className="w-3.5 h-3.5" /> Link Existing Family Members</h4>
@@ -103,7 +105,7 @@ export function HouseholdRegistrationFields({ members, households, household, na
           </Button>
         </div>
       ))}
-      {(role || family.length > 0) && (
+      {showPreview && (role || family.length > 0 || spouseName) && (
         <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 text-xs space-y-1" aria-label="Household preview">
           <h4 className="font-semibold text-indigo-950">{household?.name || householdName || "New household"} · Preview</h4>
           <p>{name || "This member"} — {role ? householdRoleLabels[role] : "Family Member"} · {isEditing ? "Existing member" : "New member"}</p>

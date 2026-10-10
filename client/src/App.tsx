@@ -29,6 +29,7 @@ import { LeaderPortalPage } from "./pages/leader";
 import { ProfilePage } from "./pages/ProfilePage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { PlannedVisitsPage } from "./pages/PlannedVisitsPage";
+import { EventInvitationPage } from "./pages/EventInvitationPage";
 import { ProfileModal } from "./components/profile/ProfileModal";
 import { SystemConfigurationModal } from "./components/common/SystemConfigurationModal";
 import { HelpCenter } from "./components/help/HelpCenter";
@@ -49,7 +50,7 @@ const isTabAllowedForRole = (tab: NavTab, roleName?: string): boolean => {
     case "Leader":
       return [
         "dashboard", "leader-dashboard", "biblereading", "leaderportal",
-        "curriculum", "duty", "dishwashing", "events", "sundaycycle",
+        "duty", "dishwashing", "events", "sundaycycle",
         "communications", "profile"
       ].includes(tab);
     case "Volunteer":
@@ -177,7 +178,7 @@ const MainLayout: React.FC<{ initialTab?: NavTab; initialGuide?: TaskGuide; init
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-ivory-light flex selection:bg-amber selection:text-white">
+    <div className="h-screen overflow-hidden bg-[var(--bg)] flex selection:bg-amber selection:text-white">
       {/* Sidebar in the front (full-height left column) */}
       <Sidebar
         currentTab={currentTab}
@@ -214,7 +215,7 @@ const MainLayout: React.FC<{ initialTab?: NavTab; initialGuide?: TaskGuide; init
               initialGuide={initialGuide}
               initialGuideStep={initialGuideStep}
             />}
-            <div data-guide="workspace">{renderActiveView()}</div>
+            <div key={currentTab} data-guide="workspace" className="workspace-enter">{renderActiveView()}</div>
           </div>
         </main>
       </div>
@@ -313,6 +314,8 @@ function GuideSandboxWorkspace() {
 }
 
 export function App() {
+  const invitationToken = window.location.hash.match(/^#\/invite\/([a-f0-9]{64})$/)?.[1];
+  if (window.location.hash.startsWith("#/invite/")) return <EventInvitationPage token={invitationToken || ""} />;
   return <>
     <GlobalOperationIndicator />
     {guideSandbox ? <ToastProvider><AuthProvider><GuideSandboxWorkspace /><ToastContainer /></AuthProvider></ToastProvider> : <LiveApp />}

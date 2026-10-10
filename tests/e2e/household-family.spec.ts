@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-async function prepare(page: Page, options: { motherOnly?: boolean; kinder?: boolean; noParents?: boolean; unassigned?: boolean; originalDetails?: string; relationship?: string; alternativeHousehold?: boolean } = {}) {
+async function prepare(page: Page, options: { couple?: boolean; motherOnly?: boolean; kinder?: boolean; noParents?: boolean; unassigned?: boolean; originalDetails?: string; relationship?: string; alternativeHousehold?: boolean } = {}) {
   const writes: { path: string; body: any }[] = [];
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -17,8 +17,10 @@ async function prepare(page: Page, options: { motherOnly?: boolean; kinder?: boo
   const father = { id: 10, first_name: 'Juan', last_name: 'Santos', birthdate: '1980-04-03', gender: 'Male', age: 46, ministry_id: 3, ministry_name: 'Junior Adult', contact_phone: '09111111111', household_id: 20, status: 'active' };
   const mother = { ...father, id: 11, first_name: 'Maria', gender: 'Female', contact_phone: '09222222222' };
   const child = { ...father, id: 12, first_name: 'Ana', gender: 'Female', birthdate: options.kinder ? '2022-04-03' : '2012-04-03', age: options.kinder ? 4 : 14, ministry_id: options.kinder ? 1 : 2, ministry_name: options.kinder ? 'Kinder' : 'Highschool', contact_phone: '09333333333', address: 'Daet, Camarines Norte', guardian_names: '', guardian_phone: '', school_name: 'Daet National High School', grade_level: 'Grade 9', invited_by: 'Pastor Pedro', family_details: options.originalDetails || '' };
+  if (options.couple) { Object.assign(father,{spouse_id:11,civil_status:'Married'}); Object.assign(mother,{spouse_id:10,civil_status:'Married'}); }
   const members = options.motherOnly ? [mother, child] : [father, mother, child];
   const household: any = { id: 20, name: 'Santos Household', address: 'Daet', primary_contact_phone: '09444444444', father_name: options.motherOnly || options.noParents ? '' : 'Juan Santos', mother_name: options.noParents ? '' : 'Maria Santos', guardian_name: '', member_count: members.length, members };
+  if (options.couple) { household.mother_name=''; household.family_members=[{member_id:11,name:'Maria Santos',relationship:'Family Member'}]; }
   if (options.relationship) household.family_members = [{ member_id: child.id, name: 'Ana Santos', relationship: options.relationship }];
   const allMembers = options.unassigned ? [...members, { ...child, id: 13, first_name: 'Ben', household_id: null }] : members;
   const households = [household];
@@ -36,6 +38,10 @@ async function prepare(page: Page, options: { motherOnly?: boolean; kinder?: boo
       const body = request.postDataJSON();
       writes.push({ path, body });
       const applyFamily = (target: any) => {
+        if (request.method() === 'PUT' && Array.isArray(body.family_members)) {
+          const keep = new Set(body.family_members.map((entry: any) => entry.member_id));
+          for (const member of allMembers) if (member.household_id === target.id && !keep.has(member.id)) member.household_id = null as any;
+        }
         for (const entry of body.family_members || []) {
           const member = allMembers.find(member => member.id === entry.member_id);
           if (member) member.household_id = target.id;
@@ -66,6 +72,7 @@ async function prepare(page: Page, options: { motherOnly?: boolean; kinder?: boo
     else if (path.endsWith('/members/birthdays')) json = { celebrants: [], counts: {} };
     else if (path.endsWith('/members/baptism-candidates/qualified')) json = { candidates: [], counts: {} };
     else if (path.endsWith('/households')) json = households;
+    else if (/\/family\/members\/\d+\/parents$/.test(path)) json = {parents_household_id:null,parents:[]};
     else if (path.endsWith('/members/12')) json = child;
     else if (path.endsWith('/members')) json = allMembers;
     await route.fulfill({ json });
@@ -132,7 +139,7 @@ test('household roles reflect in family members and allow parents outside the di
   await testInfo.attach('Household roles', { body: await page.screenshot(), contentType: 'image/png' });
   await page.getByRole('button', { name: /All Members \(/ }).click();
   const app = await editChild(page);
-  await expect(app.getByPlaceholder('e.g. Parents, 2 siblings')).toHaveValue('Father: Juan Santos; Mother: Maria Santos; Guardian: Tita Rosa; Ana Santos');
+  await expect(app.getByPlaceholder('e.g. Parents, 2 siblings')).toHaveValue('Husband: Juan Santos; Wife: Maria Santos; Guardian: Tita Rosa; Ana Santos');
   expect(state.errors).toEqual([]);
 });
 
@@ -196,7 +203,7 @@ test('edit household adds a church member and an unregistered relative and refle
   await dialog.getByRole('button', { name: 'Save Household', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   expect(state.writes[0].body.family_members).toEqual(expect.arrayContaining([
-    { name: 'Juan Santos', member_id: 10, relationship: 'Father' },
+    { name: 'Juan Santos', member_id: 10, relationship: 'Husband' },
     { name: 'Ana Santos', member_id: 12, relationship: 'Family Member' },
     { name: 'Ben Santos', member_id: 13, relationship: 'Son' },
     { name: 'Carla Santos', member_id: null, relationship: 'Daughter' }
@@ -205,7 +212,25 @@ test('edit household adds a church member and an unregistered relative and refle
   await expect(page.getByText('Carla Santos', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /All Members \(/ }).click();
   const app = await editChild(page);
-  await expect(app.getByPlaceholder('e.g. Parents, 2 siblings')).toHaveValue('Father: Juan Santos; Mother: Maria Santos; Ana Santos; Son: Ben Santos; Daughter: Carla Santos');
+  await expect(app.getByPlaceholder('e.g. Parents, 2 siblings')).toHaveValue('Husband: Juan Santos; Wife: Maria Santos; Ana Santos; Son: Ben Santos; Daughter: Carla Santos');
+  expect(state.errors).toEqual([]);
+});
+
+test('removed registered household member stays removed after save and reopen', async ({ page }) => {
+  const state = await prepare(page, { relationship: 'Daughter' });
+  await page.getByRole('button', { name: /Households \(/ }).click();
+  await page.getByRole('button', { name: 'Edit household & family' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit Household' });
+  await expect(dialog.getByPlaceholder('Search member or type full name...')).toHaveValue('Ana Santos');
+  await dialog.getByRole('button', { name: 'Remove family member 1', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save Household', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(state.writes[0].body.family_members.map((entry: any) => entry.member_id)).not.toContain(12);
+  await page.getByRole('button', { name: 'Edit household & family' }).click();
+  await expect(dialog.getByRole('group', { name: /^Family member/ })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: /All Members \(/ }).click();
+  await expect(page.getByText('Ana Santos', { exact: true }).first()).toBeVisible();
   expect(state.errors).toEqual([]);
 });
 
@@ -272,7 +297,7 @@ test('create household adds name-only family members and removes unused draft ro
   await testInfo.attach('Family member editor mobile', { body: await page.screenshot(), contentType: 'image/png' });
   await dialog.getByRole('button', { name: 'Create Household', exact: true }).click();
   await expect(dialog).not.toBeVisible();
-  expect(state.writes[0].body.family_members).toEqual([{ name: 'Roberto Reyes', relationship: 'Father', member_id: null }, { name: 'Mateo Reyes', relationship: 'Son', member_id: null }]);
+  expect(state.writes[0].body.family_members).toEqual([{ name: 'Roberto Reyes', relationship: 'Husband', member_id: null }, { name: 'Mateo Reyes', relationship: 'Son', member_id: null }]);
   await page.getByRole('button', { name: /Households \(/ }).click();
   await expect(page.getByText('Mateo Reyes', { exact: true })).toBeVisible();
   expect(state.errors).toEqual([]);
@@ -294,3 +319,25 @@ test('duplicate family members do not save and cancelling discards draft additio
   await expect(dialog.getByRole('group', { name: /^Family member / })).toHaveCount(1);
   expect(state.errors).toEqual([]);
 });
+
+for (const mobile of [false,true]) {
+  test('linked spouse stays in the couple section after household save and reopen'+(mobile?' on mobile':''), async ({page},testInfo)=>{
+    if(mobile)await page.setViewportSize({width:390,height:844});
+    const state=await prepare(page,{couple:true});
+    await page.getByRole('button',{name:/Households \(/}).click();
+    await page.getByRole('button',{name:'Edit household & family'}).click();
+    const dialog=page.getByRole('dialog',{name:'Edit Household'});
+    await expect(dialog.getByRole('textbox',{name:"Husband's Name"})).toHaveValue('Juan Santos');
+    await expect(dialog.getByRole('textbox',{name:"Wife's Name"})).toHaveValue('Maria Santos');
+    await expect(dialog.getByRole('group',{name:/^Family member/})).toHaveCount(1);
+    await expect(dialog.getByPlaceholder('Search member or type full name...')).toHaveValue('Ana Santos');
+    await dialog.getByRole('button',{name:'Save Household',exact:true}).click();
+    await expect(dialog).not.toBeVisible();
+    expect(state.writes[0].body.family_members).toEqual(expect.arrayContaining([{name:'Juan Santos',member_id:10,relationship:'Husband'},{name:'Maria Santos',member_id:11,relationship:'Wife'}]));
+    await page.getByRole('button',{name:'Edit household & family'}).click();
+    await expect(dialog.getByRole('textbox',{name:"Wife's Name"})).toHaveValue('Maria Santos');
+    await expect(dialog.getByRole('group',{name:/^Family member/})).toHaveCount(1);
+    await page.screenshot({path:testInfo.outputPath('couple-household.png')});
+    expect(state.errors).toEqual([]);
+  });
+}

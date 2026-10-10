@@ -1,4 +1,6 @@
 @import "./components/common/ui.css";
+@import "./design-tokens.css";
+@import "./components/common/directory-design.css";
 
 @tailwind base;
 @tailwind components;
@@ -457,4 +459,10 @@ option {
 
 .dark .skeleton-box::after {
   opacity: 0.15;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-box::after {
+    animation: none;
+  }
 }

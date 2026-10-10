@@ -55,6 +55,12 @@ test("cloud transfers preserve identities, schema fields and atomic failure beha
   try {
     await source.unsafe(migration("001_init_postgres.sql"));
     await target.unsafe(migration("001_init_postgres.sql"));
+    await source.unsafe(migration("020_event_invitations.sql"));
+    await target.unsafe(migration("020_event_invitations.sql"));
+    await source.unsafe(migration("021_invitation_member_responses.sql"));
+    await target.unsafe(migration("021_invitation_member_responses.sql"));
+    await source.unsafe(migration("022_event_ministries.sql"));
+    await target.unsafe(migration("022_event_ministries.sql"));
     await source.unsafe(migration("005_service_calendar_and_attendance_intelligence.sql"));
     await target.unsafe(migration("005_service_calendar_and_attendance_intelligence.sql"));
     await source.unsafe(migration("008_group_transitions.sql"));
@@ -62,6 +68,8 @@ test("cloud transfers preserve identities, schema fields and atomic failure beha
     await source.unsafe(migration("010_make_user_email_optional.sql"));
     await target.unsafe(migration("010_make_user_email_optional.sql"));
     await source.unsafe(compatibility());
+    await source.unsafe(migration('017_family_tree.sql'));
+    await target.unsafe(migration('017_family_tree.sql'));
     await source.unsafe("ALTER TABLE households ADD COLUMN family_members JSONB NOT NULL DEFAULT '[]'::jsonb");
     await target.unsafe("ALTER TABLE households ADD COLUMN family_members JSONB NOT NULL DEFAULT '[]'::jsonb");
     await source.unsafe(`
@@ -129,6 +137,34 @@ test("cloud transfers preserve identities, schema fields and atomic failure beha
       assert.equal((await source.unsafe("SELECT value FROM system_settings WHERE key='cloud_database_url'"))[0].value, "source-secret");
     });
 
+    await t.test('family graph remaps people and merge references; removed links stay removed on retries',async()=>{
+      const registered=randomUUID(),parent=randomUUID(),merged=randomUUID(),partner=randomUUID();
+      await source.unsafe(`INSERT INTO family_people(id,stable_key,member_id,name) VALUES(201,$1,1,'Registered'),(202,$2,NULL,'Named parent'),(203,$3,NULL,'Old placeholder'),(204,$4,NULL,'Named partner')`,[registered,parent,merged,partner]);
+      await source.unsafe('UPDATE family_people SET merged_into_id=202 WHERE id=203');
+      await source.unsafe("UPDATE family_people SET household_id=1,household_entry_key='name:named parent' WHERE id=202");
+      await source.unsafe(`INSERT INTO family_relationships(id,from_person_id,to_person_id,kind,parent_role,deleted_at) VALUES(401,202,201,'parent','father',NULL),(402,201,204,'spouse',NULL,NULL),(403,203,201,'guardian',NULL,CURRENT_TIMESTAMP)`);
+      await target.unsafe(`INSERT INTO family_people(id,stable_key,member_id,name) VALUES(901,$1,1,'Destination registered'),(202,$2,NULL,'Unrelated person')`,[randomUUID(),randomUUID()]);
+      await target.unsafe("INSERT INTO family_people(id,stable_key,name,household_id,household_entry_key) VALUES(902,$1,'Named parent',1,'name:named parent')",[randomUUID()]);
+      await source.unsafe('UPDATE family_relationships SET source_household_id=1 WHERE id=401');
+      await push();await push();
+      const people=await target.unsafe('SELECT * FROM family_people');
+      assert.equal(people.length,5);const parentId=people.find(p=>p.stable_key===parent)!.id;
+      assert.equal(people.find(p=>p.stable_key===registered)!.id,901);
+      assert.equal(people.find(p=>p.stable_key===merged)!.merged_into_id,parentId);
+      assert.ok(parentId!==202);
+      assert.equal(parentId,902,'scoped household entry identity survives independent node IDs');
+      assert.equal(people.find(p=>p.id===parentId)!.household_entry_key,'name:named parent');
+      const spouse=(await target.unsafe("SELECT * FROM family_relationships WHERE kind='spouse'"))[0];assert.ok(spouse.from_person_id<spouse.to_person_id);
+      assert.equal((await target.unsafe("SELECT * FROM family_relationships WHERE kind='parent'"))[0].to_person_id,901);
+      await source.unsafe('UPDATE family_relationships SET deleted_at=CURRENT_TIMESTAMP,source_removed=TRUE WHERE id=401');
+      await push();await pull();await pull();
+      assert.equal((await target.unsafe("SELECT * FROM family_relationships WHERE kind='parent' AND deleted_at IS NULL")).length,0);
+      assert.equal((await source.unsafe("SELECT * FROM family_relationships WHERE kind='parent' AND deleted_at IS NULL")).length,0);
+      assert.equal((await source.unsafe('SELECT * FROM family_people')).length,5);
+      const retired=(await target.unsafe("SELECT * FROM family_relationships WHERE kind='parent'"))[0];
+      assert.equal(retired.source_household_id,1);assert.equal(retired.source_removed,true);
+    });
+
     await t.test("roster sync matches group/member pairs across different IDs without losing memberships", async () => {
       await source.unsafe(`
         INSERT INTO bible_study_groups (id,name,leader_name,meeting_day,meeting_time,location)
@@ -181,6 +217,56 @@ test("cloud transfers preserve identities, schema fields and atomic failure beha
         await connection.unsafe("DELETE FROM bible_study_members WHERE group_id<>1 OR member_id IS NULL");
         await connection.unsafe("UPDATE bible_study_members SET id=1 WHERE group_id=1 AND member_id=1");
         await connection.unsafe("DELETE FROM bible_study_groups WHERE id IN (2,3,4)");
+      }
+    });
+
+    await t.test("service dates match across database drivers and retain calendar days on push, pull and retries", async () => {
+      try {
+        await source.unsafe(`
+          INSERT INTO services (id,service_date,service_type,title,created_by) VALUES
+            (1,'2026-10-11','sunday_service','Updated Sunday service',2),
+            (2,'2026-10-11','special_service','Same-day special service',2),
+            (3,'2026-10-12','special_service','Next-day service',2);
+        `);
+        await target.unsafe(`
+          INSERT INTO services (id,service_date,service_type,title,created_by) VALUES
+            (71,'2026-10-11','sunday_service','Previous Sunday service',1),
+            (1,'2026-10-25','sunday_service','Cloud-only Sunday service',1),
+            (2,'2026-10-18','special_service','Cloud-only special service',1);
+        `);
+        const readServices = (connection: SyncSql) => connection.unsafe(
+          "SELECT id, service_date::text AS service_date, service_type, title, created_by FROM services ORDER BY service_date, service_type"
+        );
+        await push();
+        const services = await readServices(target);
+        assert.equal(services.length, 5);
+        const sunday = services.find(row => row.title === 'Updated Sunday service')!;
+        assert.equal(sunday.id, 71);
+        assert.equal(sunday.service_date, '2026-10-11');
+        assert.equal(sunday.created_by, 1);
+        const special = services.find(row => row.title === 'Same-day special service')!;
+        assert.equal(special.service_date, '2026-10-11');
+        assert.equal(special.service_type, 'special_service');
+        assert.ok(special.id > 71);
+        assert.equal(services.find(row => row.title === 'Next-day service')!.service_date, '2026-10-12');
+        assert.equal(services.find(row => row.id === 1)!.title, 'Cloud-only Sunday service');
+        assert.equal(services.find(row => row.id === 2)!.title, 'Cloud-only special service');
+        await push();
+        assert.deepEqual(await readServices(target), services);
+        await pull();
+        const localServices = await readServices(source);
+        assert.equal(localServices.length, 5);
+        assert.equal(localServices.find(row => row.title === 'Updated Sunday service')!.id, 1);
+        assert.equal(localServices.find(row => row.title === 'Updated Sunday service')!.created_by, 2);
+        assert.equal(localServices.find(row => row.title === 'Same-day special service')!.id, 2);
+        assert.equal(localServices.find(row => row.title === 'Next-day service')!.service_date, '2026-10-12');
+        await pull();
+        assert.deepEqual(await readServices(source), localServices);
+        assert.equal((await target.unsafe("SELECT birthdate::text AS birthdate FROM members WHERE id=1"))[0].birthdate, '2000-01-01');
+        assert.equal((await target.unsafe("SELECT reading_start::text AS reading_start FROM users WHERE username='existing'"))[0].reading_start, '2026-09-02');
+      } finally {
+        await source.unsafe("DELETE FROM services");
+        await target.unsafe("DELETE FROM services");
       }
     });
 

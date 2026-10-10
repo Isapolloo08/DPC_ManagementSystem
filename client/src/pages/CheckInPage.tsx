@@ -1,3 +1,8 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { StatCard } from "../components/common/StatCard";
+import { Pagination } from "../components/common/Pagination";
+import { useListPagination } from "../hooks/useListPagination";
+import { PageHeader } from "../components/common/PageHeader";
 import { AlertTriangle as UIAlertTriangle, CircleX as UICircleX } from "lucide-react";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
@@ -13,11 +18,11 @@ import {
   Search, CheckCircle2, Clock, Printer, KeyRound, QrCode, X,
   Users, Heart, Check, Calendar, Plus, RefreshCw,
   Home, Phone, UserPlus, Filter, ArrowRight, ShieldAlert, Award,
-  UserX, HelpCircle, XCircle, RotateCcw, FileText, CheckSquare,
-  ListChecks, SlidersHorizontal, ChevronLeft, ChevronRight, ChevronDown
+  UserX, HelpCircle, XCircle, RotateCcw, FileText,
+  ListChecks, ChevronLeft, ChevronRight, ChevronDown
 } from "lucide-react";
 import { useSocketEvent } from "../socket";
-import { CheckInPageSkeleton, TableSkeleton } from "../components/common/SkeletonLoader";
+import { CheckInPageSkeleton, AttendanceSummarySkeleton, AttendanceTableSkeleton } from "../components/common/SkeletonLoader";
 import { EventAttendanceCheckInView } from "../components/attendance/EventAttendanceCheckInView";
 
 export const CheckInPage: React.FC = () => {
@@ -221,6 +226,7 @@ export const CheckInPage: React.FC = () => {
   const [roster, setRoster] = useState<AttendanceRosterItem[]>([]);
   const [activeCheckins, setActiveCheckins] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const attendanceRequestVersion = React.useRef(0);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [guestSubmitting, setGuestSubmitting] = useState(false);
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
@@ -269,7 +275,7 @@ export const CheckInPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadAttendanceData(roster.length === 0);
+    loadAttendanceData(true);
   }, [serviceDate]);
 
   // Clear selections only when ministry or service date changes (NOT on search query)
@@ -290,7 +296,8 @@ export const CheckInPage: React.FC = () => {
     loadAttendanceData(false);
   }, [serviceDate]);
 
- const loadAttendanceData = async (isInitial = false) => {
+  const loadAttendanceData = async (isInitial = false) => {
+    const version = ++attendanceRequestVersion.current;
     guideData.clearError();
     try {
       if (isInitial) {
@@ -298,17 +305,22 @@ export const CheckInPage: React.FC = () => {
       }
       const ministryParam = coordinatorMinistryId ? coordinatorMinistryId : undefined;
       const [rosterList, checkinsList] = await Promise.all([
-        api.getAttendanceRoster({ ministry_id: ministryParam, date: serviceDate }).catch(err => { guideData.reportError(err); return []; }),
+        api.getAttendanceRoster({ ministry_id: ministryParam, date: serviceDate }).catch(err => {
+          if (version === attendanceRequestVersion.current) guideData.reportError(err);
+          return [];
+        }),
         api.getTodayAttendance(ministryParam, serviceDate).catch(() => [])
       ]);
+      if (version !== attendanceRequestVersion.current) return;
       setRoster(rosterList);
       setActiveCheckins(checkinsList);
     } catch (err: any) {
+      if (version !== attendanceRequestVersion.current) return;
       console.error("Failed to load attendance data:", err);
       guideData.reportError(err);
       showToast(err.message || "Failed to load attendance", "error");
     } finally {
-      if (isInitial) {
+      if (version === attendanceRequestVersion.current) {
         setLoading(false);
       }
     }
@@ -715,6 +727,8 @@ export const CheckInPage: React.FC = () => {
     });
   }, [roster, searchQuery, selectedHousehold, coordinatorMinistryId, filterMinistry, statusFilter, isFastMode]);
 
+  const rosterPage = useListPagination(filteredRoster, JSON.stringify([searchQuery, selectedHousehold, coordinatorMinistryId, filterMinistry, statusFilter, isFastMode]), 30);
+
   // Households list
   const householdsList = useMemo(() => {
     const names = new Set<string>();
@@ -755,7 +769,7 @@ export const CheckInPage: React.FC = () => {
 
       {/* TOP SUBTAB SWITCHER: Sunday Service vs Special Events */}
       <div className="flex items-center justify-between gap-4 flex-wrap pb-1">
-        <div className="inline-flex items-center gap-1.5 p-1 bg-stone-200/70 rounded-2xl border border-stone-300/80">
+        <div className="page-tabs inline-flex flex-wrap max-w-full items-center gap-1.5 p-1 bg-stone-100 rounded-2xl border border-stone-300/80">
           <button
             type="button"
             onClick={() => setActiveAttendanceTab("sunday")}
@@ -765,7 +779,7 @@ export const CheckInPage: React.FC = () => {
                 ? "bg-indigo text-white shadow-sm"
                 : "text-charcoal/70 hover:text-charcoal hover:bg-white/60"
             }`}
-          >
+           aria-pressed={activeAttendanceTab === "sunday"}>
             <ChurchLogo className="w-4 h-4 text-amber" />
             <span>Sunday Worship Check-In</span>
           </button>
@@ -777,7 +791,7 @@ export const CheckInPage: React.FC = () => {
                 ? "bg-indigo text-white shadow-sm"
                 : "text-charcoal/70 hover:text-charcoal hover:bg-white/60"
             }`}
-          >
+           aria-pressed={activeAttendanceTab === "event"}>
             <Calendar className="w-4 h-4 text-amber" />
             <span>Special Event Check-In</span>
           </button>
@@ -794,279 +808,209 @@ export const CheckInPage: React.FC = () => {
         <EventAttendanceCheckInView />
       ) : (
         <>
-      {/* TOP HERO: Sunday Service & Attendance Overview */}
-      <div className="relative rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
-        {/* Background decorative elements isolated with overflow-hidden */}
-        <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
-          <img
-            src="/container_bg.jpg"
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen"
-          />
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
-          <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl"></div>
-        </div>
+      {/* Page header */}
+            <PageHeader icon={<UserCheck />} title={<>Worship Service Attendance</>} description={<>Track Sunday attendees, mark kids check-in / check-out, record absent & excused members, and generate child security badges.</>} actions={<div className="flex flex-wrap items-center gap-2.5 xl:shrink-0">
+              {/* Dedicated Sunday Service Selector Popover */}
+              <div ref={dateMenuRef} className="relative z-20 flex items-center gap-1 bg-stone-50 p-1 rounded-xl border border-stone-200 max-w-full">
+                <button
+                  type="button"
+                  onClick={handlePrevSunday}
+                  className="p-2 rounded-lg hover:bg-indigo-50 text-muted hover:text-indigo transition-colors cursor-pointer active:scale-95"
+                  title="Previous Sunday Service"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <ChurchLogo className="w-3.5 h-3.5 text-amber-400" />
-              <span>Sunday Divine Worship & Kids Attendance Kiosk</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-              Worship Service Attendance
-            </h1>
-            <p className="text-xs text-indigo-200/90 max-w-xl leading-relaxed">
-              Track Sunday attendees, mark kids check-in / check-out, record absent & excused members, and generate child security badges.
-            </p>
-          </div>
-
-          {/* Quick Date & Service Selector Controls */}
-          <div className="flex flex-wrap items-center gap-2.5 bg-white/10 p-2.5 rounded-2xl border border-white/15 backdrop-blur-md">
-            {/* Dedicated Sunday Service Selector Popover */}
-            <div ref={dateMenuRef} className="relative z-50 flex items-center gap-1 bg-indigo-950/90 p-1 rounded-2xl border border-white/15 backdrop-blur-md shadow-inner">
-              <button
-                type="button"
-                onClick={handlePrevSunday}
-                className="p-2 rounded-xl hover:bg-white/15 text-indigo-200 hover:text-white transition-colors cursor-pointer active:scale-95"
-                title="Previous Sunday Service"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {/* Central Trigger Button */}
-              <button
-                type="button"
-                onClick={() => setIsDateMenuOpen(!isDateMenuOpen)}
-                data-guide="attendance-service"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-all text-white cursor-pointer active:scale-95"
-              >
-                <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="font-medium text-xs tracking-tight">
-                  {formatDateDisplay(serviceDate)}
-                </span>
-
-                {serviceDate === upcomingSundayStr ? (
-                  <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/30 text-purple-200 border border-purple-400/40 hidden sm:inline-block">
-                    Upcoming (Locked)
+                {/* Central Trigger Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsDateMenuOpen(!isDateMenuOpen)}
+                  data-guide="attendance-service"
+                  className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors text-charcoal cursor-pointer active:scale-95 min-w-0"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-indigo shrink-0" />
+                  <span className="font-medium text-xs tracking-tight">
+                    {formatDateDisplay(serviceDate)}
                   </span>
-                ) : serviceDate === latestSundayStr ? (
-                  <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 hidden sm:inline-block">
-                    {isTodaySunday ? "Today's Service" : "Latest Service"}
-                  </span>
-                ) : (
-                  <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-white/15 text-indigo-200 hidden sm:inline-block">
-                    Past Sunday
-                  </span>
-                )}
 
-                <ChevronDown className={`w-3.5 h-3.5 text-indigo-300 transition-transform duration-200 ${isDateMenuOpen ? "rotate-180" : ""}`} />
-              </button>
+                  {serviceDate === upcomingSundayStr ? (
+                    <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 hidden sm:inline-block">
+                      Upcoming (Locked)
+                    </span>
+                  ) : serviceDate === latestSundayStr ? (
+                    <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 hidden sm:inline-block">
+                      {isTodaySunday ? "Today's Service" : "Latest Service"}
+                    </span>
+                  ) : (
+                    <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo hidden sm:inline-block">
+                      Past Sunday
+                    </span>
+                  )}
 
-              <button
-                type="button"
-                onClick={handleNextSunday}
-                disabled={serviceDate >= upcomingSundayStr}
-                className={`p-2 rounded-xl transition-colors ${serviceDate >= upcomingSundayStr
-                  ? "text-indigo-400/30 cursor-not-allowed"
-                  : "hover:bg-white/15 text-indigo-200 hover:text-white cursor-pointer active:scale-95"
-                  }`}
-                title={serviceDate >= upcomingSundayStr ? "No further upcoming Sundays" : "Next Sunday Service"}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                  <ChevronDown className={`w-3.5 h-3.5 text-muted shrink-0 transition-transform duration-200 ${isDateMenuOpen ? "rotate-180" : ""}`} />
+                </button>
 
-              {/* Sunday Selector Popover Dropdown (100% Solid Opaque Background) */}
-              {isDateMenuOpen && (
-                <div className="absolute top-full left-0 sm:left-auto sm:right-0 md:left-0 mt-2 z-50 w-72 sm:w-84 bg-slate-950 border border-slate-700 rounded-2xl shadow-2xl ring-1 ring-white/10 p-3.5 text-white animate-in fade-in zoom-in-95 duration-150">
-                  {/* Section 1: Upcoming & Latest Highlights */}
-                  <div className="space-y-2">
-                    <div className="text-[12px] uppercase font-medium tracking-wider text-slate-400 px-1">
-                      Services
-                    </div>
+                <button
+                  type="button"
+                  onClick={handleNextSunday}
+                  disabled={serviceDate >= upcomingSundayStr}
+                  className={`p-2 rounded-xl transition-colors ${serviceDate >= upcomingSundayStr
+                    ? "text-muted opacity-40 cursor-not-allowed"
+                    : "hover:bg-indigo-50 text-muted hover:text-indigo cursor-pointer active:scale-95"
+                    }`}
+                  title={serviceDate >= upcomingSundayStr ? "No further upcoming Sundays" : "Next Sunday Service"}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
 
-                    {/* Upcoming Sunday (Only 1) */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setServiceDate(upcomingSundayStr);
-                        setIsDateMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${serviceDate === upcomingSundayStr
-                        ? "bg-purple-950 border-2 border-purple-500 text-white shadow-md"
-                        : "bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 hover:border-slate-700"
-                        }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0 border border-purple-500/30">
-                          <Clock className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-white">{formatDateDisplay(upcomingSundayStr)}</div>
-                          <div className="text-[12px] text-purple-300 font-medium">Upcoming Sunday (Preview Only)</div>
-                        </div>
+                {/* Sunday Selector Popover Dropdown (100% Solid Opaque Background) */}
+                {isDateMenuOpen && (
+                  <div className="absolute top-full left-0 sm:left-auto sm:right-0 md:left-0 mt-2 z-50 w-72 sm:w-84 max-w-[calc(100vw-3rem)] bg-white border border-stone-200 rounded-2xl shadow-2xl ring-1 ring-stone-200/50 p-3.5 text-charcoal animate-in fade-in zoom-in-95 duration-150">
+                    {/* Section 1: Upcoming & Latest Highlights */}
+                    <div className="space-y-2">
+                      <div className="text-[12px] uppercase font-medium tracking-wider text-muted px-1">
+                        Services
                       </div>
-                      <span className="text-[12px] px-2 py-0.5 rounded-md bg-purple-500/30 text-purple-200 font-medium border border-purple-400/40">
-                        Locked
-                      </span>
-                    </button>
 
-                    {/* Latest / Today's Service */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setServiceDate(latestSundayStr);
-                        setIsDateMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${serviceDate === latestSundayStr
-                        ? "bg-emerald-950 border-2 border-emerald-500 text-white shadow-md"
-                        : "bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 hover:border-slate-700"
-                        }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                          <CheckCircle2 className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium text-white">{formatDateDisplay(latestSundayStr)}</div>
-                          <div className="text-[12px] text-emerald-300 font-medium">
-                            {isTodaySunday ? "Today's Sunday Service" : "Latest Sunday Service"}
+                      {/* Upcoming Sunday (Only 1) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setServiceDate(upcomingSundayStr);
+                          setIsDateMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${serviceDate === upcomingSundayStr
+                          ? "bg-purple-50 border-2 border-purple-300 text-charcoal shadow-md"
+                          : "bg-white hover:bg-stone-50 text-charcoal border border-stone-200 hover:border-indigo-200"
+                          }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+                            <Clock className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-charcoal">{formatDateDisplay(upcomingSundayStr)}</div>
+                            <div className="text-[12px] text-purple-700 font-medium">Upcoming Sunday (Preview Only)</div>
                           </div>
                         </div>
+                        <span className="text-[12px] px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 font-medium border border-purple-200">
+                          Locked
+                        </span>
+                      </button>
+
+                      {/* Latest / Today's Service */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setServiceDate(latestSundayStr);
+                          setIsDateMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${serviceDate === latestSundayStr
+                          ? "bg-emerald-50 border-2 border-emerald-300 text-charcoal shadow-md"
+                          : "bg-white hover:bg-stone-50 text-charcoal border border-stone-200 hover:border-indigo-200"
+                          }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-charcoal">{formatDateDisplay(latestSundayStr)}</div>
+                            <div className="text-[12px] text-emerald-700 font-medium">
+                              {isTodaySunday ? "Today's Sunday Service" : "Latest Sunday Service"}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[12px] px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-medium border border-emerald-200">
+                          Active
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Section 2: Recent Sundays (Last 4 Weeks) */}
+                    <div className="mt-3 pt-3 border-t border-stone-200 space-y-1.5">
+                      <div className="text-[12px] uppercase font-medium tracking-wider text-muted px-1">
+                        Recent Past Services
                       </div>
-                      <span className="text-[12px] px-2 py-0.5 rounded-md bg-emerald-500/30 text-emerald-200 font-medium border border-emerald-400/40">
-                        Active
-                      </span>
-                    </button>
-                  </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {recentPastSundays.map((s) => (
+                          <button
+                            key={s.date}
+                            type="button"
+                            onClick={() => {
+                              setServiceDate(s.date);
+                              setIsDateMenuOpen(false);
+                            }}
+                            className={`p-2.5 rounded-xl text-xs font-medium text-left transition-all flex items-center justify-between cursor-pointer ${serviceDate === s.date
+                              ? "bg-indigo text-white shadow-sm ring-2 ring-indigo-400"
+                              : "bg-stone-50 hover:bg-indigo-50 text-charcoal border border-stone-200 hover:border-indigo-200"
+                              }`}
+                          >
+                            <span className="truncate mr-1">{s.label}</span>
+                            {serviceDate === s.date && <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Section 2: Recent Sundays (Last 4 Weeks) */}
-                  <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
-                    <div className="text-[12px] uppercase font-medium tracking-wider text-slate-400 px-1">
-                      Recent Past Services
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {recentPastSundays.map((s) => (
-                        <button
-                          key={s.date}
-                          type="button"
-                          onClick={() => {
-                            setServiceDate(s.date);
-                            setIsDateMenuOpen(false);
-                          }}
-                          className={`p-2.5 rounded-xl text-xs font-medium text-left transition-all flex items-center justify-between cursor-pointer ${serviceDate === s.date
-                            ? "bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400"
-                            : "bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700"
-                            }`}
-                        >
-                          <span className="truncate mr-1">{s.label}</span>
-                          {serviceDate === s.date && <Check className="w-3.5 h-3.5 text-amber-300 shrink-0" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Section 3: Jump to Any Past Sunday Archive */}
-                  <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
-                    <div className="text-[12px] uppercase font-medium tracking-wider text-slate-400 px-1 flex items-center justify-between">
-                      <span>Jump to Any Past Sunday</span>
-                      <span className="text-[12px] text-slate-400 font-normal lowercase">(snaps to sunday)</span>
-                    </div>
-                    <div className="relative flex items-center">
-                      <input
-                        type="date"
-                        max={upcomingSundayStr}
-                        value={serviceDate}
-                        onChange={(e) => snapToSunday(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 hover:border-slate-500 focus:border-amber-400 text-white text-xs font-medium px-3 py-2 rounded-xl outline-none transition-all cursor-pointer [color-scheme:dark]"
-                      />
+                    {/* Section 3: Jump to Any Past Sunday Archive */}
+                    <div className="mt-3 pt-3 border-t border-stone-200 space-y-1.5">
+                      <div className="text-[12px] uppercase font-medium tracking-wider text-muted px-1 flex items-center justify-between">
+                        <span>Jump to Any Past Sunday</span>
+                        <span className="text-[12px] text-muted font-normal lowercase">(snaps to sunday)</span>
+                      </div>
+                      <div className="relative flex items-center">
+                        <input
+                          type="date"
+                          max={upcomingSundayStr}
+                          value={serviceDate}
+                          onChange={(e) => snapToSunday(e.target.value)}
+                          className="w-full bg-stone-50 border border-stone-200 hover:border-indigo-200 focus:border-indigo text-charcoal text-xs font-medium px-3 py-2 rounded-xl outline-none transition-all cursor-pointer"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <button data-guide="attendance-guest"
-              onClick={() => {
-                if (isUpcomingFuture) {
-                  showToast("Guest check-in is disabled for upcoming future dates.", "error");
-                  return;
-                }
-                setIsGuestModalOpen(true);
-              }}
-              disabled={isUpcomingFuture}
-              className={`px-3.5 py-2 rounded-xl text-xs font-medium shadow-md transition-all flex items-center gap-1.5 ${isUpcomingFuture
-                ? "bg-white/10 text-white/70 cursor-not-allowed border border-white/10"
-                : "bg-amber-500 hover:bg-amber-500 text-charcoal active:scale-95 cursor-pointer"
-                }`}
-              title={isUpcomingFuture ? "Check-in disabled for upcoming Sunday" : "Check In Guest"}
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Check In Guest</span>
-            </button>
+              <button data-guide="attendance-guest"
+                onClick={() => {
+                  if (isUpcomingFuture) {
+                    showToast("Guest check-in is disabled for upcoming future dates.", "error");
+                    return;
+                  }
+                  setIsGuestModalOpen(true);
+                }}
+                disabled={isUpcomingFuture}
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium shadow-md transition-all flex items-center gap-1.5 ${isUpcomingFuture
+                  ? "bg-stone-100 text-muted cursor-not-allowed border border-stone-200"
+                  : "bg-indigo hover:bg-indigo-700 text-white active:scale-95 cursor-pointer"
+                  }`}
+                title={isUpcomingFuture ? "Check-in disabled for upcoming Sunday" : "Check In Guest"}
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Check In Guest</span>
+              </button>
 
-            <button
-              onClick={() => loadAttendanceData(false)}
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
-              title="Refresh Attendance"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-        </div>
+              <button
+                onClick={() => loadAttendanceData(false)}
+                className="p-2.5 rounded-xl bg-white border border-stone-200 hover:bg-stone-50 text-indigo transition-colors cursor-pointer"
+                title="Refresh Attendance"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>} />
 
-        {/* Live Attendance Metric Stat Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/10">
-          <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Present Today</span>
-              <UserCheck className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-2xl font-medium text-white mt-1">
-              {presentCount} <span className="text-xs font-normal text-indigo-300">/ {totalRosterCount}</span>
-            </div>
-            <div className="text-[12px] text-emerald-300 font-medium mt-0.5">{attendanceRate}% Turnout</div>
-          </div>
-
-          <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Absent / Excused</span>
-              <UserX className="w-4 h-4 text-rose-400" />
-            </div>
-            <div className="text-2xl font-medium text-white mt-1">
-              {absentCount + excusedCount}
-            </div>
-            <div className="text-[12px] text-rose-300 mt-0.5">
-              {absentCount} Absent • {excusedCount} Excused
-            </div>
-          </div>
-
-          <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Kids In Sunday School</span>
-              <Tag className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-2xl font-medium text-white mt-1">
-              {kidsCheckedIn.length}
-            </div>
-            <div className="text-[12px] text-indigo-200 mt-0.5">Kinder & Elementary in session</div>
-          </div>
-
-          <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 backdrop-blur-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-medium text-indigo-200 uppercase tracking-wider">Kids Checked Out</span>
-              <ShieldCheck className="w-4 h-4 text-emerald-300" />
-            </div>
-            <div className="text-2xl font-medium text-white mt-1">
-              {checkedOutCount}
-            </div>
-            <div className="text-[12px] text-indigo-200 mt-0.5">Safe pickup verified</div>
-          </div>
-        </div>
-      </div>
+      {/* Summary statistics */}
+      {loading ? <AttendanceSummarySkeleton /> : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4" aria-label="Attendance summary">
+        <StatCard label="Present Today" value={presentCount} valueHint={<>/ {totalRosterCount}</>} icon={<UserCheck />} tone="emerald" description={attendanceRate + "% Turnout"} />
+        <StatCard label="Absent / Excused" value={absentCount + excusedCount} icon={<UserX />} tone="rose" description={<>{absentCount} Absent • {excusedCount} Excused</>} />
+        <StatCard label="Kids In Sunday School" value={kidsCheckedIn.length} icon={<Tag />} tone="amber" description="Kinder & Elementary in session" />
+        <StatCard label="Kids Checked Out" value={checkedOutCount} icon={<ShieldCheck />} description="Safe pickup verified" />
+      </div>}
 
       {/* VIEW SWITCHER TABS & SEARCH FILTERS */}
-      <div className="space-y-3 bg-white p-4 rounded-3xl border border-gray-200 shadow-2xs">
+      <div className="space-y-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
 
         {/* Ministry Tabs (Draggable & Scrollable) */}
         <div className="relative flex items-center group/min">
@@ -1162,20 +1106,11 @@ export const CheckInPage: React.FC = () => {
                 Batch Roll Call Active • Showing all {batchScopeList.length} members in current ministry scope. Use the search bar inside the roll call toolbar below to find members.
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setIsFastMode(false);
-                setSelectedMemberIds(new Set());
-              }}
-              className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal/80 font-medium text-xs transition-all cursor-pointer shrink-0"
-            >
-              Exit Batch Mode
-            </button>
           </div>
         ) : (
           /* Normal Mode: Responsive Status Pills + Clean Search & Household */
-          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-2 border-t border-gray-100">
+          <FilterPanel title="Attendance filters" summary={searchQuery || "Filter the attendance roster"}>
+            <div className="filter-panel-layout flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-2 border-t border-gray-100">
             {/* Status Quick Filter Chips - Wraps gracefully so nothing is cut off */}
             <div data-guide="attendance-status-filter" className="flex flex-wrap items-center gap-1.5 text-xs">
               <span className="text-[12px] font-medium text-muted uppercase tracking-wider shrink-0 mr-1">Status:</span>
@@ -1287,6 +1222,7 @@ export const CheckInPage: React.FC = () => {
               </select>
             </div>
           </div>
+          </FilterPanel>
         )}
       </div>
 
@@ -1321,10 +1257,10 @@ export const CheckInPage: React.FC = () => {
       )}
 
       {/* MAIN ATTENDANCE ROSTER LIST */}
-      {loading && roster.length === 0 ? (
-        <TableSkeleton rows={8} columns={6} />
+      {loading ? (
+        <AttendanceTableSkeleton rows={8} columns={6} />
       ) : (
-        <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden space-y-0">
 
           {/* Top Directory Header */}
           <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gray-50/50">
@@ -1347,7 +1283,7 @@ export const CheckInPage: React.FC = () => {
                 </div>
                 <p className="text-[12px] text-muted">
                   {isFastMode
-                    ? "Batch Roll Call: Select absent members (unselected are marked Present) or select present attendees."
+                    ? "Choose a method, select members, then review before saving."
                     : "Quickly mark attendance: Check-In (Present), Check-Out, Absent Today, or Excused (Sick/Travel)."}
                 </p>
               </div>
@@ -1395,217 +1331,17 @@ export const CheckInPage: React.FC = () => {
             </div>
           </div>
 
-          {/* BATCH ROLL CALL TOOLBAR (Rendered when isFastMode is active) */}
-          {isFastMode && (
-            <div className="bg-slate-950 p-4 sm:p-5 text-white border-b border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-              
-              {/* Row 1: Mode Selection (Full-Width 3-Column Grid) */}
-              <div className="space-y-2">
-                <span className="text-[12px] font-medium uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" /> Roll Call Method:
-                </span>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-
-                  {/* Mode A: Select Absent (Unselected = Present) */}
-                  <button data-guide="attendance-method-absent"
-                    type="button"
-                    onClick={() => {
-                      setFastModeType("absent_rest_present");
-                      setSelectedMemberIds(new Set());
-                    }}
-                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "absent_rest_present"
-                      ? "bg-rose-600 text-white shadow-md ring-2 ring-rose-400"
-                      : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
-                      }`}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                      <UserX className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="font-medium leading-tight">Mark Absentees (Exception)</div>
-                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Unselected = Present by Default</div>
-                    </div>
-                  </button>
-
-                  {/* Mode B: Select Present (Unselected = Absent) */}
-                  <button data-guide="attendance-method-present"
-                    type="button"
-                    onClick={() => {
-                      setFastModeType("present_rest_absent");
-                      setSelectedMemberIds(new Set());
-                    }}
-                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "present_rest_absent"
-                      ? "bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400"
-                      : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
-                      }`}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                      <UserCheck className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="font-medium leading-tight">Mark Present Attendees</div>
-                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Unselected = Absent by Default</div>
-                    </div>
-                  </button>
-
-                  {/* Mode C: Present Only */}
-                  <button data-guide="attendance-method-selected"
-                    type="button"
-                    onClick={() => {
-                      setFastModeType("present_only");
-                      setSelectedMemberIds(new Set());
-                    }}
-                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${fastModeType === "present_only"
-                      ? "bg-sky-600 text-white shadow-md ring-2 ring-sky-400"
-                      : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
-                      }`}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                      <CheckSquare className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="font-medium leading-tight">Mark Selected Present Only</div>
-                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Keep unselected unchanged</div>
-                    </div>
-                  </button>
-
-                </div>
-              </div>
-
-              {/* Row 2: Roll Call Search & Actions Bar */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-800">
-
-                {/* Search & Household Bar */}
-                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full lg:w-auto flex-1 max-w-xl">
-                  <div className="relative flex-1 min-w-[200px]">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="Search member in roll call..."
-                      data-guide="attendance-search"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-7 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-400 text-xs focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 outline-none transition-all"
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
-                        title="Clear search"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <select data-guide="attendance-batch-household"
-                    value={selectedHousehold}
-                    onChange={(e) => setSelectedHousehold(e.target.value)}
-                    className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 outline-none font-medium cursor-pointer shrink-0"
-                  >
-                    <option value="all" className="bg-slate-900 text-white">All Households</option>
-                    {householdsList.map(h => (
-                      <option key={h} value={h} className="bg-slate-900 text-white">{h} Family</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Selection Helpers & Active Filter Tag */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div data-guide="attendance-selection-tools" className="flex items-center gap-1 bg-white/10 p-1 rounded-xl border border-white/15">
-                    <button
-                      type="button"
-                      onClick={() => selectAllFiltered(filteredRoster)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-white hover:bg-white/15 transition-all cursor-pointer"
-                      title="Select all members currently in list"
-                    >
-                      Select All ({filteredRoster.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => clearSelection()}
-                      disabled={selectedMemberIds.size === 0}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/15 disabled:opacity-40 transition-all cursor-pointer"
-                    >
-                      Clear ({selectedMemberIds.size})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => invertSelection(filteredRoster)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/15 transition-all cursor-pointer"
-                      title="Invert current check selection"
-                    >
-                      Invert
-                    </button>
-                  </div>
-
-                  {searchQuery && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs">
-                      <span>Filtered: <strong>{filteredRoster.length}</strong> of {batchScopeList.length}</span>
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="hover:text-white ml-0.5 cursor-pointer"
-                        title="Reset search filter"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
-              {/* Row 3: Tip Banner & Save Action */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <div className="bg-white/5 border border-white/10 rounded-2xl px-3.5 py-2 text-xs flex items-center justify-between flex-wrap gap-2 text-slate-300 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-                    <span>
-                      {fastModeType === "absent_rest_present" ? (
-                        <><strong>Tip:</strong> Select members who are absent. All unselected members will automatically be marked as <strong>Present</strong> upon saving.</>
-                      ) : fastModeType === "present_rest_absent" ? (
-                        <><strong>Tip:</strong> Select members who are present. All unselected members will automatically be marked as <strong>Absent</strong> upon saving.</>
-                      ) : (
-                        <><strong>Tip:</strong> Select members to mark as <strong>Present</strong> today.</>
-                      )}
-                    </span>
-                  </div>
-                  <span className="text-[12px] font-mono text-amber-300 shrink-0">
-                    {selectedMemberIds.size} of {batchScopeList.length} in scope selected
-                  </span>
-                </div>
-
-                {/* Primary Save Button */}
-                <button data-guide="attendance-batch-save"
-                  type="button"
-                  onClick={() => handleApplyBatchAttendance(batchScopeList)}
-                  disabled={batchSubmitting || batchScopeList.length === 0}
-                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-medium text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
-                >
-                  {batchSubmitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Saving Roll Call...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4 stroke-[3]" />
-                      <span>
-                        {fastModeType === "absent_rest_present"
-                          ? `Save Roll Call (${selectedMemberIds.size} Absent, ${Math.max(0, batchScopeList.length - selectedMemberIds.size)} Present)`
-                          : fastModeType === "present_rest_absent"
-                            ? `Save Roll Call (${selectedMemberIds.size} Present, ${Math.max(0, batchScopeList.length - selectedMemberIds.size)} Absent)`
-                            : `Save ${selectedMemberIds.size} Selected Present`}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-            </div>
-          )}
+          {isFastMode && <BatchRollCallToolbar
+            method={fastModeType}
+            onMethodChange={method => { setFastModeType(method); setSelectedMemberIds(new Set()); }}
+            selectedCount={selectedMemberIds.size} scopeCount={batchScopeList.length}
+            matchingCount={filteredRoster.length}
+            search={searchQuery} onSearchChange={setSearchQuery}
+            households={householdsList} household={selectedHousehold} onHouseholdChange={setSelectedHousehold}
+            onSelectAll={() => selectAllFiltered(filteredRoster)}
+            onClear={clearSelection} onInvert={() => invertSelection(filteredRoster)}
+            onSave={() => handleApplyBatchAttendance(batchScopeList)} submitting={batchSubmitting}
+          />}
 
           {/* Roster Table */}
           <div className="overflow-x-auto min-h-[160px]">
@@ -1645,7 +1381,7 @@ export const CheckInPage: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredRoster.map((item) => {
+                  rosterPage.items.map((item) => {
                     const isPresent = item.is_present === 1;
                     const isAbsent = item.attendance_status === "absent" || item.attendance_notes?.includes("[ABSENT]");
                     const isExcused = item.attendance_status === "excused" || item.attendance_notes?.includes("[EXCUSED]");
@@ -1976,88 +1712,10 @@ export const CheckInPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <Pagination label="attendance roster" page={rosterPage.page} pageSize={rosterPage.pageSize} total={rosterPage.total} onPageChange={rosterPage.setPage} onPageSizeChange={rosterPage.setPageSize} />
         </div>
       )}
 
-      {/* FLOATING ACTION BAR FOR BATCH ROLL CALL */}
-      {isFastMode && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl bg-slate-950/95 text-white backdrop-blur-md p-3 sm:p-4 rounded-3xl shadow-2xl border border-slate-700/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 animate-in slide-in-from-bottom-6">
-          <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-medium shrink-0 ${fastModeType === "absent_rest_present"
-              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-              : fastModeType === "present_rest_absent"
-                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
-              }`}>
-              {fastModeType === "absent_rest_present" ? (
-                <UserX className="w-5 h-5" />
-              ) : fastModeType === "present_rest_absent" ? (
-                <UserCheck className="w-5 h-5" />
-              ) : (
-                <CheckSquare className="w-5 h-5" />
-              )}
-            </div>
-            <div>
-              <div className="text-xs font-medium flex items-center gap-2">
-                <span>
-                  {fastModeType === "absent_rest_present"
-                    ? "Absence Selection Active"
-                    : fastModeType === "present_rest_absent"
-                      ? "Presence Selection Active"
-                      : "Selective Check-In Active"}
-                </span>
-                <span className="text-[12px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300">
-                  {batchScopeList.length} Members in Scope
-                </span>
-              </div>
-              <p className="text-[12px] text-slate-300">
-                {fastModeType === "absent_rest_present" ? (
-                  <>
-                    <strong className="text-rose-400 font-medium">{selectedMemberIds.size} Absent</strong> • <strong className="text-emerald-400 font-medium">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Present</strong>
-                  </>
-                ) : fastModeType === "present_rest_absent" ? (
-                  <>
-                    <strong className="text-emerald-400 font-medium">{selectedMemberIds.size} Present</strong> • <strong className="text-rose-400 font-medium">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Absent</strong>
-                  </>
-                ) : (
-                  <>
-                    <strong className="text-sky-400 font-medium">{selectedMemberIds.size} Selected Present</strong>
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => clearSelection()}
-              className="px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              Reset
-            </button>
-
-            <button data-guide="attendance-batch-save"
-              type="button"
-              onClick={() => handleApplyBatchAttendance(batchScopeList)}
-              disabled={batchSubmitting || batchScopeList.length === 0}
-              className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-medium text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
-            >
-              {batchSubmitting ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Saving Changes...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 stroke-[3]" />
-                  <span>Save Attendance Changes</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* MODAL: MARK ABSENT / EXCUSED WITH REASON */}
       {absentModalMember && createPortal(
@@ -2405,3 +2063,4 @@ export const CheckInPage: React.FC = () => {
     </div>
   );
 };
+import { BatchRollCallToolbar } from "../components/attendance/BatchRollCallToolbar";

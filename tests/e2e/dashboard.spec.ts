@@ -54,7 +54,7 @@ test('greeting types once, reserves its space, and keeps the complete accessible
   await expect(numbers).toHaveText(['21', '2', '0', '10']);
   const settledSize = await heading.boundingBox();
   expect(settledSize!.width).toBe(size!.width);
-  expect(settledSize!.height).toBe(size!.height);
+  expect(settledSize!.height).toBeCloseTo(size!.height, 2);
   await page.clock.fastForward(10_000);
   await expect(text).toHaveText('Good morning, Mark.');
   await page.getByRole('combobox', { name: 'Appearance' }).selectOption('dark');

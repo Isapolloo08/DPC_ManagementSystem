@@ -1,3 +1,6 @@
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
+import { StatCardSkeleton, ListSkeleton } from "../components/common/SkeletonLoader";
 import { CalendarDays as UICalendarDays, MapPin as UIMapPin } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -282,81 +285,39 @@ export const ProfilePage: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* HERO BANNER */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-          <div className="flex items-center gap-4 sm:gap-5 min-w-0">
-            {/* User Avatar with Ring */}
-            <div className="relative shrink-0">
-              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-amber-400 text-indigo-950 font-medium text-2xl sm:text-3xl flex items-center justify-center shadow-xl ring-4 ring-white/10">
-                {initials}
-              </div>
-              <span className="absolute -bottom-1 -right-1 p-1.5 rounded-xl bg-emerald-500 text-white shadow-md" title="Active session">
-                <ShieldCheck className="w-4 h-4" />
+      <PageHeader icon={<span className="text-sm font-medium">{initials}</span>} title={user.name}
+        description={<>
+          <span>@{user.username || user.email.split("@")[0]}</span>
+          <span>•</span>
+          <span>{user.email}</span>
+        </>}
+        meta={<><span className={`text-[12px] font-medium uppercase tracking-wider px-3 py-1 rounded-full shadow-xs ${currentRoleMeta.color}`}>
+          {user.role_name}
+        </span>{user.ministries && user.ministries.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
+            <span className="text-[12px] text-muted font-medium uppercase tracking-wider">
+              Assigned:
+            </span>
+            {user.ministries.map((m) => (
+              <span
+                key={m.id}
+                className="text-[12px] font-medium px-2.5 py-0.5 rounded-md bg-stone-50 text-charcoal  border border-stone-200"
+              >
+                {m.name} Ministry
               </span>
-            </div>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight truncate">
-                  {user.name}
-                </h1>
-                <span className={`text-[12px] font-medium uppercase tracking-wider px-3 py-1 rounded-full shadow-xs ${currentRoleMeta.color}`}>
-                  {user.role_name}
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-indigo-200/90 font-medium flex items-center gap-2 mt-1 truncate">
-                <span>@{user.username || user.email.split("@")[0]}</span>
-                <span>•</span>
-                <span>{user.email}</span>
-              </p>
-
-              {user.ministries && user.ministries.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
-                  <span className="text-[12px] text-indigo-200 font-medium uppercase tracking-wider">
-                    Assigned:
-                  </span>
-                  {user.ministries.map((m) => (
-                    <span
-                      key={m.id}
-                      className="text-[12px] font-medium px-2.5 py-0.5 rounded-md bg-white/15 text-white backdrop-blur-xs border border-white/20"
-                    >
-                      {m.name} Ministry
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+            ))}
           </div>
-
-          <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              onClick={loadActivity}
-              className="p-2.5 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20 text-white transition-all shadow-2xs cursor-pointer active:scale-95"
-              title="Refresh profile details"
-            >
-              <RefreshCw className={`w-4 h-4 ${loadingActivity ? "animate-spin text-amber-400" : ""}`} />
-            </button>
-          </div>
-        </div>
-
-        {/* NAVIGATION TABS */}
-        <div className="flex items-center gap-2 mt-8 overflow-x-auto no-scrollbar pt-3 border-t border-white/10">
+        )}</>}
+        actions={<Button size="icon" onClick={loadActivity} disabled={loadingActivity} title="Refresh profile details"><RefreshCw className={loadingActivity ? "h-4 w-4 animate-spin" : "h-4 w-4"} /></Button>}>
+        <div className="page-tabs flex flex-wrap items-center gap-2">
           <button data-guide="profile-personal"
             type="button"
+            aria-pressed={activeTab === "personal"}
             onClick={() => setActiveTab("personal")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === "personal"
-                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
-                : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "personal"
+              ? "bg-indigo-50 text-indigo-950 border border-indigo-200"
+              : "bg-stone-50 hover:bg-stone-50 text-charcoal hover:text-charcoal"
+              }`}
           >
             <UserIcon className="w-4 h-4 shrink-0" />
             <span>Personal & Account Details</span>
@@ -364,12 +325,12 @@ export const ProfilePage: React.FC = () => {
 
           <button data-guide="profile-security"
             type="button"
+            aria-pressed={activeTab === "security"}
             onClick={() => setActiveTab("security")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === "security"
-                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
-                : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "security"
+              ? "bg-indigo-50 text-indigo-950 border border-indigo-200"
+              : "bg-stone-50 hover:bg-stone-50 text-charcoal hover:text-charcoal"
+              }`}
           >
             <Lock className="w-4 h-4 shrink-0" />
             <span>Password & Security</span>
@@ -377,12 +338,12 @@ export const ProfilePage: React.FC = () => {
 
           <button data-guide="profile-roles"
             type="button"
+            aria-pressed={activeTab === "roles"}
             onClick={() => setActiveTab("roles")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === "roles"
-                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
-                : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "roles"
+              ? "bg-indigo-50 text-indigo-950 border border-indigo-200"
+              : "bg-stone-50 hover:bg-stone-50 text-charcoal hover:text-charcoal"
+              }`}
           >
             <Shield className="w-4 h-4 shrink-0" />
             <span>Role & Permissions</span>
@@ -390,18 +351,18 @@ export const ProfilePage: React.FC = () => {
 
           <button data-guide="profile-activity"
             type="button"
+            aria-pressed={activeTab === "activity"}
             onClick={() => setActiveTab("activity")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === "activity"
-                ? "bg-white text-indigo-950 shadow-md font-medium scale-100"
-                : "bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
-            }`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "activity"
+              ? "bg-indigo-50 text-indigo-950 border border-indigo-200"
+              : "bg-stone-50 hover:bg-stone-50 text-charcoal hover:text-charcoal"
+              }`}
           >
             <BarChart3 className="w-4 h-4 shrink-0" />
             <span>Church Engagement</span>
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* TAB CONTENT PANELS */}
       <div className="space-y-6">
@@ -422,7 +383,7 @@ export const ProfilePage: React.FC = () => {
             )}
 
             {/* Core Account Credentials */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <KeyRound className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -467,7 +428,7 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             {/* Contact & Demographics */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <Phone className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -523,7 +484,7 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             {/* Academic & Professional Details */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <Briefcase className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -608,7 +569,7 @@ export const ProfilePage: React.FC = () => {
               </div>
             )}
 
-            <div className="bg-white p-7 rounded-3xl border border-slate-200/80 shadow-2xs space-y-5">
+            <div className="bg-white p-7 rounded-2xl border border-slate-200/80 shadow-2xs space-y-5">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <Lock className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -748,7 +709,7 @@ export const ProfilePage: React.FC = () => {
         {/* TAB 3: ROLE & PERMISSIONS MATRIX */}
         {activeTab === "roles" && (
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
               <span className="text-[12px] font-medium uppercase tracking-wider text-muted block">
                 Assigned Role Overview
               </span>
@@ -763,7 +724,7 @@ export const ProfilePage: React.FC = () => {
               </p>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <ShieldCheck className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -785,7 +746,7 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             {user.ministries && user.ministries.length > 0 && (
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                   <Building className="w-4 h-4 text-indigo-600" />
                   <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -814,9 +775,9 @@ export const ProfilePage: React.FC = () => {
 
         {/* TAB 4: CHURCH ACTIVITY & STATS */}
         {activeTab === "activity" && (
-          <div className="space-y-6">
+          <div className="space-y-6">{loadingActivity ? <div role="status" aria-busy="true" aria-label="Loading church activity..."><StatCardSkeleton /><div className="mt-6"><ListSkeleton count={3} /></div></div> : (<div className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
                 <div className="p-3 rounded-2xl bg-teal-50 text-teal-600 border border-teal-100 shrink-0">
                   <Calendar className="w-5 h-5" />
                 </div>
@@ -830,7 +791,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
                 <div className="p-3 rounded-2xl bg-sky-50 text-sky-600 border border-sky-100 shrink-0">
                   <BookOpen className="w-5 h-5" />
                 </div>
@@ -844,7 +805,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
                 <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 shrink-0">
                   <Users className="w-5 h-5" />
                 </div>
@@ -858,7 +819,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
                 <div className="p-3 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100 shrink-0">
                   <Utensils className="w-5 h-5" />
                 </div>
@@ -875,7 +836,7 @@ export const ProfilePage: React.FC = () => {
 
             {/* Life Groups Overview */}
             {activityStats?.groupsLed && activityStats.groupsLed.length > 0 && (
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                   <BookOpen className="w-4 h-4 text-sky-600" />
                   <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -899,7 +860,7 @@ export const ProfilePage: React.FC = () => {
 
             {/* Duty Assignments */}
             {activityStats?.dutiesAssigned && activityStats.dutiesAssigned.length > 0 && (
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-2xs space-y-4">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                   <Utensils className="w-4 h-4 text-amber-600" />
                   <h3 className="text-xs font-semibold text-indigo-950 uppercase tracking-wider">
@@ -919,7 +880,7 @@ export const ProfilePage: React.FC = () => {
                 </div>
               </div>
             )}
-          </div>
+          </div>)}</div>
         )}
       </div>
     </div>

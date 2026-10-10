@@ -1,3 +1,8 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { useListPagination } from "../hooks/useListPagination";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -84,7 +89,7 @@ export const DutyPage: React.FC = () => {
   const { user, ministries, selectedMinistryId } = useAuth();
   const { showToast, deleteWithUndo } = useToast();
   const isCoordinator = user?.role_name === "Coordinator";
-  const canManage = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
+  const canManage = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "IT Admin";
   const coordinatorMinistryId = isCoordinator && user?.ministries && user.ministries.length > 0
     ? user.ministries[0].id
     : (user?.role_name !== "Admin" && user?.role_name !== "Pastor" && user?.role_name !== "IT Admin" && selectedMinistryId ? selectedMinistryId : null);
@@ -710,6 +715,8 @@ export const DutyPage: React.FC = () => {
   // Find this Saturday's item
   const thisSaturday = schedule[0] || null;
 
+  const teamsPage = useListPagination(teams, String(activeScope));
+  const schedulePage = useListPagination(schedule.map((item, index) => ({ item, index })), String(activeScope));
   const guideData = useGuideDataState("duty-teams", { loading, count: teams.length, filtered: Boolean(activeScope), retry: loadDutyData });
 
   if (loading && teams.length === 0) {
@@ -719,60 +726,26 @@ export const DutyPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 space-y-2">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <CalendarCheck className="w-3.5 h-3.5 text-amber-300" />
-              <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Saturday Duty Roster"}</span>
-            </div>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
-            Saturday Duty Roster & Rotating Teams
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-            Weekly Saturday service preparation, church facility cleaning, and rotating team duty cycle.
-          </p>
-        </div>
-
-        <div className="relative z-10 flex items-center gap-2.5">
-          <button
-            onClick={loadDutyData}
-            className="p-2.5 rounded-2xl border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all shadow-2xs backdrop-blur-md cursor-pointer active:scale-95"
-            title="Refresh schedule"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-amber-300" : ""}`} />
-          </button>
+      <PageHeader icon={<Calendar />} title={<>Saturday Duty Roster & Rotating Teams</>}
+        description={<>Weekly Saturday service preparation, church facility cleaning, and rotating team duty cycle.</>}
+        actions={<><div className="relative z-10 flex items-center gap-2.5">
+          <Button onClick={loadDutyData} title="Refresh schedule" variant="secondary" size="icon">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin " : ""}`} />
+          </Button>
           {canManage && (
-            <button data-guide="duty-new"
-              onClick={handleOpenCreateTeam}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <Plus className="w-4 h-4 text-indigo-950" />
+            <Button data-guide="duty-new" onClick={handleOpenCreateTeam} variant="primary">
+              <Plus className="w-4 h-4 " />
               <span>Create Team</span>
-            </button>
+            </Button>
           )}
-        </div>
-      </div>
+        </div></>} />
 
       {/* Hero Card: THIS SATURDAY'S ON-DUTY TEAM */}
       {thisSaturday && thisSaturday.team && (
-        <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-7 sm:p-8 text-white shadow-xl border border-white/10">
-          <img
-            src="/container_bg.jpg"
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover object-center opacity-30 mix-blend-screen pointer-events-none"
-          />
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-400/15 pointer-events-none rounded-full blur-3xl -mr-20 -mt-20"></div>
-          <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 pointer-events-none rounded-full blur-2xl"></div>
+        <div className="relative overflow-hidden bg-white rounded-2xl p-7 sm:p-8 text-charcoal shadow-sm border border-stone-200">
+
+
+
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
             <div className="space-y-3.5">
@@ -781,11 +754,11 @@ export const DutyPage: React.FC = () => {
                   <Clock className="w-3.5 h-3.5 text-indigo-950" />
                   <span>THIS SATURDAY ON DUTY</span>
                 </span>
-                <span className="text-xs text-indigo-100 font-medium bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+                <span className="text-xs text-muted font-medium bg-stone-50 px-3 py-1 rounded-full  border border-stone-200">
                   {thisSaturday.date_formatted}
                 </span>
                 {thisSaturday.status === "completed" && (
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[12px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="bg-emerald-500/20 text-muted border border-emerald-400/40 text-[12px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
                     <Check className="w-3 h-3" />
                     <span>Completed</span>
                   </span>
@@ -793,34 +766,34 @@ export const DutyPage: React.FC = () => {
               </div>
 
               <div>
-                <h2 className="text-2xl sm:text-3xl font-semibold text-white flex items-center gap-3">
+                <h2 className="text-2xl sm:text-3xl font-semibold text-charcoal flex items-center gap-3">
                   <span>{thisSaturday.team.name}</span>
                   <span
                     className="w-4 h-4 rounded-full ring-2 ring-white/60 shadow-md inline-block"
                     style={{ backgroundColor: thisSaturday.team.color }}
                   ></span>
                 </h2>
-                <p className="text-xs text-indigo-100/90 mt-1.5 max-w-xl leading-relaxed">
+                <p className="text-xs text-muted mt-1.5 max-w-xl leading-relaxed">
                   Responsibilities: {thisSaturday.notes || thisSaturday.team.tasks_checklist || "Sanctuary Cleaning, Restrooms, Trash, Audio Setup"}
                 </p>
               </div>
 
               {/* Leader & Roster Preview */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
-                <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 flex items-center gap-2 shadow-2xs">
-                  <UserCheck className="w-4 h-4 text-amber-300" />
+                <div className="bg-stone-50  px-3.5 py-2 rounded-2xl border border-stone-200 flex items-center gap-2 shadow-2xs">
+                  <UserCheck className="w-4 h-4 text-muted" />
                   <span className="text-xs font-medium">
-                    Leader: <strong className="text-white font-medium">{thisSaturday.team.leader_name || "Unassigned"}</strong>
+                    Leader: <strong className="text-charcoal font-medium">{thisSaturday.team.leader_name || "Unassigned"}</strong>
                   </span>
                   {thisSaturday.team.leader_phone && (
-                    <span className="text-[12px] text-indigo-200 font-mono">({thisSaturday.team.leader_phone})</span>
+                    <span className="text-[12px] text-muted font-mono">({thisSaturday.team.leader_phone})</span>
                   )}
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 flex items-center gap-2 shadow-2xs">
-                  <Users className="w-4 h-4 text-amber-300" />
+                <div className="bg-stone-50  px-3.5 py-2 rounded-2xl border border-stone-200 flex items-center gap-2 shadow-2xs">
+                  <Users className="w-4 h-4 text-muted" />
                   <span className="text-xs font-medium">
-                    Team Strength: <strong className="text-white font-medium">{thisSaturday.team.members?.length || thisSaturday.team.members_count || 0} Members</strong>
+                    Team Strength: <strong className="text-charcoal font-medium">{thisSaturday.team.members?.length || thisSaturday.team.members_count || 0} Members</strong>
                   </span>
                 </div>
               </div>
@@ -828,29 +801,29 @@ export const DutyPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0">
-              <div className="text-xs text-amber-200 font-medium bg-white/10 border border-white/20 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs backdrop-blur-xs">
-                <CheckCircle2 className="w-4 h-4 text-amber-300" />
+              <div className="text-xs text-muted font-medium bg-stone-50 border border-stone-200 px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-xs ">
+                <CheckCircle2 className="w-4 h-4 text-muted" />
                 <span>Active Rotation • {thisSaturday.date_formatted}</span>
               </div>
 
-              <button data-guide="duty-swap"
+              {canManage && (<button data-guide="duty-swap"
                 onClick={() => handleOpenSwapModal(thisSaturday)}
-                className="flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 text-white font-medium text-xs py-2.5 px-4 rounded-2xl border border-white/20 transition-all active:scale-95 cursor-pointer shadow-xs"
+                className="flex items-center justify-center gap-2 bg-stone-50 hover:bg-stone-100 text-charcoal font-medium text-xs py-2.5 px-4 rounded-2xl border border-stone-200 transition-all active:scale-95 cursor-pointer shadow-xs"
               >
-                <ArrowLeftRight className="w-4 h-4 text-amber-300" />
+                <ArrowLeftRight className="w-4 h-4 text-muted" />
                 <span>Swap Saturday Team</span>
-              </button>
+              </button>)}
             </div>
           </div>
 
           {/* Member chips row */}
           {thisSaturday.team.members && thisSaturday.team.members.length > 0 && (
-            <div className="mt-5 pt-4 border-t border-white/15 flex flex-wrap items-center gap-2">
-              <span className="text-[12px] font-medium uppercase tracking-wider text-indigo-300">Duty Disciples:</span>
+            <div className="mt-5 pt-4 border-t border-stone-200 flex flex-wrap items-center gap-2">
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted">Duty Disciples:</span>
               {thisSaturday.team.members.map((m, idx) => (
                 <span
                   key={idx}
-                  className="bg-white/15 hover:bg-white/25 border border-white/15 px-3 py-1 rounded-xl text-xs font-medium text-white flex items-center gap-1.5 shadow-2xs backdrop-blur-xs"
+                  className="bg-stone-50 hover:bg-stone-100 border border-stone-200 px-3 py-1 rounded-xl text-xs font-medium text-charcoal flex items-center gap-1.5 shadow-2xs "
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                   <span>{m.first_name} {m.last_name}</span>
@@ -865,7 +838,7 @@ export const DutyPage: React.FC = () => {
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex items-center bg-white/95 p-1.5 rounded-2xl border border-indigo-100/90 shadow-2xs w-fit gap-1.5">
+      <div className="page-tabs flex items-center bg-white/95 p-1.5 rounded-2xl border border-indigo-100/90 shadow-2xs w-fit gap-1.5">
         <button
           onClick={() => setActiveTab("teams")}
           data-guide="duty-teams-tab"
@@ -873,7 +846,7 @@ export const DutyPage: React.FC = () => {
             ? "bg-indigo-950 text-white shadow-xs"
             : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
             }`}
-        >
+         aria-pressed={activeTab === "teams"}>
           <Users className="w-4 h-4" />
           <span>Duty Teams ({teams.length})</span>
         </button>
@@ -885,7 +858,7 @@ export const DutyPage: React.FC = () => {
             ? "bg-indigo-950 text-white shadow-xs"
             : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
             }`}
-        >
+         aria-pressed={activeTab === "schedule"}>
           <Calendar className="w-4 h-4" />
           <span>Saturday Rotation Cycle ({schedule.length} Weeks)</span>
         </button>
@@ -896,7 +869,7 @@ export const DutyPage: React.FC = () => {
             ? "bg-indigo-950 text-white shadow-xs"
             : "text-charcoal/70 hover:text-indigo-950 hover:bg-indigo-50/50"
             }`}
-        >
+         aria-pressed={activeTab === "tasks"}>
           <CheckSquare className="w-4 h-4" />
           <span>Duty Checklist</span>
         </button>
@@ -909,7 +882,7 @@ export const DutyPage: React.FC = () => {
             <CardGridSkeleton count={6} columns={3} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {teams.map((team) => (
+              {teamsPage.items.map((team) => (
                 <div
                   key={team.id}
                   className="bg-white/95 rounded-3xl border border-indigo-100/90 hover:border-amber-400 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between space-y-4"
@@ -931,20 +904,20 @@ export const DutyPage: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <button
+                        {canManage && (<button
                           onClick={() => handleOpenEditTeam(team)}
                           className="p-2 text-muted hover:text-indigo-950 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
                           title="Edit Team"
                         >
                           <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
+                        </button>)}
+                        {canManage && (<button
                           onClick={() => handleDeleteTeam(team.id, team.name)}
                           className="p-2 text-muted hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                           title="Delete Team"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        </button>)}
                       </div>
                     </div>
 
@@ -966,13 +939,13 @@ export const DutyPage: React.FC = () => {
                     <div className="mt-4 space-y-2.5">
                       <div className="flex items-center justify-between text-xs font-medium text-indigo-950">
                         <span>Assigned Disciples ({team.members?.length || 0})</span>
-                        <button
+                        {canManage && (<button
                           onClick={() => handleOpenAddMember(team)}
                           className="text-indigo-950 hover:text-amber-600 text-[12px] flex items-center gap-1 font-medium cursor-pointer transition-colors"
                         >
                           <UserPlus className="w-3.5 h-3.5" />
                           <span>Add Member</span>
-                        </button>
+                        </button>)}
                       </div>
 
                       {team.members && team.members.length > 0 ? (
@@ -1002,25 +975,25 @@ export const DutyPage: React.FC = () => {
                                 )}
                               </div>
 
-                              <button
+                              {canManage && (<button
                                 onClick={() => handleRemoveMember(team.id, m.member_id, `${m.first_name} ${m.last_name}`)}
                                 className="p-1 text-muted hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
                                 title="Remove from team"
                               >
                                 <X className="w-3.5 h-3.5" />
-                              </button>
+                              </button>)}
                             </div>
                           ))}
                         </div>
                       ) : (
                         <div className="p-4 rounded-2xl border border-dashed border-indigo-200 text-center text-xs text-muted">
                           No members assigned yet.
-                          <button
+                          {canManage && (<button
                             onClick={() => handleOpenAddMember(team)}
                             className="block mx-auto mt-1 text-indigo-950 font-medium underline cursor-pointer"
                           >
                             + Add first member
-                          </button>
+                          </button>)}
                         </div>
                       )}
                     </div>
@@ -1043,16 +1016,18 @@ export const DutyPage: React.FC = () => {
               <p className="text-xs text-muted mt-1 max-w-sm mx-auto">
                 Create Team 1, Team 2, and more to set up a seamless rotating Saturday duty cycle.
               </p>
-              <button data-guide="duty-new"
+              {canManage && (<button data-guide="duty-new"
                 onClick={handleOpenCreateTeam}
                 className="mt-4 bg-indigo-950 text-white font-medium text-xs px-5 py-2.5 rounded-xl shadow-xs"
               >
                 + Create Team 1
-              </button>
+              </button>)}
             </div>
           )}
         </div>
       )}
+
+      {activeTab === "teams" && <Pagination label="duty teams" page={teamsPage.page} pageSize={teamsPage.pageSize} total={teamsPage.total} onPageChange={teamsPage.setPage} onPageSizeChange={teamsPage.setPageSize} loading={loading} />}
 
       {/* TAB 2: SATURDAY ROTATION CYCLE TIMELINE */}
       {activeTab === "schedule" && (
@@ -1085,7 +1060,7 @@ export const DutyPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {schedule.map((item, idx) => (
+            {schedulePage.items.map(({ item, index: idx }) => (
               <div
                 key={idx}
                 className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${item.is_this_saturday
@@ -1180,13 +1155,13 @@ export const DutyPage: React.FC = () => {
                     </button>
                   )}
 
-                  <button
+                  {canManage && (<button
                     onClick={() => handleOpenSwapModal(item)}
                     className="p-2 hover:bg-indigo-50 rounded-xl text-muted hover:text-indigo-950 transition-colors cursor-pointer"
                     title="Swap with another Saturday"
                   >
                     <ArrowLeftRight className="w-4 h-4" />
-                  </button>
+                  </button>)}
                 </div>
               </div>
             ))}
@@ -1195,6 +1170,7 @@ export const DutyPage: React.FC = () => {
       )}
 
       {/* TAB 3: SATURDAY CHECKLIST & GUIDELINES (DYNAMIC & EDITABLE) */}
+      {activeTab === "schedule" && <Pagination label="Saturday schedule" page={schedulePage.page} pageSize={schedulePage.pageSize} total={schedulePage.total} onPageChange={schedulePage.setPage} onPageSizeChange={schedulePage.setPageSize} loading={loading} />}
       {activeTab === "tasks" && (
         <div className="space-y-6">
           {/* Action Header */}
@@ -1267,7 +1243,7 @@ export const DutyPage: React.FC = () => {
                   {dutyChecklist.map((item) => (
                     <div
                       key={item.id}
-                      onClick={() => handleToggleDutyTask(item.id)}
+                      onClick={canManage ? () => handleToggleDutyTask(item.id) : undefined}
                       className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-3 group ${
                         item.completed
                           ? "bg-emerald-50/70 border-emerald-200/80 text-emerald-950"
@@ -1515,14 +1491,14 @@ export const DutyPage: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <button
+                          {canManage && (<button
                             type="button"
                             onClick={() => handleRemoveMemberFromForm(mId)}
                             className="text-muted hover:text-rose-600 p-0.5 rounded cursor-pointer transition-colors"
                             title="Remove member"
                           >
                             <X className="w-3.5 h-3.5" />
-                          </button>
+                          </button>)}
                         </div>
                       );
                     })}
@@ -1596,7 +1572,8 @@ export const DutyPage: React.FC = () => {
 
             {/* Filter & Search Bar */}
             <div className="space-y-3 shrink-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <FilterPanel title="Disciple filters" summary={selectorSearchQuery || "Search disciples by name and ministry"}>
+                <div className="filter-panel-layout grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
                   <input data-guide="duty-member-search"
@@ -1629,6 +1606,7 @@ export const DutyPage: React.FC = () => {
                   </select>
                 </div>
               </div>
+              </FilterPanel>
 
               {/* Quick Batch Controls & Counter */}
               <div className="flex items-center justify-between text-xs pt-1">

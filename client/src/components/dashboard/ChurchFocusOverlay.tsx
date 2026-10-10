@@ -15,13 +15,14 @@ interface ChurchFocusOverlayProps {
   panelId: string;
   timeOfDay: string;
   stats: ChurchStat[];
+  groupTab?: NavTab | null;
   nextGathering?: EventItem;
   onClose: () => void;
   onNavigate: (tab: NavTab) => void;
   onOpenProfile?: () => void;
 }
 
-export function ChurchFocusOverlay({ focused, entered, geometry, overlayRef, triggerRef, panelId, timeOfDay, stats, nextGathering, onClose, onNavigate, onOpenProfile }: ChurchFocusOverlayProps) {
+export function ChurchFocusOverlay({ focused, entered, geometry, overlayRef, triggerRef, panelId, timeOfDay, stats, groupTab, nextGathering, onClose, onNavigate, onOpenProfile }: ChurchFocusOverlayProps) {
   const { origin, target, panel } = geometry;
   const style = {
     '--focus-left': `${target.left}px`, '--focus-top': `${target.top}px`,
@@ -32,6 +33,6 @@ export function ChurchFocusOverlay({ focused, entered, geometry, overlayRef, tri
   return createPortal(<div ref={overlayRef} className="church-dashboard church-focus-overlay" data-church-focused={focused} data-entered={entered} data-time-of-day={timeOfDay} style={style} aria-hidden={!focused} inert={!focused}>
     <div className="church-focus-backdrop" aria-hidden="true" />
     <div className="church-focus-visual"><ChurchBuilding focused={focused} panelId={panelId} buttonRef={triggerRef} onToggle={onClose} /></div>
-    <ChurchFocusPanel id={panelId} focused={focused} stats={stats} nextGathering={nextGathering} onClose={onClose} onNavigate={onNavigate} onOpenProfile={onOpenProfile} />
+    <ChurchFocusPanel id={panelId} focused={focused} stats={stats} groupTab={groupTab} nextGathering={nextGathering} onClose={onClose} onNavigate={onNavigate} onOpenProfile={onOpenProfile} />
   </div>, document.body);
 }

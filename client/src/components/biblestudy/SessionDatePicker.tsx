@@ -28,6 +28,7 @@ export interface SessionOptionItem {
   isLatest: boolean;
   isLogged?: boolean;
   loggedSession?: {
+    progress_stage?: string | null;
     id?: number;
     topic_title?: string;
     chapter?: string;

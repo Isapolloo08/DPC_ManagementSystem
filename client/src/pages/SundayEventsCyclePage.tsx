@@ -1,3 +1,10 @@
+import { EventMinistryPicker } from "../components/events/EventMinistryPicker";
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { useListPagination } from "../hooks/useListPagination";
+import { PageHeader } from "../components/common/PageHeader";
+import { CardGridSkeleton, Skeleton } from "../components/common/SkeletonLoader";
+import { Button } from "../components/common/Button";
 import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import { CalendarDays as UICalendarDays, Check as UICheck, MapPin as UIMapPin, RefreshCw as UIRefreshCw } from "lucide-react";
 import { ModalPanel } from "../components/common/ModalPanel";
@@ -21,6 +28,7 @@ interface FormState {
   is_annual_recurring: boolean;
   title: string;
   description: string;
+  ministry_ids: number[];
   target_ministry_id: number | null;
   target_ministry_name: string;
   // Recurring-specific fields
@@ -62,6 +70,7 @@ export const SundayEventsCyclePage: React.FC = () => {
     is_annual_recurring: true,
     title: "",
     description: "",
+    ministry_ids: [],
     target_ministry_id: null,
     target_ministry_name: "Church-wide / All Ministries",
     month: new Date().getMonth() + 1,
@@ -134,7 +143,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       setLoading(true);
       const [cycleRes, eventsRes] = await Promise.all([
         api.getRecurringSundayEvents({ year: selectedYear }),
-        api.getEvents()
+        api.getEvents({ from: selectedYear + "-01-01", to: selectedYear + "-12-31" })
       ]);
       setCycleData(cycleRes);
       setRegularEvents(eventsRes || []);
@@ -188,7 +197,8 @@ export const SundayEventsCyclePage: React.FC = () => {
       is_annual_recurring: true,
       title: "",
       description: "",
-      target_ministry_id: null,
+      ministry_ids: [],
+    target_ministry_id: null,
       target_ministry_name: "Church-wide / All Ministries",
       month: new Date().getMonth() + 1,
       week_pattern: "1st_sunday",
@@ -213,8 +223,9 @@ export const SundayEventsCyclePage: React.FC = () => {
       description: evt.description || "",
       month: evt.month,
       week_pattern: evt.week_pattern || "1st_sunday",
+      ministry_ids: evt.ministry_ids ?? (evt.target_ministry_id ? [evt.target_ministry_id] : []),
       target_ministry_id: evt.target_ministry_id || null,
-      target_ministry_name: evt.target_ministry_name || evt.db_ministry_name || "Church-wide / All Ministries",
+      target_ministry_name: evt.db_ministry_name || evt.target_ministry_name || "Church-wide / All Ministries",
       color: evt.color || "#2C3968",
       icon: evt.icon || "Award",
       program_highlights: evt.program_highlights || "",
@@ -257,6 +268,7 @@ export const SundayEventsCyclePage: React.FC = () => {
       is_annual_recurring: false,
       title: evt.title,
       description: evt.description || "",
+      ministry_ids: evt.ministry_ids ?? (evt.ministry_id ? [evt.ministry_id] : []),
       target_ministry_id: evt.ministry_id || null,
       target_ministry_name: evt.ministry_name || "Church-wide / All Ministries",
       month: eventMonth || 1,
@@ -296,6 +308,7 @@ export const SundayEventsCyclePage: React.FC = () => {
           description: formData.description.trim() || null,
           month: Number(formData.month),
           week_pattern: formData.week_pattern,
+          ministry_ids: formData.ministry_ids,
           target_ministry_id: formData.target_ministry_id || null,
           target_ministry_name: formData.target_ministry_name || null,
           color: formData.color,
@@ -329,6 +342,7 @@ export const SundayEventsCyclePage: React.FC = () => {
         const eventPayload = {
           title: formData.title.trim(),
           description: formData.description.trim() || null,
+          ministry_ids: formData.ministry_ids,
           ministry_id: formData.target_ministry_id || null,
           start_time: startDateTime,
           end_time: endDateTime,
@@ -481,6 +495,9 @@ export const SundayEventsCyclePage: React.FC = () => {
     return true;
   });
 
+  const celebrationPage = useListPagination([...filteredRecurring.map(evt => ({ kind: "recurring", id: evt.id })), ...filteredOneTime.map(evt => ({ kind: "one_time", id: evt.id }))], JSON.stringify([selectedYear, selectedTypeFilter, selectedQuarter, selectedMinistryFilter, searchQuery]));
+  const visibleRecurring = filteredRecurring.filter(evt => celebrationPage.items.some(item => item.kind === "recurring" && item.id === evt.id));
+  const visibleOneTime = filteredOneTime.filter(evt => celebrationPage.items.some(item => item.kind === "one_time" && item.id === evt.id));
   const totalCount = filteredRecurring.length + filteredOneTime.length;
   const guideData = useGuideDataState("celebrations", { loading, count: totalCount, filtered: recurringEvents.length + regularEvents.length > 0 || Boolean(searchQuery), retry: loadAllEvents });
   const syncedCount = recurringEvents.filter(e => e.is_synced_to_calendar).length;
@@ -491,53 +508,38 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* ==================================================== */}
       {/* TOP HERO BANNER & YEAR SELECTOR */}
       {/* ==================================================== */}
-      <div className="celebrations-toolbar">
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold text-indigo-950 tracking-tight">
-              Events and Celebrations
-            </h1>
-            <p className="text-sm text-muted max-w-xl leading-relaxed">
-              Plan church gatherings and annual milestones, year after year.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-            {/* Year Switcher Pills */}
-            <div data-guide="celebration-year" className="celebrations-segment flex items-center p-1 rounded-xl" aria-label="Select year">
-              {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((yr) => (
-                <button
-                  key={yr}
-                  aria-pressed={selectedYear === yr}
-                  onClick={() => setSelectedYear(yr)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${selectedYear === yr
-                      ? "bg-amber-400 text-indigo-950 shadow-md scale-105"
-                      : "text-white/80 hover:text-white hover:bg-white/10"
-                    }`}
-                >
-                  {yr}
-                </button>
-              ))}
-            </div>
-
-            {isAdminOrCoordinator && (
-              <button data-guide="celebration-new"
-                onClick={handleOpenAdd}
-                className="celebrations-add flex items-center justify-center gap-2 font-medium px-4 py-2.5 rounded-xl text-xs"
+      <PageHeader icon={<Calendar />} title={<>Events and Celebrations</>}
+        description={<>Plan church gatherings and annual milestones, year after year.</>}
+        actions={<><div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+          {/* Year Switcher Pills */}
+          <div data-guide="celebration-year" className="celebrations-segment flex items-center p-1 rounded-xl" aria-label="Select year">
+            {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((yr) => (
+              <button
+                key={yr}
+                aria-pressed={selectedYear === yr}
+                onClick={() => setSelectedYear(yr)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${selectedYear === yr
+                  ? "bg-amber-400 text-indigo-950 shadow-sm scale-105"
+                  : "text-charcoal hover:text-charcoal hover:bg-stone-50"
+                  }`}
               >
-                <Plus className="w-4 h-4" />
-                <span>Add Event / Celebration</span>
+                {yr}
               </button>
-            )}
+            ))}
           </div>
-        </div>
-      </div>
+
+          {isAdminOrCoordinator && (
+            <Button data-guide="celebration-new" onClick={handleOpenAdd} variant="secondary">
+              <Plus className="w-4 h-4" />
+              <span>Add Event / Celebration</span>
+            </Button>
+          )}
+        </div></>} />
 
       {/* ==================================================== */}
       {/* 12-MONTH VISUAL ROADMAP STRIP */}
       {/* ==================================================== */}
-      <section className="celebrations-overview rounded-2xl p-4 sm:p-5 space-y-4" aria-label="Year at a glance">
+      {loading ? <div role="status" aria-busy="true" aria-label="Loading year overview..." className="bg-white border border-stone-200 rounded-2xl p-5 space-y-4"><Skeleton className="h-6 w-44" /><div className="grid grid-cols-2 sm:grid-cols-6 gap-3">{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div></div> : (<section className="celebrations-overview rounded-2xl p-4 sm:p-5 space-y-4" aria-label="Year at a glance">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
@@ -652,12 +654,13 @@ export const SundayEventsCyclePage: React.FC = () => {
             );
           })}
         </div>
-      </section>
+      </section>)}
 
       {/* ==================================================== */}
       {/* FILTER & SEARCH CONTROLS */}
       {/* ==================================================== */}
-      <div className="celebrations-filters flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 p-4 rounded-2xl">
+      <FilterPanel title="Event filters" summary={[selectedTypeFilter === "all" ? "All event types" : selectedTypeFilter.replace(/_/g, " "), selectedQuarter === "all" ? "All year" : selectedQuarter, selectedMinistryFilter !== "all" && selectedMinistryFilter, searchQuery].filter(Boolean).join(" · ")}>
+        <div className="filter-panel-layout celebrations-filters flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 p-4 rounded-2xl">
 
         {/* Event Type & Quarter Filter Chips */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -749,6 +752,7 @@ export const SundayEventsCyclePage: React.FC = () => {
           </select>
         </div>
       </div>
+      </FilterPanel>
 
       {/* ==================================================== */}
       {/* EVENTS & CELEBRATIONS CARDS GRID */}
@@ -760,12 +764,9 @@ export const SundayEventsCyclePage: React.FC = () => {
           onClick={() => { setSearchQuery(""); setSelectedQuarter("all"); setSelectedTypeFilter("all"); setSelectedMinistryFilter("all"); }}>Clear filters</button>}
       </div>
       {loading ? (
-        <div className="py-16 text-center space-y-3">
-          <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mx-auto" />
-          <p className="text-xs font-medium text-muted">Loading events and celebrations...</p>
-        </div>
+        <div role="status" aria-busy="true" aria-label="Loading events and celebrations..."><CardGridSkeleton count={6} columns={3} /></div>
       ) : totalCount === 0 ? (
-        <div className="bg-white/95 rounded-3xl p-12 border border-indigo-100/90 text-center space-y-3 shadow-sm">
+        <div className="bg-white/95 rounded-2xl p-12 border border-stone-200 text-center space-y-3 shadow-sm">
           <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200 shadow-2xs">
             <Calendar className="w-7 h-7" />
           </div>
@@ -789,7 +790,7 @@ export const SundayEventsCyclePage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
           {/* 1. RECURRING ANNUAL SUNDAY CELEBRATIONS */}
-          {filteredRecurring.map((evt) => (
+          {visibleRecurring.map((evt) => (
             <div
               key={`recurring-${evt.id}`}
               className="celebration-card group rounded-2xl overflow-hidden flex flex-col justify-between"
@@ -861,7 +862,7 @@ export const SundayEventsCyclePage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2 pt-1">
                     <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-indigo-950 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200">
                       <Users className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>{evt.target_ministry_name || evt.db_ministry_name || "Church-wide"}</span>
+                      <span>{evt.db_ministry_name || evt.target_ministry_name || "Church-wide"}</span>
                     </span>
                   </div>
                 </div>
@@ -921,7 +922,7 @@ export const SundayEventsCyclePage: React.FC = () => {
           ))}
 
           {/* 2. ONE-TIME SCHEDULED EVENTS */}
-          {filteredOneTime.map((evt) => {
+          {visibleOneTime.map((evt) => {
             const startDate = new Date(evt.start_time);
             const endDate = new Date(evt.end_time);
             const dateFormatted = startDate.toLocaleDateString("en-US", {
@@ -1058,6 +1059,8 @@ export const SundayEventsCyclePage: React.FC = () => {
       {/* ==================================================== */}
       {/* ADD / EDIT EVENT OR CELEBRATION MODAL */}
       {/* ==================================================== */}
+      <Pagination label="celebrations" page={celebrationPage.page} pageSize={celebrationPage.pageSize} total={celebrationPage.total} onPageChange={celebrationPage.setPage} onPageSizeChange={celebrationPage.setPageSize} loading={loading} />
+
       {isModalOpen && (
         <ViewportOverlay className="bg-charcoal/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-xl w-full my-auto shadow-2xl border border-indigo-100 animate-in fade-in zoom-in duration-200 overflow-hidden">
@@ -1373,38 +1376,10 @@ export const SundayEventsCyclePage: React.FC = () => {
                 </div>
               )}
 
-              {/* Target Ministry / Department */}
-              <div>
-                <label className="block text-xs font-medium text-charcoal mb-1">
-                  Target Ministry / Department
-                </label>
-                <select
-                  value={formData.target_ministry_id || ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!val) {
-                      setFormData({
-                        ...formData,
-                        target_ministry_id: null,
-                        target_ministry_name: "Church-wide / All Ministries"
-                      });
-                    } else {
-                      const selected = ministries.find((m) => m.id === parseInt(val, 10));
-                      setFormData({
-                        ...formData,
-                        target_ministry_id: parseInt(val, 10),
-                        target_ministry_name: selected?.name || ""
-                      });
-                    }
-                  }}
-                  className="w-full text-xs p-2.5 rounded-xl border border-gray-200 focus:outline-hidden"
-                >
-                  <option value="">Church-wide / All Ministries</option>
-                  {ministries.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} Ministry</option>
-                  ))}
-                </select>
-              </div>
+              <EventMinistryPicker ministries={ministries} value={formData.ministry_ids} onChange={ids => setFormData({
+                ...formData, ministry_ids: ids, target_ministry_id: ids[0] || null,
+                target_ministry_name: ids.length ? ministries.filter(m => ids.includes(m.id)).map(m => m.name).join(' + ') : 'Church-wide / All Ministries'
+              })} />
 
               {/* Description & Pastoral Purpose */}
               <div>

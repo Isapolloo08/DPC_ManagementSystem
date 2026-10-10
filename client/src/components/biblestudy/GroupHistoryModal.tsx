@@ -1,6 +1,9 @@
-import { ModalPanel } from "../common/ModalPanel";
+import { ModalShell } from "../common/ModalShell";
+import { Badge } from "../common/Badge";
+import { Button } from "../common/Button";
+import { formatDisplayDate } from "../../utils/displayDate";
+import "./study-design.css";
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { BibleStudyGroup, BibleStudyGroupHistoryResponse, BibleStudyGroupTransition } from "../../types";
 import { api } from "../../api";
 import {
@@ -97,58 +100,14 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
     return matchesTarget || matchesReason || matchesCreator || matchesSources;
   });
 
-  return createPortal(
-    <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-indigo-100 space-y-4.5 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150">
-        
-        {/* Header */}
-        <div data-modal-header className="flex items-start justify-between border-b border-gray-100 pb-3.5">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-medium shadow-xs ${
-              activeTab === "all"
-                ? "bg-purple-100 text-purple-900"
-                : isMergedSource
-                ? "bg-amber-100 text-amber-900"
-                : "bg-indigo-100 text-indigo-900"
-            }`}>
-              {activeTab === "all" ? <GitMerge className="w-5 h-5" /> : <History className="w-5 h-5" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-base text-charcoal">
-                  {activeTab === "all" ? "All Church Transitions & Merges Log" : "Group Transition History"}
-                </h3>
-                {group && activeTab === "group" && (
-                  <span className={`text-[12px] font-medium px-2 py-0.5 rounded-full uppercase ${
-                    isMergedSource
-                      ? "bg-amber-100 text-amber-900 border border-amber-300"
-                      : "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                  }`}>
-                    {isMergedSource ? "Merged Group" : "Active Group"}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs font-medium text-indigo-950/70">
-                {activeTab === "all"
-                  ? "Overall central record of group merges, consolidations, and restructuring"
-                  : (group?.name || "Group History")}
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 text-muted hover:text-charcoal hover:bg-gray-100 rounded-xl cursor-pointer transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-
-
+  return <ModalShell title={activeTab === "all" ? "All Church Transitions & Merges Log" : "Group Transition History"}
+    subtitle={activeTab === "all" ? "Church-wide group merges, consolidations and restructuring." : group?.name}
+    icon={activeTab === "all" ? <GitMerge /> : <History />} size={activeTab === "all" ? "lg" : "md"}
+    onClose={onClose} className="study-design">
+    {group && activeTab === "group" && <Badge variant={isMergedSource ? "neutral" : "success"}>{isMergedSource ? "Merged Group" : "Active Group"}</Badge>}
         {loading ? (
           <div className="py-12 text-center text-xs text-muted space-y-2">
-            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="w-6 h-6 border-2 border-[var(--border)] border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p>Loading historical records...</p>
           </div>
         ) : error ? (
@@ -165,16 +124,18 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
                 <input
                   type="text"
+                  aria-label="Search transitions"
                   placeholder="Search by group name, leader, reason..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  className="w-full pl-9 pr-3 py-2 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                 />
               </div>
               <select
+                aria-label="Filter transition type"
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-charcoal"
+                className="w-full sm:w-auto px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)] rounded-xl text-xs font-medium text-charcoal"
               >
                 <option value="all">All Types</option>
                 <option value="MERGE">Group Merges</option>
@@ -185,7 +146,7 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
 
             {/* List of transitions */}
             {filteredTransitions.length === 0 ? (
-              <div className="py-12 text-center space-y-2 bg-gray-50 rounded-2xl border border-gray-100">
+              <div className="py-12 text-center space-y-2 bg-[var(--surface-2)] rounded-2xl border border-[var(--border)]">
                 <GitMerge className="w-8 h-8 text-charcoal/30 mx-auto" />
                 <p className="text-xs font-medium text-muted">No transition or merge records found.</p>
                 <p className="text-[12px] text-muted">Merged group transitions will appear here automatically.</p>
@@ -199,37 +160,28 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
                   return (
                     <div
                       key={t.id}
-                      className="p-4 bg-gray-50/80 hover:bg-purple-50/40 rounded-2xl border border-gray-200 hover:border-purple-200 transition-all space-y-3 shadow-2xs"
+                      className="p-4 bg-[var(--surface-2)] hover:bg-[var(--surface-2)] rounded-2xl border border-[var(--border)] border-[var(--border)] transition-all space-y-3 shadow-2xs"
                     >
                       <div className="flex items-start justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
-                          <span className={`text-[12px] font-medium px-2.5 py-0.5 rounded-full uppercase flex items-center gap-1 ${
-                            isMerge
-                              ? "bg-purple-100 text-purple-900 border border-purple-300"
-                              : "bg-blue-100 text-blue-900 border border-blue-300"
-                          }`}>
-                            <GitMerge className="w-3 h-3" />
-                            <span>{isMerge ? "Group Merge" : t.transition_type}</span>
-                          </span>
+                          <Badge variant="info"><GitMerge className="w-3 h-3" /><span>{isMerge ? "Group Merge" : t.transition_type}</span></Badge>
                           <span className="text-[12px] font-medium text-muted">
-                            {new Date(t.effective_date || t.created_at).toLocaleDateString(undefined, {
-                              year: "numeric", month: "short", day: "numeric"
-                            })}
+                            {formatDisplayDate(t.effective_date || t.created_at)}
                           </span>
                         </div>
 
                         {t.created_by_name && (
-                          <span className="text-[12px] text-muted bg-white px-2 py-0.5 rounded-lg border border-gray-200 font-medium">
+                          <span className="text-[12px] text-muted bg-white px-2 py-0.5 rounded-lg border border-[var(--border)] font-medium">
                             Authorized by: <strong>{t.created_by_name}</strong>
                           </span>
                         )}
                       </div>
 
                       {/* Resulting Group & Source Groups Layout */}
-                      <div className="bg-white p-3 rounded-xl border border-gray-200/90 space-y-2">
+                      <div className="bg-white p-3 rounded-xl border border-[var(--border)] space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <div>
-                            <span className="text-[12px] font-medium text-emerald-800 uppercase tracking-wider block">
+                            <span className="text-[12px] font-medium text-[color:var(--text-muted)] uppercase tracking-wider block">
                               Resulting Active Group
                             </span>
                             <strong className="text-xs text-charcoal font-medium">
@@ -243,7 +195,7 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
                                 onSelectRelatedGroup(t.new_group_id!);
                                 onClose();
                               }}
-                              className="text-[12px] font-medium px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo border border-indigo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                              className="ui-button ui-button--secondary ui-button--sm"
                             >
                               <span>Inspect Group</span>
                               <ChevronRight className="w-3 h-3" />
@@ -253,23 +205,21 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
 
                         {/* Source Groups */}
                         {sGroups.length > 0 && (
-                          <div className="pt-2 border-t border-gray-100">
+                          <div className="pt-2 border-t border-[var(--border)]">
                             <span className="text-[12px] font-medium text-muted block mb-1">
-                              Merged from {sGroups.length} source groups:
+                              <GitMerge className="inline-block w-4 h-4 mr-1" aria-hidden="true" />Merged from {sGroups.length} groups
                             </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            <div className="study-merge-sources">
                               {sGroups.map((sg) => (
                                 <div
                                   key={sg.id}
-                                  className="p-2 rounded-lg bg-gray-50 border border-gray-200 text-[12px] flex items-center justify-between"
+                                  className="p-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-[12px] flex items-center justify-between"
                                 >
                                   <div>
                                     <div className="font-medium text-charcoal">• {sg.name}</div>
                                     <div className="text-[12px] text-muted">Leader: {sg.leader_name}</div>
                                   </div>
-                                  <span className="text-[12px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-medium uppercase">
-                                    Merged Source
-                                  </span>
+
                                 </div>
                               ))}
                             </div>
@@ -277,13 +227,11 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
                         )}
 
                         {/* Reason / Notes */}
-                        {(t.reason || t.notes) && (
-                          <div className="pt-2 border-t border-gray-100 text-[12px] text-charcoal/70 flex items-start gap-1.5">
+                        {(t.reason?.trim() || t.notes?.trim()) && (
+                          <div className="pt-2 border-t border-[var(--border)] text-[12px] text-charcoal/70 flex items-start gap-1.5">
                             <FileText className="w-3.5 h-3.5 text-muted shrink-0 mt-0.5" />
-                            <span>
-                              {t.reason && <strong className="text-charcoal font-medium">{t.reason}: </strong>}
-                              {t.notes}
-                            </span>
+                            <div>{t.reason?.trim() && <p><strong>Reason: </strong>{t.reason}</p>}
+                              {t.notes?.trim() && <p><strong>Notes: </strong>{t.notes}</p>}</div>
                           </div>
                         )}
                       </div>
@@ -299,19 +247,17 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
             
             {/* Case 1: Resulting Group created through Merge Transition */}
             {createdTransition && (
-              <div className="p-4 bg-indigo-50/70 rounded-2xl border border-indigo-200 space-y-3">
-                <div className="flex items-center gap-2 text-indigo-950 font-medium">
-                  <GitMerge className="w-4 h-4 text-indigo-700" />
+              <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--border)] space-y-3">
+                <div className="flex items-center gap-2 text-[color:var(--text-muted)] font-medium">
+                  <GitMerge className="w-4 h-4 text-[color:var(--text-muted)]" />
                   <span>Created through Group Merge</span>
                 </div>
 
-                <div className="text-charcoal/80 space-y-1 bg-white p-3 rounded-xl border border-indigo-100">
+                <div className="text-charcoal/80 space-y-1 bg-white p-3 rounded-xl border border-[var(--border)]">
                   <div className="flex items-center justify-between">
                     <span className="text-muted font-medium">Effective Date:</span>
                     <strong className="text-charcoal">
-                      {new Date(createdTransition.effective_date).toLocaleDateString(undefined, {
-                        year: 'numeric', month: 'long', day: 'numeric'
-                      })}
+                      {formatDisplayDate(createdTransition.effective_date)}
                     </strong>
                   </div>
                   {createdTransition.reason && (
@@ -330,24 +276,25 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
 
                 {/* Source Groups List */}
                 <div className="space-y-2">
-                  <span className="text-[12px] font-medium text-indigo-950 block">
+                  <span className="text-[12px] font-medium text-[color:var(--text-muted)] block">
                     Merged from {sourceGroups.length} Source Groups:
                   </span>
                   <div className="space-y-1.5">
                     {sourceGroups.map((sg) => (
                       <div
-                        key={sg.id}
+                        key={sg.id} role={onSelectRelatedGroup ? "button" : undefined} tabIndex={onSelectRelatedGroup ? 0 : undefined}
+                        onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }}
                         onClick={() => {
                           if (onSelectRelatedGroup) {
                             onSelectRelatedGroup(sg.id);
                           }
                         }}
-                        className="p-2.5 bg-white rounded-xl border border-indigo-100 flex items-center justify-between hover:border-indigo-300 hover:bg-indigo-50/30 transition-all cursor-pointer group shadow-2xs"
+                        className="p-2.5 bg-white rounded-xl border border-[var(--border)] flex items-center justify-between border-[var(--border)] hover:bg-[var(--surface-2)] transition-all cursor-pointer group shadow-2xs"
                       >
                         <div>
                           <div className="font-medium text-charcoal group-hover:text-indigo flex items-center gap-1.5">
                             <span>• {sg.name}</span>
-                            <span className="text-[12px] text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded font-medium">
+                            <span className="text-[12px] text-[color:var(--text-muted)] bg-[var(--surface-2)] px-1.5 py-0.2 rounded font-medium">
                               Historical
                             </span>
                           </div>
@@ -366,33 +313,33 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
 
             {/* Case 2: Source Group that was merged into another group */}
             {isMergedSource && (
-              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-300 space-y-3">
+              <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--border)] space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-amber-950 font-medium">
-                    <ShieldCheck className="w-4 h-4 text-amber-700" />
+                  <div className="flex items-center gap-2 text-[color:var(--text-muted)] font-medium">
+                    <ShieldCheck className="w-4 h-4 text-[color:var(--text-muted)]" />
                     <span>Status: Merged</span>
                   </div>
                   {group?.effective_date && (
-                    <span className="text-[12px] font-medium text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-full">
-                      Active until: {group.effective_date}
+                    <span className="text-[12px] font-medium text-[color:var(--text-muted)] bg-[var(--surface-2)] px-2 py-0.5 rounded-full">
+                      Active until: {formatDisplayDate(group.effective_date)}
                     </span>
                   )}
                 </div>
 
-                <p className="text-[12px] text-amber-900 leading-relaxed">
+                <p className="text-[12px] text-[color:var(--text-muted)] leading-relaxed">
                   This Bible study group was consolidated into a merged group. All historical sessions and attendance records remain strictly archived under this group.
                 </p>
 
                 {mergedInto && (
                   <div className="space-y-1.5">
-                    <span className="text-[12px] font-medium text-amber-950">Merged into:</span>
-                    <div
+                    <span className="text-[12px] font-medium text-[color:var(--text-muted)]">Merged into:</span>
+                    <div role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }}
                       onClick={() => {
                         if (mergedInto.id && onSelectRelatedGroup) {
                           onSelectRelatedGroup(mergedInto.id);
                         }
                       }}
-                      className="p-3 bg-white rounded-xl border border-amber-200 flex items-center justify-between hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group"
+                      className="p-3 bg-white rounded-xl border border-[var(--border)] flex items-center justify-between border-[var(--border)] hover:shadow-xs transition-all cursor-pointer group"
                     >
                       <div>
                         <div className="font-medium text-charcoal group-hover:text-indigo text-xs">
@@ -404,7 +351,7 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 text-[12px] font-medium text-indigo-700">
+                      <div className="flex items-center gap-1 text-[12px] font-medium text-[color:var(--text-muted)]">
                         <span>View Group</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </div>
@@ -416,8 +363,8 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
 
             {/* Leadership Roster & History */}
             {group && (
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-2.5">
-                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+              <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--border)] space-y-2.5">
+                <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
                   <span className="font-medium text-xs text-charcoal uppercase tracking-wider flex items-center gap-1.5">
                     <UserCheck className="w-4 h-4 text-indigo" />
                     <span>Leadership Record</span>
@@ -426,23 +373,23 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-gray-200 text-xs">
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-[var(--border)] text-xs">
                     <div>
                       <div className="font-medium text-charcoal">{group.leader_name}</div>
                       <div className="text-[12px] text-muted">{group.leader_contact || "Primary Facilitator"}</div>
                     </div>
-                    <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900">
+                    <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--surface-2)] text-[color:var(--text-muted)]">
                       Primary Leader
                     </span>
                   </div>
 
                   {group.assistant_leader_name && (
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-gray-200 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-[var(--border)] text-xs">
                       <div>
                         <div className="font-medium text-charcoal">{group.assistant_leader_name}</div>
                         <div className="text-[12px] text-muted">{group.assistant_leader_contact || "Assistant Facilitator"}</div>
                       </div>
-                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--surface-2)] text-[color:var(--text-muted)]">
                         Assistant Leader
                       </span>
                     </div>
@@ -452,8 +399,8 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
             )}
 
             {/* Historical Notice */}
-            <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[12px] text-charcoal/70 flex items-start gap-2">
-              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div className="p-3 bg-[var(--surface-2)] rounded-xl border border-[var(--border)] text-[12px] text-charcoal/70 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-[color:var(--text-muted)] shrink-0 mt-0.5" />
               <span>
                 All past session roll-calls, discipleship notes, and progress logs are permanently referenced to the group that held them at that time.
               </span>
@@ -462,26 +409,6 @@ export const GroupHistoryModal: React.FC<GroupHistoryModalProps> = ({
           </div>
         )}
 
-        {/* Footer */}
-        <div data-modal-footer className="pt-2 border-t border-gray-100 flex items-center justify-between">
-          <div>
-            {activeTab === "all" && (
-              <span className="text-[12px] text-muted">
-                Total recorded transitions: <strong>{allTransitions.length}</strong>
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-medium text-xs text-charcoal cursor-pointer transition-colors"
-          >
-            Close
-          </button>
-        </div>
-
-      </ModalPanel>
-    </div>,
-    document.body
-  );
+      {activeTab === "all" && <p className="text-xs text-muted">Total recorded transitions: <strong>{allTransitions.length}</strong></p>}
+    </ModalShell>;
 };

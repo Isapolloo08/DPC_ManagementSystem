@@ -14,13 +14,14 @@ interface ChurchFocusPanelProps {
   id: string;
   focused: boolean;
   stats: ChurchStat[];
+  groupTab?: NavTab | null;
   nextGathering?: EventItem;
   onClose: () => void;
   onNavigate: (tab: NavTab) => void;
   onOpenProfile?: () => void;
 }
 
-export function ChurchFocusPanel({ id, focused, stats, nextGathering, onClose, onNavigate, onOpenProfile }: ChurchFocusPanelProps) {
+export function ChurchFocusPanel({ id, focused, stats, groupTab = 'biblestudy', nextGathering, onClose, onNavigate, onOpenProfile }: ChurchFocusPanelProps) {
   const headingId = useId();
   const panelRef = useRef<HTMLElement>(null);
   const [present, setPresent] = useState(focused);
@@ -50,7 +51,7 @@ export function ChurchFocusPanel({ id, focused, stats, nextGathering, onClose, o
     <div className="church-focus-actions">
       {onOpenProfile && <button type="button" className="church-profile-action" onClick={onOpenProfile}>View church profile <ArrowUpRight size={14} aria-hidden="true" /></button>}
       <button type="button" onClick={() => onNavigate('events')}>Open calendar <ArrowUpRight size={13} aria-hidden="true" /></button>
-      <button type="button" onClick={() => onNavigate('biblestudy')}>View groups <ArrowUpRight size={13} aria-hidden="true" /></button>
+      {groupTab && <button type="button" onClick={() => onNavigate(groupTab)}>{groupTab === 'leaderportal' ? 'My Bible study group' : 'View groups'} <ArrowUpRight size={13} aria-hidden="true" /></button>}
     </div>
   </aside>;
 }

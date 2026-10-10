@@ -1,0 +1,412 @@
+Phase A audit: remaining literal colors and cream/purple utility uses in client/src.
+Semantic token definitions and the central legacy palette are excluded. Some legacy classes are already overridden by scoped semantic styles; entries need review, not automatic replacement. Data-driven ministry colors remain data.
+
+client/src\pages\AuditPage.tsx:287:        <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-950 border border-purple-300 font-medium px-2.5 py-0.5 rounded-full text-[12px] shadow-2xs">
+client/src\pages\AuditPage.tsx:288:          <LogOut className="w-3 h-3 text-purple-600" />
+client/src\pages\AuditPage.tsx:305:    else if (tbl.includes("USER")) style = "bg-purple-50 text-purple-950 border-purple-200";
+client/src\pages\AuditPage.tsx:440:                        className="hover:bg-indigo-50/40 odd:bg-ivory-light/30 transition-colors cursor-pointer group"
+client/src\pages\AttendanceLogPage.tsx:264:      doc.setFillColor(44, 57, 104); // #2C3968 - Indigo
+client/src\pages\AttendanceLogPage.tsx:274:      doc.setTextColor(217, 164, 65); // #D9A441 - Amber
+client/src\pages\AttendanceLogPage.tsx:707:                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-900 rounded-lg text-[12px] font-medium border border-purple-200/60">
+client/src\pages\AttendanceLogPage.tsx:708:                            <PartyPopper className="w-3 h-3 text-purple-600" />
+client/src\pages\AttendanceLogPage.tsx:728:                          <span className="font-medium text-purple-900">
+client/src\pages\CommunicationsPage.tsx:218:                  style={{ backgroundColor: a.ministry_color || "#2C3968" }}
+client/src\pages\CommunicationsPage.tsx:280:                  className="w-full bg-ivory-light p-2.5 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 font-medium text-indigo-900"
+client/src\pages\CommunicationsPage.tsx:290:                  className="w-full bg-ivory-light p-2.5 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 disabled:opacity-90 disabled:cursor-not-allowed font-medium text-charcoal cursor-pointer"
+client/src\pages\CommunicationsPage.tsx:307:                  className="w-full bg-ivory-light p-2.5 rounded-2xl border border-indigo-100/90 focus:outline-none focus:ring-2 focus:ring-indigo/20 leading-relaxed font-medium"
+client/src\pages\BibleStudyPage.tsx:1025:            <History className="w-4 h-4 text-purple-300" />
+client/src\pages\BibleStudyPage.tsx:1066:                : "bg-ivory-light text-charcoal/70 hover:bg-gray-100"
+client/src\pages\BibleStudyPage.tsx:1077:            <div data-guide="groups-status" className="flex items-center gap-1 bg-ivory-light p-1 rounded-2xl border border-gray-200">
+client/src\pages\BibleStudyPage.tsx:1122:                className="bg-ivory-light px-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-medium text-indigo cursor-pointer disabled:opacity-90 disabled:cursor-not-allowed"
+client/src\pages\BibleStudyPage.tsx:1136:                className="bg-ivory-light px-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal cursor-pointer"
+client/src\pages\BibleStudyPage.tsx:1152:              className="w-full bg-ivory-light pl-9 pr-3 py-1.5 rounded-xl text-xs border border-gray-200 focus:outline-none focus:border-indigo font-medium"
+client/src\pages\BibleStudyPage.tsx:1224:                        style={{ backgroundColor: g.ministry_color || "#059669" }}
+client/src\pages\BibleStudyPage.tsx:1288:                      className="flex-1 px-3 py-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-gray-200/80"
+client/src\pages\BibleStudyPage.tsx:1296:                      className="p-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal/70 hover:text-emerald-800 transition-colors border border-gray-200/80 cursor-pointer"
+client/src\pages\BibleStudyPage.tsx:1440:                  style={{ backgroundColor: g.ministry_color || "#2C3968" }}
+client/src\pages\BibleStudyPage.tsx:1471:                      style={{ backgroundColor: g.ministry_color || "#2C3968" }}
+client/src\pages\BibleStudyPage.tsx:1673:                      className="flex-1 px-3 py-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-gray-200/80"
+client/src\pages\BibleStudyPage.tsx:1681:                      className="p-2 rounded-xl bg-ivory-light hover:bg-gray-200 text-charcoal/70 hover:text-indigo transition-colors border border-gray-200/80 cursor-pointer"
+client/src\pages\BibleStudyPage.tsx:1689:                        className="p-2 rounded-xl bg-ivory-light hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors border border-gray-200/80 cursor-pointer"
+client/src\pages\BibleStudyPage.tsx:1746:                        ? "#059669"
+client/src\pages\BibleStudyPage.tsx:1748:                        ? "#64748b"
+client/src\pages\BibleStudyPage.tsx:1749:                        : (selectedGroup.ministry_color || "#2C3968")
+client/src\pages\BibleStudyPage.tsx:1857:              <div className="p-3.5 bg-ivory rounded-2xl border border-amber/20 space-y-2">
+client/src\pages\BibleStudyPage.tsx:1910:                <p className="text-charcoal/80 leading-relaxed bg-ivory-light p-3 rounded-xl border border-gray-100">
+client/src\pages\BibleStudyPage.tsx:1928:                      <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-ivory-light border border-gray-100 text-xs">
+client/src\pages\BibleStudyPage.tsx:2095:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\BibleStudyPage.tsx:2105:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-indigo"
+client/src\pages\BibleStudyPage.tsx:2124:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-indigo disabled:opacity-90 disabled:cursor-not-allowed"
+client/src\pages\BibleStudyPage.tsx:2160:                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\BibleStudyPage.tsx:2265:                      className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium"
+client/src\pages\BibleStudyPage.tsx:2330:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\BibleStudyPage.tsx:2355:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium"
+client/src\pages\BibleStudyPage.tsx:2398:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-xs cursor-pointer"
+client/src\pages\BibleStudyPage.tsx:2437:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs"
+client/src\pages\BibleStudyPage.tsx:2620:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\BibleStudyPage.tsx:2708:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\BibleStudyPage.tsx:2773:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium text-charcoal focus:outline-none focus:border-emerald-600"
+client/src\pages\BibleStudyPage.tsx:2786:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium focus:outline-none focus:border-emerald-600"
+client/src\pages\BibleStudyPage.tsx:2799:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium focus:outline-none focus:border-emerald-600"
+client/src\pages\BibleStudyPage.tsx:2813:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-emerald-600"
+client/src\pages\CheckInPage.tsx:836:                    <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 hidden sm:inline-block">
+client/src\pages\CheckInPage.tsx:882:                          ? "bg-purple-50 border-2 border-purple-300 text-charcoal shadow-md"
+client/src\pages\CheckInPage.tsx:887:                          <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+client/src\pages\CheckInPage.tsx:892:                            <div className="text-[12px] text-purple-700 font-medium">Upcoming Sunday (Preview Only)</div>
+client/src\pages\CheckInPage.tsx:895:                        <span className="text-[12px] px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 font-medium border border-purple-200">
+client/src\pages\CheckInPage.tsx:1074:                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color || "#2C3968" }}></span>
+client/src\pages\CheckInPage.tsx:1228:        <div className="bg-indigo-950 border border-purple-500/30 text-white p-4 rounded-3xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1">
+client/src\pages\CheckInPage.tsx:1230:            <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-400/30 flex items-center justify-center shrink-0">
+client/src\pages\CheckInPage.tsx:1236:                <span className="text-[12px] uppercase font-medium px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40">
+client/src\pages\CheckInPage.tsx:1240:              <p className="text-xs text-purple-200/80 mt-0.5">
+client/src\pages\CheckInPage.tsx:1474:                            style={{ backgroundColor: item.ministry_color || "#2C3968" }}
+client/src\pages\CurriculumPage.tsx:331:              className="w-full pl-10 pr-4 py-2 rounded-2xl border border-indigo-100/90 bg-ivory-light text-xs focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium placeholder:text-muted transition-all"
+client/src\pages\CurriculumPage.tsx:550:                            className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${detailGroupTab === "merged" ? "bg-white text-purple-900 shadow-2xs" : "text-purple-700/80 hover:text-purple-900"
+client/src\pages\CurriculumPage.tsx:652:                                  <div className={`flex items-center gap-1 font-medium ${isMerged ? "text-purple-900" : "text-indigo-900"}`}>
+client/src\context\ThemeContext.tsx:41:        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#2C3968');
+client/src\pages\curriculum.css:38:.curriculum-group-card :is([class*="text-purple"], [class*="text-indigo"]) { color: var(--text-muted); }
+client/src\pages\DishwashingPage.tsx:141:        bg: "bg-violet-50",
+client/src\pages\DishwashingPage.tsx:142:        border: "border-violet-100",
+client/src\pages\DishwashingPage.tsx:143:        text: "text-violet-700",
+client/src\pages\DishwashingPage.tsx:144:        accent: "text-violet-600",
+client/src\pages\DishwashingPage.tsx:145:        badgeBg: "bg-violet-600"
+client/src\pages\DishwashingPage.tsx:223:    color: "#0D9488",
+client/src\pages\DishwashingPage.tsx:632:      color: ["#0D9488", "#0284C7", "#7C3AED", "#EA580C", "#059669", "#D97706", "#DB2777"][nextNum % 7],
+client/src\pages\DishwashingPage.tsx:683:      color: team.color || linkedMinistries[0]?.color || "#0D9488",
+client/src\pages\DishwashingPage.tsx:1285:                      style={{ backgroundColor: nextSunday.team?.color || "#0D9488" }}
+client/src\pages\DishwashingPage.tsx:1313:                    style={{ backgroundColor: thirdSunday.team?.color || "#64748B" }}
+client/src\pages\DishwashingPage.tsx:2289:                                  style={{ backgroundColor: m.color || "#0D9488" }}
+client/src\pages\DishwashingPage.tsx:2591:                    {["#0D9488", "#0284C7", "#7C3AED", "#EA580C", "#059669", "#D97706", "#DB2777", "#475569"].map((c) => (
+client/src\pages\DishwashingPage.tsx:3001:                    { key: "violet", label: "Violet", bg: "bg-violet-50 text-violet-700 border-violet-200" }
+client/src\pages\DashboardPage.tsx:338:                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.ministry_color || "#0284c7" }} />
+client/src\pages\DashboardPage.tsx:422:                    style={{ backgroundColor: activeMinistry?.color || "#2C3968" }}
+client/src\pages\DashboardPage.tsx:477:                <div className="lg:col-span-5 p-4 rounded-2xl bg-ivory-light/80 border border-indigo-100/80 space-y-2.5 flex flex-col justify-between">
+client/src\pages\DashboardPage.tsx:800:                        style={{ backgroundColor: m.ministry_color || "#3b82f6" }}
+client/src\pages\DashboardPage.tsx:861:                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
+client/src\pages\DashboardPage.tsx:871:              <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+client/src\pages\DashboardPage.tsx:881:                    className="p-2.5 rounded-xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between gap-2 hover:bg-purple-50/30 hover:border-purple-200 transition-all"
+client/src\pages\DashboardPage.tsx:886:                        style={{ backgroundColor: c.ministry_color || "#7c3aed" }}
+client/src\pages\DashboardPage.tsx:908:                  <Cake className="w-5 h-5 text-purple-400 mx-auto" />
+client/src\pages\DashboardPage.tsx:1168:            <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5 flex-1 bg-ivory-light/30">
+client/src\pages\DashboardPage.tsx:1221:                                  style={{ backgroundColor: candidate.ministry_color || "#0284c7" }}
+client/src\pages\DashboardPage.tsx:1255:                            <div className="space-y-1.5 p-2.5 bg-ivory-light/60 rounded-xl border border-indigo-50 text-xs">
+client/src\pages\EventsPage.tsx:466:        ministry_color: evt.ministry_color || "#2C3968",
+client/src\pages\EventsPage.tsx:467:        badge_color: evt.ministry_color || "#2C3968",
+client/src\pages\EventsPage.tsx:488:        ministry_color: duty.team.color || "#2C3968",
+client/src\pages\EventsPage.tsx:491:        badge_color: duty.team.color || "#2C3968",
+client/src\pages\EventsPage.tsx:514:        ministry_color: dish.team.color || "#0D9488",
+client/src\pages\EventsPage.tsx:517:        badge_color: dish.team.color || "#0D9488",
+client/src\pages\EventsPage.tsx:563:            ministry_color: group.ministry_color || "#7C3AED",
+client/src\pages\EventsPage.tsx:566:            badge_color: group.ministry_color || "#7C3AED",
+client/src\pages\EventsPage.tsx:591:        ministry_color: "#EA580C",
+client/src\pages\EventsPage.tsx:593:        badge_color: "#EA580C",
+client/src\pages\EventsPage.tsx:985:                ? "bg-purple-700 text-white shadow-md ring-2 ring-purple-700/20"
+client/src\pages\EventsPage.tsx:986:                : "bg-purple-50 text-purple-900 hover:bg-purple-100 border border-purple-200/80"
+client/src\pages\EventsPage.tsx:1244:                                  {act.type === "bible_study" && <BookOpen className="w-3 h-3 shrink-0 text-purple-200" />}
+client/src\pages\EventsPage.tsx:1365:                              className="bg-purple-900 hover:bg-purple-800 text-white font-medium px-3 py-1.5 rounded-xl text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+client/src\pages\EventsPage.tsx:1368:                              <UserCheck className="w-3.5 h-3.5 text-purple-300" />
+client/src\pages\EventsPage.tsx:1533:                        className="w-full bg-purple-900  text-white font-medium py-2.5 px-4 rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+client/src\pages\EventsPage.tsx:1535:                        <UserCheck className="w-4 h-4 text-purple-300" />
+client/src\pages\EventsPage.tsx:1574:                      <BookOpen className="w-4 h-4 text-purple-600" />
+client/src\pages\EventsPage.tsx:1831:                      {act.type === "bible_study" && <BookOpen className="w-3.5 h-3.5 shrink-0 text-purple-700" />}
+client/src\pages\EventsPage.css:15:.calendar-view-switch button[aria-pressed="true"] { color: var(--ui-heading); background: var(--calendar-surface); box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
+client/src\pages\EventsPage.css:23:  border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--calendar-muted); box-shadow: none; --tw-ring-shadow: 0 0 #0000;
+client/src\pages\EventsPage.css:37:.calendar-week button[aria-current="date"] { background: var(--ui-accent); color: var(--ui-accent-text); box-shadow: none; --tw-ring-shadow: 0 0 #0000; }
+client/src\pages\EventsPage.css:51:.calendar-activity[data-selected="true"] { border-color: var(--activity-mark); outline: 1px solid var(--activity-mark); outline-offset: 1px; --tw-ring-shadow: 0 0 #0000; box-shadow: none; }
+client/src\pages\LoginPage.tsx:272:            background: "linear-gradient(to top, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 75, 0.60) 45%, rgba(15, 23, 42, 0.40) 100%)"
+client/src\pages\LoginPage.tsx:376:      <div className="w-full md:w-1/2 lg:w-5/12 min-h-0 md:min-h-screen bg-ivory-light flex flex-col justify-between p-5 sm:p-8 md:p-10 lg:p-14 overflow-y-auto">
+client/src\pages\DutyPage.tsx:80:      return { bg: "bg-violet-50/90", border: "border-violet-200", title: "text-violet-950", desc: "text-violet-900" };
+client/src\pages\DutyPage.tsx:319:    color: "#2C3968",
+client/src\pages\DutyPage.tsx:394:      color: nextNum % 2 === 1 ? "#2C3968" : "#E07A5F",
+client/src\pages\DutyPage.tsx:924:                    <div className="mt-3.5 bg-ivory-light/70 p-3 rounded-2xl border border-indigo-50 flex items-center justify-between text-xs">
+client/src\pages\DutyPage.tsx:963:                              className="flex items-center justify-between p-2.5 rounded-xl bg-ivory-light/60 hover:bg-ivory-light border border-indigo-50/80 text-xs transition-colors"
+client/src\pages\DutyPage.tsx:1249:                          : "bg-ivory-light/70 hover:bg-indigo-50/40 border-indigo-50/80 text-charcoal"
+client/src\pages\DutyPage.tsx:1414:                    className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\DutyPage.tsx:1425:                    className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\DutyPage.tsx:1435:                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\DutyPage.tsx:1449:                  {["#2C3968", "#E07A5F", "#6E8B74", "#D9A441", "#8D5B4C", "#4A5568"].map((c) => (
+client/src\pages\DutyPage.tsx:1478:                  <div className="max-h-36 overflow-y-auto p-2 rounded-xl bg-ivory-light border border-gray-200 space-y-1.5">
+client/src\pages\DutyPage.tsx:1521:                  className="w-full bg-ivory-light p-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo"
+client/src\pages\DutyPage.tsx:1582:                    className="w-full bg-ivory-light pl-9 pr-3 py-2 rounded-xl border border-indigo-100 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+client/src\pages\DutyPage.tsx:1591:                    className="w-full bg-ivory-light pl-9 pr-3 py-2 rounded-xl border border-indigo-100 text-xs focus:outline-none focus:border-indigo-500 font-medium cursor-pointer"
+client/src\pages\DutyPage.tsx:1760:                    style={{ backgroundColor: swapItem1.team?.color || "#6366f1" }}
+client/src\pages\DutyPage.tsx:1777:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-indigo-100 focus:outline-none focus:border-indigo font-medium text-indigo-950 cursor-pointer text-xs"
+client/src\pages\DutyPage.tsx:1894:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+client/src\pages\DutyPage.tsx:1905:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+client/src\pages\DutyPage.tsx:1960:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+client/src\pages\DutyPage.tsx:1974:                    { key: "violet", label: "Violet", bg: "bg-violet-50 text-violet-800 border-violet-200" }
+client/src\pages\DutyPage.tsx:1998:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs text-charcoal"
+client/src\pages\leader\LeaderPortalPage.tsx:1049:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium"
+client/src\pages\leader\LeaderPortalPage.tsx:1061:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200"
+client/src\pages\leader\LeaderPortalPage.tsx:1164:                      className="w-full pl-9 pr-8 py-2.5 bg-ivory-light rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal"
+client/src\pages\leader\LeaderPortalPage.tsx:1182:                      className="w-full bg-ivory-light py-2.5 px-3 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal cursor-pointer truncate"
+client/src\components\attendance\EventAttendanceCheckInView.tsx:588:                  className="w-full pl-9 pr-7 py-2 bg-ivory-light border border-charcoal/15 rounded-xl text-xs font-medium text-charcoal focus:outline-none focus:border-indigo transition"
+client/src\components\attendance\EventAttendanceCheckInView.tsx:603:                className="bg-ivory-light border border-charcoal/15 text-charcoal text-xs font-medium py-2 px-3 rounded-xl focus:outline-none focus:border-indigo cursor-pointer"
+client/src\components\attendance\EventAttendanceCheckInView.tsx:805:                                  : "hover:bg-ivory/50"
+client/src\components\attendance\EventAttendanceCheckInView.tsx:859:                            style={{ backgroundColor: item.ministry_color || "#2C3968" }}
+client/src\components\attendance\EventAttendanceCheckInView.tsx:1173:                  className="w-full pl-9 pr-3 py-2 bg-ivory-light border border-charcoal/15 rounded-xl text-xs font-medium text-charcoal focus:outline-none focus:border-indigo"
+client/src\components\attendance\EventAttendanceCheckInView.tsx:1179:                className="bg-ivory-light border border-charcoal/15 text-charcoal text-xs font-medium py-2 px-3 rounded-xl focus:outline-none cursor-pointer"
+client/src\components\attendance\EventAttendanceCheckInView.tsx:1200:                    className="p-3 hover:bg-ivory/60 flex items-center justify-between transition-colors"
+client/src\pages\ProfilePage.tsx:195:      color: "bg-purple-600 text-white",
+client/src\pages\ProfilePage.tsx:402:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
+client/src\pages\ProfilePage.tsx:413:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
+client/src\pages\ProfilePage.tsx:424:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
+client/src\pages\ProfilePage.tsx:447:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs"
+client/src\pages\ProfilePage.tsx:457:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs"
+client/src\pages\ProfilePage.tsx:466:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\pages\ProfilePage.tsx:480:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs"
+client/src\pages\ProfilePage.tsx:503:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs"
+client/src\pages\ProfilePage.tsx:514:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs"
+client/src\pages\ProfilePage.tsx:525:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs"
+client/src\pages\ProfilePage.tsx:536:                    className="w-full bg-ivory-light/60 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs"
+client/src\pages\ProfilePage.tsx:591:                    className="w-full bg-ivory-light/60 p-3 pr-10 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\pages\ProfilePage.tsx:614:                    className="w-full bg-ivory-light/60 p-3 pr-10 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\pages\ProfilePage.tsx:661:                    className="w-full bg-ivory-light/60 p-3 pr-10 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\features\members\components\MemberFamilySection.tsx:18:  return <section aria-label="Family members" className="sm:col-span-2 p-4 rounded-2xl border border-indigo-100 bg-ivory-light/70 space-y-3">
+client/src\features\members\components\MemberFamilySection.tsx:33:          : relationship.includes("guardian") ? "bg-purple-100 text-purple-900" : "bg-indigo-100 text-indigo-900";
+client/src\pages\ReportsPage.tsx:219:                        className="bg-ivory-light p-4 rounded-2xl border border-gray-200/80 hover:border-sky-300 transition-all flex flex-col justify-between group hover:shadow-md"
+client/src\pages\ReportsPage.tsx:249:              <div className="p-8 text-center bg-ivory-light rounded-2xl border border-dashed border-gray-300 space-y-2">
+client/src\pages\ReportsPage.tsx:317:                <div className="p-8 text-center bg-ivory-light rounded-2xl border border-dashed border-gray-300 space-y-1">
+client/src\pages\ReportsPage.tsx:338:                <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
+client/src\pages\ReportsPage.tsx:349:                <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
+client/src\pages\ReportsPage.tsx:374:                <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
+client/src\pages\ReportsPage.tsx:399:                <div className="p-3 bg-ivory rounded-2xl border border-indigo-100 space-y-1">
+client/src\pages\ReportsPage.tsx:457:                      className="p-4 rounded-2xl bg-ivory-light border border-gray-200/90 space-y-3 hover:border-indigo-300 transition-all shadow-2xs"
+client/src\pages\ReportsPage.tsx:497:              <div className="p-8 text-center bg-ivory-light rounded-2xl border border-dashed border-gray-300">
+client/src\pages\leader\LeaderDashboardPage.tsx:431:              <Calendar className="w-4 h-4 text-purple-600" />
+client/src\pages\leader\LeaderDashboardPage.tsx:436:              className="text-xs font-medium text-purple-700 hover:text-purple-900 cursor-pointer"
+client/src\pages\leader\LeaderDashboardPage.tsx:452:                  className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-purple-50/50 border border-slate-200/80 transition-all flex items-center justify-between gap-3"
+client/src\pages\leader\LeaderDashboardPage.tsx:470:                    <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-white text-purple-800 border border-purple-200 shrink-0">
+client/src\components\StartupShootingStar.tsx:63:        trail.addColorStop(0, "rgba(255,246,213,0.92)");
+client/src\components\StartupShootingStar.tsx:64:        trail.addColorStop(0.45, "rgba(221,182,103,0.35)");
+client/src\components\StartupShootingStar.tsx:65:        trail.addColorStop(1, "rgba(221,182,103,0)");
+client/src\components\StartupShootingStar.tsx:67:        ink.shadowColor = "rgba(227,190,113,0.38)";
+client/src\components\StartupShootingStar.tsx:70:        ink.fillStyle = "#fff2d2";
+client/src\components\StartupShootingStar.tsx:71:        ink.shadowColor = "rgba(234,199,131,0.7)";
+client/src\pages\SettingsPage.tsx:34:  "#2C3968", "#D9A441", "#6E8B74", "#B85C56", "#E07A5F",
+client/src\pages\SettingsPage.tsx:35:  "#4A5568", "#8D5B4C", "#3B82F6", "#8B5CF6", "#10B981",
+client/src\pages\SettingsPage.tsx:36:  "#F59E0B", "#EC4899", "#6366F1", "#14B8A6", "#64748B"
+client/src\pages\SettingsPage.tsx:133:    color: "#2C3968",
+client/src\pages\SettingsPage.tsx:146:    color: "#2C3968"
+client/src\pages\SettingsPage.tsx:280:        color: lookup.color || "#2C3968",
+client/src\pages\SettingsPage.tsx:390:        color: ministry.color || "#2C3968"
+client/src\pages\SettingsPage.tsx:703:                          style={{ backgroundColor: min.color || "#2C3968" }}
+client/src\pages\SettingsPage.tsx:800:                          style={{ backgroundColor: cat.color || "#2C3968" }}
+client/src\pages\SettingsPage.tsx:953:                        style={{ backgroundColor: cat.color || "#2C3968" }}
+client/src\pages\SettingsPage.tsx:1019:                        style={{ backgroundColor: cat.color || "#2C3968" }}
+client/src\pages\SettingsPage.tsx:1087:                          style={{ backgroundColor: status.color || "#10B981" }}
+client/src\components\biblestudy\GroupHistoryModal.tsx:109:                ? "bg-purple-100 text-purple-900"
+client/src\components\biblestudy\GroupHistoryModal.tsx:202:                      className="p-4 bg-gray-50/80 hover:bg-purple-50/40 rounded-2xl border border-gray-200 hover:border-purple-200 transition-all space-y-3 shadow-2xs"
+client/src\components\biblestudy\GroupHistoryModal.tsx:208:                              ? "bg-purple-100 text-purple-900 border border-purple-300"
+client/src\components\biblestudy\BibleStudyRescheduleModal.tsx:592:                        className="w-full bg-ivory-light p-2.5 rounded-xl border border-indigo-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\pages\leader\LeaderDashboard.tsx:420:            className="bg-white p-5 rounded-3xl border border-purple-200/80 hover:border-purple-400 shadow-2xs hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-3"
+client/src\pages\leader\LeaderDashboard.tsx:423:              <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:scale-110 transition-transform">
+client/src\pages\leader\LeaderDashboard.tsx:426:              <ChevronRight className="w-4 h-4 text-purple-600 group-hover:translate-x-1 transition-transform" />
+client/src\pages\leader\LeaderDashboard.tsx:429:              <h4 className="text-sm font-semibold text-charcoal group-hover:text-purple-800 transition-colors">Daily Bible Reading</h4>
+client/src\pages\leader\LeaderDashboard.tsx:434:            <span className="text-[12px] font-medium text-purple-700 flex items-center gap-1 group-hover:underline">
+client/src\pages\leader\LeaderDashboard.tsx:461:                : "bg-ivory-light text-charcoal/70 hover:bg-gray-100 border border-gray-200"
+client/src\pages\leader\LeaderDashboard.tsx:470:                : "bg-ivory-light text-charcoal/70 hover:bg-gray-100 border border-gray-200"
+client/src\pages\leader\LeaderDashboard.tsx:737:                className="flex-1 py-2 px-3 rounded-xl bg-ivory-light hover:bg-gray-100 border border-gray-200 text-charcoal text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
+client/src\components\biblestudy\GroupTransitionModal.tsx:537:              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-ivory-light p-4 rounded-2xl border border-indigo-100">
+client/src\components\biblestudy\GroupTransitionModal.tsx:565:                  className="w-full bg-ivory-light p-2.5 pr-8 rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:border-indigo"
+client/src\components\biblestudy\GroupTransitionModal.tsx:613:                              style={{ backgroundColor: g.ministry_color || "#2C3968" }}
+client/src\components\biblestudy\GroupTransitionModal.tsx:691:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium text-charcoal text-xs focus:outline-none focus:border-indigo"
+client/src\components\biblestudy\GroupTransitionModal.tsx:702:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium text-indigo cursor-pointer focus:outline-none focus:border-indigo"
+client/src\components\biblestudy\GroupTransitionModal.tsx:715:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium text-indigo cursor-pointer focus:outline-none focus:border-indigo"
+client/src\components\biblestudy\GroupTransitionModal.tsx:752:                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs"
+client/src\components\biblestudy\GroupTransitionModal.tsx:836:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium cursor-pointer"
+client/src\components\biblestudy\GroupTransitionModal.tsx:874:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium text-xs cursor-pointer"
+client/src\components\biblestudy\GroupTransitionModal.tsx:907:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium"
+client/src\components\biblestudy\GroupTransitionModal.tsx:919:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200"
+client/src\components\biblestudy\GroupTransitionModal.tsx:956:                            : "bg-ivory-light border-gray-200 hover:border-indigo-300 hover:bg-white"
+client/src\components\biblestudy\GroupTransitionModal.tsx:1077:                      className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium text-xs focus:outline-none focus:border-indigo"
+client/src\components\biblestudy\GroupTransitionModal.tsx:1087:                      className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium text-xs focus:outline-none focus:border-indigo"
+client/src\components\biblestudy\GroupTransitionModal.tsx:1098:              <div className="bg-ivory-light p-3.5 rounded-2xl border border-indigo-100">
+client/src\components\biblestudy\GroupTransitionModal.tsx:1145:                  className="w-full mt-2 bg-ivory-light p-2.5 rounded-xl border border-gray-200 font-medium"
+client/src\components\biblestudy\GroupTransitionModal.tsx:1158:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200"
+client/src\pages\leader\LeaderBibleStudy.tsx:407:                    : "bg-ivory-light hover:bg-amber-50 text-amber-900 border-amber-200"
+client/src\pages\leader\LeaderBibleStudy.tsx:472:                    className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-xs h-[41px]"
+client/src\pages\leader\LeaderBibleStudy.tsx:521:                  className="w-full bg-ivory-light p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal cursor-pointer"
+client/src\pages\SundayEventsCyclePage.css:6:.celebrations-page .celebrations-segment button[aria-pressed="true"] { background: var(--ui-surface); color: var(--ui-heading); box-shadow: 0 1px 3px rgb(0 0 0 / .08); }
+client/src\pages\SundayEventsCyclePage.tsx:75:    color: "#2C3968",
+client/src\pages\SundayEventsCyclePage.tsx:201:      color: "#2C3968",
+client/src\pages\SundayEventsCyclePage.tsx:223:      color: evt.color || "#2C3968",
+client/src\pages\SundayEventsCyclePage.tsx:270:      color: evt.ministry_color || "#2C3968",
+client/src\pages\SundayEventsCyclePage.tsx:582:                      ? "bg-ivory-light/60 border-indigo-100 hover:border-amber-300"
+client/src\pages\SundayEventsCyclePage.tsx:727:              className="text-xs pl-9 pr-3.5 py-2 rounded-xl bg-ivory-light border border-indigo-100 focus:outline-hidden focus:ring-2 focus:ring-indigo/20 focus:border-indigo w-52 sm:w-64"
+client/src\pages\SundayEventsCyclePage.tsx:735:            className="text-xs px-3 py-2 rounded-xl bg-ivory-light border border-indigo-100 font-medium text-charcoal focus:outline-hidden"
+client/src\pages\SundayEventsCyclePage.tsx:790:                style={{ backgroundColor: evt.color || "#2C3968" }}
+client/src\pages\SundayEventsCyclePage.tsx:934:                  style={{ backgroundColor: evt.ministry_color || "#2C3968" }}
+client/src\pages\SundayEventsCyclePage.tsx:1468:              <div className="p-3 bg-ivory-light/80 rounded-2xl border border-indigo-50 space-y-1">
+client/src\pages\volunteer\VolunteerDashboard.tsx:290:            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-purple-50/80 hover:bg-purple-100/90 border border-purple-200/80 text-purple-900 transition-all text-center group cursor-pointer hover:shadow-xs"
+client/src\pages\volunteer\VolunteerDashboard.tsx:292:            <Calendar className="w-5 h-5 text-purple-600 mb-1.5 group-hover:scale-110 transition-transform" />
+client/src\pages\volunteer\VolunteerDashboard.tsx:294:            <span className="text-[12px] text-purple-700/70">Church Calendar</span>
+client/src\components\biblestudy\SessionHistoryModal.tsx:103:      <details className="group rounded-xl border border-gray-200 bg-ivory-light p-3 space-y-3">
+client/src\pages\UsersPage.tsx:878:                                style={{ backgroundColor: m.color || "#2C3968" }}
+client/src\pages\UsersPage.tsx:1562:                          style={{ backgroundColor: m.color || "#2C3968" }}
+client/src\components\biblestudy\SessionDatePicker.tsx:11: * - Latest / Logged / Missing badges with #2B3467 navy selected state
+client/src\components\biblestudy\SessionDatePicker.tsx:178:              : "bg-ivory-light border-gray-200 hover:border-indigo-200 hover:bg-white"
+client/src\components\biblestudy\SessionDatePicker.tsx:526:            ? "bg-[#2B3467] text-white border-[#2B3467] shadow-xs scale-[1.01]"
+client/src\components\biblestudy\SessionDatePicker.tsx:539:                <div className="w-1.5 h-1.5 rounded-full bg-[#2B3467]" />
+client/src\components\settings\PurgeYearModal.tsx:147:      case "announcements": return <MessageSquare className="w-3.5 h-3.5 text-purple-600" />;
+client/src\components\DPCLoadingScreen.tsx:208:          className="dpc-startup fixed inset-0 z-[9999] h-screen w-screen overflow-hidden bg-[#08111f]"
+client/src\components\DPCLoadingScreen.tsx:237:                    color="#d7b66e"
+client/src\components\DPCLoadingScreen.tsx:238:                    highlightColor="#fff0c4"
+client/src\pages\leader\LeaderAttendanceMonitor.tsx:377:              className="w-full pl-9 pr-8 py-2 bg-ivory-light rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium text-charcoal"
+client/src\pages\leader\LeaderAttendanceMonitor.tsx:433:                  className="bg-ivory-light py-1.5 px-2.5 rounded-xl border border-gray-200 text-[12px] font-medium text-charcoal cursor-pointer"
+client/src\components\layout\DashboardDateButton.tsx:9:    className="dashboard-date-button inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white p-2 xl:px-3 text-charcoal text-[12px] cursor-pointer hover:bg-ivory focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-ivory-light">
+client/src\components\layout\Navbar.tsx:66:      ? "bg-ivory-light/95 border-gray-200/70 backdrop-blur-md"
+client/src\components\layout\Navbar.tsx:157:                className="group flex items-center gap-2 pl-2.5 pr-2.5 py-1 rounded-full border border-gray-200 bg-white hover:bg-ivory transition-all cursor-pointer text-left active:scale-98"
+client/src\components\notifications\NotificationBell.tsx:110:          <div className="max-h-[55vh] overflow-y-auto p-2 space-y-2 bg-ivory-light">
+client/src\components\profile\ProfileModal.tsx:176:      color: "bg-purple-600 text-white",
+client/src\components\profile\ProfileModal.tsx:389:        <div className="flex-1 overflow-y-auto p-5 sm:p-7 bg-ivory-light/40 space-y-6">
+client/src\components\profile\ProfileModal.tsx:423:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
+client/src\components\profile\ProfileModal.tsx:434:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
+client/src\components\profile\ProfileModal.tsx:445:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-indigo-950 text-xs"
+client/src\components\profile\ProfileModal.tsx:468:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+client/src\components\profile\ProfileModal.tsx:478:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+client/src\components\profile\ProfileModal.tsx:487:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\components\profile\ProfileModal.tsx:501:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+client/src\components\profile\ProfileModal.tsx:524:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+client/src\components\profile\ProfileModal.tsx:535:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+client/src\components\profile\ProfileModal.tsx:546:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+client/src\components\profile\ProfileModal.tsx:557:                      className="w-full bg-ivory-light/50 p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
+client/src\components\profile\ProfileModal.tsx:620:                      className="w-full bg-ivory-light/50 p-2.5 pr-10 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\components\profile\ProfileModal.tsx:644:                      className="w-full bg-ivory-light/50 p-2.5 pr-10 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\components\profile\ProfileModal.tsx:693:                      className="w-full bg-ivory-light/50 p-2.5 pr-10 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs font-medium"
+client/src\components\settings\DataInspectionModal.tsx:67:      case "announcements": return <MessageSquare className="w-4 h-4 text-purple-600" />;
+client/src\components\settings\BackupModal.tsx:161:      case "announcements": return <MessageSquare className="w-3.5 h-3.5 text-purple-600" />;
+client/src\components\DPCLoadingScreen.css:2:  background: radial-gradient(ellipse at 50% 35%, #11243a 0%, #0a1729 52%, #060e1b 100%);
+client/src\components\DPCLoadingScreen.css:6:  color: #f5e8c8;
+client/src\components\DPCLoadingScreen.css:90:  background: linear-gradient(90deg, rgba(255, 246, 213, 0.92), rgba(221, 182, 103, 0.35) 45%, transparent);
+client/src\components\DPCLoadingScreen.css:91:  box-shadow: 0 0 12px rgba(227, 190, 113, 0.38), 0 0 4px rgba(255, 245, 213, 0.55);
+client/src\components\DPCLoadingScreen.css:105:  background: #fff2d2;
+client/src\components\DPCLoadingScreen.css:106:  box-shadow: 0 0 10px rgba(234, 199, 131, 0.7), 0 0 4px #fff2d2;
+client/src\components\DPCLoadingScreen.css:137:  from { opacity: 0; transform: scale(0.94); filter: blur(3px) drop-shadow(0 0 0 rgba(220, 184, 115, 0)); }
+client/src\components\DPCLoadingScreen.css:138:  70% { opacity: 1; transform: scale(1.01); filter: blur(0) drop-shadow(0 0 14px rgba(220, 184, 115, 0.32)); }
+client/src\components\DPCLoadingScreen.css:139:  to { opacity: 1; transform: scale(1); filter: blur(0) drop-shadow(0 0 7px rgba(220, 184, 115, 0.18)); }
+client/src\components\dashboard\ChurchOverview.css:2:  --dashboard-card: #fffef8;
+client/src\components\dashboard\ChurchOverview.css:3:  --dashboard-muted-card: #f5f3e9;
+client/src\components\dashboard\ChurchOverview.css:4:  --dashboard-line: #e8e5d9;
+client/src\components\dashboard\ChurchOverview.css:5:  --dashboard-ink: #30312b;
+client/src\components\dashboard\ChurchOverview.css:6:  --dashboard-muted: #797a6f;
+client/src\components\dashboard\ChurchOverview.css:7:  --dashboard-gold: #f0ce68;
+client/src\components\dashboard\ChurchOverview.css:8:  --dashboard-soft-gold: #faf0c9;
+client/src\components\dashboard\ChurchOverview.css:12:  --dashboard-card: #1e293b;
+client/src\components\dashboard\ChurchOverview.css:13:  --dashboard-muted-card: #172033;
+client/src\components\dashboard\ChurchOverview.css:14:  --dashboard-line: #334155;
+client/src\components\dashboard\ChurchOverview.css:15:  --dashboard-ink: #e2e8f0;
+client/src\components\dashboard\ChurchOverview.css:16:  --dashboard-muted: #a6b0bf;
+client/src\components\dashboard\ChurchOverview.css:17:  --dashboard-gold: #e4bd58;
+client/src\components\dashboard\ChurchOverview.css:18:  --dashboard-soft-gold: #423b25;
+client/src\components\dashboard\ChurchOverview.css:98:.scripture-card .bg-sky-600 { background: var(--dashboard-gold); color: #30312b; }
+client/src\components\dashboard\ChurchOverview.css:134:.ministry-view-switch button[aria-pressed="true"] { background: var(--dashboard-card); color: var(--dashboard-ink); box-shadow: 0 1px 3px rgb(0 0 0 / .06); }
+client/src\components\dashboard\ChurchOverview.css:135:.ministry-view-switch button:focus-visible { outline: 2px solid #b59136; outline-offset: 2px; }
+client/src\components\dashboard\ChurchOverview.css:136:.ministry-hover-details { position: absolute; top: calc(100% - 1px); left: -1px; right: -1px; opacity: 0; visibility: hidden; transform: translateY(-4px); pointer-events: none; box-shadow: 0 8px 12px rgb(0 0 0 / .08); transition: opacity 160ms, transform 160ms, visibility 160ms; }
+client/src\components\help\help.css:1:.help-page-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; color: #334155; }
+client/src\components\help\help.css:3:.help-text-button:hover { color: #4f46e5; }
+client/src\components\help\help.css:4:.help-shortcuts { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 18px 20px; margin-bottom: 24px; background: #fff; border: 1px solid #e0e7ff; border-radius: 20px; }
+client/src\components\help\help.css:5:.help-task-shortcut { display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid #c7d2fe; border-radius: 12px; background: #eef2ff; color: #312e81; font-size: 12px; font-weight: 500; cursor: pointer; }
+client/src\components\help\help.css:6:.help-task-shortcut:hover { background: #e0e7ff; }
+client/src\components\help\help.css:7:.help-dialog { width: min(620px, calc(100vw - 28px)); max-height: calc(100dvh - 40px); margin: auto; padding: 0; border: 1px solid #e5e7eb; border-radius: 24px; background: #fff; color: #263247; box-shadow: 0 24px 80px #0f172a40; }
+client/src\components\help\help.css:8:.help-dialog::backdrop { background: #0f172a85; }
+client/src\components\help\help.css:13:.help-eyebrow { font-size: 12px; font-weight: 500; letter-spacing: .05em; color: #4f46e5; }
+client/src\components\help\help.css:14:.help-description { font-size: 13px; line-height: 1.65; color: #475569; margin-top: 12px; }
+client/src\components\help\help.css:15:.help-icon-button { display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; padding: 8px; color: #64748b; cursor: pointer; flex-shrink: 0; }
+client/src\components\help\help.css:16:.help-icon-button:hover { background: #f1f5f9; color: #1e293b; }
+client/src\components\help\help.css:17:.help-tour-button { width: 100%; display: flex; align-items: center; gap: 14px; padding: 18px; margin-top: 20px; text-align: left; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 16px; cursor: pointer; }
+client/src\components\help\help.css:21:.help-tour-button:hover { background: #e0e7ff; }
+client/src\components\help\help.css:23:.help-task-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 14px; text-align: left; cursor: pointer; }
+client/src\components\help\help.css:24:.help-task-card:hover { background: #f8fafc; border-color: #a5b4fc; }
+client/src\components\help\help.css:25:.help-task-card strong { font-size: 13px; color: #263247; }
+client/src\components\help\help.css:26:.help-task-card span { font-size: 12px; line-height: 1.5; color: #64748b; }
+client/src\components\help\help.css:28:.help-primary { background: #4338ca; color: #fff; }
+client/src\components\help\help.css:29:.help-primary:hover { background: #3730a3; }
+client/src\components\help\help.css:30:.help-secondary { background: #f1f5f9; color: #475569; }
+client/src\components\help\help.css:31:.help-secondary:hover { background: #e2e8f0; }
+client/src\components\help\help.css:34:.help-guide-state-label { margin-top: 10px; font-size: 12px; color: #92400e; }
+client/src\components\help\help.css:36:.help-dialog--preview::backdrop { background: #0f172a; }
+client/src\components\help\help.css:42:.help-demo-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px; background: #eef2ff; color: #312e81; border-block: 1px solid #c7d2fe; }
+client/src\components\help\help.css:44:.help-demo-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: #fff; }
+client/src\components\help\help.css:45:html[data-theme="dark"] .help-demo-toolbar { background: #263247; color: #c7d2fe; border-color: #475569; }
+client/src\components\help\help.css:52:.help-preview-notice { display: flex; align-items: center; gap: 8px; margin: 16px 0; padding: 12px; font-size: 12px; line-height: 1.6; background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-radius: 12px; }
+client/src\components\help\help.css:54:.help-preview-workspace, .help-preview-instructions { padding: 18px; border: 1px solid #cbd5e1; border-radius: 16px; background: #f8fafc; min-width: 0; }
+client/src\components\help\help.css:58:.help-preview-record dt { color: #64748b; }
+client/src\components\help\help.css:59:.help-preview-record dd { color: #263247; overflow-wrap: anywhere; }
+client/src\components\help\help.css:61:.help-preview-control { display: flex; align-items: center; gap: 10px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; background: #fff; text-align: left; font-size: 12px; color: #334155; }
+client/src\components\help\help.css:62:.help-preview-control span { font-weight: 600; color: #4338ca; }
+client/src\components\help\help.css:63:.help-preview-control[aria-current="step"] { border-color: #6366f1; background: #eef2ff; }
+client/src\components\help\help.css:66:html[data-theme="dark"] .help-guide-state-label { color: #fde68a; }
+client/src\components\help\help.css:67:html[data-theme="dark"] .help-preview-notice { background: #263247; color: #c7d2fe; border-color: #64748b; }
+client/src\components\help\help.css:69:html[data-theme="dark"] .help-preview-control { background: #0f172a; border-color: #64748b; color: #e2e8f0; }
+client/src\components\help\help.css:70:html[data-theme="dark"] .help-preview-record dt { color: #b8c5d6; }
+client/src\components\help\help.css:71:html[data-theme="dark"] .help-preview-record dd { color: #e2e8f0; }
+client/src\components\help\help.css:72:html[data-theme="dark"] .help-preview-control span { color: #c7d2fe; }
+client/src\components\help\help.css:73:html[data-theme="dark"] .help-preview-control[aria-current="step"] { background: #263247; border-color: #a5b4fc; }
+client/src\components\help\help.css:75:.help-page-steps li { display: flex; gap: 12px; font-size: 13px; line-height: 1.6; color: #475569; }
+client/src\components\help\help.css:76:.help-page-step { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; padding: 12px; border: 1px solid #e2e8f0; border-radius: 14px; cursor: pointer; }
+client/src\components\help\help.css:77:.help-page-step:hover { background: #eef2ff; border-color: #a5b4fc; }
+client/src\components\help\help.css:80:.help-page-step strong { color: #263247; margin-bottom: 4px; }
+client/src\components\help\help.css:81:.help-page-step .help-step-number { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0; background: #eef2ff; border-radius: 50%; color: #4338ca; font-weight: 500; }
+client/src\components\help\help.css:83:.help-guide-search { display: grid; gap: 6px; margin-bottom: 16px; font-size: 12px; color: #334155; }
+client/src\components\help\help.css:84:.help-guide-search input { padding: 10px 12px; width: 100%; border: 1px solid #94a3b8; border-radius: 10px; background: #fff; color: #0f172a; }
+client/src\components\help\help.css:85:.help-guide-search input:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+client/src\components\help\help.css:86:.help-task-card small { color: #64748b; font-size: 11px; }
+client/src\components\help\help.css:87:html[data-theme="dark"] .help-guide-search, html[data-theme="dark"] .help-task-card small { color: #cbd5e1; }
+client/src\components\help\help.css:88:html[data-theme="dark"] .help-guide-search input { background: #0f172a; color: #e2e8f0; border-color: #64748b; }
+client/src\components\help\help.css:89:html[data-theme="dark"] .help-guide-search input::placeholder { color: #94a3b8; }
+client/src\components\help\help.css:90:.help-step-navigation button { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; font-size: 12px; cursor: pointer; }
+client/src\components\help\help.css:91:.help-step-navigation button[aria-current="step"] { background: #4338ca; border-color: #4338ca; color: #fff; font-weight: 600; }
+client/src\components\help\help.css:92:.help-step-details { list-style: disc; padding-left: 18px; margin-top: 12px; font-size: 12px; line-height: 1.65; color: #475569; }
+client/src\components\help\help.css:94:.help-guide-panel { position: fixed; z-index: 150; bottom: 20px; right: 20px; width: min(360px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; overflow: hidden; padding: 20px; border-radius: 20px; border: 1px solid #a5b4fc; background: #fff; box-shadow: 0 12px 48px #0f172a30; }
+client/src\components\help\help.css:98:.help-spotlight-shade { position: absolute; background: rgb(15 23 42 / 48%); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+client/src\components\help\help.css:99:.help-spotlight-frame { position: absolute; border: 2px solid #a5b4fc; border-radius: 12px; box-shadow: 0 0 18px rgb(129 140 248 / 30%); }
+client/src\components\help\help.css:100:.help-prerequisite { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #fffbeb; color: #92400e; font-size: 12px; line-height: 1.5; }
+client/src\components\help\help.css:102:.help-progress { height: 4px; margin-top: 16px; border-radius: 4px; overflow: hidden; background: #e0e7ff; }
+client/src\components\help\help.css:103:.help-progress span { display: block; height: 100%; background: #4f46e5; }
+client/src\components\help\help.css:104:.help-resume { position: fixed; z-index: 150; bottom: 16px; right: 16px; display: flex; align-items: center; gap: 8px; background: #4338ca; color: #fff; padding: 12px 16px; border-radius: 24px; box-shadow: 0 4px 20px #0f172a30; font-size: 12px; font-weight: 500; cursor: pointer; }
+client/src\components\help\help.css:107:.help-dialog button:focus-visible, .help-guide-panel button:focus-visible, .help-page-bar button:focus-visible, .help-shortcuts button:focus-visible, .help-resume:focus-visible { outline: 3px solid #6366f1; outline-offset: 3px; }
+client/src\components\help\help.css:115:html[data-theme="dark"] .help-shortcuts, html[data-theme="dark"] .help-dialog, html[data-theme="dark"] .help-guide-panel { background: #182235; border-color: #475569; color: #e2e8f0; }
+client/src\components\help\help.css:116:html[data-theme="dark"] .help-description, html[data-theme="dark"] .help-page-steps li, html[data-theme="dark"] .help-task-card span { color: #cbd5e1; }
+client/src\components\help\help.css:117:html[data-theme="dark"] .help-task-card { border-color: #475569; }
+client/src\components\help\help.css:118:html[data-theme="dark"] .help-task-card strong { color: #e2e8f0; }
+client/src\components\help\help.css:119:html[data-theme="dark"] .help-task-card:hover, html[data-theme="dark"] .help-icon-button:hover { background: #263247; }
+client/src\components\help\help.css:120:html[data-theme="dark"] .help-eyebrow { color: #a5b4fc; }
+client/src\components\help\help.css:121:html[data-theme="dark"] .help-page-bar { color: #cbd5e1; }
+client/src\components\help\help.css:122:html[data-theme="dark"] .help-text-button { color: #c7d2fe; }
+client/src\components\help\help.css:123:html[data-theme="dark"] .help-text-button:hover { color: #fff; background: #263247; }
+client/src\components\help\help.css:127:html[data-theme="dark"] .help-page-step strong { color: #e2e8f0; }
+client/src\components\help\help.css:131:html[data-theme="dark"] .help-shortcuts .text-muted { color: #b8c5d6; }
+client/src\components\help\help.css:132:html[data-theme="dark"] .help-icon-button { color: #cbd5e1; }
+client/src\components\help\help.css:133:html[data-theme="dark"] .help-icon-button:hover { color: #fff; }
+client/src\components\help\help.css:134:html[data-theme="dark"] .help-step-details { color: #cbd5e1; }
+client/src\components\help\help.css:135:html[data-theme="dark"] .help-secondary { background: #263247; color: #e2e8f0; }
+client/src\components\help\help.css:136:html[data-theme="dark"] .help-secondary:hover { background: #334155; }
+client/src\components\help\help.css:138:html[data-theme="dark"] .help-task-shortcut { background: #263247; border-color: #64748b; color: #e2e8f0; }
+client/src\components\help\help.css:140:html[data-theme="dark"] .help-task-shortcut:hover { background: #334155; }
+client/src\components\help\help.css:141:html[data-theme="dark"] .help-task-card > svg { color: #a5b4fc; }
+client/src\components\help\help.css:142:html[data-theme="dark"] .help-page-step { border-color: #475569; }
+client/src\components\help\help.css:143:html[data-theme="dark"] .help-page-step:hover { background: #263247; }
+client/src\components\help\help.css:145:html[data-theme="dark"] .help-page-step .help-step-number { background: #263247; color: #c7d2fe; border-color: #64748b; }
+client/src\components\help\help.css:146:html[data-theme="dark"] .help-step-navigation button[aria-current="step"] { background: #4338ca; color: #fff; border-color: #a5b4fc; }
+client/src\components\help\help.css:147:html[data-theme="dark"] .help-prerequisite { background: #3b2f19; color: #fde68a; }
+client/src\components\help\help.css:148:html[data-theme="dark"] .help-progress { background: #334155; }
+client/src\components\help\help.css:149:html[data-theme="dark"] .help-progress span { background: #a5b4fc; }
+client/src\components\help\help.css:150:html[data-theme="dark"] :is(.help-dialog, .help-guide-panel, .help-page-bar, .help-shortcuts) button:focus-visible { outline-color: #a5b4fc !important; }
+client/src\components\common\DatePickerInput.tsx:254:              : "bg-ivory-light text-charcoal border-gray-200 hover:border-gray-300"
+client/src\components\common\DatePickerInput.tsx:473:                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-indigo-50 text-[12px] font-medium text-indigo-900 border border-indigo-100 transition-colors cursor-pointer"
+client/src\components\common\DatePickerInput.tsx:480:                      className="px-2 py-1 rounded-md bg-ivory-light hover:bg-amber-50 text-[12px] font-medium text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+client/src\components\dashboard\ChurchViewport.css:7:  mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
+client/src\components\common\DateTimePickerInput.tsx:246:          className={`w-full bg-ivory-light p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-medium text-charcoal h-[41px] ${
+client/src\components\common\EventAttendanceModal.tsx:109:        <div data-modal-header className="p-5 sm:p-6 bg-purple-950 text-white flex items-center justify-between relative overflow-hidden">
+client/src\components\common\EventAttendanceModal.tsx:111:            <div className="p-3 bg-purple-500/20 text-purple-300 rounded-2xl border border-purple-400/30">
+client/src\components\common\EventAttendanceModal.tsx:120:              <div className="flex items-center gap-3 text-xs text-purple-200/80 font-medium mt-1">
+client/src\components\common\EventAttendanceModal.tsx:156:            <div className="text-xl font-medium text-purple-900 mt-0.5">
+client/src\components\common\MemberAttendanceSummaryModal.tsx:672:                      <div className="p-2 bg-purple-100 text-purple-900 rounded-xl">
+client/src\components\common\MemberAttendanceSummaryModal.tsx:673:                        <PartyPopper className="w-4 h-4 text-purple-600" />
+client/src\components\common\MemberAttendanceSummaryModal.tsx:677:                    <span className="text-lg font-medium text-purple-900">
+client/src\components\common\MemberAttendanceSummaryModal.tsx:1094:                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[12px] font-medium bg-purple-50 text-purple-900 border border-purple-200">
+client/src\components\common\MemberAttendanceSummaryModal.tsx:1095:                                  <PartyPopper className="w-2.5 h-2.5 text-purple-600" />
+client/src\components\common\TimePickerInput.tsx:134:          className={`w-full bg-ivory-light p-2.5 pl-8 pr-7 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs font-medium text-charcoal h-[41px] ${
+client/src\components\common\TimePickerInput.tsx:274:                    className="px-2 py-0.5 rounded-md bg-ivory-light hover:bg-indigo-50 border border-gray-200 text-[12px] font-medium text-charcoal/70 hover:text-indigo hover:border-indigo-200 transition-colors cursor-pointer"
+

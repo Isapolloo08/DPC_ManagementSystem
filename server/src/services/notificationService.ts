@@ -5,6 +5,7 @@ import { getNotificationEmailSettings } from "./notificationSettings";
 import { processEmailOutbox } from "./emailOutboxWorker";
 
 export type NotificationEventType =
+  | "bible_study_update"
   | "absence_alert"
   | "session_rescheduled"
   | "at_risk_member"

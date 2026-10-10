@@ -1,3 +1,9 @@
+import { EventMinistryPicker } from "../components/events/EventMinistryPicker";
+import { EventInvitationsModal } from "../components/events/EventInvitationsModal";
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { useListPagination } from "../hooks/useListPagination";
+import { PageHeader } from "../components/common/PageHeader";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -110,6 +116,7 @@ export interface UnifiedActivity {
   time_formatted: string;
   location?: string;
   ministry_id?: number | null;
+  ministry_ids?: number[];
   ministry_name?: string;
   ministry_color?: string;
   leader_name?: string;
@@ -162,6 +169,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
 
   // Inspector & Modals state
+  const [invitationEvent, setInvitationEvent] = useState<EventItem | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<UnifiedActivity | null>(null);
   const [selectedScheduleKey, setSelectedScheduleKey] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -227,6 +235,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
+    ministry_ids: (isRestricted && allowedMinistries.length > 0 ? [allowedMinistries[0].id] : []) as number[],
     ministry_id: isRestricted && allowedMinistries.length > 0 ? String(allowedMinistries[0].id) : "",
     start_time: getNowIsoLocal(),
     end_time: getNowPlusHoursIsoLocal(2),
@@ -255,14 +264,14 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   useEffect(() => {
     if (isRestricted && allowedMinistries.length > 0) {
       setFilterMinistry(String(allowedMinistries[0].id));
-      setFormData(prev => ({ ...prev, ministry_id: String(allowedMinistries[0].id) }));
+      setFormData(prev => ({ ...prev, ministry_id: String(allowedMinistries[0].id), ministry_ids: [allowedMinistries[0].id] }));
     }
   }, [isRestricted, allowedMinistries]);
 
   useEffect(() => {
     loadAllMasterData();
     loadLocations();
-  }, [selectedMinistryId]);
+  }, [selectedMinistryId, currentDate.getFullYear(), currentDate.getMonth()]);
 
   // Real-time automatic sync via Socket.IO
   useSocketEvent("events:changed", () => loadAllMasterData());
@@ -291,11 +300,11 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       const ministryScope = isRestricted && allowedMinistries.length > 0 ? allowedMinistries[0].id : undefined;
 
       const [eventsRes, dutyRes, dishRes, groupsRes, bdaysRes] = await Promise.all([
-        api.getEvents({ ministry_id: ministryScope }).catch(err => { guideData.reportError(err); return []; }),
+        api.getEvents({ ministry_id: ministryScope, from: new Date(Date.UTC(currentDate.getFullYear(), currentDate.getMonth(), -6)).toISOString().slice(0, 10), to: new Date(Date.UTC(currentDate.getFullYear(), currentDate.getMonth() + 1, 7)).toISOString().slice(0, 10) }).catch(err => { guideData.reportError(err); return []; }),
         api.getDutySchedule({ ministry_id: ministryScope, count: 20 }).catch(() => ({ schedule: [] })),
         api.getDishwashingSchedule({ count: 20 }).catch(() => ({ schedule: [] })),
-        api.getGroups({ ministry_id: ministryScope }).catch(() => []),
-        api.getBirthdays({ ministry_id: ministryScope, timeframe: "all" }).catch(() => ({ celebrants: [] }))
+        api.getGroups({ ministry_id: ministryScope, status: "active", view: "calendar" }).catch(() => []),
+        api.getBirthdays({ ministry_id: ministryScope, timeframe: "all", month: currentDate.getMonth() + 1 }).catch(() => ({ celebrants: [] }))
       ]);
 
       setEvents(eventsRes || []);
@@ -372,6 +381,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       setFormData({
         title: "",
         description: "",
+        ministry_ids: [],
         ministry_id: "",
         start_time: getNowIsoLocal(),
         end_time: getNowPlusHoursIsoLocal(2),
@@ -459,6 +469,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
         time_formatted: timeFormatted,
         location: evt.location || "Main Sanctuary",
         ministry_id: evt.ministry_id,
+        ministry_ids: evt.ministry_ids,
         ministry_name: evt.ministry_name || "All-Church",
         ministry_color: evt.ministry_color || "#2C3968",
         badge_color: evt.ministry_color || "#2C3968",
@@ -600,7 +611,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
   const filteredActivities = useMemo(() => {
     return allUnifiedActivities.filter(item => {
       // Ministry filter
-      if (filterMinistry && item.ministry_id && String(item.ministry_id) !== filterMinistry) {
+      if (filterMinistry && item.ministry_id && !(item.ministry_ids || [item.ministry_id]).includes(Number(filterMinistry))) {
         return false;
       }
 
@@ -837,6 +848,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
     });
   }, [filteredActivities]);
 
+  const agendaPage = useListPagination(upcomingActivitiesList, JSON.stringify([filterType, filterMinistry, searchQuery, currentDate.getFullYear(), currentDate.getMonth()]));
   // Set default active activity in inspector
   const activeInspectorItem = (selectedActivity && filteredActivities.find(activity => activity.id === selectedActivity.id))
     || filteredActivities.find(activity => isActivityOnDate(activity, `${year}-${String(month + 1).padStart(2, "0")}-01`)
@@ -866,33 +878,17 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
       {/* ========================================================================= */}
       {/* 1. PAGE HERO HEADER */}
       {/* ========================================================================= */}
-      <div className="calendar-toolbar flex flex-col md:flex-row md:items-center justify-between gap-4">
-
-        <div className="relative z-10 space-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="calendar-title-icon p-2.5 rounded-xl">
-              <CalendarIcon className="w-5 h-5" />
-            </span>
-            <h1 className="calendar-title text-2xl font-semibold tracking-tight">
-              Church calendar
-            </h1>
-          </div>
-          <p className="calendar-subtitle text-sm leading-relaxed">
-            Gatherings, serving schedules, and milestones in one place.
-          </p>
-        </div>
-
-        {/* Top Actions & View Mode Switcher */}
-        <div className="relative z-10 flex flex-wrap items-center gap-3 shrink-0">
+      <PageHeader icon={<CalendarIcon />} title={<>Church calendar</>}
+        description={<>Gatherings, serving schedules, and milestones in one place.</>}
+        actions={<><div className="relative z-10 flex flex-wrap items-center gap-3 shrink-0">
           <div className="calendar-view-switch flex items-center p-1 rounded-xl" aria-label="Calendar view">
             <button data-guide="calendar-view"
               aria-pressed={viewMode === "calendar"}
               onClick={() => setViewMode("calendar")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                viewMode === "calendar" 
-                  ? "bg-amber-400 text-slate-950 shadow-md scale-100" 
-                  : "text-slate-300 hover:text-white"
-              }`}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${viewMode === "calendar"
+                ? "bg-amber-400 text-slate-950 shadow-sm scale-100"
+                : "text-muted hover:text-charcoal"
+                }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
               <span>Calendar</span>
@@ -900,11 +896,10 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
             <button data-guide="calendar-agenda"
               aria-pressed={viewMode === "agenda"}
               onClick={() => setViewMode("agenda")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                viewMode === "agenda" 
-                  ? "bg-amber-400 text-slate-950 shadow-md scale-100" 
-                  : "text-slate-300 hover:text-white"
-              }`}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${viewMode === "agenda"
+                ? "bg-amber-400 text-slate-950 shadow-sm scale-100"
+                : "text-muted hover:text-charcoal"
+                }`}
             >
               <List className="w-3.5 h-3.5" />
               <span>Agenda</span>
@@ -912,37 +907,31 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
           </div>
 
           {onNavigate && (
-            <button
-              onClick={() => onNavigate("sundaycycle")}
-              className="calendar-secondary-action flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium"
-            >
-              <Sun className="w-4 h-4 text-amber-300" />
+            <Button onClick={() => onNavigate("sundaycycle")} variant="secondary">
+              <Sun className="w-4 h-4 " />
               <span>Events & Celebrations</span>
-            </button>
+            </Button>
           )}
 
           {canCreate && (
-            <button
-              onClick={() => {
-                if (onNavigate) {
-                  onNavigate("sundaycycle");
-                } else {
-                  handleOpenCreateModal();
-                }
-              }}
-              className="calendar-primary-action flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium"
-            >
-              <Plus className="w-4 h-4 text-slate-950" />
+            <Button onClick={() => {
+              if (onNavigate) {
+                onNavigate("sundaycycle");
+              } else {
+                handleOpenCreateModal();
+              }
+            }} variant="secondary">
+              <Plus className="w-4 h-4 " />
               <span>Add Event / Celebration</span>
-            </button>
+            </Button>
           )}
-        </div>
-      </div>
+        </div></>} />
 
       {/* ========================================================================= */}
       {/* 2. FILTER CONTROLS BAR: CATEGORY PILLS + SCOPE + SEARCH */}
       {/* ========================================================================= */}
-      <div className="calendar-filters p-4 rounded-2xl space-y-3.5">
+      <FilterPanel title="Calendar filters" summary={[filterType === "all" ? "All activities" : filterType.replace(/_/g, " "), searchQuery].filter(Boolean).join(" · ")}>
+        <div className="filter-panel-layout calendar-filters p-4 rounded-2xl space-y-3.5">
         {/* Row 1: Activity Category Filters */}
         <div data-guide="calendar-kinds" className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           <button
@@ -1065,6 +1054,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+      </FilterPanel>
 
       {/* ========================================================================= */}
       {/* 3. MAIN 2-COLUMN LAYOUT: CALENDAR/AGENDA (LEFT) + ACTIVITY INSPECTOR (RIGHT) */}
@@ -1286,13 +1276,13 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
             /* AGENDA / TIMELINE LIST VIEW */
             <div className="space-y-3.5">
               {upcomingActivitiesList.length === 0 ? (
-                <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs text-slate-400 space-y-2">
+                <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-xs text-slate-400 space-y-2">
                   <CalendarIcon className="w-10 h-10 mx-auto text-slate-300" />
                   <p className="font-medium text-slate-600">No activities found matching your filters.</p>
                   <p className="text-[12px]">Try selecting "All Activities" or clearing your search query.</p>
                 </div>
               ) : (
-                upcomingActivitiesList.map((act) => {
+                agendaPage.items.map((act) => {
                   const isSelected = activeInspectorItem?.id === act.id;
                   const dateObj = new Date(act.date_str);
                   const monthName = dateObj.toLocaleString([], { month: "short" });
@@ -1420,6 +1410,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   );
                 })
               )}
+              <Pagination label="activities" page={agendaPage.page} pageSize={agendaPage.pageSize} total={agendaPage.total} onPageChange={agendaPage.setPage} onPageSizeChange={agendaPage.setPageSize} loading={loading} />
             </div>
           )}
         </div>
@@ -1543,6 +1534,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                   </div>
                 )}
 
+                {canCreate && activeInspectorItem.type === "church_event" && <Button variant="secondary" className="w-full" onClick={() => setInvitationEvent(activeInspectorItem.raw_data)}><Send size={15} />Invitation Links & Responses</Button>}
                 {/* Footer Action Buttons */}
                 <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
                   {activeInspectorItem.type === "church_event" && (
@@ -1634,20 +1626,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
                 />
               </div>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Host Ministry</label>
-                <select
-                  value={formData.ministry_id}
-                  onChange={(e) => setFormData({ ...formData, ministry_id: e.target.value })}
-                  disabled={isRestricted && allowedMinistries.length <= 1}
-                  className="w-full bg-slate-50 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-600 font-medium"
-                >
-                  <option value="">All-Church Event</option>
-                  {allowedMinistries.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} Ministry</option>
-                  ))}
-                </select>
-              </div>
+              <EventMinistryPicker ministries={ministries} value={formData.ministry_ids} label="Host Ministries" onChange={ids => setFormData({ ...formData, ministry_ids: ids, ministry_id: ids[0] ? String(ids[0]) : '' })} />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1902,6 +1881,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
         onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
       />
 
+      {invitationEvent && <EventInvitationsModal event={invitationEvent} onClose={() => setInvitationEvent(null)} />}
       {/* Event Attendance & Check-In Modal */}
       <EventAttendanceModal
         event={attendanceModalEvent}

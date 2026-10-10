@@ -1,6 +1,12 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import "./attendance-log.css";
+import { StatCard } from "../components/common/StatCard";
+import { ClipboardList } from "lucide-react";
+import { PageHeader } from "../components/common/PageHeader";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { AttendanceSummarySkeleton, AttendanceTableSkeleton } from "../components/common/SkeletonLoader";
 import { withOperation } from "../services/operationActivity";
 import { useGuideDataState } from "../components/help/GuideDataContext";
 import {
@@ -9,13 +15,13 @@ import {
   AttendanceLogType,
   AttendanceLogStatus,
   Ministry,
-  BibleStudyGroup
+  BibleStudyGroup,
+  EventItem
 } from "../types";
 import {
   FileSpreadsheet,
   FileText,
   Search,
-  Filter,
   RotateCcw,
   Calendar,
   Layers,
@@ -31,22 +37,19 @@ import {
   Info,
   Loader2,
   UserCheck,
-  PartyPopper
+  PartyPopper,
+  BookOpen
 } from "lucide-react";
 
-// Helper to get default last 90 days in YYYY-MM-DD
+// All recorded history through today in the church timezone.
 function getDefaultDateRange(): { fromDate: string; toDate: string } {
   try {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
-    const now = new Date(today);
-    const past90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const from = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(past90);
-    return { fromDate: from, toDate: today };
+    return { fromDate: "", toDate: today };
   } catch {
     const now = new Date();
     const today = now.toISOString().split("T")[0];
-    const past90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    return { fromDate: past90, toDate: today };
+    return { fromDate: "", toDate: today };
   }
 }
 
@@ -57,17 +60,20 @@ export const AttendanceLogPage: React.FC = () => {
   // Filters State
   const [fromDate, setFromDate] = useState<string>(defaultDates.fromDate);
   const [toDate, setToDate] = useState<string>(defaultDates.toDate);
-  const [logType, setLogType] = useState<AttendanceLogType | "">("");
+  const [selectedLogType, setLogType] = useState<AttendanceLogType | "">("");
+  const isLeaderRole = user?.role_name === "Leader";
+  const logType = isLeaderRole ? "bible_study" : selectedLogType;
   const [status, setStatus] = useState<AttendanceLogStatus | "">("");
   const [selectedMinistryId, setSelectedMinistryId] = useState<string>("all");
   const [selectedGroupId, setSelectedGroupId] = useState<string>("all");
+  const [selectedEventId, setSelectedEventId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [debouncedSearch, setDebouncedSearch] = useState<string>("");
 
   // Pagination State
   const [page, setPage] = useState<number>(1);
   const [jumpPageInput, setJumpPageInput] = useState<string>("");
-  const pageSize = 50;
+  const [pageSize, setPageSize] = useState(50);
 
   // Data State
   const [rows, setRows] = useState<AttendanceLogItem[]>([]);
@@ -82,6 +88,8 @@ export const AttendanceLogPage: React.FC = () => {
   // Reference Options
   const [ministries, setMinistries] = useState<Ministry[]>([]);
   const [groups, setGroups] = useState<BibleStudyGroup[]>([]);
+
+  const [events, setEvents] = useState<EventItem[]>([]);
 
   // UI State
   const [loading, setLoading] = useState<boolean>(true);
@@ -107,13 +115,15 @@ export const AttendanceLogPage: React.FC = () => {
     let isMounted = true;
     async function loadMetadata() {
       try {
-        const [minsData, groupsData] = await Promise.all([
+        const [minsData, groupsData, eventsData] = await Promise.all([
           api.getMinistries().catch(() => []),
-          api.getGroups().catch(() => [])
+          api.getGroups().catch(() => []),
+          api.getEvents({ to: getDefaultDateRange().toDate }).catch(() => [])
         ]);
         if (isMounted) {
           setMinistries(minsData || []);
           setGroups(groupsData || []);
+          setEvents((eventsData || []).filter(event => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(event.start_time)) <= getDefaultDateRange().toDate));
         }
       } catch (err) {
         console.error("Failed to load reference dropdown data:", err);
@@ -147,6 +157,7 @@ export const AttendanceLogPage: React.FC = () => {
           status: status,
           ministryId: selectedMinistryId,
           groupId: selectedGroupId,
+          eventId: logType === "event" ? selectedEventId : "all",
           search: debouncedSearch,
           page,
           pageSize
@@ -154,19 +165,20 @@ export const AttendanceLogPage: React.FC = () => {
         controller.signal
       );
 
+      if (controller.signal.aborted) return;
       setRows(res.rows || []);
       setTotal(res.total || 0);
       setSummary(res.summary || { total: 0, present: 0, absent: 0, excused: 0 });
     } catch (err: any) {
-      if (err.name === "AbortError") {
+      if (controller.signal.aborted || err.name === "AbortError") {
         return; // Request was aborted by user filter update
       }
       console.error("Failed to fetch attendance log:", err);
       setError(err.message || "Failed to load attendance logs. Please check server connection.");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }, [fromDate, toDate, logType, status, selectedMinistryId, selectedGroupId, debouncedSearch, page]);
+  }, [fromDate, toDate, logType, status, selectedMinistryId, selectedGroupId, selectedEventId, debouncedSearch, page, pageSize]);
 
   // Trigger fetch whenever active filters or page change
   useEffect(() => {
@@ -187,6 +199,7 @@ export const AttendanceLogPage: React.FC = () => {
     setStatus("");
     setSelectedMinistryId("all");
     setSelectedGroupId("all");
+    setSelectedEventId("all");
     setSearchQuery("");
     setDebouncedSearch("");
     setPage(1);
@@ -203,6 +216,7 @@ export const AttendanceLogPage: React.FC = () => {
         status: status,
         ministryId: selectedMinistryId,
         groupId: selectedGroupId,
+          eventId: logType === "event" ? selectedEventId : "all",
         search: debouncedSearch
       });
 
@@ -234,6 +248,7 @@ export const AttendanceLogPage: React.FC = () => {
         status: status,
         ministryId: selectedMinistryId,
         groupId: selectedGroupId,
+          eventId: logType === "event" ? selectedEventId : "all",
         search: debouncedSearch,
         page: 1,
         pageSize: 5000
@@ -272,12 +287,13 @@ export const AttendanceLogPage: React.FC = () => {
       // Period and active filter info
       doc.setFontSize(9);
       doc.setTextColor(50, 50, 50);
-      const periodText = `Period: ${fromDate} to ${toDate}`;
-      const typeFilterText = logType ? ` | Type: ${logType === "sunday_service" ? "Sunday Service" : "Bible Study"}` : " | Type: All";
+      const periodText = `Period: ${fromDate || "All history"} to ${toDate || defaultDates.toDate}`;
+      const typeFilterText = logType ? ` | Type: ${logType === "sunday_service" ? "Sunday Service" : logType === "event" ? "Events" : "Bible Study"}` : " | Type: All";
+      const eventFilterText = logType === "event" && selectedEventId !== "all" ? ` | Event: ${events.find(event => String(event.id) === selectedEventId)?.title || selectedEventId}` : "";
       const statusFilterText = status ? ` | Status: ${status.toUpperCase()}` : "";
       const searchFilterText = debouncedSearch ? ` | Search: "${debouncedSearch}"` : "";
 
-      doc.text(`${periodText}${typeFilterText}${statusFilterText}${searchFilterText}`, 14, 31);
+      doc.text(`${periodText}${typeFilterText}${eventFilterText}${statusFilterText}${searchFilterText}`, 14, 31);
 
       // Summary totals row
       const summaryText = `Totals — Records: ${totalCount} | Present: ${dataRes.summary.present} | Absent: ${dataRes.summary.absent} | Excused: ${dataRes.summary.excused}`;
@@ -397,99 +413,49 @@ export const AttendanceLogPage: React.FC = () => {
     }
   };
 
-  const isLeaderRole = user?.role_name === "Leader";
   const isCoordinatorRole = user?.role_name === "Coordinator";
+  const filterSummary = [
+    logType === 'event' ? 'Events' : logType === 'bible_study' ? 'Bible Study' : logType === 'sunday_service' ? 'Sunday Service' : 'All attendance',
+    fromDate ? `${fromDate} to ${toDate || defaultDates.toDate}` : `All history through ${toDate || defaultDates.toDate}`,
+    status && status.charAt(0).toUpperCase() + status.slice(1),
+    selectedMinistryId !== 'all' && (ministries.find(ministry => String(ministry.id) === selectedMinistryId)?.name || 'Selected ministry'),
+    selectedGroupId !== 'all' && (groups.find(group => String(group.id) === selectedGroupId)?.name || 'Selected group'),
+    logType === 'event' && selectedEventId !== 'all' && (events.find(event => String(event.id) === selectedEventId)?.title || 'Selected event'),
+    searchQuery.trim() && `Search: ${searchQuery.trim()}`,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
       {/* Page Header */}
-      <div className="bg-white rounded-2xl p-6 sm:p-7 shadow-sm border border-stone-200/80 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5 mb-1.5">
-            <div className="p-2.5 bg-indigo/10 rounded-xl text-indigo border border-indigo/20">
-              <UserCheck className="w-6 h-6 text-indigo" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-charcoal">Attendance Log</h1>
-              <p className="text-xs sm:text-sm font-medium text-stone-500">
-                Unified audit history of Sunday service check-ins, Bible Study attendance, and Special Events.
-              </p>
-            </div>
-          </div>
-        </div>
+      <PageHeader icon={<ClipboardList />} title={<>Attendance Log</>} description={<>Unified audit history of Sunday service check-ins, Bible Study attendance, and Special Events.</>} actions={<div className="flex items-center gap-2.5 flex-wrap">
+        <button data-guide="log-csv"
+          onClick={handleExportCsv}
+          disabled={isExportingCsv || loading || rows.length === 0}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Download UTF-8 CSV with Excel compatibility"
+        >
+          {isExportingCsv ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+          <span>Export CSV</span>
+        </button>
 
-        {/* Action Buttons: CSV & PDF */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button data-guide="log-csv"
-            onClick={handleExportCsv}
-            disabled={isExportingCsv || loading || rows.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Download UTF-8 CSV with Excel compatibility"
-          >
-            {isExportingCsv ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
-            <span>Export CSV</span>
-          </button>
+        <button data-guide="log-pdf"
+          onClick={handleExportPdf}
+          disabled={isExportingPdf || loading || rows.length === 0}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo hover:bg-indigo-900 active:scale-[0.98] text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Generate print-ready formatted PDF report"
+        >
+          {isExportingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          <span>Export PDF</span>
+        </button>
+      </div>} />
 
-          <button data-guide="log-pdf"
-            onClick={handleExportPdf}
-            disabled={isExportingPdf || loading || rows.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo hover:bg-indigo-900 active:scale-[0.98] text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Generate print-ready formatted PDF report"
-          >
-            {isExportingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-            <span>Export PDF</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Summary Statistics Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-stone-500">Total Records</span>
-            <Layers className="w-4 h-4 text-indigo" />
-          </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-medium text-indigo">
-            {loading ? "..." : summary.total.toLocaleString()}
-          </div>
-          <div className="text-[12px] text-stone-600 font-medium mt-1">Filtered timeframe</div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-emerald-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-emerald-700">Present</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-medium text-emerald-700">
-            {loading ? "..." : summary.present.toLocaleString()}
-          </div>
-          <div className="text-[12px] text-emerald-600 font-medium mt-1">
-            {summary.total > 0 ? `${((summary.present / summary.total) * 100).toFixed(1)}% of total` : "0%"}
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-rose-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-rose-700">Absent</span>
-            <XCircle className="w-4 h-4 text-rose-600" />
-          </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-medium text-rose-700">
-            {loading ? "..." : summary.absent.toLocaleString()}
-          </div>
-          <div className="text-[12px] text-rose-600 font-medium mt-1">Bible Study records</div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-amber-700">Excused</span>
-            <Clock className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-medium text-amber-700">
-            {loading ? "..." : summary.excused.toLocaleString()}
-          </div>
-          <div className="text-[12px] text-amber-600 font-medium mt-1">Notice filed</div>
-        </div>
-      </div>
+      {/* Summary statistics */}
+      {loading ? <AttendanceSummarySkeleton /> : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4" aria-label="Attendance summary">
+        <StatCard label="Total Records" value={summary.total.toLocaleString()} icon={<Layers />} description="Filtered timeframe" />
+        <StatCard label="Present" value={summary.present.toLocaleString()} icon={<CheckCircle2 />} tone="emerald" description={summary.total > 0 ? ((summary.present / summary.total) * 100).toFixed(1) + "% of total" : "0%"} />
+        <StatCard label="Absent" value={summary.absent.toLocaleString()} icon={<XCircle />} tone="rose" description="Bible Study records" />
+        <StatCard label="Excused" value={summary.excused.toLocaleString()} icon={<Clock />} tone="amber" description="Notice filed" />
+      </div>}
 
       {/* Explanatory Note Banner */}
       <div className="bg-amber-50/80 border border-amber-200/70 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-amber-900 font-medium">
@@ -506,20 +472,19 @@ export const AttendanceLogPage: React.FC = () => {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-200 space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-2 text-sm font-medium text-charcoal">
-            <Filter className="w-4 h-4 text-indigo" />
-            <span>Search & Filter Options</span>
+      <FilterPanel aria-label="Attendance filters" summary={filterSummary} actions={<button type="button" data-guide="log-reset" onClick={handleResetFilters} className="filter-panel-reset"><RotateCcw size={14} />Reset Filters</button>}>
+        <fieldset className="attendance-source-filter" data-guide="log-type">
+          <legend>Attendance Type</legend>
+          <div className="attendance-source-options">
+            {[
+              { value: '', label: 'All attendance', icon: Layers },
+              { value: 'sunday_service', label: 'Sunday Service', icon: HeartHandshake },
+              { value: 'bible_study', label: 'Bible Study', icon: BookOpen },
+              { value: 'event', label: 'Events', icon: PartyPopper },
+            ].map(option => <button key={option.value} type="button" aria-pressed={logType === option.value} disabled={isLeaderRole && option.value !== 'bible_study'} onClick={() => { setLogType(option.value as AttendanceLogType | ''); setSelectedGroupId('all'); setSelectedEventId('all'); setPage(1); }}><option.icon size={15} />{option.label}</button>)}
           </div>
-          <button data-guide="log-reset"
-            onClick={handleResetFilters}
-            className="text-xs font-medium text-stone-500 hover:text-indigo inline-flex items-center gap-1 transition"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Filters</span>
-          </button>
-        </div>
+          <p>Recorded attendance through today. Future sessions and events appear in the calendar.</p>
+        </fieldset>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {/* From Date */}
@@ -530,6 +495,8 @@ export const AttendanceLogPage: React.FC = () => {
             <div className="relative">
               <input data-guide="log-from"
                 type="date"
+                max={defaultDates.toDate}
+                aria-label="From Date"
                 value={fromDate}
                 onChange={(e) => {
                   setFromDate(e.target.value);
@@ -549,36 +516,17 @@ export const AttendanceLogPage: React.FC = () => {
             <div className="relative">
               <input data-guide="log-to"
                 type="date"
+                max={defaultDates.toDate}
+                aria-label="To Date"
                 value={toDate}
                 onChange={(e) => {
-                  setToDate(e.target.value);
+                  setToDate(e.target.value > defaultDates.toDate ? defaultDates.toDate : e.target.value);
                   setPage(1);
                 }}
                 className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
               />
               <Calendar className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
             </div>
-          </div>
-
-          {/* Type Filter */}
-          <div>
-            <label className="block text-xs font-medium text-stone-600 mb-1">
-              Attendance Type
-            </label>
-            <select data-guide="log-type"
-              value={logType}
-              disabled={isLeaderRole} // Leaders are automatically scoped to Bible Study
-              onChange={(e) => {
-                setLogType(e.target.value as AttendanceLogType | "");
-                setPage(1);
-              }}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition disabled:opacity-60"
-            >
-              <option value="">All Types (Sunday, Bible Study & Events)</option>
-              <option value="sunday_service">Sunday Worship Service</option>
-              <option value="bible_study">Bible Study / Small Group</option>
-              <option value="event">Special Event / Celebration</option>
-            </select>
           </div>
 
           {/* Status Filter */}
@@ -624,6 +572,15 @@ export const AttendanceLogPage: React.FC = () => {
             </select>
           </div>
 
+          {logType === 'event' ? <div>
+            <label htmlFor="attendance-log-event" className="block text-xs font-medium text-stone-600 mb-1">Event</label>
+            <select id="attendance-log-event" data-guide="log-event" value={selectedEventId}
+              onChange={event => { setSelectedEventId(event.target.value); setPage(1); }}
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition">
+              <option value="all">All Events</option>
+              {events.map(event => <option key={event.id} value={event.id}>{event.title} · {new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(event.start_time))}</option>)}
+            </select>
+          </div> : <>
           {/* Bible Study Group Filter */}
           <div>
             <label className="block text-xs font-medium text-stone-600 mb-1">
@@ -631,11 +588,13 @@ export const AttendanceLogPage: React.FC = () => {
             </label>
             <select data-guide="log-group"
               value={selectedGroupId}
+              disabled={logType === "sunday_service"}
               onChange={(e) => {
                 setSelectedGroupId(e.target.value);
+                if (e.target.value !== "all") setLogType("bible_study");
                 setPage(1);
               }}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-charcoal focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none transition disabled:opacity-60"
             >
               <option value="all">All Groups</option>
               {groups.map((g) => (
@@ -645,6 +604,8 @@ export const AttendanceLogPage: React.FC = () => {
               ))}
             </select>
           </div>
+
+          </>}
 
           {/* Member Name Search (2 columns on lg) */}
           <div className="sm:col-span-2">
@@ -672,17 +633,10 @@ export const AttendanceLogPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </FilterPanel>
 
       {/* Main Table Container */}
-      <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
-        {/* Table Loading Overlay or Skeleton */}
-        {loading && (
-          <div className="p-8 text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo mx-auto mb-3" />
-            <p className="text-xs font-medium text-stone-500">Loading attendance logs...</p>
-          </div>
-        )}
+      {loading ? <AttendanceTableSkeleton rows={8} columns={7} showAvatar={false} showDirectoryHeader={false} /> : <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
 
         {/* Error Message */}
         {!loading && error && (
@@ -837,6 +791,7 @@ export const AttendanceLogPage: React.FC = () => {
 
             <div className="flex items-center gap-2 flex-wrap">
               {/* First & Prev */}
+              <label className="flex items-center gap-2">Rows per page<select aria-label="attendance records rows per page" value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(1); }} className="ui-input w-auto py-1 min-h-9">{[10, 20, 30, 50, 100].map(size => <option key={size}>{size}</option>)}</select></label>
               <button
                 onClick={() => setPage(1)}
                 disabled={page <= 1}
@@ -902,7 +857,7 @@ export const AttendanceLogPage: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 };

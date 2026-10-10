@@ -80,24 +80,20 @@ export async function ensureAttendanceLogViewWithEventId(): Promise<void> {
   }
 }
 
-// Helper to calculate Asia/Manila current date and past 90 days default
+// History includes all recorded dates through today in the church timezone.
 function getDefaultDateRange(): { fromDate: string; toDate: string } {
   try {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
-    const now = new Date(today);
-    const past90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const from = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(past90);
-    return { fromDate: from, toDate: today };
+    return { fromDate: "", toDate: today };
   } catch {
     const now = new Date();
     const today = now.toISOString().split("T")[0];
-    const past90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    return { fromDate: past90, toDate: today };
+    return { fromDate: "", toDate: today };
   }
 }
 
 // Build SQL conditions and parameters for attendance log based on filters and RBAC
-async function buildAttendanceLogQuery(
+export async function buildAttendanceLogQuery(
   user: { id: number; role_name: string; name: string; ministry_ids: number[] },
   query: Record<string, any>
 ): Promise<{ whereSql: string; params: any[]; emptyResult: boolean }> {
@@ -115,14 +111,20 @@ async function buildAttendanceLogQuery(
 
   const defaultDates = getDefaultDateRange();
   const filterFrom = typeof from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : defaultDates.fromDate;
-  const filterTo = typeof to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : defaultDates.toDate;
+  const requestedTo = typeof to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : defaultDates.toDate;
+  const filterTo = requestedTo < defaultDates.toDate ? requestedTo : defaultDates.toDate;
 
-  const conditions: string[] = [];
+  const conditions: string[] = [
+    `v.log_date <= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::DATE`,
+    `NOT EXISTS (SELECT 1 FROM events future_event WHERE future_event.id = v.event_id AND (future_event.start_time AT TIME ZONE 'Asia/Manila')::DATE > (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::DATE)`,
+  ];
   const params: any[] = [];
 
   // Date range (inclusive)
-  params.push(filterFrom);
-  conditions.push(`v.log_date >= $${params.length}`);
+  if (filterFrom) {
+    params.push(filterFrom);
+    conditions.push(`v.log_date >= $${params.length}`);
+  }
 
   params.push(filterTo);
   conditions.push(`v.log_date <= $${params.length}`);

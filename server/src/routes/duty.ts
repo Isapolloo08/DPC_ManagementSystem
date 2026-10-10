@@ -93,7 +93,7 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
 });
 
 // 2. Create Duty Team (e.g. Team 1, Team 2, Team 3)
-router.post("/teams", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/teams", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { name, ministry_id, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
 
@@ -167,7 +167,7 @@ router.post("/teams", authMiddleware, requireRoles("Admin", "Pastor", "Coordinat
 });
 
 // 3. Update Duty Team
-router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const { name, leader_id, leader_name, color, order_seq, tasks_checklist, member_ids } = req.body;
@@ -224,7 +224,7 @@ router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordi
 });
 
 // 4. Delete Duty Team
-router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     await db.run("DELETE FROM duty_teams WHERE id = $1", [id]);
@@ -236,7 +236,7 @@ router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coo
 });
 
 // 5. Add Member(s) to Duty Team (Supports Single or Batch)
-router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const teamId = req.params.id;
     const { member_id, member_ids, role = "Member" } = req.body;
@@ -268,7 +268,7 @@ router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Pastor"
 });
 
 // 6. Remove Member from Duty Team
-router.delete("/teams/:id/members/:memberId", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
+router.delete("/teams/:id/members/:memberId", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { id, memberId } = req.params;
     await db.run("DELETE FROM duty_team_members WHERE team_id = $1 AND member_id = $2", [id, memberId]);
@@ -406,7 +406,7 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
 });
 
 // 8. Mark Saturday Duty Complete
-router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "IT Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { duty_date, team_id, ministry_id, notes } = req.body;
 
@@ -440,7 +440,7 @@ router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Pastor"
 });
 
 // 9. Swap Teams between Two Saturdays
-router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "IT Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { date1, teamId1, date2, teamId2, ministry_id } = req.body;
 
@@ -500,7 +500,7 @@ router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Pastor", "C
 });
 
 // 10. Override / Edit Single Saturday Assignment
-router.post("/schedule/override", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "IT Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/schedule/override", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { duty_date, team_id, ministry_id, status = "scheduled", notes } = req.body;
 
@@ -533,7 +533,7 @@ router.post("/schedule/override", authMiddleware, requireRoles("Admin", "Pastor"
 });
 
 // 11. Reset Overrides back to Automatic Rotation
-router.post("/schedule/reset", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "IT Admin"), async (req: AuthRequest, res: Response) => {
+router.post("/schedule/reset", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { duty_date, ministry_id } = req.body;
 

@@ -35,6 +35,7 @@ export interface User {
 }
 
 export type NotificationEventType =
+  | "bible_study_update"
   | "absence_alert"
   | "session_rescheduled"
   | "at_risk_member"
@@ -294,6 +295,14 @@ export interface HouseholdFamilyMember {
   aliases?: string[];
 }
 
+export type FamilyKind = 'parent' | 'guardian' | 'spouse';
+export interface FamilyPersonInput { person_id?: number; member_id?: number; name?: string; household_id?: number | null }
+export interface FamilyLinksInput { parents_household_id: number | null; parents: (FamilyPersonInput & { role: 'father' | 'mother' | 'parent' })[] }
+export interface FamilyPerson { id: number; stable_key: string; member_id: number | null; name: string; household_id: number | null; household_name: string | null; photo_url?: string | null }
+export interface FamilyRelationship { id: number; from_person_id: number; to_person_id: number; kind: FamilyKind; parent_role?: 'father' | 'mother' | 'parent' | null }
+export interface FamilyTreeResponse { household: {id:number;name:string}; people: FamilyPerson[]; relationships: FamilyRelationship[]; legacy_suggestions?: Pick<Household,'father_name'|'mother_name'|'guardian_name'|'family_members'> }
+export interface MemberParentsResponse {parents_household_id:number|null;parents:{person_id:number;name:string;role:'father'|'mother'|'parent'}[]}
+
 export interface Household {
   id: number;
   name: string;
@@ -357,6 +366,7 @@ export interface AttendanceRosterItem {
 
 export interface EventItem {
   id: number;
+  ministry_ids?: number[];
   ministry_id: number | null;
   ministry_name?: string;
   ministry_color?: string;
@@ -372,6 +382,7 @@ export interface EventItem {
 
 export interface RecurringSundayEvent {
   id: number;
+  ministry_ids?: number[];
   title: string;
   theme_tagline?: string | null;
   description?: string | null;
@@ -531,6 +542,7 @@ export interface BibleStudyMember {
   contact_email?: string;
   contact_phone?: string;
   status?: "active" | "transferred" | "inactive" | string;
+  member_status?: "active" | "transferred" | "inactive" | string;
   joined_at: string;
   left_at?: string | null;
   transition_id?: number | null;
@@ -630,6 +642,7 @@ export interface BibleStudySessionDetail {
   session_date: string;
   topic_title: string;
   chapter: string;
+  progress_stage?: string | null;
   notes?: string;
   is_special?: boolean;
   special_reason?: string | null;
@@ -727,11 +740,16 @@ export interface SystemSetting {
 }
 
 export interface StudyTopic {
+  has_discussion?: boolean;
+  has_review?: boolean;
+  has_exam?: boolean;
   id: number;
   title: string;
   total_chapters: number;
   summary_notes?: string | null;
   created_at?: string;
+  group_counts?: { active: number; completed: number; ongoing: number; merged: number };
+  group_preview?: BibleStudyGroup[];
 }
 
 export interface StudyTopicDetailResponse {
@@ -741,7 +759,10 @@ export interface StudyTopicDetailResponse {
 
 export interface StudyTopicsSummary {
   topics: StudyTopic[];
+  all?: StudyTopic[];
   total_count: number;
+  pagination?: { page: number; limit: number; total: number; totalPages: number };
+  summary?: { totalBooks: number; totalChapters: number; totalGroups: number; groupsDone: number; groupsOngoing: number };
 }
 
 export interface DutyTeamMember {
@@ -1101,6 +1122,7 @@ export interface AttendanceLogFilters {
   status?: AttendanceLogStatus | "";
   ministryId?: number | string;
   groupId?: number | string;
+  eventId?: number | string;
   memberId?: number | string;
   search?: string;
   page?: number;

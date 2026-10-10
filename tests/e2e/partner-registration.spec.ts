@@ -62,7 +62,7 @@ async function enterMain(page: Page, existingHousehold = false) {
   if (existingHousehold) {
     await main.getByRole('button', { name: 'Select List', exact: true }).click();
     await main.locator('[data-guide="member-household"]').selectOption('20');
-    await main.getByLabel('Your relationship in this household', { exact: true }).selectOption('father');
+    await main.getByLabel('Your relationship in this household', { exact: true }).selectOption('husband');
     await expect(main.getByLabel('Family Members', { exact: true })).toHaveValue('Father: Juan Dela Cruz; Son: Andrie Dela Cruz');
   }
   await main.getByRole('button', { name: 'Continue to Partner', exact: true }).click();
@@ -83,8 +83,12 @@ test('separate partner step reflects shared details, retains inputs on back, and
   await expect(partner).toContainText('Pastor Pedro');
   await expect(partner).toContainText('Purok 1, Daet, Camarines Norte');
   await enterPartner(page, partner);
+  await expect(partner.locator('[aria-label="Couple household summary"]')).toContainText('Dela Cruz Household');
+  await expect(partner.locator('[aria-label="Couple household summary"]')).toContainText('Maria Dela Cruz · Spouse');
   await partner.getByRole('button', { name: 'Back to Member', exact: true }).first().click();
   const main = page.getByRole('dialog', { name: 'Add New Member Record', exact: true });
+  await expect(main.locator('[aria-label="Household preview"]')).toContainText('Maria Dela Cruz');
+  await expect(main.locator('[aria-label="Household preview"]')).toContainText('Spouse · New member');
   await main.getByPlaceholder(addressPlaceholder).fill('Purok 2, Daet, Camarines Norte');
   await main.getByPlaceholder('Search member name or type custom...').fill('Pastor Pablo');
   await main.getByRole('button', { name: 'Continue to Partner' }).click();
@@ -114,7 +118,7 @@ test('partner form reflects the shared selected household and saves additional r
   await partner.getByRole('button', { name: 'Save Both Members' }).click();
   await expect(partner).not.toBeVisible();
   expect(state.writes).toHaveLength(1);
-  expect(state.writes[0].body.household_registration).toMatchObject({ mode: 'existing', household_id: 20, role: 'father' });
+  expect(state.writes[0].body.household_registration).toMatchObject({ mode: 'existing', household_id: 20, role: 'husband' });
   expect(state.writes[0].body.partner_record.family_details).toBe('Liza Dela Cruz');
   expect(state.errors).toEqual([]);
 });

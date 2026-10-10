@@ -1,5 +1,10 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { usePageControls, useDebouncedValue } from "../hooks/useListPagination";
+import { Pagination } from "../components/common/Pagination";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
 import { ModalPanel } from "../components/common/ModalPanel";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -17,6 +22,13 @@ export const CommunicationsPage: React.FC = () => {
   const { user, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
   const { showToast, deleteWithUndo } = useToast();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
+  const { page, pageSize, setPage, setPageSize } = usePageControls(JSON.stringify([selectedMinistryId, debouncedSearch]), 20);
+  const [serverPaged, setServerPaged] = useState(false);
+  const [total, setTotal] = useState(0);
+  const sequence = useRef(0);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isAnnounceModalOpen, setIsAnnounceModalOpen] = useState(false);
 
@@ -80,7 +92,8 @@ export const CommunicationsPage: React.FC = () => {
 
   useEffect(() => {
     loadCommunications();
-  }, [selectedMinistryId]);
+  }, [selectedMinistryId, page, pageSize, debouncedSearch]);
+  useEffect(() => () => { sequence.current++; }, []);
 
   // Real-time synchronization
   useSocketEvent("communications:changed", () => {
@@ -88,16 +101,20 @@ export const CommunicationsPage: React.FC = () => {
   });
 
  const loadCommunications = async () => {
+    const requestId = ++sequence.current;
     guideData.clearError();
     try {
       setLoading(true);
-      const aList = await api.getAnnouncements(selectedMinistryId ?? undefined);
-      setAnnouncements(aList || []);
+      const aList = await api.getAnnouncementsPage({ ministry_id: selectedMinistryId ?? undefined, page, limit: pageSize, search: debouncedSearch });
+      if (requestId !== sequence.current) return;
+      if (Array.isArray(aList)) { setAnnouncements(aList); setTotal(aList.length); setServerPaged(false); }
+      else { setAnnouncements(aList.data); setTotal(aList.pagination.total); setServerPaged(true); if (aList.pagination.page !== page) setPage(aList.pagination.page); }
     } catch (err) {
+      if (requestId !== sequence.current) return;
       console.error("Communications load error:", err);
       guideData.reportError(err);
     } finally {
-      setLoading(false);
+      if (requestId === sequence.current) { setHasLoaded(true); setLoading(false); }
     }
   };
 
@@ -129,59 +146,35 @@ export const CommunicationsPage: React.FC = () => {
 
   const canPostAnnouncement = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
 
+  const filtered = serverPaged ? announcements : announcements.filter(item => (item.title + " " + item.body + " " + item.author_name).toLowerCase().includes(search.trim().toLowerCase()));
+  const visible = serverPaged ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
+  const resultTotal = serverPaged ? total : filtered.length;
   const guideData = useGuideDataState("announcements", { loading, count: announcements.length, filtered: Boolean(selectedMinistryId), retry: loadCommunications });
 
-  if (loading && announcements.length === 0) {
+  if (loading && !hasLoaded) {
     return <CommunicationsPageSkeleton />;
   }
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 space-y-2">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <Megaphone className="w-3.5 h-3.5 text-amber-300" />
-              <span>Church Broadcasts & Bulletins</span>
-            </div>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
-            Church Communications & Bulletins
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-            Ministry-scoped broadcasts, pastoral alerts, and official church announcements.
-          </p>
-        </div>
-
-        {/* Action controls */}
-        <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
+      <PageHeader icon={<Megaphone />} title={<>Church Communications & Bulletins</>}
+        description={<>Ministry-scoped broadcasts, pastoral alerts, and official church announcements.</>}
+        actions={<><div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
           {canPostAnnouncement && (
-            <button data-guide="announcement-new"
-              onClick={() => setIsAnnounceModalOpen(true)}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-indigo-950" />
+            <Button data-guide="announcement-new" onClick={() => setIsAnnounceModalOpen(true)} variant="primary">
+              <Plus className="w-4 h-4 " />
               <span>Post Announcement</span>
-            </button>
+            </Button>
           )}
-        </div>
-      </div>
+        </div></>} />
 
       {/* Summary Bar */}
-      <div className="flex items-center justify-between bg-white/95 p-4 rounded-3xl border border-indigo-100/90 shadow-sm">
+      <div className="flex items-center justify-between bg-white/95 p-4 rounded-2xl border border-stone-200 shadow-sm">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-indigo-700" />
           <span className="text-xs font-medium text-charcoal">
-            Active Bulletins ({announcements.length})
+            Active Bulletins ({resultTotal})
           </span>
         </div>
         <span className="text-[12px] text-muted font-medium">
@@ -189,12 +182,16 @@ export const CommunicationsPage: React.FC = () => {
         </span>
       </div>
 
+      <FilterPanel title="Announcement filters" summary={search || "All announcements"}>
+        <input aria-label="Search announcements" placeholder="Search title, message, or author…" value={search} onChange={event => setSearch(event.target.value)} className="ui-input" />
+      </FilterPanel>
+
       {/* Announcements Content */}
       <div data-guide="announcements-list">
-      {loading && announcements.length === 0 ? (
+      {loading && filtered.length === 0 ? (
         <CardGridSkeleton count={4} columns={2} />
       ) : announcements.length === 0 ? (
-        <div className="bg-white/95 rounded-3xl p-12 text-center border border-indigo-100 shadow-sm space-y-3">
+        <div className="bg-white/95 rounded-2xl p-12 text-center border border-indigo-100 shadow-sm space-y-3">
           <MessageSquare className="w-12 h-12 text-charcoal/20 mx-auto" />
           <h3 className="font-semibold text-sm text-charcoal">No Announcements Yet</h3>
           <p className="text-xs text-muted max-w-sm mx-auto">
@@ -203,7 +200,7 @@ export const CommunicationsPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {announcements.map((a) => (
+          {visible.map((a) => (
             <div
               key={a.id}
               className={`bg-white/95 rounded-3xl p-6 border shadow-sm transition-all hover:shadow-md ${
@@ -260,6 +257,7 @@ export const CommunicationsPage: React.FC = () => {
 
       {/* Post Announcement Modal */}
       </div>
+      <Pagination label="announcements" page={page} pageSize={pageSize} total={resultTotal} onPageChange={setPage} onPageSizeChange={setPageSize} loading={loading} />
       {isAnnounceModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <ModalPanel data-modal-panel className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-indigo-100 space-y-4 animate-scale-up">

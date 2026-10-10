@@ -1,3 +1,8 @@
+import { FilterPanel } from "../common/FilterPanel";
+import { StatCard } from "../common/StatCard";
+import { Pagination } from "../common/Pagination";
+import { useListPagination } from "../../hooks/useListPagination";
+import { PageHeader } from "../common/PageHeader";
 import { ViewportOverlay } from "../common/ViewportOverlay";
 import { CircleX as UICircleX } from "lucide-react";
 import { ModalPanel } from "../common/ModalPanel";
@@ -10,10 +15,10 @@ import {
   CheckCircle2, Clock, MapPin, Search, Users,
   UserCheck, UserPlus, Calendar, ChevronDown, Check,
   RefreshCw, X, Undo2, Loader2, Layers, Tag,
-  ListChecks, SlidersHorizontal, CheckSquare, AlertCircle, UserX,
+  ListChecks, AlertCircle, UserX,
   HelpCircle
 } from "lucide-react";
-import { TableSkeleton } from "../common/SkeletonLoader";
+import { Skeleton, AttendanceSummarySkeleton, AttendanceTableSkeleton } from "../common/SkeletonLoader";
 
 interface EventAttendanceCheckInViewProps {
   initialEventId?: number;
@@ -389,6 +394,8 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
     });
   }, [attendees, searchQuery, filterMinistry, statusFilter, isFastMode]);
 
+  const rosterPage = useListPagination(filteredAttendees, JSON.stringify([searchQuery, filterMinistry, statusFilter, isFastMode]), 30);
+
   // Walk-in candidates (members not yet in attendees roster)
   const walkInCandidates = useMemo(() => {
     const rosterMemberIds = new Set(attendees.map(r => r.member_id));
@@ -446,129 +453,54 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
       )}
 
       {/* TOP HERO: Special Event Attendance Overview (Matched to DPC ChMS Design System) */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+      <PageHeader icon={<Calendar />} title={<>Event Attendance Checking</>} description={<>Live registration desk check-in for church anniversaries, youth camps, conferences, seminars, and ministry fellowships.</>} actions={<div className="flex flex-col gap-2 min-w-0 w-full sm:w-84 xl:shrink-0">
+        <label htmlFor="event-attendance-selector" className="text-[12px] font-medium text-muted uppercase tracking-wider">
+          Select Church Event
+        </label>
+        <div className="relative">
+          {loadingEvents ? <div role="status"><span className="sr-only">Loading church events...</span><Skeleton className="h-10 w-full rounded-xl" /></div> : <>
+            <select id="event-attendance-selector" data-guide="event-attendance-event"
+              value={selectedEventId || ""}
+              onChange={(e) => setSelectedEventId(Number(e.target.value))}
+              disabled={loadingEvents || events.length === 0}
+              className="w-full bg-stone-50 text-charcoal font-medium text-xs p-2.5 pr-8 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-indigo/20 focus:border-indigo cursor-pointer appearance-none"
+            >
+              {events.length === 0 && <option value="">No events recorded</option>}
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.title} ({formatEventDate(ev.start_time)})
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" /></>}
+        </div>
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <Calendar className="w-3.5 h-3.5 text-amber-400" />
-              <span>Special Event Attendance Kiosk</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-              Event Attendance Checking
-            </h1>
-            <p className="text-xs text-indigo-200/90 max-w-xl leading-relaxed">
-              Live registration desk check-in for church anniversaries, youth camps, conferences, seminars, and ministry fellowships.
-            </p>
-          </div>
-
-          {/* Dedicated Event Selector */}
-          <div className="flex flex-col gap-2 bg-white/10 p-3 rounded-2xl border border-white/15 backdrop-blur-md min-w-[280px] sm:min-w-[340px]">
-            <label className="text-[12px] font-medium text-amber-300 uppercase tracking-wider">
-              Select Church Event
-            </label>
-            <div className="relative">
-              <select data-guide="event-attendance-event"
-                value={selectedEventId || ""}
-                onChange={(e) => setSelectedEventId(Number(e.target.value))}
-                disabled={loadingEvents || events.length === 0}
-                className="w-full bg-indigo-950/95 text-white font-medium text-xs p-2.5 pr-8 rounded-xl border border-white/20 focus:outline-none focus:border-amber cursor-pointer appearance-none truncate"
-              >
-                {events.length === 0 && <option value="">No events recorded</option>}
-                {events.map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.title} ({formatEventDate(ev.start_time)})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 text-amber-300 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-
-            {selectedEvent && (
-              <div className="flex items-center gap-3 text-[12px] text-indigo-200/90 pt-1 border-t border-white/10">
-                <span className="flex items-center gap-1 font-medium">
-                  <Clock className="w-3 h-3 text-amber-400" />
-                  {formatEventTime(selectedEvent.start_time)}
-                </span>
-                {selectedEvent.location && (
-                  <span className="flex items-center gap-1 font-medium truncate">
-                    <MapPin className="w-3 h-3 text-emerald-400" />
-                    {selectedEvent.location}
-                  </span>
-                )}
-              </div>
+        {selectedEvent && (
+          <div className="flex items-center gap-3 text-[12px] text-muted pt-1 border-t border-stone-200">
+            <span className="flex items-center gap-1 font-medium">
+              <Clock className="w-3 h-3 text-amber-600" />
+              {formatEventTime(selectedEvent.start_time)}
+            </span>
+            {selectedEvent.location && (
+              <span className="flex items-center gap-1 font-medium truncate">
+                <MapPin className="w-3 h-3 text-emerald-600" />
+                {selectedEvent.location}
+              </span>
             )}
           </div>
-        </div>
-      </div>
+        )}
+      </div>} />
 
-      {/* Summary Statistics Strip (Matched to Sunday Attendance Standard) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-emerald-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-emerald-700">Present Today</span>
-            <UserCheck className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-medium text-emerald-700">
-            {loadingRoster ? "..." : presentCount.toLocaleString()} <span className="text-xs font-normal text-stone-400">/ {totalRosterCount}</span>
-          </div>
-          <div className="text-[12px] text-emerald-600 font-medium mt-1">
-            {attendanceRate}% Turnout Rate
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-rose-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-rose-700">Absent / Excused</span>
-            <UserX className="w-4 h-4 text-rose-600" />
-          </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-medium text-rose-700">
-            {loadingRoster ? "..." : (absentCount + excusedCount).toLocaleString()}
-          </div>
-          <div className="text-[12px] text-rose-600 font-medium mt-1">
-            {absentCount} Absent • {excusedCount} Excused
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-amber-700">Pending / Unmarked</span>
-            <Clock className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="mt-2 text-2xl sm:text-3xl font-medium text-amber-700">
-            {loadingRoster ? "..." : unmarkedCount.toLocaleString()}
-          </div>
-          <div className="text-[12px] text-amber-600 font-medium mt-1">Not yet marked</div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wider text-indigo">Turnout Progress</span>
-              <span className="text-xs font-medium text-indigo">{attendanceRate}%</span>
-            </div>
-            <div className="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden my-2 border border-stone-200/60">
-              <div
-                className="bg-emerald-600 h-full rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, attendanceRate)}%` }}
-              ></div>
-            </div>
-          </div>
-          <div className="text-[12px] text-stone-500 font-medium">
-            {presentCount} of {totalRosterCount} marked present
-          </div>
-        </div>
-      </div>
+      {/* Attendance summary */}
+      {loadingEvents || loadingRoster ? <AttendanceSummarySkeleton /> : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4" aria-label="Attendance summary">
+        <StatCard label="Present Today" value={presentCount.toLocaleString()} valueHint={<>/ {totalRosterCount}</>} icon={<UserCheck />} tone="emerald" description={attendanceRate + "% Turnout Rate"} />
+        <StatCard label="Absent / Excused" value={(absentCount + excusedCount).toLocaleString()} icon={<UserX />} tone="rose" description={<>{absentCount} Absent • {excusedCount} Excused</>} />
+        <StatCard label="Pending / Unmarked" value={unmarkedCount.toLocaleString()} icon={<Clock />} tone="amber" description="Not yet marked" />
+        <StatCard label="Turnout Progress" value={attendanceRate + "%"} icon={<UserCheck />} progress={attendanceRate} description={<>{presentCount} of {totalRosterCount} marked present</>} />
+      </div>}
 
       {/* Filter & Action Toolbar (Matched to DPC ChMS Toolbar) */}
-      <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-stone-200 space-y-4">
+      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-stone-200 space-y-4">
         {isFastMode ? (
           /* When in Batch Roll Call Mode: Show contextual banner instead of confusing status filters */
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
@@ -578,20 +510,11 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
                 Batch Roll Call Active • Showing all {batchScopeList.length} members in current scope. Use the search bar inside the roll call toolbar below to find members.
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setIsFastMode(false);
-                setSelectedMemberIds(new Set());
-              }}
-              className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-charcoal/80 font-medium text-xs transition-all cursor-pointer shrink-0"
-            >
-              Exit Batch Mode
-            </button>
           </div>
         ) : (
           /* Normal Mode: Search Box + Ministry & Status Filter Pills */
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <FilterPanel title="Event attendance filters" summary={[statusFilter === "all" ? "All attendees" : statusFilter, searchQuery].filter(Boolean).join(" · ")}>
+            <div className="filter-panel-layout flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             {/* Status Quick Filter Chips */}
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
               <span className="text-[12px] font-medium text-muted uppercase tracking-wider shrink-0 mr-1">Status:</span>
@@ -708,19 +631,20 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
               </button>
             </div>
           </div>
+          </FilterPanel>
         )}
       </div>
 
       {/* MAIN ATTENDANCE ROSTER LIST */}
-      {loadingRoster && attendees.length === 0 ? (
-        <TableSkeleton rows={8} columns={5} />
+      {loadingEvents || loadingRoster ? (
+        <AttendanceTableSkeleton rows={8} columns={5} />
       ) : !selectedEventId ? (
         <div className="bg-white rounded-3xl p-16 text-center text-stone-400 space-y-2 border border-stone-200 shadow-sm">
           <Users className="w-12 h-12 mx-auto text-stone-300" />
           <p className="font-medium text-charcoal">Please select an event above to view and check attendance.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden space-y-0">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden space-y-0">
 
           {/* Top Directory Header with Batch Roll Call Toggle */}
           <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3 bg-gray-50/50">
@@ -744,7 +668,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
                 </div>
                 <p className="text-[12px] text-muted">
                   {isFastMode
-                    ? "Batch Roll Call: Select absent/pending members (unselected are marked Present) or select present attendees."
+                    ? "Choose a method, select members, then review before saving."
                     : "Quickly mark event attendees: Check-In (Present), Absent Today, Excused (Travel/Sick), or Undo."}
                 </p>
               </div>
@@ -788,208 +712,16 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
             </div>
           </div>
 
-          {/* BATCH ROLL CALL TOOLBAR (Rendered when isFastMode is active) */}
-          {isFastMode && (
-            <div className="bg-slate-950 p-4 sm:p-5 text-white border-b border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-              
-              {/* Row 1: Mode Selection (Full-Width 3-Column Grid) */}
-              <div className="space-y-2">
-                <span className="text-[12px] font-medium uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" /> Roll Call Method:
-                </span>
-                <div data-guide="event-attendance-methods" className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-
-                  {/* Mode A: Select Absent / Pending (Unselected = Present) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFastModeType("absent_rest_present");
-                      setSelectedMemberIds(new Set());
-                    }}
-                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${
-                      fastModeType === "absent_rest_present"
-                        ? "bg-rose-600 text-white shadow-md ring-2 ring-rose-400"
-                        : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                      <UserX className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="font-medium leading-tight">Mark Absentees (Exception)</div>
-                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Unselected = Present by Default</div>
-                    </div>
-                  </button>
-
-                  {/* Mode B: Select Present (Unselected = Absent) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFastModeType("present_rest_absent");
-                      setSelectedMemberIds(new Set());
-                    }}
-                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${
-                      fastModeType === "present_rest_absent"
-                        ? "bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400"
-                        : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                      <UserCheck className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="font-medium leading-tight">Mark Present Attendees</div>
-                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Unselected = Absent/Pending by Default</div>
-                    </div>
-                  </button>
-
-                  {/* Mode C: Present Only */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFastModeType("present_only");
-                      setSelectedMemberIds(new Set());
-                    }}
-                    className={`p-3 rounded-2xl text-xs font-medium transition-all flex items-center gap-3 cursor-pointer text-left ${
-                      fastModeType === "present_only"
-                        ? "bg-sky-600 text-white shadow-md ring-2 ring-sky-400"
-                        : "bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10"
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                      <CheckSquare className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="font-medium leading-tight">Mark Selected Present Only</div>
-                      <div className="text-[12px] text-white/80 font-normal mt-0.5">Keep unselected unchanged</div>
-                    </div>
-                  </button>
-
-                </div>
-              </div>
-
-              {/* Row 2: Roll Call Search & Actions Bar */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-800">
-
-                {/* Search in Roll Call */}
-                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full lg:w-auto flex-1 max-w-xl">
-                  <div className="relative flex-1 min-w-[200px]">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="Search member in roll call..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-7 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-400 text-xs focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 outline-none transition-all"
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
-                        title="Clear search"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Selection Helpers & Active Filter Tag */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-1 bg-white/10 p-1 rounded-xl border border-white/15">
-                    <button
-                      type="button"
-                      onClick={() => selectAllFiltered(filteredAttendees)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-white hover:bg-white/15 transition-all cursor-pointer"
-                      title="Select all members currently in list"
-                    >
-                      Select All ({filteredAttendees.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => clearSelection()}
-                      disabled={selectedMemberIds.size === 0}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/15 disabled:opacity-40 transition-all cursor-pointer"
-                    >
-                      Clear ({selectedMemberIds.size})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => invertSelection(filteredAttendees)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/15 transition-all cursor-pointer"
-                      title="Invert current check selection"
-                    >
-                      Invert
-                    </button>
-                  </div>
-
-                  {searchQuery && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs">
-                      <span>Filtered: <strong>{filteredAttendees.length}</strong> of {batchScopeList.length}</span>
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="hover:text-white ml-0.5 cursor-pointer"
-                        title="Reset search filter"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
-              {/* Row 3: Tip Banner & Save Action */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <div className="bg-white/5 border border-white/10 rounded-2xl px-3.5 py-2 text-xs flex items-center justify-between flex-wrap gap-2 text-slate-300 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-                    <span>
-                      {fastModeType === "absent_rest_present" ? (
-                        <><strong>Tip:</strong> Select members who are absent/not arrived. All unselected members will automatically be marked as <strong>Present</strong> upon saving.</>
-                      ) : fastModeType === "present_rest_absent" ? (
-                        <><strong>Tip:</strong> Select members who are present. All unselected members will automatically be marked as <strong>Absent/Pending</strong> upon saving.</>
-                      ) : (
-                        <><strong>Tip:</strong> Select members to mark as <strong>Present</strong> for this event.</>
-                      )}
-                    </span>
-                  </div>
-                  <span className="text-[12px] font-mono text-amber-300 shrink-0">
-                    {selectedMemberIds.size} of {batchScopeList.length} in scope selected
-                  </span>
-                </div>
-
-                {/* Primary Save Button */}
-                <button data-guide="event-attendance-save"
-                  type="button"
-                  onClick={() => handleApplyBatchAttendance(batchScopeList)}
-                  disabled={batchSubmitting || batchScopeList.length === 0}
-                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-medium text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
-                >
-                  {batchSubmitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Saving Roll Call...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4 stroke-[3]" />
-                      <span>
-                        {fastModeType === "absent_rest_present"
-                          ? `Save Roll Call (${selectedMemberIds.size} Absent, ${Math.max(0, batchScopeList.length - selectedMemberIds.size)} Present)`
-                          : fastModeType === "present_rest_absent"
-                            ? `Save Roll Call (${selectedMemberIds.size} Present, ${Math.max(0, batchScopeList.length - selectedMemberIds.size)} Absent)`
-                            : `Save ${selectedMemberIds.size} Selected Present`}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-            </div>
-          )}
+          {isFastMode && <BatchRollCallToolbar
+            method={fastModeType}
+            onMethodChange={method => { setFastModeType(method); setSelectedMemberIds(new Set()); }}
+            selectedCount={selectedMemberIds.size} scopeCount={batchScopeList.length}
+            matchingCount={filteredAttendees.length}
+            search={searchQuery} onSearchChange={setSearchQuery}
+            onSelectAll={() => selectAllFiltered(filteredAttendees)}
+            onClear={clearSelection} onInvert={() => invertSelection(filteredAttendees)}
+            onSave={() => handleApplyBatchAttendance(batchScopeList)} submitting={batchSubmitting}
+          />}
 
           {/* Roster Table */}
           <div className="overflow-x-auto min-h-[160px]">
@@ -1036,7 +768,7 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
                     </td>
                   </tr>
                 ) : (
-                  filteredAttendees.map((item) => {
+                  rosterPage.items.map((item) => {
                     const isChecking = markingId === item.member_id;
                     const isPresent = item.status === "attended";
                     const isAbsent = item.status === "absent" || item.attendance_notes?.includes("[ABSENT]");
@@ -1294,89 +1026,10 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
               </tbody>
             </table>
           </div>
+          <Pagination label="event attendees" page={rosterPage.page} pageSize={rosterPage.pageSize} total={rosterPage.total} onPageChange={rosterPage.setPage} onPageSizeChange={rosterPage.setPageSize} />
         </div>
       )}
 
-      {/* FLOATING ACTION BAR FOR BATCH ROLL CALL */}
-      {isFastMode && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl bg-slate-950/95 text-white backdrop-blur-md p-3 sm:p-4 rounded-3xl shadow-2xl border border-slate-700/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 animate-in slide-in-from-bottom-6">
-          <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-medium shrink-0 ${
-              fastModeType === "absent_rest_present"
-                ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                : fastModeType === "present_rest_absent"
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                  : "bg-sky-500/20 text-sky-300 border border-sky-500/30"
-            }`}>
-              {fastModeType === "absent_rest_present" ? (
-                <UserX className="w-5 h-5" />
-              ) : fastModeType === "present_rest_absent" ? (
-                <UserCheck className="w-5 h-5" />
-              ) : (
-                <CheckSquare className="w-5 h-5" />
-              )}
-            </div>
-            <div>
-              <div className="text-xs font-medium flex items-center gap-2">
-                <span>
-                  {fastModeType === "absent_rest_present"
-                    ? "Absence Selection Active"
-                    : fastModeType === "present_rest_absent"
-                      ? "Presence Selection Active"
-                      : "Selective Check-In Active"}
-                </span>
-                <span className="text-[12px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300">
-                  {batchScopeList.length} Members in Scope
-                </span>
-              </div>
-              <p className="text-[12px] text-slate-300">
-                {fastModeType === "absent_rest_present" ? (
-                  <>
-                    <strong className="text-rose-400 font-medium">{selectedMemberIds.size} Absent</strong> • <strong className="text-emerald-400 font-medium">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Present</strong>
-                  </>
-                ) : fastModeType === "present_rest_absent" ? (
-                  <>
-                    <strong className="text-emerald-400 font-medium">{selectedMemberIds.size} Present</strong> • <strong className="text-rose-400 font-medium">{Math.max(0, batchScopeList.length - selectedMemberIds.size)} Auto-Absent</strong>
-                  </>
-                ) : (
-                  <>
-                    <strong className="text-sky-400 font-medium">{selectedMemberIds.size} Selected Present</strong>
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => clearSelection()}
-              className="px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              Reset
-            </button>
-
-            <button data-guide="event-attendance-save"
-              type="button"
-              onClick={() => handleApplyBatchAttendance(batchScopeList)}
-              disabled={batchSubmitting || batchScopeList.length === 0}
-              className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-medium text-xs shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50 flex-1 sm:flex-initial"
-            >
-              {batchSubmitting ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Saving Changes...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 stroke-[3]" />
-                  <span>Save Attendance Changes</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* MODAL: MARK ABSENT / EXCUSED WITH REASON */}
       {absentModalMember && createPortal(
@@ -1593,3 +1246,4 @@ export const EventAttendanceCheckInView: React.FC<EventAttendanceCheckInViewProp
     </div>
   );
 };
+import { BatchRollCallToolbar } from "./BatchRollCallToolbar";

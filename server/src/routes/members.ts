@@ -1,6 +1,9 @@
+import { parsePagination, validatePagination } from "../utils/pagination";
 import { Router, Request, Response } from "express";
-import { prepareMemberHousehold, saveMemberHouseholdRelationship, reflectHouseholdFamily, validateHouseholdParent, writeMemberWithParent } from "../utils/householdFamily";
+import { prepareMemberHousehold, saveMemberHouseholdRelationship, syncHouseholdSpouseRole, reflectHouseholdFamily, validateHouseholdParent, writeMemberWithParent } from "../utils/householdFamily";
 import { db } from "../db/schema";
+import { lockFamily, saveFamilyLinks, syncMemberSpouse } from "../utils/familyTree";
+import { syncRecordedHouseholdChildren } from "../utils/householdTree";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { calculateAge } from "./ministries";
 import { emitRealtimeEvent } from "../socket";
@@ -140,7 +143,7 @@ function computeAttendanceHealthAndStatus(member: any, attendanceRecords: any[] 
 }
 
 // Get list of members with search, filter, and pagination (Admin, Pastor, Coordinator)
-router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Request, res: Response) => {
+router.get("/", validatePagination, requireRoles("Admin", "Pastor", "Coordinator"), async (req: Request, res: Response) => {
   try {
     const {
       ministry_id,
@@ -158,6 +161,14 @@ router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Requ
 
     let whereClause = " WHERE 1=1";
     const params: any[] = [];
+
+    if (req.query.ids !== undefined) {
+      if (typeof req.query.ids !== "string" || !/^\d+(,\d+)*$/.test(req.query.ids)) return res.status(400).json({ error: "Choose valid member IDs." });
+      const ids = [...new Set(req.query.ids.split(",").map(Number))];
+      if (ids.length > 100 || ids.some(id => !Number.isSafeInteger(id) || id < 1)) return res.status(400).json({ error: "Choose 1–100 valid member IDs." });
+      params.push(ids);
+      whereClause += ` AND m.id = ANY($${params.length}::int[])`;
+    }
 
     if (ministry_id) {
       params.push(ministry_id);
@@ -207,7 +218,7 @@ router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Requ
     if (search && typeof search === "string" && search.trim()) {
       params.push(`%${search.trim()}%`);
       const pIdx = params.length;
-      whereClause += ` AND (m.first_name ILIKE $${pIdx} OR m.last_name ILIKE $${pIdx} OR (m.first_name || ' ' || m.last_name) ILIKE $${pIdx} OR m.contact_email ILIKE $${pIdx} OR m.contact_phone ILIKE $${pIdx} OR m.address ILIKE $${pIdx})`;
+      whereClause += ` AND (m.first_name ILIKE $${pIdx} OR m.last_name ILIKE $${pIdx} OR (m.first_name || ' ' || m.last_name) ILIKE $${pIdx} OR m.contact_email ILIKE $${pIdx} OR m.contact_phone ILIKE $${pIdx} OR m.address ILIKE $${pIdx} OR min.name ILIKE $${pIdx})`;
     }
 
     if (birthday_filter && typeof birthday_filter === "string") {
@@ -224,10 +235,9 @@ router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Requ
       }
     }
 
-    const isPaginated = page !== undefined || limit !== undefined;
+    const { enabled: isPaginated, page: requestedPage, limit: curLimit } = parsePagination(req.query);
+    let curPage = requestedPage;
     let totalCount = 0;
-    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
-    const curLimit = Math.max(1, limit ? parseInt(String(limit), 10) : 30);
 
     if (isPaginated) {
       const countQuery = `
@@ -240,6 +250,7 @@ router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Requ
       `;
       const countRes = await db.get<{ total: string | number }>(countQuery, params);
       totalCount = parseInt(String(countRes?.total || 0), 10);
+      curPage = Math.min(curPage, Math.max(1, Math.ceil(totalCount / curLimit)));
     }
 
     let query = `
@@ -254,7 +265,7 @@ router.get("/", requireRoles("Admin", "Pastor", "Coordinator"), async (req: Requ
       LEFT JOIN users u ON m.user_id = u.id
       LEFT JOIN members sp ON m.spouse_id = sp.id
       ${whereClause}
-      ORDER BY LOWER(m.first_name) ASC, LOWER(m.last_name) ASC
+      ORDER BY LOWER(m.first_name) ASC, LOWER(m.last_name) ASC, m.id ASC
     `;
 
     let members: any[] = [];
@@ -1163,6 +1174,7 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
     }
 
     const { result, resolvedSpouseId, savedHouseholdId } = await db.transaction(async client => {
+      await lockFamily(client);
       const savedHouseholdId = req.body.household_registration
         ? await prepareMemberHousehold(client, req.body.household_registration, { first_name: first_name.trim(), last_name: last_name.trim(), address, contact_phone })
         : (household_id ? Number(household_id) : null);
@@ -1299,6 +1311,10 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
         `, [newId, `${first_name} ${last_name}`, resolvedSpouseId, !!req.body.household_registration, savedHouseholdId]);
       }
 
+      await saveFamilyLinks(client, Number(newId), req.body.family_links);
+      await syncMemberSpouse(client, Number(newId));
+      if (resolvedSpouseId) await syncHouseholdSpouseRole(client, Number(newId));
+      if (savedHouseholdId) await syncRecordedHouseholdChildren(client, Number(savedHouseholdId));
       return { result, resolvedSpouseId, savedHouseholdId };
     });
     const newId = result.lastInsertRowid;
@@ -1404,6 +1420,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
     }
 
     const { resolvedSpouseId, savedHouseholdId } = await db.transaction(async client => {
+      await lockFamily(client);
       const savedHouseholdId = req.body.household_registration
         ? await prepareMemberHousehold(client, req.body.household_registration, { id: Number(id), household_id: currentMember.household_id, previous_name: `${currentMember.first_name} ${currentMember.last_name}`, first_name: effectiveFirstName, last_name: effectiveLastName, address: address ?? currentMember.address, contact_phone: contact_phone ?? currentMember.contact_phone })
         : (household_id === undefined ? currentMember.household_id : (household_id ? Number(household_id) : null));
@@ -1582,6 +1599,10 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
         `, [id, `${effectiveFirstName} ${effectiveLastName}`, resolvedSpouseId, !!req.body.household_registration, savedHouseholdId]);
       }
 
+      await saveFamilyLinks(client, Number(id), req.body.family_links);
+      await syncMemberSpouse(client, Number(id));
+      if (resolvedSpouseId) await syncHouseholdSpouseRole(client, Number(id));
+      if (savedHouseholdId) await syncRecordedHouseholdChildren(client, Number(savedHouseholdId));
       return { resolvedSpouseId, savedHouseholdId };
     });
 

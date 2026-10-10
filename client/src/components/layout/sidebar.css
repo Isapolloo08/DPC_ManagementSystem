@@ -1,0 +1,133 @@
+.shared-layout-sidebar {
+  --sidebar-hover: color-mix(in srgb, var(--navy) 7%, var(--surface));
+  --sidebar-icon-bg: color-mix(in srgb, var(--navy) 6%, var(--surface));
+  --sidebar-icon-ink: var(--navy);
+}
+
+.dark .shared-layout-sidebar {
+  --sidebar-hover: var(--surface-2);
+  --sidebar-icon-bg: var(--surface-2);
+  --sidebar-icon-ink: var(--text-muted);
+}
+
+.shared-layout-sidebar .sidebar-brand {
+  background-image: linear-gradient(120deg, color-mix(in srgb, var(--gold) 7%, transparent), transparent 70%);
+}
+
+.shared-layout-sidebar .sidebar-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: .1em;
+  font-weight: 600;
+}
+
+.sidebar-section-title::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+.shared-layout-sidebar .sidebar-nav-item {
+  position: relative;
+  min-height: 44px;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.shared-layout-sidebar .sidebar-nav-item:hover {
+  background: var(--sidebar-hover);
+  color: var(--text);
+}
+
+.shared-layout-sidebar .sidebar-nav-item[aria-current="page"] {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  box-shadow: var(--shadow-brand-icon);
+  font-weight: 600;
+}
+
+.sidebar-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--gold);
+}
+
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  background: var(--sidebar-icon-bg);
+  color: var(--sidebar-icon-ink);
+}
+
+.sidebar-nav-item .sidebar-nav-icon svg {
+  width: 16px;
+  height: 16px;
+  color: inherit;
+}
+
+.sidebar-nav-item[aria-current="page"] .sidebar-nav-icon {
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+  color: var(--gold);
+}
+
+.sidebar-nav-scroll {
+  overscroll-behavior-y: contain;
+  scroll-padding-block: 8px;
+}
+
+.sidebar-ministry-row { gap: 8px; }
+.sidebar-ministry-row > span { flex-shrink: 0; }
+
+/* Reserve equal space at both edges so arrows never cover navigation labels. */
+.sidebar-scroll-controls {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  height: 28px;
+}
+
+.shared-layout-sidebar .sidebar-scroll-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.shared-layout-sidebar .sidebar-scroll-button:hover {
+  color: var(--gold);
+}
+
+.shared-layout-sidebar :is(button, a, input, select):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav-item { transition: none; }
+}

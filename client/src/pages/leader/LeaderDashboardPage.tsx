@@ -1,3 +1,4 @@
+import { ChurchOverview } from "../../components/dashboard/ChurchOverview";
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../api";
@@ -5,18 +6,20 @@ import { useGuideDataState } from "../../components/help/GuideDataContext";
 import {
   BibleStudyGroup, BibleStudyMember, StudyTopic,
   SaturdayDutyScheduleResponse, SundayDutyScheduleResponse,
-  Announcement, EventItem, Ministry
+  Announcement, EventItem
 } from "../../types";
 import { useSocketEvent } from "../../socket";
 import { TodayBibleReadingWidget } from "../../components/common/TodayBibleReadingWidget";
 import { NavTab } from "../../components/layout/Sidebar";
 import {
   Users, Calendar, Clock, MapPin,
-  BookmarkCheck, UserCheck, ArrowRight, CalendarCheck,
+  BookmarkCheck, UserCheck, ArrowRight,
   Utensils, MessageSquare, BookOpen, ChevronRight,
-  ShieldCheck, AlertCircle, CheckCircle2, TrendingUp,
-  Layers, Plus
+  AlertCircle, Plus
 } from "lucide-react";
+import { getCurriculumCompletion } from "../../utils/curriculumCompletion";
+import { formatDisplayDate } from "../../utils/displayDate";
+import "./leader-dashboard.css";
 import { DashboardSkeleton } from "../../components/common/SkeletonLoader";
 
 interface LeaderDashboardPageProps {
@@ -107,437 +110,127 @@ export const LeaderDashboardPage: React.FC<LeaderDashboardPageProps> = ({ onNavi
   // Designated Sunday Dishwashing
   const upcomingDishwashing = dishwashingData?.thisSunday || dishwashingData?.nextSunday;
 
+  const completion = getCurriculumCompletion(activeGroup, studyTopics);
+  const previewTopics = currentTopic
+    ? [currentTopic, ...studyTopics.filter(topic => topic.id !== currentTopic.id)].slice(0, 3)
+    : studyTopics.slice(0, 3);
+  const capacity = activeGroup?.max_capacity || 0;
+  const occupancy = capacity ? Math.round(disciples.length / capacity * 100) : 0;
+
   if (loading && groups.length === 0) {
-    return <DashboardSkeleton />;
+    return <DashboardSkeleton variant="service" />;
   }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-6 sm:p-8 shadow-xl border border-white/10">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-        <div className="absolute bottom-0 right-32 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-200 text-xs font-medium tracking-wide uppercase">
-              <BookmarkCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span>Small Group Discipleship Leader Hub</span>
+      <div className="church-dashboard role-church-hero">
+      <ChurchOverview name={user?.name || "Friend"} role="Leader" events={upcomingEvents}
+        ministryName={activeGroup?.name || "Small group discipleship"} onNavigate={onNavigate} groupTab="leaderportal"
+        stats={[
+          { label: 'Disciples', value: disciples.length, tab: 'leaderportal' },
+          { label: 'My groups', value: myLedGroups.length, tab: 'leaderportal' },
+          { label: 'Study topics', value: studyTopics.length, tab: 'leaderportal' },
+          { label: 'Upcoming events', value: upcomingEvents.length, tab: 'events' },
+        ]}
+        description={<>"Be shepherds of God's flock that is under your care, watching over them—not because you must, but because you are willing, as God wants you to be." (1 Peter 5:2).</>}
+        data-guide="leader-dashboard-summary"
+        actions={<>{activeGroup ? (
+          <div className="shrink-0 bg-stone-50  rounded-2xl p-4 border border-stone-200 flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber text-charcoal flex items-center justify-center font-medium text-sm shadow-sm">
+              <Users className="w-5 h-5 text-slate-900" />
             </div>
-            <h1 data-guide="leader-dashboard-summary" className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-              Welcome back, Leader {user?.name || ""}!
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300/90 max-w-xl leading-relaxed">
-              "Be shepherds of God's flock that is under your care, watching over them—not because you must, but because you are willing, as God wants you to be." (1 Peter 5:2).
-            </p>
+            <div>
+              <span className="text-[12px] font-medium text-amber-700 uppercase tracking-wider block">Assigned Small Group</span>
+              <span className="text-sm font-medium text-charcoal block truncate max-w-[180px]">{activeGroup.name}</span>
+              <span className="text-[12px] text-muted">{activeGroup.meeting_day} • {activeGroup.meeting_time}</span>
+            </div>
           </div>
-
-          {activeGroup ? (
-            <div className="shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-amber text-charcoal flex items-center justify-center font-medium text-sm shadow-sm">
-                <Users className="w-5 h-5 text-slate-900" />
-              </div>
-              <div>
-                <span className="text-[12px] font-medium text-amber-300 uppercase tracking-wider block">Assigned Small Group</span>
-                <span className="text-sm font-medium text-white block truncate max-w-[180px]">{activeGroup.name}</span>
-                <span className="text-[12px] text-slate-300">{activeGroup.meeting_day} • {activeGroup.meeting_time}</span>
-              </div>
+        ) : (
+          <div className="shrink-0 bg-amber-500/10 rounded-2xl p-4 border border-amber-500/20 flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-amber-700" />
+            <div className="text-xs text-amber-700">
+              <div className="font-medium">No Small Group Assigned</div>
+              <div className="text-[12px] opacity-80">Contact Admin/Coordinator</div>
             </div>
-          ) : (
-            <div className="shrink-0 bg-amber-500/10 rounded-2xl p-4 border border-amber-500/20 flex items-center gap-3">
-              <AlertCircle className="w-6 h-6 text-amber-400" />
-              <div className="text-xs text-amber-200">
-                <div className="font-medium">No Small Group Assigned</div>
-                <div className="text-[12px] opacity-80">Contact Admin/Coordinator</div>
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}</>} />
       </div>
 
-      {/* 2. Today's Bible Reading Devotion */}
-      <TodayBibleReadingWidget onNavigateToPlan={() => onNavigate("biblereading")} />
-
-      {/* 3. Executive Leader KPI Metrics (4 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* A. Disciples Roster Count */}
-        <div className="bg-white rounded-2xl p-5 border border-sky-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Group Disciples</span>
-            <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-medium text-slate-900">
-              {disciples.length}
-              <span className="text-xs font-normal text-slate-400 ml-1">/ {activeGroup?.max_capacity || 12} max</span>
-            </div>
-            <p className="text-xs text-sky-700 font-medium mt-0.5">
-              {activeGroup ? activeGroup.name : "Active Group"}
-            </p>
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[12px] text-slate-500">Enrolled disciples</span>
-            <button data-guide="leader-dashboard-group"
-              onClick={() => onNavigate("leaderportal")}
-              className="text-xs font-medium text-sky-700 hover:text-sky-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
-            >
-              <span>Manage Roster</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      <div className="leader-dashboard-content">
+        <div className="leader-metrics">
+          <article className="leader-metric" data-tone="info">
+            <div className="leader-metric-label"><h2>Disciples enrolled</h2><span className="leader-icon"><Users size={16} /></span></div>
+            <p className="leader-metric-value">{disciples.length}<span>{capacity ? `/ ${capacity} capacity` : ' enrolled'}</span></p>
+            <button className="leader-metric-detail" data-guide="leader-dashboard-group" onClick={() => onNavigate('leaderportal')}><span className="leader-dot" />{capacity ? `${occupancy}% small group occupancy` : 'Manage group roster'}<ChevronRight size={13} /></button>
+          </article>
+          <article className="leader-metric" data-tone="success">
+            <div className="leader-metric-label"><h2>Weekly fellowship</h2><span className="leader-icon"><Clock size={16} /></span></div>
+            <p className="leader-metric-value leader-metric-text">{activeGroup?.meeting_day || 'Not assigned'}<span>{activeGroup?.meeting_time}</span></p>
+            <button className="leader-metric-detail" data-guide="leader-dashboard-group" onClick={() => onNavigate('leaderportal')}><MapPin size={13} />{activeGroup?.location || 'View group details'}<ChevronRight size={13} /></button>
+          </article>
+          <article className="leader-metric" data-tone="study">
+            <div className="leader-metric-label"><h2>Active curriculum</h2><span className="leader-icon"><BookmarkCheck size={16} /></span></div>
+            <p className="leader-metric-value leader-metric-text" title={activeGroup?.curriculum || undefined}>{activeGroup?.curriculum || 'No assigned book'}</p>
+            <button className="leader-metric-detail" onClick={() => onNavigate('leaderportal')}>{activeGroup?.curriculum ? <><span>Chapter {completion.current} of {completion.total}</span><strong>{completion.percent}% done</strong></> : <span>Explore study topics <ChevronRight size={13} /></span>}</button>
+          </article>
+          <article className="leader-metric" data-tone="warning">
+            <div className="leader-metric-label"><h2>Sunday ministry duty</h2><span className="leader-icon"><Utensils size={16} /></span></div>
+            <p className="leader-metric-value leader-metric-text">Dishwashing duty</p>
+            <button className="leader-metric-detail" onClick={() => onNavigate('dishwashing')}><Calendar size={13} /><span>{upcomingDishwashing?.duty_date ? formatDisplayDate(upcomingDishwashing.duty_date) : 'No upcoming duty'}</span>{upcomingDishwashing?.team && <span className="leader-badge">{upcomingDishwashing.team.name}</span>}</button>
+          </article>
         </div>
 
-        {/* B. Meeting Schedule & Attendance */}
-        <div className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Weekly Fellowship</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-xl font-medium text-slate-900 truncate">
-              {activeGroup?.meeting_day || "Wednesday"}
-            </div>
-            <p className="text-xs text-emerald-700 font-medium mt-0.5">
-              {activeGroup?.meeting_time || "7:00 PM"} • {activeGroup?.location || "Sanctuary"}
-            </p>
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[12px] text-slate-500">Weekly Roll-Call</span>
-            <button data-guide="leader-dashboard-group"
-              onClick={() => onNavigate("leaderportal")}
-              className="text-xs font-medium text-emerald-700 hover:text-emerald-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
-            >
-              <span>Take Attendance</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+        <TodayBibleReadingWidget layout="dashboard" onNavigateToPlan={() => onNavigate('biblereading')} />
 
-        {/* C. Active Curriculum & Study Topic */}
-        <div className="bg-white rounded-2xl p-5 border border-indigo-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Curriculum Topic</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-              <BookmarkCheck className="w-4 h-4" />
-            </div>
+        <section className="leader-commands" aria-labelledby="leader-commands-heading">
+          <div className="leader-command-heading"><h2 id="leader-commands-heading">Leader Quick Command Center</h2><span>One-click actions</span></div>
+          <div className="leader-command-grid">
+            {[
+              { label: 'Take Roll-Call', detail: 'Session attendance', icon: UserCheck, tab: 'leaderportal', tone: 'warning' },
+              { label: 'Group Disciples', detail: 'Manage roster', icon: Users, tab: 'leaderportal', tone: 'info' },
+              { label: 'Bible Topics', detail: 'Books & tracks', icon: BookmarkCheck, tab: 'curriculum', tone: 'study' },
+              { label: 'Bible Reading', detail: '1-Year Scripture', icon: BookOpen, tab: 'biblereading', tone: 'success' },
+              { label: 'Dishwashing', detail: 'Sunday kitchen', icon: Utensils, tab: 'dishwashing', tone: 'warning' },
+            ].map(action => <button key={action.label} data-tone={action.tone} data-guide={action.tab === 'leaderportal' ? 'leader-dashboard-group' : undefined} onClick={() => onNavigate(action.tab as NavTab)}><span className="leader-icon"><action.icon size={18} /></span><strong>{action.label}</strong><span>{action.detail}</span></button>)}
           </div>
-          <div className="mt-3">
-            <div className="text-sm font-medium text-slate-900 truncate" title={activeGroup?.curriculum || "General Scripture Study"}>
-              {activeGroup?.curriculum || "General Scripture Study"}
-            </div>
-            <p className="text-xs text-indigo-700 font-medium mt-0.5">
-              {currentTopic ? `${currentTopic.total_chapters} Total Chapters` : `${studyTopics.length} Topics Available`}
-            </p>
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[12px] text-slate-500">Study Roadmap</span>
-            <button
-              onClick={() => onNavigate("curriculum")}
-              className="text-xs font-medium text-indigo-700 hover:text-indigo-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
-            >
-              <span>Explore Books</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+        </section>
 
-        {/* D. Sunday Dishwashing Rotation */}
-        <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wider">Sunday Dishwashing</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-              <Utensils className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-sm font-medium text-slate-900 truncate">
-              {upcomingDishwashing?.team?.name || activeGroup?.name || "Sunday Fellowship Meal"}
-            </div>
-            <p className="text-xs text-amber-800 font-medium mt-0.5">
-              {upcomingDishwashing?.duty_date ? new Date(upcomingDishwashing.duty_date).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" }) : "Scheduled Sundays"}
-            </p>
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[12px] text-slate-500">Fellowship Meal Duty</span>
-            <button
-              onClick={() => onNavigate("dishwashing")}
-              className="text-xs font-medium text-amber-800 hover:text-amber-950 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform cursor-pointer"
-            >
-              <span>View Roster</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
+        <div className="leader-panel-columns">
+          <div className="leader-panel-stack">
+            <section className="leader-panel" aria-labelledby="leader-roster-heading">
+              <div className="leader-panel-heading"><div><span className="leader-icon" data-tone="info"><Users size={16} /></span><div><h2 id="leader-roster-heading">Disciples Roster</h2><p>{activeGroup ? `${activeGroup.name} (${disciples.length} members)` : 'Your assigned small group'}</p></div></div><button data-guide="leader-dashboard-group" onClick={() => onNavigate('leaderportal')}>Manage in Portal <ArrowRight size={13} /></button></div>
+              {disciples.length ? <div className="leader-roster-list">{disciples.slice(0, 4).map((disciple, index) => {
+                const name = disciple.member_name || `${disciple.first_name || ''} ${disciple.last_name || ''}`.trim() || 'Member';
+                const initials = name.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
+                return <div className="leader-roster-row" key={disciple.id}><span className="leader-avatar" data-color={index % 4}>{initials}</span><div><strong>{name}</strong><span>{disciple.joined_at ? `Joined ${formatDisplayDate(disciple.joined_at)}` : disciple.contact_phone || 'Group disciple'}</span></div><span className="leader-badge" data-tone={disciple.status === 'inactive' || disciple.status === 'transferred' ? 'neutral' : 'success'}>{disciple.status === 'inactive' ? 'Inactive' : disciple.status === 'transferred' ? 'Transferred' : 'Enrolled'}</span></div>;
+              })}</div> : <p className="leader-empty"><Users size={25} />No disciples assigned to this group yet.</p>}
+              <div className="leader-panel-footer"><span>Showing {Math.min(4, disciples.length)} of {disciples.length} disciples</span><button className="leader-primary" onClick={() => onNavigate('leaderportal')}><Plus size={13} />{disciples.length ? 'Manage disciples' : 'Add Disciples in Portal'}</button></div>
+            </section>
 
-      {/* 4. Leader Quick Action Command Bar */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-2xs">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-5 bg-amber-500 rounded-full" />
-            <h3 className="font-semibold text-sm text-slate-900 uppercase tracking-wide">
-              Leader Quick Command Center
-            </h3>
-          </div>
-          <span className="text-xs text-slate-500 font-medium">One-click actions</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <button data-guide="leader-dashboard-group"
-            onClick={() => onNavigate("leaderportal")}
-            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-50/80 hover:bg-amber-100/90 border border-amber-200/80 text-amber-950 transition-all text-center group cursor-pointer hover:shadow-xs"
-          >
-            <UserCheck className="w-5 h-5 text-amber-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-medium">Take Roll-Call</span>
-            <span className="text-[12px] text-amber-700/70">Session attendance</span>
-          </button>
-
-          <button data-guide="leader-dashboard-group"
-            onClick={() => onNavigate("leaderportal")}
-            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-sky-50/80 hover:bg-sky-100/90 border border-sky-200/80 text-sky-950 transition-all text-center group cursor-pointer hover:shadow-xs"
-          >
-            <Users className="w-5 h-5 text-sky-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-medium">Group Disciples</span>
-            <span className="text-[12px] text-sky-700/70">Manage roster</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate("curriculum")}
-            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-indigo-50/80 hover:bg-indigo-100/90 border border-indigo-200/80 text-indigo-950 transition-all text-center group cursor-pointer hover:shadow-xs"
-          >
-            <BookmarkCheck className="w-5 h-5 text-indigo-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-medium">Bible Topics</span>
-            <span className="text-[12px] text-indigo-700/70">Books & tracks</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate("biblereading")}
-            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-emerald-50/80 hover:bg-emerald-100/90 border border-emerald-200/80 text-emerald-950 transition-all text-center group cursor-pointer hover:shadow-xs"
-          >
-            <BookOpen className="w-5 h-5 text-emerald-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-medium">Bible Reading</span>
-            <span className="text-[12px] text-emerald-700/70">1-Year Scripture</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate("dishwashing")}
-            className="flex flex-col items-center justify-center p-4 rounded-2xl bg-teal-50/80 hover:bg-teal-100/90 border border-teal-200/80 text-teal-950 transition-all text-center group cursor-pointer hover:shadow-xs"
-          >
-            <Utensils className="w-5 h-5 text-teal-600 mb-1.5 group-hover:scale-110 transition-transform" />
-            <span className="text-xs font-medium">Dishwashing</span>
-            <span className="text-[12px] text-teal-700/70">Sunday kitchen</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 5. 2-Column: Group Disciples Roster & Curriculum Chapter Roadmap */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Disciples Roster Preview */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-sky-600" />
-              <h3 className="font-semibold text-sm text-slate-900">
-                Disciples Roster ({disciples.length})
-              </h3>
-            </div>
-            <button data-guide="leader-dashboard-group"
-              onClick={() => onNavigate("leaderportal")}
-              className="text-xs font-medium text-sky-700 hover:text-sky-900 cursor-pointer flex items-center gap-1"
-            >
-              <span>Manage in Portal</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <section className="leader-panel" aria-labelledby="leader-events-heading">
+              <div className="leader-panel-heading"><div><span className="leader-icon" data-tone="study"><Calendar size={16} /></span><h2 id="leader-events-heading">Church Calendar & Events</h2></div><button data-guide="leader-dashboard-calendar" onClick={() => onNavigate('events')}>All Events <ArrowRight size={13} /></button></div>
+              {upcomingEvents.length ? <div className="leader-events-grid">{upcomingEvents.map(event => {
+                const date = new Date(event.start_time);
+                return <button className="leader-event" key={event.id} onClick={() => onNavigate('events')}><span className="leader-event-date"><span>{date.toLocaleDateString(undefined, { month: 'short' })}</span><strong>{date.getDate()}</strong></span><span className="leader-event-description"><strong>{event.title}</strong><span>{date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}{event.location ? ` · ${event.location}` : ''}</span>{event.ministry_name && <span className="leader-badge" data-tone="info">{event.ministry_name}</span>}</span></button>;
+              })}</div> : <p className="leader-empty"><Calendar size={25} />No upcoming events scheduled.</p>}
+            </section>
           </div>
 
-          {disciples.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-              <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs font-medium">No disciples assigned to this group yet.</p>
-              <button data-guide="leader-dashboard-group"
-                onClick={() => onNavigate("leaderportal")}
-                className="mt-3 px-3 py-1.5 rounded-xl bg-sky-600 text-white text-xs font-medium hover:bg-sky-700 transition-all cursor-pointer"
-              >
-                Add Disciples in Portal
-              </button>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {disciples.slice(0, 6).map((d) => {
-                const displayName = d.member_name || `${d.first_name || ""} ${d.last_name || ""}`.trim() || "Member";
-                const initials = displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "M";
+          <div className="leader-panel-stack">
+            <section className="leader-panel" aria-labelledby="leader-topics-heading">
+              <div className="leader-panel-heading"><div><span className="leader-icon" data-tone="study"><BookOpen size={16} /></span><h2 id="leader-topics-heading">Bible Study Topics & Books</h2></div><button onClick={() => onNavigate('curriculum')}>View All Books <ArrowRight size={13} /></button></div>
+              {studyTopics.length ? <div className="leader-topic-list">{previewTopics.map(topic => {
+                const isCurrent = topic.id === currentTopic?.id;
+                return <button className="leader-topic" data-current={isCurrent} key={topic.id} onClick={() => onNavigate(isCurrent ? 'leaderportal' : 'curriculum')}><span className="leader-topic-title"><strong>{topic.title}</strong><span className="leader-badge" data-tone={isCurrent ? 'study' : 'neutral'}>{isCurrent ? (completion.complete ? 'Finished' : 'Active') : `${topic.total_chapters} chapters`}</span></span>{topic.summary_notes && <span className="leader-topic-summary">{topic.summary_notes}</span>}{isCurrent && <><span className="leader-topic-progress"><span>{activeGroup?.current_chapter || 'Not started'} · {completion.finished} chapters finished</span><strong>{completion.percent}%</strong></span><span className="leader-progress" role="progressbar" aria-label={`${topic.title} curriculum completion`} aria-valuenow={completion.percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${completion.percent}%` }} /></span></>}</button>;
+              })}</div> : <p className="leader-empty"><BookOpen size={25} />No study topics registered.</p>}
+            </section>
 
-                return (
-                  <div key={d.id} className="py-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-900 flex items-center justify-center font-medium text-xs shrink-0">
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-medium text-xs text-slate-900 truncate">{displayName}</div>
-                        <div className="text-[12px] text-slate-500 truncate">{d.contact_phone || "Active disciple"}</div>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[12px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                      Enrolled
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Right: Active Curriculum Topics Preview */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-indigo-600" />
-              <h3 className="font-semibold text-sm text-slate-900">Bible Study Topics & Books</h3>
-            </div>
-            <button
-              onClick={() => onNavigate("curriculum")}
-              className="text-xs font-medium text-indigo-700 hover:text-indigo-900 cursor-pointer flex items-center gap-1"
-            >
-              <span>View All Books</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <section className="leader-panel" aria-labelledby="leader-notices-heading">
+              <div className="leader-panel-heading"><div><span className="leader-icon" data-tone="warning"><MessageSquare size={16} /></span><h2 id="leader-notices-heading">Church Announcements</h2></div><button onClick={() => onNavigate('communications')}>All Notices <ArrowRight size={13} /></button></div>
+              {announcements.length ? <div className="leader-notice-list">{announcements.map(item => <article className="leader-notice" data-pinned={!!item.is_pinned} key={item.id}><div><h3>{item.title}</h3>{!!item.is_pinned && <span className="leader-badge" data-tone="warning">Pinned</span>}</div><p>{item.body}</p></article>)}</div> : <p className="leader-empty"><MessageSquare size={25} />No active announcements posted.</p>}
+            </section>
           </div>
-
-          {studyTopics.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-              <BookOpen className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs font-medium">No study topics registered.</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {studyTopics.slice(0, 4).map((topic) => (
-                <div
-                  key={topic.id}
-                  className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-indigo-50/50 border border-slate-200/80 transition-all space-y-1.5"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-semibold text-xs text-slate-900 truncate">{topic.title}</h4>
-                    <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
-                      {topic.total_chapters} Ch
-                    </span>
-                  </div>
-                  {topic.summary_notes && (
-                    <p className="text-[12px] text-slate-600 line-clamp-2 leading-relaxed">
-                      {topic.summary_notes}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 6. 2-Column: Upcoming Events & Ministry Announcements */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Events */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-purple-600" />
-              <h3 className="font-semibold text-sm text-slate-900">Church Calendar & Events</h3>
-            </div>
-            <button data-guide="leader-dashboard-calendar"
-              onClick={() => onNavigate("events")}
-              className="text-xs font-medium text-purple-700 hover:text-purple-900 cursor-pointer"
-            >
-              All Events →
-            </button>
-          </div>
-
-          {upcomingEvents.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-              <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs font-medium">No upcoming events scheduled.</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {upcomingEvents.map(event => (
-                <div
-                  key={event.id}
-                  className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-purple-50/50 border border-slate-200/80 transition-all flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <h4 className="font-semibold text-xs text-slate-900 truncate">{event.title}</h4>
-                    <div className="flex items-center gap-3 text-[12px] text-slate-500 mt-1">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-400" />
-                        {new Date(event.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" })}
-                      </span>
-                      {event.location && (
-                        <span className="flex items-center gap-1 truncate">
-                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                          {event.location}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {event.ministry_name && (
-                    <span className="px-2 py-0.5 rounded-md text-[12px] font-medium bg-white text-purple-800 border border-purple-200 shrink-0">
-                      {event.ministry_name}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Announcements */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-amber-600" />
-              <h3 className="font-semibold text-sm text-slate-900">Church Announcements</h3>
-            </div>
-            <button
-              onClick={() => onNavigate("communications")}
-              className="text-xs font-medium text-amber-800 hover:text-amber-950 cursor-pointer"
-            >
-              All Notices →
-            </button>
-          </div>
-
-          {announcements.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs font-medium">No active announcements posted.</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {announcements.map(item => (
-                <div
-                  key={item.id}
-                  className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-amber-50/50 border border-slate-200/80 transition-all space-y-1"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-semibold text-xs text-slate-900 truncate">{item.title}</h4>
-                    {item.is_pinned && (
-                      <span className="px-1.5 py-0.5 rounded text-[12px] font-medium bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
-                        PINNED
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[12px] text-slate-600 line-clamp-2 leading-relaxed">{item.body}</p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

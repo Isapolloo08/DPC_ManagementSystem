@@ -51,7 +51,7 @@ for (const mode of ['light', 'dark']) {
     await expect(page.locator('.overview-heading h1')).toHaveCSS('font-weight', '500');
     await page.getByTitle('Members & Families', { exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Members & Family Directory', exact: true })).toHaveCSS('font-weight', '600');
-    await expect(page.getByRole('heading', { name: 'Members & Family Directory', exact: true })).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(page.getByRole('heading', { name: 'Members & Family Directory', exact: true })).toHaveCSS('color', mode === 'light' ? 'rgb(41, 37, 32)' : 'rgb(226, 232, 240)');
     await expect(page.getByRole('button', { name: 'Add Member', exact: true })).toHaveCSS('font-weight', '500');
     const row = page.locator('main tbody tr').filter({ hasText: 'Alexson Delos Angeles' });
     const contact = row.getByText('09294937729', { exact: true });

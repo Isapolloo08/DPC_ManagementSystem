@@ -193,8 +193,8 @@ test('authenticated shell and portal dialogs follow the chosen appearance', asyn
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.keyboard.press('Control+p');
   await expect(page.getByRole('heading', { name: /System Configuration/i })).toBeVisible();
-  // The secondary Close action uses slate-200, which maps to slate-700 in dark mode.
-  await expect(page.getByRole('button', { name: 'Close', exact: true }).filter({ hasText: /^Close$/ })).toHaveCSS('background-color', 'rgb(51, 65, 85)');
+  // Shared secondary actions use the dark surface token.
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCSS('background-color', 'rgb(30, 41, 59)');
   await page.screenshot({ path: 'test-results/theme-shell-dark.png', fullPage: true });
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 247, 242)');

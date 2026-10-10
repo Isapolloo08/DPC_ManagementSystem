@@ -1,4 +1,7 @@
+import { FilterPanel } from "../../components/common/FilterPanel";
 import React, { useState } from "react";
+import { Pagination } from "../../components/common/Pagination";
+import { useListPagination } from "../../hooks/useListPagination";
 import { BibleStudyGroup, BibleStudyMember } from "../../types";
 import { Search, UserPlus, Phone, Users, Plus, Layers } from "lucide-react";
 
@@ -35,6 +38,8 @@ export const LeaderMembers: React.FC<LeaderMembersProps> = ({
     const nameB = (b.member_name || `${b.first_name || ""} ${b.last_name || ""}`).trim().toLowerCase();
     return nameA.localeCompare(nameB);
   });
+
+  const memberPage = useListPagination(filteredMembers, JSON.stringify([activeGroup?.id, memberSearch]));
 
   if (!activeGroup) {
     return (
@@ -91,7 +96,8 @@ export const LeaderMembers: React.FC<LeaderMembersProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 sm:flex-initial">
+            <FilterPanel title="Roster filters" summary={memberSearch || "All enrolled members"} className="flex-1">
+              <div className="filter-panel-layout relative flex-1 sm:flex-initial">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
@@ -101,6 +107,7 @@ export const LeaderMembers: React.FC<LeaderMembersProps> = ({
                 className="pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-indigo-600 bg-slate-50"
               />
             </div>
+            </FilterPanel>
 
             {onOpenCreateGroupModal && (
               <button
@@ -149,7 +156,7 @@ export const LeaderMembers: React.FC<LeaderMembersProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredMembers.map((d) => {
+                memberPage.items.map((d) => {
                   const displayName = d.member_name || `${d.first_name || ""} ${d.last_name || ""}`.trim() || "Member";
                   const initials = displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "M";
 
@@ -196,6 +203,7 @@ export const LeaderMembers: React.FC<LeaderMembersProps> = ({
             </tbody>
           </table>
         </div>
+        <Pagination label="group members" page={memberPage.page} pageSize={memberPage.pageSize} total={memberPage.total} onPageChange={memberPage.setPage} onPageSizeChange={memberPage.setPageSize} />
       </div>
     </div>
   );

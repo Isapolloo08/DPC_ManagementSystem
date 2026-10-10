@@ -48,6 +48,22 @@ export async function runPostgresMigrations() {
       console.log(`✅ Notification schema and default rules applied successfully.`);
     }
 
+    const studyUpdatesPath = getMigrationFilePath("018_bible_study_update_notifications.sql");
+    if (!studyUpdatesPath) throw new Error("Missing Bible study update notification migration 018");
+    await sql.unsafe(fs.readFileSync(studyUpdatesPath, "utf-8"));
+    const studyStagesPath = getMigrationFilePath("019_study_topic_stages.sql");
+    if (!studyStagesPath) throw new Error("Missing study topic stage migration 019");
+    await sql.unsafe(fs.readFileSync(studyStagesPath, "utf-8"));
+    const eventInvitationsPath = getMigrationFilePath("020_event_invitations.sql");
+    if (!eventInvitationsPath) throw new Error("Missing event invitation migration 020");
+    await sql.unsafe(fs.readFileSync(eventInvitationsPath, "utf-8"));
+    const invitationMembersPath = getMigrationFilePath("021_invitation_member_responses.sql");
+    if (!invitationMembersPath) throw new Error("Missing invitation member migration 021");
+    await sql.unsafe(fs.readFileSync(invitationMembersPath, "utf-8"));
+    const eventMinistriesPath = getMigrationFilePath("022_event_ministries.sql");
+    if (!eventMinistriesPath) throw new Error("Missing event ministries migration 022");
+    await sql.unsafe(fs.readFileSync(eventMinistriesPath, "utf-8"));
+
     // Verify
     const count = await sql`SELECT count(*) FROM ministries`;
     console.log(`✨ Verification: ${count[0].count} ministries active in PostgreSQL database.`);

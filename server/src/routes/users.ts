@@ -1,3 +1,4 @@
+import { parsePagination, validatePagination } from "../utils/pagination";
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { db } from "../db/schema";
@@ -39,13 +40,14 @@ router.get("/roles", cacheMiddleware("roles", 600), async (req: Request, res: Re
 });
 
 // List users with filtering (Accessible to authenticated staff/leaders for lookups)
-router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get("/users", authMiddleware, validatePagination, async (req: AuthRequest, res: Response) => {
   try {
     const { role_id, role_name, search, page, limit } = req.query;
 
     let whereClause = " WHERE 1=1";
     const params: any[] = [];
 
+    if (req.query.eligible_leaders === "true") whereClause += " AND r.name IN ('Coordinator', 'Leader', 'Pastor')";
     if (role_id) {
       params.push(role_id);
       whereClause += ` AND u.role_id = $${params.length}`;
@@ -53,19 +55,19 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
 
     if (role_name && typeof role_name === "string") {
       params.push(role_name);
-      whereClause += ` AND LOWER(r.name) = LOWER($${params.length})`;
+      whereClause += String(role_name).toLowerCase() === 'admin' ? ` AND r.name IN ('Admin', 'IT Admin')` : ` AND LOWER(r.name) = LOWER($${params.length})`;
+      if (String(role_name).toLowerCase() === 'admin') params.pop();
     }
 
     if (search && typeof search === "string") {
       params.push(`%${search}%`);
       const pIdx = params.length;
-      whereClause += ` AND (u.name ILIKE $${pIdx} OR u.email ILIKE $${pIdx} OR (u.username IS NOT NULL AND u.username ILIKE $${pIdx}))`;
+      whereClause += ` AND (u.name ILIKE $${pIdx} OR u.email ILIKE $${pIdx} OR (u.username IS NOT NULL AND u.username ILIKE $${pIdx}) OR r.name ILIKE $${pIdx} OR CONCAT_WS(' ', m.first_name, m.last_name) ILIKE $${pIdx} OR EXISTS (SELECT 1 FROM user_ministries um JOIN ministries min ON min.id = um.ministry_id WHERE um.user_id = u.id AND min.name ILIKE $${pIdx}))`;
     }
 
-    const isPaginated = page !== undefined || limit !== undefined;
+    const { enabled: isPaginated, page: requestedPage, limit: curLimit } = parsePagination(req.query);
+    let curPage = requestedPage;
     let totalCount = 0;
-    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
-    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
 
     if (isPaginated) {
       const countRes = await db.get<{ total: string | number }>(`
@@ -76,6 +78,7 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
         ${whereClause}
       `, params);
       totalCount = parseInt(String(countRes?.total || 0), 10);
+      curPage = Math.min(curPage, Math.max(1, Math.ceil(totalCount / curLimit)));
     }
 
     let query = `
@@ -88,7 +91,7 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
       JOIN roles r ON u.role_id = r.id
       LEFT JOIN members m ON m.user_id = u.id
       ${whereClause}
-      ORDER BY u.role_id ASC, u.name ASC
+      ORDER BY u.role_id ASC, u.name ASC, u.id ASC
     `;
 
     let users: any[] = [];
@@ -129,7 +132,11 @@ router.get("/users", authMiddleware, async (req: AuthRequest, res: Response) => 
     }));
 
     if (isPaginated) {
+      const counts = await db.all<{ role: string; count: string }>("SELECT LOWER(r.name) AS role, COUNT(*) AS count FROM users u JOIN roles r ON r.id = u.role_id GROUP BY r.name");
+      const summary: Record<string, number> = { total: 0 };
+      for (const row of counts) { const role = row.role === "it admin" ? "admin" : row.role; summary[role] = (summary[role] || 0) + Number(row.count); summary.total += Number(row.count); }
       res.json({
+        summary,
         data: formatted,
         pagination: {
           total: totalCount,

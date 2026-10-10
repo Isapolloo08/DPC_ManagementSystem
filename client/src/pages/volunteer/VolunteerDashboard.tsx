@@ -1,3 +1,5 @@
+import { ChurchOverview } from "../../components/dashboard/ChurchOverview";
+import { DashboardSkeleton } from "../../components/common/SkeletonLoader";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../api";
@@ -77,46 +79,35 @@ export const VolunteerDashboard: React.FC<VolunteerDashboardProps> = ({ onNaviga
   const upcomingDishwashing = dishwashingData?.thisSunday || dishwashingData?.schedule?.[0] || null;
   const guideData = useGuideDataState("dashboard", { loading, count: 1, retry: loadVolunteerData });
 
+  if (loading && !dutySchedule && !dishwashingData) return <DashboardSkeleton variant="service" />;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-6 sm:p-8 shadow-xl border border-white/10">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-        <div className="absolute bottom-0 right-32 w-64 h-64 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-xs font-medium tracking-wide uppercase">
-              <HeartHandshake className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Ministry Volunteer & Service Hub</span>
+      <div className="church-dashboard role-church-hero">
+      <ChurchOverview name={user?.name || "Faithful Servant"} role="Volunteer" events={upcomingEvents}
+        ministryName={assignedMinistry?.name || "Ministry service"} onNavigate={onNavigate} groupTab={null}
+        stats={[
+          { label: 'Cleaning duties', value: dutySchedule?.schedule?.length ?? 0, tab: 'duty' },
+          { label: 'Dishwashing', value: dishwashingData?.schedule?.length ?? 0, tab: 'dishwashing' },
+          { label: 'Announcements', value: announcements.length, tab: 'communications' },
+          { label: 'Upcoming events', value: upcomingEvents.length, tab: 'events' },
+        ]}
+        description={<>"Whatever you do, work at it with all your heart, as working for the Lord, not for human masters." (Colossians 3:23).
+          Here are your service assignments and ministry updates.</>}
+        data-guide="volunteer-summary"
+        actions={<>{assignedMinistry && (
+          <div className="shrink-0 bg-stone-50  rounded-2xl p-4 border border-stone-200 flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber text-charcoal flex items-center justify-center font-medium text-sm shadow-sm">
+              {assignedMinistry.name.substring(0, 2).toUpperCase()}
             </div>
-            <h1 data-guide="volunteer-summary" className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-              Welcome, {user?.name || "Faithful Servant"}!
-            </h1>
-            <p className="text-xs sm:text-sm text-emerald-100/80 max-w-xl">
-              "Whatever you do, work at it with all your heart, as working for the Lord, not for human masters." (Colossians 3:23).
-              Here are your service assignments and ministry updates.
-            </p>
+            <div>
+              <span className="text-[12px] font-medium text-muted uppercase tracking-wider block">Assigned Department</span>
+              <span className="text-sm font-medium text-charcoal block">{assignedMinistry.name} Ministry</span>
+              <span className="text-[12px] text-muted">{assignedMinistry.min_age}-{assignedMinistry.max_age} yrs bracket</span>
+            </div>
           </div>
-
-          {assignedMinistry && (
-            <div className="shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-amber text-charcoal flex items-center justify-center font-medium text-sm shadow-sm">
-                {assignedMinistry.name.substring(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <span className="text-[12px] font-medium text-emerald-300 uppercase tracking-wider block">Assigned Department</span>
-                <span className="text-sm font-medium text-white block">{assignedMinistry.name} Ministry</span>
-                <span className="text-[12px] text-emerald-200/70">{assignedMinistry.min_age}-{assignedMinistry.max_age} yrs bracket</span>
-              </div>
-            </div>
-          )}
-        </div>
+        )}</>} />
       </div>
 
       {/* 2. Today's Bible Reading Devotion */}

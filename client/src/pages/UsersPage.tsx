@@ -1,6 +1,12 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { usePageControls, useDebouncedValue } from "../hooks/useListPagination";
+import { StatCard } from "../components/common/StatCard";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
 import { Check as UICheck, Lock as UILock } from "lucide-react";
 import { ModalPanel } from "../components/common/ModalPanel";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -24,10 +30,17 @@ export const UsersPage: React.FC = () => {
   const [roles, setRoles] = useState<Role[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   // Filter & Search States
   const [selectedRole, setSelectedRole] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const debouncedSearch = useDebouncedValue(searchQuery);
+  const { page, pageSize, setPage, setPageSize } = usePageControls(JSON.stringify([selectedRole, debouncedSearch]));
+  const [serverTotal, setServerTotal] = useState(0);
+  const [serverPaged, setServerPaged] = useState(false);
+  const [roleSummary, setRoleSummary] = useState<Record<string, number> | null>(null);
+  const requestSequence = useRef(0);
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
 
   // Modal States
@@ -114,7 +127,8 @@ export const UsersPage: React.FC = () => {
 
   useEffect(() => {
     loadAllData(users.length === 0);
-  }, []);
+  }, [page, pageSize, selectedRole, debouncedSearch]);
+  useEffect(() => () => { requestSequence.current++; }, []);
 
   // Real-time synchronization
   useSocketEvent("users:changed", () => loadAllData(false));
@@ -122,13 +136,15 @@ export const UsersPage: React.FC = () => {
   useSocketEvent("ministries:changed", () => loadAllData(false));
 
  const loadAllData = async (isInitial = false) => {
+    const sequence = ++requestSequence.current;
     guideData.clearError();
+    setLoading(true);
     try {
       if (isInitial) {
         setLoading(true);
       }
       const [usersRes, rolesRes, membersRes] = await Promise.all([
-        api.getUsers().catch(async err => {
+        api.getUsersPage({ page, limit: pageSize, role_name: selectedRole === "all" ? undefined : selectedRole, search: debouncedSearch }).catch(async err => {
           guideData.reportError(err);
           const demo = await api.getDemoUsers().catch(() => []);
           return demo;
@@ -141,20 +157,37 @@ export const UsersPage: React.FC = () => {
           { id: 5, name: "Volunteer", description: "Ministry helper & attendance facilitator" },
           { id: 6, name: "Member", description: "Regular church attendee / member" }
         ]),
-        api.getMembers().catch(() => [])
+        Promise.resolve([] as Member[])
       ]);
-      setUsers(usersRes);
+      if (sequence !== requestSequence.current) return;
+      if (Array.isArray(usersRes)) { setUsers(usersRes); setServerPaged(false); setRoleSummary(null); }
+      else { setUsers(usersRes.data); setServerPaged(true); setServerTotal(usersRes.pagination.total); setRoleSummary(usersRes.summary || null); if (usersRes.pagination.page !== page) setPage(usersRes.pagination.page); }
       setRoles(rolesRes);
-      setMembers(membersRes);
+      // Member options load only when the account form is opened.
     } catch (err: any) {
+      if (sequence !== requestSequence.current) return;
       console.error("Failed to load user management data:", err);
       guideData.reportError(err);
     } finally {
-      if (isInitial) {
-        setLoading(false);
-      }
+      if (sequence === requestSequence.current) { setHasLoaded(true); setLoading(false); }
     }
   };
+
+  const memberLookupSearch = useDebouncedValue(memberSearch);
+  useEffect(() => {
+    if (!isUserModalOpen) return;
+    let active = true;
+    api.getMembers({ page: 1, limit: 30, search: memberLookupSearch }).then(async response => {
+      const records = Array.isArray(response) ? response : response.data || [];
+      const selectedId = Number(formData.member_id);
+      if (selectedId && !records.some(member => member.id === selectedId)) {
+        const selected = await api.getMembers({ ids: [selectedId] });
+        records.push(...(Array.isArray(selected) ? selected : selected.data || []));
+      }
+      if (active) setMembers(records);
+    }).catch(() => { if (active) setMembers([]); });
+    return () => { active = false; };
+  }, [isUserModalOpen, memberLookupSearch, formData.member_id]);
 
   const handleMemberSelect = (memberIdStr: string) => {
     if (!memberIdStr) {
@@ -466,6 +499,7 @@ export const UsersPage: React.FC = () => {
 
   // Filtered Users
   const filteredUsers = useMemo(() => {
+    if (serverPaged) return users;
     return users.filter(u => {
       const matchesRole = selectedRole === "all" ||
         u.role_name.toLowerCase() === selectedRole.toLowerCase() ||
@@ -482,10 +516,11 @@ export const UsersPage: React.FC = () => {
       );
       return matchesRole && matchesSearch;
     });
-  }, [users, selectedRole, searchQuery]);
+  }, [users, selectedRole, searchQuery, serverPaged]);
 
   // Counts by Role
   const roleCounts = useMemo(() => {
+    if (roleSummary) return { admin: roleSummary.admin || 0, pastor: roleSummary.pastor || 0, coordinator: roleSummary.coordinator || 0, leader: roleSummary.leader || 0, volunteer: roleSummary.volunteer || 0, member: roleSummary.member || 0 };
     return {
       admin: users.filter(u => u.role_name === "Admin" || u.role_name === "IT Admin").length,
       pastor: users.filter(u => u.role_name === "Pastor").length,
@@ -494,7 +529,9 @@ export const UsersPage: React.FC = () => {
       volunteer: users.filter(u => u.role_name === "Volunteer").length,
       member: users.filter(u => u.role_name === "Member").length
     };
-  }, [users]);
+  }, [users, roleSummary]);
+  const totalUsers = serverPaged ? serverTotal : filteredUsers.length;
+  const visibleUsers = serverPaged ? filteredUsers : filteredUsers.slice((page - 1) * pageSize, page * pageSize);
 
   const getRoleBadge = (roleName: string) => {
     switch (roleName) {
@@ -547,7 +584,7 @@ export const UsersPage: React.FC = () => {
 
   const guideData = useGuideDataState("users", { loading, count: filteredUsers.length, filtered: Boolean(searchQuery || selectedRole !== "all"), retry: () => loadAllData(true) });
 
-  if (loading && users.length === 0) {
+  if (loading && !hasLoaded) {
     return <UsersPageSkeleton />;
   }
 
@@ -555,181 +592,33 @@ export const UsersPage: React.FC = () => {
     <div className="space-y-6">
 
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="space-y-2 relative z-10">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-400/20 border border-cyan-300/30 text-cyan-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <ShieldAlert className="w-3.5 h-3.5 text-cyan-300" />
-              <span>Hierarchical RBAC & Security</span>
-            </div>
-          </div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-white tracking-tight">
-            User Accounts & Role Permissions
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
-            Manage system logins, assign ministry scopes, configure access boundaries for Admins (Super Administrator), Pastors (Senior Pastor / Church Executive), Coordinators, Leaders, Volunteers, and link accounts to church member profiles.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 flex-wrap shrink-0 relative z-10">
-          <button data-guide="users-matrix"
-            onClick={() => setIsMatrixOpen(!isMatrixOpen)}
-            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all cursor-pointer active:scale-95"
-          >
-            <ShieldCheck className="w-4 h-4 text-sky-300" />
+      <PageHeader icon={<ShieldAlert />} title={<>User Accounts & Role Permissions</>}
+        description={<>Manage system logins, assign ministry scopes, configure access boundaries for Admins (Super Administrator), Pastors (Senior Pastor / Church Executive), Coordinators, Leaders, Volunteers, and link accounts to church member profiles.</>}
+        actions={<><div className="flex items-center gap-3 flex-wrap shrink-0 relative z-10">
+          <Button data-guide="users-matrix" onClick={() => setIsMatrixOpen(!isMatrixOpen)} variant="secondary">
+            <ShieldCheck className="w-4 h-4 " />
             <span>{isMatrixOpen ? "Hide Permissions Matrix" : "Role Permissions Matrix"}</span>
-          </button>
+          </Button>
 
-          <button data-guide="users-new"
-            onClick={() => handleOpenUserModal()}
-            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs py-2.5 px-5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4 text-indigo-950" />
+          <Button data-guide="users-new" onClick={() => handleOpenUserModal()} variant="primary">
+            <UserPlus className="w-4 h-4 " />
             <span>Add New User</span>
-          </button>
-        </div>
-      </div>
+          </Button>
+        </div></>} />
 
-      {/* 6 Core Roles KPI Overview Strip */}
+      {/* Role overview */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        {/* 1. Admin (Super Admin) */}
-        <div
-          onClick={() => setSelectedRole(selectedRole === "admin" ? "all" : "admin")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "admin"
-              ? "border-cyan-500 ring-2 ring-cyan-500/20 bg-cyan-950/10"
-              : "border-cyan-200/60 hover:border-cyan-400"
-            }`}
-        >
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <ShieldAlert className="w-4 h-4 text-cyan-600 shrink-0" />
-              <span className="text-xs font-medium text-cyan-950">Admin</span>
-            </div>
-            <div className="text-2xl font-medium text-cyan-950 tracking-tight">{roleCounts.admin}</div>
-            <p className="text-[12px] text-muted font-medium">Super Admin</p>
-          </div>
-          <div className="p-3 bg-cyan-950 text-cyan-300 rounded-2xl shrink-0 border border-cyan-800">
-            <ShieldAlert className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* 2. Pastor */}
-        <div
-          onClick={() => setSelectedRole(selectedRole === "pastor" ? "all" : "pastor")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "pastor"
-              ? "border-indigo ring-2 ring-indigo/20 bg-indigo-50/30"
-              : "border-indigo-100/90 hover:border-indigo-300"
-            }`}
-        >
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-indigo shrink-0" />
-              <span className="text-xs font-medium text-indigo">Pastor</span>
-            </div>
-            <div className="text-2xl font-medium text-indigo tracking-tight">{roleCounts.pastor}</div>
-            <p className="text-[12px] text-muted font-medium">Senior Pastor / Exec</p>
-          </div>
-          <div className="p-3 bg-indigo-50 text-indigo rounded-2xl shrink-0 border border-indigo-100">
-            <Lock className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* 3. Coordinator */}
-        <div
-          onClick={() => setSelectedRole(selectedRole === "coordinator" ? "all" : "coordinator")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "coordinator"
-              ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/30"
-              : "border-emerald-100/90 hover:border-emerald-300"
-            }`}
-        >
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-              <span className="text-xs font-medium text-emerald-800">Coordinators</span>
-            </div>
-            <div className="text-2xl font-medium text-emerald-900 tracking-tight">{roleCounts.coordinator}</div>
-            <p className="text-[12px] text-muted font-medium">Dept. Overseers</p>
-          </div>
-          <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl shrink-0 border border-emerald-100">
-            <Building2 className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* 4. Leader */}
-        <div
-          onClick={() => setSelectedRole(selectedRole === "leader" ? "all" : "leader")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "leader"
-              ? "border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/30"
-              : "border-sky-100/90 hover:border-sky-300"
-            }`}
-        >
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-sky-700 shrink-0" />
-              <span className="text-xs font-medium text-sky-800">Leaders</span>
-            </div>
-            <div className="text-2xl font-medium text-sky-900 tracking-tight">{roleCounts.leader}</div>
-            <p className="text-[12px] text-muted font-medium">Life Group Leaders</p>
-          </div>
-          <div className="p-3 bg-sky-50 text-sky-700 rounded-2xl shrink-0 border border-sky-100">
-            <BookOpen className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* 5. Volunteer */}
-        <div
-          onClick={() => setSelectedRole(selectedRole === "volunteer" ? "all" : "volunteer")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "volunteer"
-              ? "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/30"
-              : "border-amber-100/90 hover:border-amber-300"
-            }`}
-        >
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <HeartHandshake className="w-4 h-4 text-amber-700 shrink-0" />
-              <span className="text-xs font-medium text-amber-800">Volunteers</span>
-            </div>
-            <div className="text-2xl font-medium text-amber-900 tracking-tight">{roleCounts.volunteer}</div>
-            <p className="text-[12px] text-muted font-medium">Service Helpers</p>
-          </div>
-          <div className="p-3 bg-amber-50 text-amber-700 rounded-2xl shrink-0 border border-amber-100">
-            <UserCheck className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* 6. Member */}
-        <div
-          onClick={() => setSelectedRole(selectedRole === "member" ? "all" : "member")}
-          className={`bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between gap-3 ${selectedRole === "member"
-              ? "border-slate-500 ring-2 ring-slate-500/20 bg-slate-50/40"
-              : "border-slate-100/90 hover:border-slate-300"
-            }`}
-        >
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-slate-700 shrink-0" />
-              <span className="text-xs font-medium text-slate-800">Members</span>
-            </div>
-            <div className="text-2xl font-medium text-slate-900 tracking-tight">{roleCounts.member}</div>
-            <p className="text-[12px] text-muted font-medium">Church Attendees</p>
-          </div>
-          <div className="p-3 bg-slate-100 text-slate-700 rounded-2xl shrink-0 border border-slate-200">
-            <UserCircle2 className="w-5 h-5" />
-          </div>
-        </div>
+        <StatCard label="Admin" value={roleCounts.admin} icon={<ShieldAlert />} tone="cyan" description="Super Admin" onClick={() => setSelectedRole(selectedRole === "admin" ? "all" : "admin")} selected={selectedRole === "admin"} />
+        <StatCard label="Pastor" value={roleCounts.pastor} icon={<Lock />} description="Senior Pastor / Exec" onClick={() => setSelectedRole(selectedRole === "pastor" ? "all" : "pastor")} selected={selectedRole === "pastor"} />
+        <StatCard label="Coordinators" value={roleCounts.coordinator} icon={<Building2 />} tone="emerald" description="Dept. Overseers" onClick={() => setSelectedRole(selectedRole === "coordinator" ? "all" : "coordinator")} selected={selectedRole === "coordinator"} />
+        <StatCard label="Leaders" value={roleCounts.leader} icon={<BookOpen />} tone="sky" description="Life Group Leaders" onClick={() => setSelectedRole(selectedRole === "leader" ? "all" : "leader")} selected={selectedRole === "leader"} />
+        <StatCard label="Volunteers" value={roleCounts.volunteer} icon={<UserCheck />} tone="amber" description="Service Helpers" onClick={() => setSelectedRole(selectedRole === "volunteer" ? "all" : "volunteer")} selected={selectedRole === "volunteer"} />
+        <StatCard label="Members" value={roleCounts.member} icon={<UserCircle2 />} tone="neutral" description="Church Attendees" onClick={() => setSelectedRole(selectedRole === "member" ? "all" : "member")} selected={selectedRole === "member"} />
       </div>
 
       {/* Interactive Role Permissions Matrix */}
       {isMatrixOpen && (
-        <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 border border-stone-200 shadow-sm space-y-4 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center justify-between pb-3 border-b border-gray-100">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-indigo-50 text-indigo rounded-xl border border-indigo-100">
@@ -843,12 +732,13 @@ export const UsersPage: React.FC = () => {
       )}
 
       {/* User Search & Filter Toolbar */}
-      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-5 border border-indigo-100/90 shadow-sm space-y-3">
+      <FilterPanel title="User filters" summary={[selectedRole === "all" ? "All roles" : selectedRole, searchQuery].filter(Boolean).join(" · ")}>
+        <div className="filter-panel-layout bg-white/95 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Role Filter Pills */}
           <div data-guide="users-role-filter" className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {[
-              { id: "all", label: "All Roles", icon: null, count: users.length },
+              { id: "all", label: "All Roles", icon: null, count: roleSummary?.total ?? users.length },
               { id: "admin", label: "Admin", icon: <ShieldAlert className="w-3.5 h-3.5 text-cyan-500" />, count: roleCounts.admin },
               { id: "pastor", label: "Pastor", icon: <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />, count: roleCounts.pastor },
               { id: "coordinator", label: "Coordinator", icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />, count: roleCounts.coordinator },
@@ -887,9 +777,10 @@ export const UsersPage: React.FC = () => {
           </div>
         </div>
       </div>
+      </FilterPanel>
 
       {/* Users Table */}
-      <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
+      <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
         {loading && users.length === 0 ? (
           <TableSkeleton rows={7} columns={5} />
         ) : filteredUsers.length === 0 ? (
@@ -916,7 +807,7 @@ export const UsersPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map((u) => {
+                {visibleUsers.map((u) => {
                   const isCurrentSessionUser = currentUser?.id === u.id;
                   const isSuperAdmin = currentUser?.role_name === "Admin" || currentUser?.role_name === "IT Admin";
                   const isTargetPrivileged = u.role_name === "Admin" || u.role_name === "Pastor" || u.role_name === "IT Admin";
@@ -1069,6 +960,8 @@ export const UsersPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      <Pagination label="users" page={page} pageSize={pageSize} total={totalUsers} onPageChange={setPage} onPageSizeChange={setPageSize} loading={loading} />
 
       {/* ==================================================== */}
       {/* MODAL: Create / Edit User Account */}

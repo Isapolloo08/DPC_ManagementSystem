@@ -73,6 +73,20 @@ async function selectChild(form: Locator, existing = false) {
   await expect(form.locator('[aria-label="Household preview"]')).toContainText(`Ana Santos — ${existing ? 'Family Member' : 'Daughter'}`);
 }
 
+test('selected spouse appears in the new household before choosing a household role and clears when removed', async ({ page }) => {
+  const state = await prepare(page);
+  await state.form.getByRole('button', { name: /Married/ }).click();
+  await state.form.getByPlaceholder('Type to search existing member (e.g. Maria Clara)...').fill('Ana');
+  await page.getByRole('button', { name: /^Ana Santos Female/ }).click();
+  const preview = state.form.locator('[aria-label="Household preview"]');
+  await expect(preview).toContainText('Ana Santos');
+  await expect(preview).toContainText('Spouse · Registered member');
+  await state.form.getByRole('button', { name: 'Change / Remove', exact: true }).click();
+  await expect(preview).not.toContainText('Ana Santos');
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
 for (const mobile of [false, true]) {
   test(`new parent links the existing child in one save${mobile ? ' on mobile' : ''}`, async ({ page }, testInfo) => {
     if (mobile) await page.setViewportSize({ width: 390, height: 844 });
@@ -156,6 +170,7 @@ for (const ministry of [
     const state = await prepare(page);
     await state.form.locator('[data-guide="member-ministry"]').first().selectOption(ministry.id);
     await expect(state.form.getByRole('button', { name: 'Create New', exact: true })).toHaveCount(ministry.canCreate ? 1 : 0);
+    await expect(state.form.getByRole('region', { name: 'Parents’ household', exact: true })).toHaveCount(ministry.name === 'Junior Adult' ? 1 : 0);
     await expect(state.form.getByRole('button', { name: 'Select List', exact: true })).toBeVisible();
     await expect(state.form.getByRole('textbox', { name: 'Search existing family members', exact: true })).toHaveCount(ministry.canCreate ? 1 : 0);
     expect(state.writes).toEqual([]);

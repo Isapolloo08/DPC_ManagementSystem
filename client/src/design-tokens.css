@@ -1,0 +1,68 @@
+@layer base {
+  :root {
+    --bg: #F4F6F9;
+    --surface: #FFFFFF;
+    --surface-2: #F8FAFC;
+    --border: #E4E7EC;
+    --text: #101828;
+    --text-muted: #667085;
+    --shadow-card: 0 1px 2px rgba(16,24,40,.06);
+    --shadow-brand-icon: 0 4px 10px rgba(44,57,104,.16), inset 0 1px 0 rgba(255,255,255,.15);
+    --shadow-dialog: 0 16px 48px rgba(0,0,0,.2);
+    --dialog-overlay: rgba(19,25,44,.6);
+    --gold: #D9A441;
+    --accent: var(--gold);
+    --on-gold: #3B2300;
+    --navy: #2C3968;
+    --navy-hover: #222D52;
+    --nav-active-bg: var(--navy);
+    --nav-active-text: #FFFFFF;
+    --status-success-bg: #ECFDF3;
+    --status-success-text: #067647;
+    --status-success-border: #ABEFC6;
+    --status-warning-bg: #FEF0C7;
+    --status-warning-text: #93370D;
+    --status-warning-border: #FEDF89;
+    --status-info-bg: #EFF8FF;
+    --status-info-text: #175CD3;
+    --status-info-border: #B2DDFF;
+    --status-neutral-bg: var(--surface-2);
+    --status-neutral-text: var(--text-muted);
+    --status-neutral-border: var(--border);
+    --status-danger-bg: var(--attention-bg);
+    --status-danger-text: var(--attention-text);
+    --status-danger-border: var(--attention-border);
+    --ministry-kinder: #E07A5F;
+    --ministry-elementary: #D9A441;
+    --ministry-highschool: #B85C56;
+    --ministry-youth: #6E8B74;
+    --ministry-young-adult: #2C3968;
+    --ministry-junior-adult: #4A5568;
+    --ministry-old-adult: #8D5B4C;
+    --attention-bg: #FEF3F2;
+    --attention-text: #B42318;
+    --attention-border: #FECDCA;
+  }
+  :root.dark {
+    --bg: #0B1220;
+    --surface: #111A2C;
+    --surface-2: #17233A;
+    --border: rgba(255,255,255,.08);
+    --text: #F2F4F7;
+    --text-muted: #98A2B3;
+    --gold: #E5B84B;
+    --status-success-bg: rgba(18,183,106,.16);
+    --status-success-text: #75E0A7;
+    --status-success-border: rgba(18,183,106,.35);
+    --status-warning-bg: rgba(245,181,68,.16);
+    --status-warning-text: #FEC84B;
+    --status-warning-border: rgba(245,181,68,.35);
+    --status-info-bg: rgba(46,144,250,.16);
+    --status-info-text: #B2DDFF;
+    --status-info-border: rgba(46,144,250,.35);
+    --nav-active-bg: var(--navy);
+    --attention-bg: rgba(240,68,56,.16);
+    --attention-text: #FDA29B;
+    --attention-border: rgba(240,68,56,.35);
+  }
+}

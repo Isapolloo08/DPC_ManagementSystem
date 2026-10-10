@@ -1,4 +1,8 @@
+import type { InvitationOverview, InvitationLink } from "./services/eventInvitations";
+import type { BibleStudySessionDetail } from "./types";
+import type { ListPage } from "./hooks/useListPagination";
 import { isGuideSandbox } from "./components/help/sandbox/runtime";
+import type { FamilyTreeResponse, MemberParentsResponse, FamilyPersonInput, FamilyKind } from './types';
 import { requestActivity, withOperation } from "./services/operationActivity";
 import {
   Ministry, User, Role, Member, Household, AttendanceRecord, AttendanceRosterItem,
@@ -225,9 +229,28 @@ export interface PlannedVisit extends PlannedVisitSummary {
   email: string | null; phone: string | null; questions: string;
   consent_at: string; staff_notes: string; updated_at: string;
 }
+export type ListQuery = Record<string, string | number | undefined>;
+const listQuery = (params: ListQuery) => {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
+  return query.toString();
+};
+
 export const api = {
-  getPlannedVisits: (filters: { page: number; status: string; visit_date: string }) => {
-    const query = new URLSearchParams({ page: String(filters.page), limit: '20' });
+  getGroupById: (id: number) => request<BibleStudyGroup>(`/groups/${id}`),
+  getUsersPage: (params: ListQuery, signal?: AbortSignal) => request<ListPage<User>>(`/users?${listQuery(params)}`, { signal }),
+  getGroupsPage: (params: ListQuery, signal?: AbortSignal) => request<ListPage<BibleStudyGroup>>(`/groups?${listQuery(params)}`, { signal }),
+  getAnnouncementsPage: (params: ListQuery, signal?: AbortSignal) => request<ListPage<Announcement>>(`/communications/announcements?${listQuery(params)}`, { signal }),
+  getAuditPage: (params: ListQuery, signal?: AbortSignal) => request<ListPage<AuditLog> & { options?: { actions: string[]; entities: string[]; operators: string[]; roles: string[] } }>(`/audit?${listQuery(params)}`, { signal }),
+  getSessionHistoryPage: (groupId: number, params: ListQuery, signal?: AbortSignal) => request<ListPage<BibleStudySessionDetail> & { sessions?: BibleStudySessionDetail[]; options?: { books: string[]; stages: string[] }; history_summary?: { total: number; latest: string | null } }>(`/groups/${groupId}/attendance?history=true&${listQuery(params)}`, { signal }),
+  exportAuditCsv: async (params: ListQuery) => withOperation("Preparing audit export…", async () => {
+    const token = localStorage.getItem("chms_token");
+    const res = await fetch(`${getApiBase()}/audit?export=csv&${listQuery(params)}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+    if (!res.ok) throw new Error("Unable to export audit records.");
+    return res.blob();
+  }),
+  getPlannedVisits: (filters: { page: number; limit?: number; status: string; visit_date: string }) => {
+    const query = new URLSearchParams({ page: String(filters.page), limit: String(filters.limit || 20) });
     if (filters.status) query.set('status', filters.status);
     if (filters.visit_date) query.set('visit_date', filters.visit_date);
     return request<{ items: PlannedVisitSummary[]; total: number; page: number; totalPages: number }>(`/planned-visits?${query}`);
@@ -388,6 +411,7 @@ export const api = {
 
   // Members & Households
   getMembers: (params?: {
+    ids?: number[];
     ministry_id?: number;
     search?: string;
     status?: string;
@@ -401,6 +425,7 @@ export const api = {
     limit?: number;
   }) => {
     const q = new URLSearchParams();
+    if (params?.ids?.length) q.set("ids", params.ids.join(","));
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.search) q.set("search", params.search);
     if (params?.status) q.set("status", params.status);
@@ -455,6 +480,12 @@ export const api = {
 
   // Households
   getHouseholds: () => request<Household[]>("/households"),
+  getHouseholdsPage: (params: ListQuery, signal?: AbortSignal) => request<ListPage<Household>>(`/households?${listQuery(params)}`, { signal }),
+  getFamilyTree: (id: number, extended = false) => request<FamilyTreeResponse>(`/family/households/${id}/tree?scope=${extended ? "extended" : "household"}`),
+  getMemberParents: (id: number) => request<MemberParentsResponse>(`/family/members/${id}/parents`),
+  saveFamilyRelationship: (data: {from:FamilyPersonInput;to:FamilyPersonInput;kind:FamilyKind;parent_role?:string}, id?:number) => request<{id:number}>(`/family/relationships${id ? `/${id}` : ''}`, {method:id?'PUT':'POST',body:JSON.stringify(data)}),
+  removeFamilyRelationship: (id:number) => request<{message:string}>(`/family/relationships/${id}`,{method:'DELETE'}),
+  linkFamilyPerson: (id:number,member_id:number) => request<{id:number}>(`/family/people/${id}/member`,{method:'PUT',body:JSON.stringify({member_id})}),
   getHousehold: (id: number) => request<Household>(`/households/${id}`),
   createHousehold: (data: Pick<Household, "name"> & Partial<Pick<Household, "address" | "primary_contact_phone" | "father_name" | "mother_name" | "guardian_name" | "family_members">>) => request<{ id: number; message: string }>("/households", {
     method: "POST",
@@ -532,10 +563,12 @@ export const api = {
     }),
 
   // Events
-  getEvents: (params?: { ministry_id?: number; upcoming?: boolean }) => {
+  getEvents: (params?: { ministry_id?: number; upcoming?: boolean; from?: string; to?: string }) => {
     const q = new URLSearchParams();
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.upcoming) q.set("upcoming", "true");
+    if (params?.from) q.set("from", params.from);
+    if (params?.to) q.set("to", params.to);
     return request<EventItem[]>(`/events?${q.toString()}`);
   },
   createEvent: (data: Partial<EventItem>) => request<{ id: number; message: string }>("/events", {
@@ -549,6 +582,10 @@ export const api = {
   deleteEvent: (id: number) => request<{ message: string }>(`/events/${id}`, {
     method: "DELETE"
   }),
+  getEventInvitations: (eventId: number) => request<InvitationOverview>(`/event-invitations/events/${eventId}`),
+  getEventInvitationMembers: (eventId: number, search: string) => request<Member[]>(`/event-invitations/events/${eventId}/members?search=${encodeURIComponent(search)}`),
+  createEventInvitation: (eventId: number, body: {member_id?: number; deadline?: string}) => request<InvitationLink>(`/event-invitations/events/${eventId}`, {method: 'POST', body: JSON.stringify(body)}),
+  setEventInvitationEnabled: (eventId: number, linkId: number, enabled: boolean) => request(`/event-invitations/events/${eventId}/links/${linkId}`, {method: 'PATCH', body: JSON.stringify({enabled})}),
   rsvpEvent: (eventId: number, member_id?: number, status = "registered") => request<{ message: string; status?: string }>(`/events/${eventId}/rsvp`, {
     method: "POST",
     body: JSON.stringify({ member_id, status })
@@ -599,13 +636,14 @@ export const api = {
 
   // Bible Study & Small Groups
   getMyGroups: () => request<BibleStudyGroup[]>("/groups/mine"),
-  getGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string; status?: string }) => {
+  getGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string; status?: string; view?: "calendar" }) => {
     const q = new URLSearchParams();
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.category) q.set("category", params.category);
     if (params?.meeting_day) q.set("meeting_day", params.meeting_day);
     if (params?.search) q.set("search", params.search);
     if (params?.status) q.set("status", params.status);
+    if (params?.view) q.set("view", params.view);
     return request<BibleStudyGroup[]>(`/groups?${q.toString()}`);
   },
   getBibleStudyGroups: (params?: { ministry_id?: number; category?: string; meeting_day?: string; search?: string; status?: string }) => {
@@ -683,6 +721,7 @@ export const api = {
     topic_title?: string;
     chapter?: string;
     update_group_progress?: boolean;
+    progress_stage?: string;
     notes?: string;
     records?: Array<{ member_id: number; status: string; notes?: string }>;
     present_member_ids?: number[];
@@ -697,12 +736,14 @@ export const api = {
   }),
 
   // Bible Study Topics & Completed Books
-  getStudyTopics: (params?: { status?: string; type?: string; ministry_id?: number; search?: string }) => {
+  getStudyTopics: (params?: { status?: string; type?: string; ministry_id?: number; search?: string; page?: number; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.type) q.set("type", params.type);
     if (params?.ministry_id) q.set("ministry_id", String(params.ministry_id));
     if (params?.search) q.set("search", params.search);
+    if (params?.page !== undefined) q.set("page", String(params.page));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
     return request<StudyTopicsSummary>(`/study-topics?${q.toString()}`);
   },
   getStudyTopic: (id: number) => request<{ topic: StudyTopic; group_members: any[]; all_groups: any[] }>(`/study-topics/${id}`),
@@ -1028,6 +1069,9 @@ export const api = {
     if (filters.groupId !== undefined && filters.groupId !== "" && filters.groupId !== "all") {
       params.set("groupId", String(filters.groupId));
     }
+    if (filters.eventId !== undefined && filters.eventId !== "" && filters.eventId !== "all") {
+      params.set("eventId", String(filters.eventId));
+    }
     if (filters.memberId !== undefined && filters.memberId !== "") {
       params.set("memberId", String(filters.memberId));
     }
@@ -1050,6 +1094,9 @@ export const api = {
     }
     if (filters.groupId !== undefined && filters.groupId !== "" && filters.groupId !== "all") {
       params.set("groupId", String(filters.groupId));
+    }
+    if (filters.eventId !== undefined && filters.eventId !== "" && filters.eventId !== "all") {
+      params.set("eventId", String(filters.eventId));
     }
     if (filters.memberId !== undefined && filters.memberId !== "") {
       params.set("memberId", String(filters.memberId));

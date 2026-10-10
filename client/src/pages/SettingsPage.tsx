@@ -1,3 +1,5 @@
+import { Button } from "../components/common/Button";
+import { PageHeader } from "../components/common/PageHeader";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -569,30 +571,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
 
 
       {/* Header */}
-      <div className={`relative overflow-hidden rounded-3xl bg-slate-900 text-white border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 ${activeTab === "backup_restore" ? "p-5 lg:px-7" : "p-6 lg:p-8 shadow-xl"}`}>
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="space-y-2 relative z-10">
-          {activeTab !== "backup_restore" && <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <Sliders className="w-3.5 h-3.5 text-amber-300" />
-              <span>Church Configuration & Master Tables</span>
-            </div>
-          </div>}
-          <h1 className="text-2xl lg:text-3xl font-semibold text-white tracking-tight">
-            {activeTab === "backup_restore" ? "Backup & Data Management" : "System Settings & Lookups"}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
-            {activeTab === "backup_restore" ? "Protect church records, manage backups, and keep your data organized." : "Configure church profile, ministry master lookups, member statuses, rooms, sanctuaries, and relationships."}
-          </p>
-        </div>
-      </div>
+      <PageHeader icon={<Sliders />} title={<>{activeTab === "backup_restore" ? "Backup & Data Management" : "System Settings & Lookups"}</>}
+        description={<>{activeTab === "backup_restore" ? "Protect church records, manage backups, and keep your data organized." : "Configure church profile, ministry master lookups, member statuses, rooms, sanctuaries, and relationships."}</>}
+        actions={activeTab !== "backup_restore" && <>{onNavigateToUsers && <Button onClick={onNavigateToUsers} variant="primary"><UserCog className="h-4 w-4" />User Management</Button>}<Button onClick={loadAllData} disabled={loading}><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Refresh</Button></>} />
 
       {/* TOP: Settings Navigation Tabs with Left & Right Scroll Buttons + Drag-to-Scroll */}
       <div className="relative flex items-center gap-2 group/tabstrip bg-slate-50/70 p-1.5 rounded-2xl border border-indigo-100/60 shadow-2xs">
@@ -619,7 +600,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUpOrLeave}
           onMouseLeave={handleMouseUpOrLeave}
-          className={`flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-1 py-0.5 select-none ${
+          className={`page-tabs flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-1 py-0.5 select-none ${
             isDragging ? "cursor-grabbing" : "cursor-grab"
           }`}
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
@@ -678,49 +659,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
       </div>
 
       {/* Header Banner */}
-      {activeTab !== "backup_restore" && (
-      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-80 h-80 bg-transparent rounded-full blur-2xl pointer-events-none"></div>
 
-        <div className="space-y-2 relative z-10">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="p-2.5 rounded-2xl bg-amber-500 text-white shadow-sm ring-4 ring-amber-100/50">
-              <Sliders className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl lg:text-3xl font-semibold text-indigo tracking-tight">
-              System Settings & Dropdowns
-            </h1>
-            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200/80 text-xs font-medium uppercase tracking-wider shadow-2xs">
-              Lookups & Configuration
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-charcoal/70 max-w-2xl leading-relaxed font-medium">
-            Configure dynamic categories, ministry brackets, event rooms, and church preferences across the entire platform.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 flex-wrap self-start md:self-auto relative z-10">
-          {onNavigateToUsers && (
-            <button
-              onClick={onNavigateToUsers}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-            >
-              <UserCog className="w-4 h-4 text-indigo-950" />
-              <span>User Management (5 Roles)</span>
-            </button>
-          )}
-          <button
-            onClick={loadAllData}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-indigo-50/60 border border-indigo-200/80 text-xs font-medium text-charcoal shadow-2xs hover:shadow-xs transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-indigo ${loading ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
-          </button>
-        </div>
-      </div>
-
-      )}
       {/* Main Workspace for Selected Tab */}
       <div className="space-y-6">
 

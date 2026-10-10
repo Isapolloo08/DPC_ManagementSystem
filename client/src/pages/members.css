@@ -1,0 +1,37 @@
+.members-page { color: var(--text); }
+.members-page [data-directory-toolbar] { background: var(--bg); }
+.members-page :is(.bg-white, .bg-white\/95), .members-page .page-header { background: var(--surface); border-color: var(--border); box-shadow: var(--shadow-card); }
+.members-page .page-header { color: var(--text); }
+.members-page :is(.text-muted, [class*="text-charcoal/"], .text-gray-500, .text-slate-500) { color: var(--text-muted); }
+.members-page :is(.text-indigo-950, .text-charcoal) { color: var(--text); }
+.members-page .bg-amber-400 { background: var(--gold); color: var(--on-gold); }
+.members-table tbody tr:hover [class*="group-hover:text-"] { color: var(--text); }
+.members-table-card { background: var(--surface); border-color: var(--border); box-shadow: var(--shadow-card); }
+.members-table thead { background: var(--surface-2); color: var(--text-muted); border-color: var(--border); }
+.members-table tbody > tr { border-color: var(--border); transition: background-color 150ms ease, color 150ms ease; }
+.members-table tbody > tr:hover { background: var(--surface-2); }
+.members-table tbody td { vertical-align: middle; }
+.members-table .text-muted { color: var(--text-muted); }
+.member-badge { white-space: nowrap; }
+.members-follow-up-chip { background: var(--status-danger-bg); color: var(--status-danger-text); border-color: var(--status-danger-border); }
+.members-follow-up-chip[data-count="0"] { background: var(--status-neutral-bg); color: var(--status-neutral-text); border-color: var(--status-neutral-border); }
+.members-follow-up-bar { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.members-follow-up-chip { display: inline-flex; align-items: center; gap: 6px; border-width: 1px; border-style: solid; border-radius: 999px; padding: 7px 12px; min-height: 36px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.members-follow-up-chip[aria-pressed="true"] { outline: 1px solid var(--attention-text); }
+.member-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; white-space: nowrap; }
+.member-row-action { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 36px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); background: var(--surface); font-size: 12px; font-weight: 500; cursor: pointer; }
+.member-row-action--icon { padding: 6px; }
+.members-page button:is([title="First Page"], [title="Previous Page"], [title="Next Page"], [title="Last Page"]) { min-width: 36px; min-height: 36px; }
+.member-row-action:hover { color: var(--ui-heading); background: var(--surface-2); }
+.member-action-menu { position: fixed; z-index: 120; width: 256px; max-height: calc(100dvh - 16px); overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-card); color: var(--text); }
+.member-action-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px; text-align: left; border-radius: 6px; font-size: 12px; line-height: 1.5; cursor: pointer; color: var(--text-muted); }
+.member-action-menu button svg { flex-shrink: 0; }
+.member-action-menu button:hover { background: var(--surface-2); color: var(--text); }
+.member-action-menu .member-menu-delete { margin-top: 4px; border-top: 1px solid var(--border); color: var(--attention-text); }
+.member-action-menu .member-menu-delete:hover { background: var(--attention-bg); color: var(--attention-text); }
+.members-page :is(button, input, select, textarea, a), .member-action-menu button { transition: background-color 150ms ease, color 150ms ease; }
+.members-page :is(button, input, select, textarea, a, [tabindex]):focus-visible, .member-action-menu button:focus-visible, .member-delete-dialog button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.member-delete-dialog { background: var(--surface); color: var(--text); }
+.member-delete-dialog .text-muted { color: var(--text-muted); }
+.member-delete-notice { padding: 14px; border: 1px solid var(--status-danger-border); border-radius: 12px; color: var(--status-danger-text); background: var(--status-danger-bg); font-size: 12px; line-height: 1.6; }
+@media (prefers-reduced-motion: reduce) { .members-page *, .member-action-menu *, .member-delete-dialog * { animation: none !important; transition: none !important; } }

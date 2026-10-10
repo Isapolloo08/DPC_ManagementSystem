@@ -20,6 +20,8 @@ dist/
 build/
 server/dist/
 client/dist/
+client/dist-invitations/
+client/.env.invitations
 
 # Logs
 npm-debug.log*

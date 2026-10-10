@@ -1,3 +1,7 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { StatCard } from "../components/common/StatCard";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
 import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import React, { useState, useMemo, useEffect } from "react";
 import {
@@ -92,102 +96,28 @@ export const BibleReadingPage: React.FC = () => {
     <div className="space-y-8 pb-16 animate-in fade-in duration-300">
       
       {/* Top Hero Banner */}
-      <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-white/10">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-20 w-72 h-72 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                <BookOpen className="w-3.5 h-3.5" /> 1-Year Bible Reading Plan & Cycle
-              </span>
-              <span className="px-3 py-1 rounded-full text-xs font-medium uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                NIV Edition
-              </span>
-            </div>
-            <h1 className="text-2xl sm:text-4xl font-semibold text-white tracking-tight">
-              Read Through the Entire Bible in 1 Year
-            </h1>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Complete all 66 Books and 1,189 chapters with a sustainable, inspiring pace (New International Version - NIV): 
-              <span className="font-medium text-sky-300"> 3 chapters every Monday to Saturday</span> and 
-              <span className="font-medium text-amber-300"> 5 chapters on Sunday</span>.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsAlignmentModalOpen(true)}
-              data-guide="reading-calibrate"
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-2xl text-xs font-medium shadow-md transition-all active:scale-95"
-              title="Calibrate schedule to match church reading benchmark"
-            >
-              <Sliders className="w-4 h-4 text-sky-400" /> Calibrate Schedule
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsPrinting(true)}
-              data-guide="reading-print"
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-2xl text-xs font-medium shadow-lg shadow-sky-500/25 transition-all active:scale-95"
-            >
-              <Printer className="w-4 h-4" /> Printable Guide
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Grid inside Hero Banner */}
-        <div className="mt-8 pt-6 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xs">
-            <div className="flex items-center gap-2 text-amber-300 text-xs font-medium uppercase tracking-wider mb-1">
-              <Calendar className="w-4 h-4 text-amber-400" /> Current Day
-            </div>
-            <div className="text-2xl sm:text-3xl font-medium text-white">
-              Day {todayReading.dayIndex} <span className="text-xs font-medium text-slate-400">/ 365</span>
-            </div>
-            <p className="text-[12px] text-slate-400 mt-0.5">{todayReading.dayName}, {todayReading.dateString}</p>
-          </div>
-
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xs">
-            <div className="flex items-center gap-2 text-sky-300 text-xs font-medium uppercase tracking-wider mb-1">
-              <BookOpen className="w-4 h-4 text-sky-400" /> Chapters Scheduled
-            </div>
-            <div className="text-2xl sm:text-3xl font-medium text-white">
-              {scheduledCount} <span className="text-xs font-medium text-slate-400">/ 1,189</span>
-            </div>
-            <p className="text-[12px] text-slate-400 mt-0.5">{progressPercent}% of Holy Bible</p>
-          </div>
-
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xs">
-            <div className="flex items-center gap-2 text-indigo-300 text-xs font-medium uppercase tracking-wider mb-1">
-              <BookmarkCheck className="w-4 h-4 text-indigo-400" /> Remaining Chapters
-            </div>
-            <div className="text-2xl sm:text-3xl font-medium text-white">
-              {remainingChapters} <span className="text-xs font-medium text-slate-400">chapters</span>
-            </div>
-            <p className="text-[12px] text-slate-400 mt-0.5">To finish full Bible in 1 year</p>
-          </div>
-
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xs">
-            <div className="flex items-center gap-2 text-emerald-300 text-xs font-medium uppercase tracking-wider mb-1">
-              <Award className="w-4 h-4 text-emerald-400" /> Today's Reading
-            </div>
-            <div className="text-base sm:text-lg font-medium text-white truncate">
-              {todayReading.passageDisplay}
-            </div>
-            <p className="text-[12px] text-slate-400 mt-0.5">{todayReading.isSunday ? "5 Chapters" : "3 Chapters"} • {todayReading.testamentSummary}</p>
-          </div>
-        </div>
+      <PageHeader icon={<BookOpen />} title={<>Read Through the Entire Bible in 1 Year</>}
+        description={<>Complete all 66 Books and 1,189 chapters with a sustainable, inspiring pace (New International Version - NIV):
+          <span className="font-medium text-sky-700"> 3 chapters every Monday to Saturday</span> and
+          <span className="font-medium text-amber-700"> 5 chapters on Sunday</span>.</>}
+        meta={<>NIV edition</>}
+        actions={<><div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <Button type="button" onClick={() => setIsAlignmentModalOpen(true)} data-guide="reading-calibrate" title="Calibrate schedule to match church reading benchmark" variant="secondary">
+            <Sliders className="w-4 h-4 " /> Calibrate Schedule
+          </Button>
+          <Button type="button" onClick={() => setIsPrinting(true)} data-guide="reading-print" variant="primary">
+            <Printer className="w-4 h-4" /> Printable Guide
+          </Button>
+        </div></>} />
+<div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="Current Day" value={"Day " + todayReading.dayIndex} valueHint="/ 365" icon={<Calendar />} tone="amber" description={<>{todayReading.dayName}, {todayReading.dateString}</>} />
+        <StatCard label="Chapters Scheduled" value={scheduledCount} valueHint="/ 1,189" icon={<BookOpen />} tone="sky" description={progressPercent + "% of Holy Bible"} />
+        <StatCard label="Remaining Chapters" value={remainingChapters} valueHint="chapters" icon={<BookmarkCheck />} description="To finish full Bible in 1 year" />
+        <StatCard label="Today's Reading" value={todayReading.passageDisplay} valueSize="text" icon={<Award />} tone="emerald" description={<>{todayReading.isSunday ? "5 Chapters" : "3 Chapters"} • {todayReading.testamentSummary}</>} />
       </div>
 
       {/* Today's Reading Highlight Section */}
-      <div data-guide="reading-today" className="bg-white rounded-3xl p-6 border border-sky-100 shadow-xs space-y-4">
+      <div data-guide="reading-today" className="bg-white rounded-2xl p-6 border border-sky-100 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/20">
@@ -291,7 +221,8 @@ export const BibleReadingPage: React.FC = () => {
       {viewMode === "calendar" && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Controls & Filters */}
-          <div data-guide="reading-filters" className="space-y-4">
+          <FilterPanel title="Reading plan filters" summary={[selectedMonth === "all" ? "All year" : monthNames[Number(selectedMonth) - 1], selectedTestament, scheduleFilter !== "all" && scheduleFilter, searchQuery].filter(Boolean).join(" · ")}>
+            <div data-guide="reading-filters" className="filter-panel-layout space-y-4">
             {/* Month Selector Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
               <button
@@ -361,6 +292,7 @@ export const BibleReadingPage: React.FC = () => {
               </div>
             </div>
           </div>
+          </FilterPanel>
 
           {/* Reading Schedule Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -445,7 +377,7 @@ export const BibleReadingPage: React.FC = () => {
         </div>
       )}
       {filteredPlan.length === 0 && (
-        <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
+        <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
             <Search className="w-6 h-6" />
           </div>

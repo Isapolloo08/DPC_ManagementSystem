@@ -1,0 +1,34 @@
+.event-invitation-page { min-height: 100dvh; display: grid; place-items: center; padding: 32px 16px; background: var(--bg); color: var(--text); }
+.event-invitation-card { width: 100%; max-width: 600px; padding: 32px; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow-card); }
+.event-invitation-card header { text-align: center; margin-bottom: 24px; }
+.event-invitation-icon { display: inline-grid; place-items: center; width: 60px; height: 60px; border-radius: 18px; background: var(--surface-2); color: var(--gold); margin-bottom: 12px; }
+.event-invitation-card header > p:first-of-type { font-size: 11px; letter-spacing: .1em; color: var(--text-muted); }
+.event-invitation-card h1 { font-size: 26px; line-height: 1.3; font-weight: 600; margin: 10px 0; overflow-wrap: anywhere; }
+.event-invitation-card header > p:last-child { font-size: 13px; color: var(--text-muted); }
+.event-invitation-details { padding: 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 20px; }
+.event-invitation-details p { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
+.event-invitation-details p + p { margin-top: 12px; }
+.event-invitation-details svg { flex-shrink: 0; margin-top: 2px; color: var(--text-muted); }
+.event-invitation-details small { display: block; margin-top: 4px; color: var(--text-muted); }
+.event-invitation-description { font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 20px; }
+.event-invitation-form { display: grid; gap: 18px; }
+.event-invitation-form .ui-input { margin-top: 6px; }
+.event-invitation-member-search { position: relative; }
+.event-invitation-member-results { position: absolute; top: 70px; left: 0; right: 0; z-index: 2; max-height: 260px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-card); padding: 6px; }
+.event-invitation-member-results button { display: block; width: 100%; min-height: 44px; padding: 12px; text-align: left; font-size: 13px; color: var(--text); border-radius: 8px; cursor: pointer; }
+.event-invitation-member-results button:hover, .event-invitation-member-results button[aria-selected="true"] { background: var(--surface-2); }
+.event-invitation-member-results p { padding: 12px; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+.event-invitation-form legend { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.event-invitation-choices { display: grid; gap: 8px; }
+.event-invitation-choices label { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); cursor: pointer; }
+.event-invitation-choices label[data-selected="true"] { border-color: var(--gold); }
+.event-invitation-choices input { accent-color: var(--gold); }
+.event-invitation-choices strong { font-size: 13px; font-weight: 500; }
+.event-invitation-choices small, .event-invitation-form label > small { display: block; color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+.event-invitation-deadline { font-size: 11px; line-height: 1.7; color: var(--text-muted); }
+.event-invitation-notice, .event-invitation-error { padding: 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+.event-invitation-error { color: rgb(var(--ink-rose-700)); }
+.event-invitation-success { display: grid; justify-items: center; gap: 12px; text-align: center; font-size: 13px; line-height: 1.6; }
+.event-invitation-success svg { color: rgb(var(--ink-emerald-600)); }
+.event-invitation-success h2 { font-weight: 600; font-size: 20px; }
+@media (max-width: 480px) { .event-invitation-page { padding: 16px 12px; } .event-invitation-card { padding: 22px 18px; border-radius: 18px; } .event-invitation-card h1 { font-size: 22px; } }

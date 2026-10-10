@@ -1,3 +1,7 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { StatCard } from "../components/common/StatCard";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
 import { BookOpen as UIBookOpen, CircleCheck as UICircleCheck, Clock as UIClock, Mars as UIMars, Venus as UIVenus } from "lucide-react";
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -100,42 +104,16 @@ export const ReportsPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 print:p-0 print:space-y-4">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 lg:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="space-y-2 relative z-10">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <Activity className="w-3.5 h-3.5 text-amber-300" />
-              <span>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Leadership Intelligence"}</span>
-            </div>
-            {isRefreshing && (
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-amber-300 font-medium bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-400/20 animate-pulse">
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                Live Syncing...
-              </span>
-            )}
-          </div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-white tracking-tight">
-            Ministry Health & Growth Insights
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed font-medium">
-            {coordinatorMinistryId
-              ? `Water baptism trajectory, retention metrics, small group health, and Sunday attendance trends for ${coordinatorMinistryName} Ministry.`
-              : "Executive analytics dashboard with month-over-month baptism counts, discipleship ratio, new member retention funnel, and Sunday service momentum."}
-          </p>
-        </div>
-
-        {/* Action Controls */}
-        <div className="relative z-10 flex items-center gap-2 flex-wrap shrink-0">
+      <PageHeader icon={<TrendingUp />} title={<>Ministry Health & Growth Insights</>}
+        meta={<>{coordinatorMinistryId ? `${coordinatorMinistryName} Scope` : "Church-wide insights"}{isRefreshing && <span className="inline-flex items-center gap-1.5"><RefreshCw className="h-3 w-3 animate-spin" /> Updating...</span>}</>}
+        description={<>{coordinatorMinistryId
+          ? `Water baptism trajectory, retention metrics, small group health, and Sunday attendance trends for ${coordinatorMinistryName} Ministry.`
+          : "Executive analytics dashboard with month-over-month baptism counts, discipleship ratio, new member retention funnel, and Sunday service momentum."}</>}
+        className="print:hidden"
+        actions={<><div className="relative z-10 flex items-center gap-2 flex-wrap shrink-0">
           {/* Timeframe Selector */}
-          <div data-guide="reports-period" className="bg-black/40 backdrop-blur-md p-1 rounded-2xl border border-white/10 flex items-center gap-1 text-xs font-medium">
+          <FilterPanel title="Report period" summary={timeframe.toUpperCase()} className="print:hidden">
+            <div data-guide="reports-period" className="filter-panel-layout bg-stone-100  p-1 rounded-2xl border border-stone-200 flex items-center gap-1 text-xs font-medium">
             {[
               { id: "3m", label: "3 Mo" },
               { id: "6m", label: "6 Mo" },
@@ -146,36 +124,32 @@ export const ReportsPage: React.FC = () => {
                 key={t.id}
                 onClick={() => setTimeframe(t.id as any)}
                 className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${timeframe === t.id
-                  ? "bg-amber-400 text-slate-950 font-medium shadow-md"
-                  : "text-slate-300 hover:text-white hover:bg-white/5"
+                  ? "bg-amber-400 text-slate-950 font-medium shadow-sm"
+                  : "text-muted hover:text-charcoal hover:bg-stone-50"
                   }`}
               >
                 {t.label}
               </button>
             ))}
           </div>
+          </FilterPanel>
 
           {/* Print / Export Button */}
-          <button data-guide="reports-print"
-            onClick={handlePrintReport}
-            className="px-3.5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer backdrop-blur-md"
-            title="Print Executive Summary for Leadership Meeting"
-          >
-            <Printer className="w-3.5 h-3.5 text-amber-300" />
+          <Button data-guide="reports-print" onClick={handlePrintReport} title="Print Executive Summary for Leadership Meeting" variant="secondary">
+            <Printer className="w-3.5 h-3.5 " />
             <span className="hidden sm:inline">Print Report</span>
-          </button>
-        </div>
-      </div>
+          </Button>
+        </div></>} />
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-200/80 pb-2 print:hidden overflow-x-auto">
+      <div className="page-tabs flex items-center gap-2 border-b border-gray-200/80 pb-2 print:hidden overflow-x-auto">
         <button data-guide="reports-growth"
           onClick={() => setActiveTab("growth")}
           className={`px-4 py-2 rounded-2xl font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${activeTab === "growth"
             ? "bg-indigo text-white shadow-md shadow-indigo/20"
             : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
             }`}
-        >
+         aria-pressed={activeTab === "growth"}>
           <TrendingUp className="w-4 h-4 text-amber-300" />
           <span>Growth Insights & Vitality</span>
         </button>
@@ -186,7 +160,7 @@ export const ReportsPage: React.FC = () => {
             ? "bg-indigo text-white shadow-md shadow-indigo/20"
             : "bg-white text-charcoal/70 hover:bg-gray-100 border border-gray-200"
             }`}
-        >
+         aria-pressed={activeTab === "demographics"}>
           <Cake className="w-4 h-4 text-rose-400" />
           <span>Demographics & Birthdays</span>
         </button>
@@ -197,117 +171,20 @@ export const ReportsPage: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === "growth" && (
         <div className="space-y-6">
-          {/* 1. Executive Vitality Scorecard (4 KPI Cards) */}
+          {/* Ministry vitality summary */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Card 1: Discipleship Ratio */}
-            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-charcoal/70">Discipleship Ratio</span>
-                <span className="p-2 rounded-2xl bg-indigo-50 text-indigo border border-indigo-100/80">
-                  <BookOpen className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-medium text-indigo tracking-tight">
-                  {growthData?.summary.discipleship_ratio ?? 0}%
-                </div>
-                <span className="text-[12px] font-medium text-muted">in Small Groups</span>
-              </div>
-              <div className="w-full bg-gray-100 h-2 rounded-full mt-2.5 overflow-hidden">
-                <div
-                  className="h-full bg-indigo rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, growthData?.summary.discipleship_ratio || 0)}%` }}
-                ></div>
-              </div>
-              <div className="text-[12px] text-muted font-medium mt-2 flex items-center justify-between">
-                <span>{growthData?.summary.disciples_in_groups || 0} of {growthData?.summary.total_active_members || 0} Disciples</span>
-                <span className="text-emerald-600">Goal: ≥ 60%</span>
-              </div>
-            </div>
-
-            {/* Card 2: New Member Retention Rate */}
-            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-charcoal/70">New Member Retention</span>
-                <span className="p-2 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100/80">
-                  <UserCheck className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-medium text-emerald-900 tracking-tight">
-                  {growthData?.summary.retention_rate ?? 0}%
-                </div>
-                <span className="text-[12px] font-medium text-emerald-700">
-                  {(growthData?.summary.retention_rate || 0) >= 80 ? <>Healthy <UICircleCheck aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></> : <>Stable <UIClock aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /></>}
-                </span>
-              </div>
-              <div className="w-full bg-gray-100 h-2 rounded-full mt-2.5 overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, growthData?.summary.retention_rate || 0)}%` }}
-                ></div>
-              </div>
-              <div className="text-[12px] text-muted font-medium mt-2 flex items-center justify-between">
-                <span>{growthData?.summary.new_members_attended || 0} of {growthData?.summary.total_new_members || 0} New Joined</span>
-                <span className="text-emerald-700">Active in {timeframe.toUpperCase()}</span>
-              </div>
-            </div>
-
-            {/* Card 3: Water Baptism Momentum */}
-            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-charcoal/70">Baptisms</span>
-                <span className="p-2 rounded-2xl bg-sky-50 text-sky-700 border border-sky-100/80">
-                  <Droplets className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-medium text-sky-950 tracking-tight">
-                  {growthData?.summary.total_baptisms_period ?? 0}
-                </div>
-                <span className="text-[12px] font-medium text-sky-700">Baptized in Period</span>
-              </div>
-              <div className="flex items-center gap-2 mt-2.5">
-                <span className="text-[12px] font-medium bg-sky-100 text-sky-900 px-2 py-0.5 rounded-md">
-                  {growthData?.baptisms.reduce((sum, b) => sum + b.male_count, 0) || 0} Brothers
-                </span>
-                <span className="text-[12px] font-medium bg-rose-100 text-rose-900 px-2 py-0.5 rounded-md">
-                  {growthData?.baptisms.reduce((sum, b) => sum + b.female_count, 0) || 0} Sisters
-                </span>
-              </div>
-              <div className="text-[12px] text-sky-800 font-medium mt-2">
-                Across {growthData?.baptisms.length || 0} recorded months
-              </div>
-            </div>
-
-            {/* Card 4: Average Weekly Sunday Attendance */}
-            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 border border-indigo-100/90 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-charcoal/70">Avg Weekly Attendance</span>
-                <span className="p-2 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100/80">
-                  <TrendingUp className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-medium text-amber-950 tracking-tight">
-                  {growthData?.summary.avg_weekly_attendance ?? 0}
-                </div>
-                <span className="text-[12px] font-medium text-amber-800">Weekly Average</span>
-              </div>
-              <div className="text-[12px] text-charcoal/70 font-medium mt-2.5 flex items-center justify-between">
-                <span>Peak Sunday: <strong>{growthData?.summary.peak_attendance ?? 0}</strong></span>
-                <span className="text-[12px] bg-amber-100 text-amber-950 px-2 py-0.5 rounded-full font-medium">
-                  {growthData?.attendance_trends.length || 0} Services
-                </span>
-              </div>
-              <div className="text-[12px] text-muted mt-1">
-                Measured across recorded check-in logs
-              </div>
-            </div>
+            <StatCard label="Discipleship Ratio" value={(growthData?.summary.discipleship_ratio ?? 0) + "%"} icon={<BookOpen />} progress={growthData?.summary.discipleship_ratio ?? 0} description={<>{growthData?.summary.disciples_in_groups || 0} of {growthData?.summary.total_active_members || 0} Disciples · Goal: ≥ 60%</>} />
+            <StatCard label="New Member Retention" value={(growthData?.summary.retention_rate ?? 0) + "%"} icon={<UserCheck />} tone="emerald" progress={growthData?.summary.retention_rate ?? 0} valueHint={(growthData?.summary.retention_rate || 0) >= 80 ? "Healthy" : "Stable"} description={<>{growthData?.summary.new_members_attended || 0} of {growthData?.summary.total_new_members || 0} New Joined · Active in {timeframe.toUpperCase()}</>} />
+            <StatCard label="Baptisms" value={growthData?.summary.total_baptisms_period ?? 0} icon={<Droplets />} tone="sky" description={"Across " + (growthData?.baptisms.length || 0) + " recorded months"}>
+              <div className="flex flex-wrap gap-2"><span>{growthData?.baptisms.reduce((sum, b) => sum + b.male_count, 0) || 0} Brothers</span><span>{growthData?.baptisms.reduce((sum, b) => sum + b.female_count, 0) || 0} Sisters</span></div>
+            </StatCard>
+            <StatCard label="Avg Weekly Attendance" value={growthData?.summary.avg_weekly_attendance ?? 0} icon={<TrendingUp />} tone="amber" description="Measured across recorded check-in logs">
+              Peak Sunday: <strong>{growthData?.summary.peak_attendance ?? 0}</strong> · {growthData?.attendance_trends.length || 0} Services
+            </StatCard>
           </div>
 
-          {/* 2. Month-over-Month Baptism Counts & Trajectory */}
-          <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-5">
+      {/* 2. Month-over-Month Baptism Counts & Trajectory */}
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -385,7 +262,7 @@ export const ReportsPage: React.FC = () => {
           {/* 3. Average Weekly Sunday Attendance Trends & Ministry Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left 2 Cols: Attendance Graph */}
-            <div className="lg:col-span-2 bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
+            <div className="lg:col-span-2 bg-white/95 backdrop-blur-md rounded-2xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
@@ -448,7 +325,7 @@ export const ReportsPage: React.FC = () => {
             </div>
 
             {/* Right 1 Col: New Member Assimilation & Retention Funnel */}
-            <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
+            <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-4">
               <div>
                 <h3 className="text-base font-semibold text-charcoal flex items-center gap-2">
                   <Compass className="w-5 h-5 text-emerald-700" />
@@ -550,7 +427,7 @@ export const ReportsPage: React.FC = () => {
           </div>
 
           {/* 4. Small Groups & Discipleship Capacity Grid */}
-          <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
@@ -635,7 +512,7 @@ export const ReportsPage: React.FC = () => {
       {activeTab === "demographics" && (
         <div className="space-y-6">
           {/* Ministry Distribution Breakdown Bar Graphic */}
-          <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-4">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">
@@ -688,7 +565,7 @@ export const ReportsPage: React.FC = () => {
           </div>
 
           {/* Birthday Distribution & Pastoral Calendar */}
-          <div className="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm space-y-5">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-charcoal flex items-center gap-2">

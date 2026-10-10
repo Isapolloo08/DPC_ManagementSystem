@@ -1,0 +1,12 @@
+.attendance-source-filter { margin-bottom: 20px; }
+.attendance-source-filter legend { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 8px; }
+.attendance-source-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.attendance-source-options button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text-muted); font-size: 12px; font-weight: 500; cursor: pointer; }
+.attendance-source-options button[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: white; }
+.attendance-source-options button:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--text); border-color: var(--gold); }
+.attendance-source-options button:disabled { opacity: .45; cursor: not-allowed; }
+.attendance-source-filter > p { font-size: 11px; line-height: 1.6; color: var(--text-muted); margin-top: 8px; }
+@media (max-width: 600px) {
+  .attendance-source-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attendance-source-options button { padding: 10px 8px; }
+}

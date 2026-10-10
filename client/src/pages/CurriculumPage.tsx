@@ -1,6 +1,16 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { Badge } from "../components/common/Badge";
+import { DialogPanel } from "../components/common/DialogPanel";
+import './curriculum.css';
+import { usePageControls, useDebouncedValue } from "../hooks/useListPagination";
+import { StatCard } from "../components/common/StatCard";
+import { PageHeader } from "../components/common/PageHeader";
+import { ListSkeleton } from "../components/common/SkeletonLoader";
+import { Button } from "../components/common/Button";
 import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import { ModalPanel } from "../components/common/ModalPanel";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -20,7 +30,7 @@ import { CurriculumPageSkeleton, CardGridSkeleton } from "../components/common/S
 
 export const CurriculumPage: React.FC = () => {
   const { user } = useAuth();
-  const canManage = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "Leader" || user?.role_name === "IT Admin";
+  const canManage = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
   const { showToast, deleteWithUndo } = useToast();
   const [loading, setLoading] = useState(true);
   const [studyTopicsSummary, setStudyTopicsSummary] = useState<StudyTopicsSummary | null>(null);
@@ -29,6 +39,11 @@ export const CurriculumPage: React.FC = () => {
 
   // Filters & Search
   const [studyTopicSearch, setStudyTopicSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(studyTopicSearch);
+  const { page, pageSize, setPage, setPageSize } = usePageControls(debouncedSearch);
+  const listSequence = useRef(0);
+  const detailSequence = useRef(0);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   // Modals & Details View
   const [selectedDetailTopic, setSelectedDetailTopic] = useState<StudyTopic | null>(null);
@@ -44,12 +59,14 @@ export const CurriculumPage: React.FC = () => {
   const [formData, setFormData] = useState({
     title: "",
     total_chapters: 1,
-    summary_notes: ""
+    summary_notes: "",
+    has_discussion: true, has_review: true, has_exam: false
   });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [page, pageSize, debouncedSearch]);
+  useEffect(() => () => { listSequence.current++; }, []);
 
   // Real-time automatic sync via Socket.IO
   useSocketEvent("study_topics:changed", () => {
@@ -60,13 +77,14 @@ export const CurriculumPage: React.FC = () => {
   });
 
  const loadData = async () => {
+    const sequence = ++listSequence.current;
     guideData.clearError();
     setLoading(true);
     try {
-      const [studyRes, groupsRes] = await Promise.all([
-        api.getStudyTopics(),
-        api.getGroups().catch(() => [])
-      ]);
+      const studyRes = await api.getStudyTopics({ page, limit: pageSize, search: debouncedSearch });
+      const groupsRes = studyRes.pagination ? [] : await api.getGroups().catch(() => []);
+      if (sequence !== listSequence.current) return;
+      if (studyRes.pagination && studyRes.pagination.page !== page) setPage(studyRes.pagination.page);
       setStudyTopicsSummary(studyRes);
       setStudyTopics(studyRes.topics || []);
       setAllGroups(groupsRes);
@@ -81,30 +99,34 @@ export const CurriculumPage: React.FC = () => {
         }
       }
     } catch (err: any) {
+      if (sequence !== listSequence.current) return;
       console.error("Failed to load curriculum data:", err);
       guideData.reportError(err);
       showToast(err.message || "Failed to load curriculum data", "error");
     } finally {
-      setLoading(false);
+      if (sequence === listSequence.current) { setHasLoaded(true); setLoading(false); }
     }
   };
 
   const handleOpenDetailModal = async (topic: StudyTopic) => {
+    const sequence = ++detailSequence.current;
     setSelectedDetailTopic(topic);
     setTopicDetailData(null);
     setDetailGroupTab("all");
     setLoadingDetail(true);
     try {
       const res = await api.getStudyTopic(topic.id);
+      if (sequence !== detailSequence.current) return;
       setTopicDetailData(res);
       if (res.topic) {
         setSelectedDetailTopic(res.topic);
       }
     } catch (err: any) {
+      if (sequence !== detailSequence.current) return;
       console.error("Failed to load topic details:", err);
       showToast(err.message || "Failed to fetch topic details", "error");
     } finally {
-      setLoadingDetail(false);
+      if (sequence === detailSequence.current) setLoadingDetail(false);
     }
   };
 
@@ -116,7 +138,8 @@ export const CurriculumPage: React.FC = () => {
       .split(" ")
       .filter((w) => w.length > 2 && !["book", "study", "guide", "life", "test", "with", "from", "paul", "holy"].includes(w));
 
-    const matchedGroups = allGroups.filter((g) => {
+    const source = selectedDetailTopic?.id === topic.id && topicDetailData?.all_groups ? topicDetailData.all_groups : topic.group_preview || allGroups;
+    const matchedGroups = source.filter((g) => {
       if (g.curriculum) {
         const currLower = g.curriculum.toLowerCase().trim();
         if (currLower === topicTitleLower || currLower.includes(topicTitleLower) || topicTitleLower.includes(currLower)) return true;
@@ -131,7 +154,8 @@ export const CurriculumPage: React.FC = () => {
     const completedGroups = activeGroups.filter(g => g.progress_stage === "completed");
     const ongoingGroups = activeGroups.filter(g => g.progress_stage !== "completed");
 
-    return { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups };
+    const counts = topic.group_counts || { active: activeGroups.length, completed: completedGroups.length, ongoing: ongoingGroups.length, merged: mergedGroups.length };
+    return { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups, counts };
   };
 
   const handleOpenModal = (topic?: StudyTopic) => {
@@ -140,14 +164,18 @@ export const CurriculumPage: React.FC = () => {
       setFormData({
         title: topic.title,
         total_chapters: topic.total_chapters || 1,
-        summary_notes: topic.summary_notes || ""
+        summary_notes: topic.summary_notes || "",
+        has_discussion: topic.has_discussion ?? true,
+        has_review: topic.has_review ?? true,
+        has_exam: topic.has_exam ?? true
       });
     } else {
       setEditingStudyTopic(null);
       setFormData({
         title: "",
         total_chapters: 1,
-        summary_notes: ""
+        summary_notes: "",
+        has_discussion: true, has_review: true, has_exam: false
       });
     }
     setIsStudyTopicModalOpen(true);
@@ -179,11 +207,19 @@ export const CurriculumPage: React.FC = () => {
       const payload = {
         title: formData.title.trim(),
         total_chapters: total,
-        summary_notes: formData.summary_notes.trim() || undefined
+        summary_notes: formData.summary_notes.trim() || undefined,
+        has_discussion: formData.has_discussion,
+        has_review: formData.has_review,
+        has_exam: formData.has_exam
       };
 
       if (editingStudyTopic) {
         await api.updateStudyTopic(editingStudyTopic.id, payload);
+        // Publish the saved fields to both entry points before refreshing the list.
+        detailSequence.current++;
+        setLoadingDetail(false);
+        setStudyTopics(previous => previous.map(topic => topic.id === editingStudyTopic.id ? { ...topic, ...payload } : topic));
+        setSelectedDetailTopic(previous => previous?.id === editingStudyTopic.id ? { ...previous, ...payload } : previous);
         showToast(`'${formData.title.trim()}' updated successfully!`);
       } else {
         await api.createStudyTopic(payload);
@@ -228,6 +264,7 @@ export const CurriculumPage: React.FC = () => {
 
   // Filtered Topics
   const filteredStudyTopics = useMemo(() => {
+    if (studyTopicsSummary?.pagination) return studyTopics;
     return studyTopics.filter(topic => {
       const q = studyTopicSearch.toLowerCase().trim();
       return !q || (
@@ -235,10 +272,13 @@ export const CurriculumPage: React.FC = () => {
         (topic.summary_notes && topic.summary_notes.toLowerCase().includes(q))
       );
     });
-  }, [studyTopics, studyTopicSearch]);
+  }, [studyTopics, studyTopicSearch, studyTopicsSummary]);
+  const resultTotal = studyTopicsSummary?.pagination?.total ?? filteredStudyTopics.length;
+  const visibleTopics = studyTopicsSummary?.pagination ? filteredStudyTopics : filteredStudyTopics.slice((page - 1) * pageSize, page * pageSize);
 
   // Dynamic Small Groups Stats (Focusing on Active Groups)
   const curriculumStats = useMemo(() => {
+    if (studyTopicsSummary?.summary) return studyTopicsSummary.summary;
     const totalBooks = studyTopics.length;
     const totalChapters = studyTopics.reduce((acc, t) => acc + (t.total_chapters || 0), 0);
     const activeGroupsWithCurriculum = allGroups.filter(g => g.curriculum && (g.status || "active") !== "merged");
@@ -252,159 +292,46 @@ export const CurriculumPage: React.FC = () => {
       groupsDone,
       groupsOngoing
     };
-  }, [studyTopics, allGroups]);
+  }, [studyTopics, allGroups, studyTopicsSummary]);
 
   const guideData = useGuideDataState("curriculum", { loading, count: filteredStudyTopics.length, filtered: Boolean(studyTopicSearch), retry: loadData });
 
-  if (loading && studyTopics.length === 0) {
+  if (loading && !hasLoaded) {
     return <CurriculumPageSkeleton />;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="curriculum-page directory-design space-y-6">
 
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 space-y-2">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <BookMarked className="w-3.5 h-3.5 text-amber-300" />
-              <span>Discipleship & Scripture Curriculum</span>
-            </div>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
-            Topics & Books of Study
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-            Manage books of the Bible and see in real time which small groups are <strong>Done</strong> and which are <strong>Ongoing</strong>.
-          </p>
-        </div>
-
-        <div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
+      <PageHeader className="page-header--compact" icon={<BookMarked />} title={<>Topics & Books of Study</>}
+        description={<>Manage books of the Bible and see in real time which small groups are <strong>Done</strong> and which are <strong>Ongoing</strong>.</>}
+        actions={<><div className="relative z-10 flex items-center gap-3 flex-wrap shrink-0">
           {canManage && (
-            <button data-guide="curriculum-new"
-              onClick={() => handleOpenModal()}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-2.5 rounded-2xl text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-indigo-950" />
+            <Button data-guide="curriculum-new" onClick={() => handleOpenModal()} variant="primary">
+              <Plus className="w-4 h-4 " />
               <span>Add Book / Topic Study</span>
-            </button>
+            </Button>
           )}
 
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="p-2.5 rounded-2xl border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all shadow-2xs backdrop-blur-md cursor-pointer"
-            title="Refresh curriculum list"
-          >
+          <Button onClick={loadData} disabled={loading} title="Refresh curriculum list" aria-label="Refresh curriculum list" variant="secondary" size="icon">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
+          </Button>
+        </div></>} />
 
-      {/* 4 Summary Metric Cards */}
+      {/* Curriculum summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Library */}
-        <div className="bg-white/95 rounded-3xl p-5 border border-indigo-100/90 shadow-sm flex items-center justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-900">
-              <Library className="w-4 h-4 text-indigo-700 shrink-0" />
-              <span>Total Books & Topics</span>
-            </div>
-            <div className="text-2xl font-medium text-charcoal tracking-tight">
-              {curriculumStats.totalBooks}
-            </div>
-            <p className="text-[12px] text-muted font-medium">Curriculum Library</p>
-          </div>
-          <div className="p-3.5 bg-indigo-50 text-indigo-700 rounded-2xl shrink-0">
-            <BookOpen className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Total Chapters Across Library */}
-        <div className="bg-white/95 rounded-3xl p-5 border border-indigo-100/90 shadow-sm flex items-center justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-900">
-              <BookMarked className="w-4 h-4 text-indigo-700 shrink-0" />
-              <span>Total Chapters / Lessons</span>
-            </div>
-            <div className="text-2xl font-medium text-charcoal tracking-tight">
-              {curriculumStats.totalChapters}
-            </div>
-            <p className="text-[12px] text-muted font-medium">Across All Books</p>
-          </div>
-          <div className="p-3.5 bg-amber-50 text-amber-700 rounded-2xl shrink-0">
-            <BookMarked className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Small Groups Done */}
-        <div className="bg-white/95 rounded-3xl p-5 border border-emerald-200/80 shadow-sm flex items-center justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-950">
-              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-              <span>Groups Completed (Done)</span>
-            </div>
-            <div className="text-2xl font-medium text-emerald-950 tracking-tight">
-              {curriculumStats.groupsDone}
-            </div>
-            <p className="text-[12px] text-emerald-800 font-medium">Finished Curriculum</p>
-          </div>
-          <div className="p-3.5 bg-emerald-50 text-emerald-700 rounded-2xl shrink-0">
-            <Award className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Small Groups Ongoing */}
-        <div className="bg-white/95 rounded-3xl p-5 border border-amber-200/80 shadow-sm flex items-center justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-amber-950">
-              <Users className="w-4 h-4 text-amber-700 shrink-0" />
-              <span>Groups In Progress (Ongoing)</span>
-            </div>
-            <div className="text-2xl font-medium text-charcoal tracking-tight">
-              {curriculumStats.groupsOngoing}
-            </div>
-            <p className="text-[12px] text-amber-800 font-medium">Active Group Studies</p>
-          </div>
-          <div className="p-3.5 bg-amber-50 text-amber-700 rounded-2xl shrink-0">
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
+        <StatCard label="Total Books & Topics" value={curriculumStats.totalBooks} icon={<BookOpen />} description="Curriculum Library" />
+        <StatCard label="Total Chapters / Lessons" value={curriculumStats.totalChapters} icon={<BookMarked />} tone="amber" description="Across All Books" />
+        <StatCard label="Groups Completed (Done)" value={curriculumStats.groupsDone} icon={<Award />} tone="emerald" description="Finished Curriculum" />
+        <StatCard label="Groups In Progress (Ongoing)" value={curriculumStats.groupsOngoing} icon={<Users />} tone="amber" description="Active Group Studies" />
       </div>
 
       {/* Filter and Search Bar with Inspector Toggle */}
-      <div className="bg-white/95 rounded-3xl p-4 sm:p-5 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-charcoal">Curriculum Books</span>
-          <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200 text-xs font-medium">
-            {filteredStudyTopics.length} of {studyTopics.length}
-          </span>
-        </div>
-
-        {/* Search Bar & Inspector Toggle */}
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap w-full md:w-auto">
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input data-guide="curriculum-search"
-              type="text"
-              placeholder="Search book or notes..."
-              value={studyTopicSearch}
-              onChange={(e) => setStudyTopicSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-2xl border border-indigo-100/90 bg-ivory-light text-xs focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium placeholder:text-muted transition-all"
-            />
-          </div>
-
-          {selectedDetailTopic && (
+      <FilterPanel title="Curriculum filters" summary={studyTopicSearch || "All curriculum books and topics"} actions={selectedDetailTopic && (
             <button data-guide="curriculum-inspector"
+              aria-label={isInspectorOpen ? "Close Side Inspector" : "Open Side Inspector"}
+              aria-expanded={isInspectorOpen}
               onClick={() => setIsInspectorOpen(!isInspectorOpen)}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${isInspectorOpen
                 ? "bg-indigo-50 text-indigo-950 border-indigo-200 shadow-2xs hover:bg-indigo-100/70"
@@ -415,9 +342,33 @@ export const CurriculumPage: React.FC = () => {
               {isInspectorOpen ? <PanelRightClose className="w-4 h-4 text-indigo-700" /> : <PanelRight className="w-4 h-4 text-muted" />}
               <span className="hidden sm:inline">{isInspectorOpen ? "Hide Groups Panel" : "Show Groups Panel"}</span>
             </button>
-          )}
+          )}>
+        <div className="filter-panel-layout bg-white/95 rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-charcoal">Curriculum Books</span>
+          <Badge variant="neutral" className="rounded-full">
+            {filteredStudyTopics.length} of {studyTopics.length}
+          </Badge>
+        </div>
+
+        {/* Search Bar & Inspector Toggle */}
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap w-full md:w-auto">
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input data-guide="curriculum-search"
+              aria-label="Search books and notes"
+              type="text"
+              placeholder="Search book or notes..."
+              value={studyTopicSearch}
+              onChange={(e) => setStudyTopicSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-2xl border border-indigo-100/90 bg-ivory-light text-xs focus:bg-white focus:ring-2 focus:ring-indigo/20 focus:border-indigo outline-none font-medium placeholder:text-muted transition-all"
+            />
+          </div>
+
+
         </div>
       </div>
+      </FilterPanel>
 
       {/* Main Content Layout: Master Grid + Group Status Inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -426,7 +377,7 @@ export const CurriculumPage: React.FC = () => {
           {loading && studyTopics.length === 0 ? (
             <CardGridSkeleton count={6} columns={selectedDetailTopic && isInspectorOpen ? 2 : 3} />
           ) : filteredStudyTopics.length === 0 ? (
-            <div className="text-center py-16 bg-white/95 rounded-3xl border border-dashed border-indigo-200/80 space-y-4">
+            <div className="text-center py-16 bg-white/95 rounded-2xl border border-dashed border-indigo-200/80 space-y-4">
               <div className="w-14 h-14 rounded-3xl bg-indigo-50 text-indigo-700 flex items-center justify-center mx-auto">
                 <BookOpen className="w-7 h-7" />
               </div>
@@ -434,196 +385,82 @@ export const CurriculumPage: React.FC = () => {
                 <p className="text-base font-medium text-charcoal">No curriculum books found</p>
                 <p className="text-xs text-muted max-w-sm mx-auto">No books match your current search.</p>
               </div>
-              <button data-guide="curriculum-new"
+              {canManage && <Button data-guide="curriculum-new" variant="primary"
                 onClick={() => handleOpenModal()}
-                className="px-5 py-2.5 rounded-2xl bg-amber-400 text-indigo-950 text-xs font-medium shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
               >
-                + Add New Book Study
-              </button>
+                + Add Book / Topic Study
+              </Button>}
             </div>
           ) : (
             <div className={`grid gap-5 ${selectedDetailTopic && isInspectorOpen
               ? "grid-cols-1 md:grid-cols-2 2xl:grid-cols-2"
               : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
               }`}>
-              {filteredStudyTopics.map(topic => {
+              {visibleTopics.map(topic => {
                 const isSelected = selectedDetailTopic?.id === topic.id;
-                const { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups } = getGroupsForTopic(topic);
+                const { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups, counts } = getGroupsForTopic(topic);
 
                 return (
-                  <div
-                    key={topic.id}
-                    onClick={() => {
-                      handleOpenDetailModal(topic);
-                      setIsInspectorOpen(true);
-                    }}
-                    className={`group relative rounded-3xl border p-5 sm:p-6 transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-4 ${isSelected
-                      ? "bg-indigo-50/50 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md scale-[1.01]"
-                      : "bg-white/95 border-indigo-100/90 hover:border-indigo-300 hover:shadow-md"
-                      }`}
-                  >
-                    <div className="space-y-3.5">
-                      {/* Top Badges */}
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="px-3 py-1 rounded-full text-[12px] font-medium bg-indigo-50 text-indigo-950 border border-indigo-200/70 shadow-2xs flex items-center gap-1.5">
-                          <BookOpen className="w-3 h-3 text-indigo-700" />
-                          <span>Book Study</span>
-                        </span>
-
-                        <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 text-[12px] font-medium">
-                          {topic.total_chapters} {topic.total_chapters === 1 ? "Chapter" : "Chapters"}
-                        </span>
+                  <article key={topic.id} className="curriculum-book-card" data-selected={isSelected}
+                    aria-label={topic.title} onClick={() => { handleOpenDetailModal(topic); setIsInspectorOpen(true); }}>
+                    <div className="curriculum-book-labels">
+                      <Badge variant="info"><BookOpen size={14} aria-hidden="true" />Book of Study</Badge>
+                      <Badge>{topic.total_chapters} {topic.total_chapters === 1 ? "Chapter" : "Chapters"}</Badge>
+                    </div>
+                    <div className="curriculum-book-copy">
+                      <h3 title={topic.title}>{topic.title}</h3>
+                      {topic.summary_notes && <p title={topic.summary_notes}>{topic.summary_notes}</p>}
+                    </div>
+                    <div className="curriculum-group-summary">
+                      <div className="curriculum-group-summary-heading">
+                        <span><Users size={14} aria-hidden="true" />Small Groups Status</span>
+                        <span>{counts.active} Active {counts.active === 1 ? "Group" : "Groups"}</span>
                       </div>
-
-                      {/* Title & Notes */}
-                      <div>
-                        <h3 className={`text-base sm:text-lg font-semibold tracking-tight leading-snug transition-colors ${isSelected ? "text-indigo-950" : "text-charcoal group-hover:text-indigo-900"
-                          }`}>
-                          {topic.title}
-                        </h3>
-                        {topic.summary_notes && (
-                          <p className="text-xs text-charcoal/65 line-clamp-2 mt-1.5 leading-relaxed font-normal">
-                            {topic.summary_notes}
-                          </p>
-                        )}
+                      <div className="curriculum-group-counts">
+                        <Badge variant="success"><CheckCircle2 size={14} aria-hidden="true" />Done <strong>{counts.completed}</strong></Badge>
+                        <Badge variant="warning"><Clock size={14} aria-hidden="true" />Ongoing <strong>{counts.ongoing}</strong></Badge>
                       </div>
-
-                      {/* Small Groups Done vs Ongoing Status Tracker */}
-                      <div className="p-3 bg-gray-50/90 rounded-2xl border border-gray-100 space-y-2">
-                        <div className="flex items-center justify-between text-xs font-medium text-charcoal/80">
-                          <div className="flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5 text-indigo-700" />
-                            <span>Small Groups Status</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[12px]">
-                            <span className="text-charcoal/70 font-medium">
-                              {activeGroups.length} Active {activeGroups.length === 1 ? "Group" : "Groups"}
-                            </span>
-                            {mergedGroups.length > 0 && (
-                              <span className="text-purple-700 font-medium bg-purple-100/80 px-1.5 py-0.2 rounded text-[12px] border border-purple-200">
-                                +{mergedGroups.length} merged
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Done & Ongoing Badges */}
-                        <div className="grid grid-cols-2 gap-2 pt-0.5">
-                          <div className={`p-2 rounded-xl border flex items-center justify-between ${completedGroups.length > 0
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                            : "bg-white border-gray-100 text-muted"
-                            }`}>
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${completedGroups.length > 0 ? "text-emerald-600" : "text-charcoal/30"}`} />
-                              <span className="text-[12px] font-medium truncate">Done</span>
-                            </div>
-                            <span className={`text-xs font-medium px-1.5 py-0.2 rounded-md ${completedGroups.length > 0 ? "bg-emerald-600 text-white" : "bg-gray-100 text-muted"}`}>
-                              {completedGroups.length}
-                            </span>
-                          </div>
-
-                          <div className={`p-2 rounded-xl border flex items-center justify-between ${ongoingGroups.length > 0
-                            ? "bg-amber-50 border-amber-200 text-amber-900"
-                            : "bg-white border-gray-100 text-muted"
-                            }`}>
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className={`w-2 h-2 rounded-full shrink-0 ${ongoingGroups.length > 0 ? "bg-amber-500 animate-pulse" : "bg-charcoal/30"}`} />
-                              <span className="text-[12px] font-medium truncate">Ongoing</span>
-                            </div>
-                            <span className={`text-xs font-medium px-1.5 py-0.2 rounded-md ${ongoingGroups.length > 0 ? "bg-amber-500 text-white" : "bg-gray-100 text-muted"}`}>
-                              {ongoingGroups.length}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Mini group badges preview if any */}
-                        {matchedGroups.length > 0 ? (
-                          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
-                            {[...activeGroups, ...mergedGroups].slice(0, 3).map((g) => {
-                              const isM = g.status === "merged";
-                              const isDone = !isM && completedGroups.some(cg => cg.id === g.id);
-                              return (
-                                <span
-                                  key={g.id}
-                                  className={`px-2 py-0.5 rounded-lg text-[12px] font-medium whitespace-nowrap truncate max-w-[110px] ${isM
-                                    ? "bg-purple-100 text-purple-900 border border-purple-200"
-                                    : isDone
-                                      ? "bg-emerald-100/80 text-emerald-900"
-                                      : "bg-amber-100/80 text-amber-900"
-                                    }`}
-                                >
-                                  {isM && <Archive aria-hidden="true" className="inline-block w-3 h-3 mr-1 align-[-0.125em]" />}{g.name}
-                                </span>
-                              );
-                            })}
-                            {matchedGroups.length > 3 && (
-                              <span className="text-[12px] font-medium text-muted">
-                                +{matchedGroups.length - 3} more
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-[12px] text-charcoal/45 italic text-center pt-0.5">
-                            No small groups assigned yet
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Select & View Action Tag */}
-                      <div className={`flex items-center justify-between pt-1 text-xs font-medium transition-colors ${isSelected ? "text-indigo-700" : "text-indigo-900/80 group-hover:text-indigo-900"
-                        }`}>
-                        <span className="flex items-center gap-1.5">
-                          {isSelected ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700" />
-                              <span>Inspecting Groups & Details</span>
-                            </>
-                          ) : (
-                            <>
-                              <Search className="w-3.5 h-3.5 text-indigo-900/60" />
-                              <span>Click to View Groups Status</span>
-                            </>
-                          )}
-                        </span>
-                        <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? "translate-x-1" : "group-hover:translate-x-1"}`} />
+                      {counts.active > 0 && <div className="curriculum-progress" role="progressbar" aria-label={topic.title + " completed groups"}
+                        aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(counts.completed / counts.active * 100)}
+                        title={counts.completed + " of " + counts.active + " groups completed"}>
+                        <span style={{ width: Math.min(100, counts.completed / counts.active * 100) + "%" }} />
+                      </div>}
+                      <div className="curriculum-group-chips">
+                        {[...activeGroups, ...mergedGroups].slice(0, 3).map(g => <Badge key={g.id}
+                          title={g.status === "merged" && g.merged_into_group_name ? g.name + " — Merged into " + g.merged_into_group_name : g.name}>
+                          {g.status === "merged" && <Archive size={12} aria-hidden="true" />}<span className="curriculum-chip-name">{g.name}</span>
+                        </Badge>)}
+                        {counts.merged > 0 && <Badge title={mergedGroups.map(g => g.merged_into_group_name ? g.name + ": Merged into " + g.merged_into_group_name : g.name + ": Merged archive").join("; ") || "Merged groups archived under this book"}>
+                          +{counts.merged} merged
+                        </Badge>}
+                        {(counts.active + counts.merged) > 3 && <span>+{counts.active + counts.merged - 3} more</span>}
+                        {(counts.active + counts.merged) === 0 && <span>No small groups assigned yet</span>}
                       </div>
                     </div>
-
-                    {/* Quick Card Action Buttons: Edit, Delete */}
-                    {canManage && (
-                      <div className="flex items-center justify-end gap-1 pt-3 border-t border-gray-100">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenModal(topic);
-                          }}
-                          className="p-2 hover:bg-indigo-50 rounded-xl text-muted hover:text-indigo-700 transition-colors cursor-pointer"
-                          title="Edit book"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirmTopic(topic);
-                          }}
-                          className="p-2 hover:bg-rose-50 rounded-xl text-muted hover:text-rose-600 transition-colors cursor-pointer"
-                          title="Delete book"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    <footer className="curriculum-book-footer">
+                      <Button variant="ghost" size="sm" aria-label={"Inspect groups for " + topic.title}
+                        onClick={event => { event.stopPropagation(); handleOpenDetailModal(topic); setIsInspectorOpen(true); }}>
+                        {isSelected ? <CheckCircle2 size={14} aria-hidden="true" /> : <Search size={14} aria-hidden="true" />}
+                        {isSelected ? "Inspecting Groups & Details" : "View Groups Status"}
+                      </Button>
+                      {canManage && <div className="curriculum-book-actions">
+                        <Button size="sm" variant="ghost" className="curriculum-icon-action" title="Edit book" aria-label={"Edit " + topic.title}
+                          onClick={event => { event.stopPropagation(); handleOpenModal(topic); }}><Edit2 size={16} aria-hidden="true" /></Button>
+                        <Button size="sm" variant="ghost" className="curriculum-icon-action curriculum-icon-delete" title="Delete book" aria-label={"Delete " + topic.title}
+                          onClick={event => { event.stopPropagation(); setDeleteConfirmTopic(topic); }}><Trash2 size={16} aria-hidden="true" /></Button>
+                      </div>}
+                    </footer>
+                  </article>
                 );
               })}
             </div>
           )}
+          {resultTotal > pageSize && <div className="mt-4"><Pagination label="books" page={page} pageSize={pageSize} total={resultTotal} onPageChange={setPage} onPageSizeChange={setPageSize} loading={loading} /></div>}
         </div>
 
         {/* Right Side: Group Status Inspector & Book Details Panel */}
         {selectedDetailTopic && isInspectorOpen && (() => {
-          const topicData = topicDetailData?.topic || selectedDetailTopic;
+          const topicData = selectedDetailTopic;
           const { activeGroups, completedGroups, ongoingGroups, mergedGroups, matchedGroups } = getGroupsForTopic(topicData);
 
           const displayedGroups = detailGroupTab === "completed"
@@ -643,18 +480,18 @@ export const CurriculumPage: React.FC = () => {
               />
 
               {/* Inspector Container */}
-              <div className="lg:col-span-5 2xl:col-span-4 lg:sticky lg:top-6 fixed inset-y-0 right-0 z-50 lg:z-auto w-full max-w-md lg:max-w-none bg-white lg:bg-transparent shadow-2xl lg:shadow-none p-4 sm:p-6 lg:p-0 overflow-y-auto animate-in slide-in-from-right duration-200">
-                <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 sm:p-6 border border-indigo-100/90 shadow-sm space-y-5">
+              <aside aria-label="Book of Study details" className="curriculum-inspector lg:col-span-5 2xl:col-span-4">
+                <div className="curriculum-inspector-panel">
                   {/* Inspector Header */}
-                  <div className="flex items-start justify-between pb-4 border-b border-gray-100 gap-3">
+                  <div className="curriculum-inspector-header flex items-start justify-between gap-3">
                     <div className="space-y-2 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-3 py-1 rounded-full text-[12px] font-medium bg-indigo-50 text-indigo-950 border border-indigo-200/70 shadow-2xs">
+                        <Badge variant="info">
                           Book of Study
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 text-[12px] font-medium">
+                        </Badge>
+                        <Badge>
                           {topicData.total_chapters} {topicData.total_chapters === 1 ? "Chapter" : "Chapters"}
-                        </span>
+                        </Badge>
                       </div>
 
                       <h2 data-guide="curriculum-details" className="text-xl font-semibold text-indigo-950 tracking-tight leading-snug">
@@ -666,17 +503,16 @@ export const CurriculumPage: React.FC = () => {
                       onClick={() => setIsInspectorOpen(false)}
                       className="p-2 rounded-2xl text-muted hover:text-charcoal hover:bg-gray-100 transition-colors cursor-pointer shrink-0"
                       title="Close Inspector"
+                      aria-label="Close Inspector"
                     >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
 
+                  <div className="curriculum-inspector-scroll"><div className="curriculum-inspector-body" tabIndex={0} aria-label="Book notes and group list">
                   {/* Live sync loader */}
                   {loadingDetail && (
-                    <div className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-indigo-50/70 border border-indigo-100 text-indigo-900 text-xs font-medium animate-pulse">
-                      <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                      <span>Loading groups and study data...</span>
-                    </div>
+                    <ListSkeleton count={3} label="Loading groups and study data..." />
                   )}
 
                   {/* Summary Notes */}
@@ -700,10 +536,12 @@ export const CurriculumPage: React.FC = () => {
                         <p className="text-[12px] text-muted">Groups studying this book</p>
                       </div>
 
-                      {/* Segmented Filter: Active, Ongoing, Done, Merged */}
-                      <div className="flex items-center bg-gray-100 p-1 rounded-xl gap-1 shrink-0 flex-wrap">
+                      {/* Active includes ongoing and done groups; merged archives remain separate. */}
+                      <div className="curriculum-group-tabs flex items-center gap-1 flex-wrap" aria-label="Filter study groups">
                         <button
                           onClick={() => setDetailGroupTab("all")}
+                          aria-pressed={detailGroupTab === "all"}
+                          title="All non-merged groups studying this book, including ongoing and completed groups. Merged archives have a separate tab."
                           className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${detailGroupTab === "all" ? "bg-white text-indigo-900 shadow-2xs" : "text-muted hover:text-charcoal"
                             }`}
                         >
@@ -711,6 +549,7 @@ export const CurriculumPage: React.FC = () => {
                         </button>
                         <button
                           onClick={() => setDetailGroupTab("ongoing")}
+                          aria-pressed={detailGroupTab === "ongoing"}
                           className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${detailGroupTab === "ongoing" ? "bg-white text-amber-800 shadow-2xs" : "text-muted hover:text-charcoal"
                             }`}
                         >
@@ -718,6 +557,7 @@ export const CurriculumPage: React.FC = () => {
                         </button>
                         <button
                           onClick={() => setDetailGroupTab("completed")}
+                          aria-pressed={detailGroupTab === "completed"}
                           className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${detailGroupTab === "completed" ? "bg-white text-emerald-800 shadow-2xs" : "text-muted hover:text-charcoal"
                             }`}
                         >
@@ -726,6 +566,7 @@ export const CurriculumPage: React.FC = () => {
                         {mergedGroups.length > 0 && (
                           <button
                             onClick={() => setDetailGroupTab("merged")}
+                            aria-pressed={detailGroupTab === "merged"}
                             className={`px-2.5 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${detailGroupTab === "merged" ? "bg-white text-purple-900 shadow-2xs" : "text-purple-700/80 hover:text-purple-900"
                               }`}
                           >
@@ -753,7 +594,7 @@ export const CurriculumPage: React.FC = () => {
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1 no-scrollbar">
+                      <div className="space-y-2.5">
                         {displayedGroups.map((grp) => {
                           const isMerged = grp.status === "merged";
                           const isGroupDone = !isMerged && completedGroups.some((cg) => cg.id === grp.id);
@@ -762,24 +603,16 @@ export const CurriculumPage: React.FC = () => {
                           return (
                             <div
                               key={grp.id}
-                              className={`p-3 rounded-2xl border text-xs space-y-2 transition-all ${isMerged
-                                ? "bg-purple-50/50 border-purple-200/80 hover:border-purple-300"
-                                : isGroupDone
-                                  ? "bg-emerald-50/60 border-emerald-200 hover:border-emerald-300"
-                                  : "bg-amber-50/60 border-amber-200 hover:border-amber-300"
-                                }`}
+                              className="curriculum-group-card text-xs space-y-2"
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-medium text-charcoal text-xs truncate">{grp.name}</span>
+                                    <span className="font-medium text-charcoal text-xs truncate" title={grp.name}>{grp.name}</span>
                                     {grp.ministry_name && (
-                                      <span
-                                        className="px-2 py-0.2 rounded-md text-[12px] font-medium text-white shrink-0"
-                                        style={{ backgroundColor: grp.ministry_color || "#2C3968" }}
-                                      >
+                                      <Badge title={grp.ministry_name}>
                                         {grp.ministry_name}
-                                      </span>
+                                      </Badge>
                                     )}
                                   </div>
                                   <div className="text-[12px] text-charcoal/70 mt-0.5">
@@ -787,15 +620,10 @@ export const CurriculumPage: React.FC = () => {
                                   </div>
                                 </div>
 
-                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium shrink-0 ${isMerged
-                                  ? "bg-purple-100 text-purple-900 border border-purple-200 shadow-2xs"
-                                  : isGroupDone
-                                    ? "bg-emerald-600 text-white shadow-2xs"
-                                    : "bg-amber-500 text-white shadow-2xs"
-                                  }`}>
+                                <Badge className="shrink-0" variant={isMerged ? "neutral" : isGroupDone ? "success" : "warning"}>
                                   {isMerged ? (
                                     <>
-                                      <GitMerge className="w-3 h-3 text-purple-700" />
+                                      <GitMerge className="w-3 h-3" aria-hidden="true" />
                                       <span>Merged Archive</span>
                                     </>
                                   ) : isGroupDone ? (
@@ -805,25 +633,25 @@ export const CurriculumPage: React.FC = () => {
                                     </>
                                   ) : (
                                     <>
-                                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                      <Clock className="w-3 h-3" aria-hidden="true" />
                                       <span>Ongoing</span>
                                     </>
                                   )}
-                                </span>
+                                </Badge>
                               </div>
 
                               {/* Merged Group Information Notice */}
                               {isMerged && grp.merged_into_group_name && (
-                                <div className="text-[12px] text-purple-900 bg-purple-100/70 p-2 rounded-xl border border-purple-200 flex items-center gap-1.5 font-medium leading-tight">
-                                  <GitMerge className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                                <div className="curriculum-merge-note" title={"Merged into " + grp.merged_into_group_name}>
+                                  <GitMerge className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                                   <span>Merged into: <strong className="font-medium">{grp.merged_into_group_name}</strong></span>
                                 </div>
                               )}
 
                               {/* Resulting Merged Group Notice */}
                               {hasSourceMerge && (
-                                <div className="text-[12px] text-teal-950 bg-teal-50 p-2 rounded-xl border border-teal-200 flex items-center gap-1.5 font-medium leading-tight">
-                                  <GitMerge className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                                <div className="curriculum-merge-note" title={"Merged from " + grp.source_group_names}>
+                                  <GitMerge className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                                   <span>Merged from: <strong className="font-medium">{grp.source_group_names}</strong></span>
                                 </div>
                               )}
@@ -835,7 +663,7 @@ export const CurriculumPage: React.FC = () => {
                                   <span>{grp.meeting_day}s {grp.meeting_time}</span>
                                 </div>
                                 {grp.location && (
-                                  <div className="flex items-center gap-1 truncate max-w-[140px]">
+                                  <div className="flex items-center gap-1 truncate max-w-[140px]" title={grp.location}>
                                     <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
                                     <span className="truncate">{grp.location}</span>
                                   </div>
@@ -854,25 +682,26 @@ export const CurriculumPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Primary & Secondary Inspector Action Buttons */}
-                  <div className="flex items-center justify-end gap-2 pt-3.5 border-t border-gray-100">
-                    <button
+                  </div></div>
+                  {/* Inspector actions stay visible while notes and groups scroll. */}
+                  <div className="curriculum-inspector-footer">
+                    <Button
                       onClick={() => handleOpenModal(topicData)}
-                      className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-medium text-xs transition-colors cursor-pointer"
+                      variant="secondary"
                     >
-                      <Edit2 className="w-3.5 h-3.5 text-indigo-700" />
+                      <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Edit Book</span>
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => setDeleteConfirmTopic(topicData)}
-                      className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium text-xs transition-colors cursor-pointer"
+                      variant="destructive"
                     >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Delete</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
-              </div>
+              </aside>
             </>
           );
         })()}
@@ -883,7 +712,7 @@ export const CurriculumPage: React.FC = () => {
       {/* ==================================================== */}
       {isStudyTopicModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <ModalPanel data-modal-panel className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <ModalPanel data-modal-panel className="curriculum-dialog bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-indigo-100 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div data-modal-header className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo flex items-center justify-center font-medium">
@@ -900,17 +729,19 @@ export const CurriculumPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsStudyTopicModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg text-muted hover:text-charcoal transition-colors"
+                aria-label="Close book form" title="Close book form"
+                className="curriculum-icon-action hover:bg-gray-100 rounded-lg"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form data-guide="curriculum-form" onSubmit={handleSaveStudyTopic} className="space-y-4">
+            <form id="curriculum-book-form" data-guide="curriculum-form" onSubmit={handleSaveStudyTopic} className="space-y-4">
               {/* Title */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-charcoal">Book / Study Title *</label>
+                <label htmlFor="study-book-title" className="text-xs font-medium text-charcoal">Book / Study Title *</label>
                 <input data-guide="curriculum-title"
+                  id="study-book-title"
                   type="text"
                   required
                   placeholder="e.g. Gospel of John, Romans, Discipleship 101..."
@@ -922,8 +753,9 @@ export const CurriculumPage: React.FC = () => {
 
               {/* Total Chapters */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-charcoal">Total Chapters / Lessons</label>
+                <label htmlFor="study-book-chapters" className="text-xs font-medium text-charcoal">Total Chapters / Lessons</label>
                 <input data-guide="curriculum-lessons"
+                  id="study-book-chapters"
                   type="number"
                   min="1"
                   required
@@ -933,10 +765,25 @@ export const CurriculumPage: React.FC = () => {
                 />
               </div>
 
+              <fieldset className="rounded-xl border border-[var(--border)] p-3 space-y-2">
+                <legend className="px-1 text-xs font-medium text-charcoal">Optional study stages</legend>
+                <p className="text-xs text-muted">Choose the activities used in this book or topic.</p>
+                {([
+                  ["has_discussion", "Discussion & Reflection"],
+                  ["has_review", "Review / Q&A"],
+                  ["has_exam", "Exam / Assessment"],
+                ] as const).map(([field, label]) => <label key={field} className="flex items-center gap-2 text-xs text-charcoal cursor-pointer py-1">
+                  <input type="checkbox" checked={formData[field]} onChange={event => setFormData(previous => ({ ...previous, [field]: event.target.checked }))} className="accent-[var(--accent)]" />
+                  <span>{label}</span>
+                </label>)}
+                <p className="text-[11px] text-muted leading-relaxed">Introduction, In progress, Mid-way, and Chapter finished are always available. Saved sessions keep their recorded stages.</p>
+              </fieldset>
+
               {/* Summary Notes */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-charcoal">Summary Notes / Objectives</label>
+                <label htmlFor="study-book-notes" className="text-xs font-medium text-charcoal">Summary Notes / Objectives</label>
                 <textarea data-guide="curriculum-notes"
+                  id="study-book-notes"
                   rows={3}
                   placeholder="Key themes, outline, study guides or reflections..."
                   value={formData.summary_notes}
@@ -947,19 +794,18 @@ export const CurriculumPage: React.FC = () => {
 
               {/* Action Buttons */}
               <div data-modal-footer className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
-                <button
+                <Button variant="secondary"
                   type="button"
                   onClick={() => setIsStudyTopicModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-charcoal/70 hover:bg-gray-100 transition-colors"
                 >
                   Cancel
-                </button>
-                <button data-guide="curriculum-save"
+                </Button>
+                <Button data-guide="curriculum-save" variant="primary"
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo text-white hover:bg-indigo-900 text-xs font-medium transition-all shadow-xs"
+                  form="curriculum-book-form"
                 >
                   {editingStudyTopic ? "Save Changes" : "Add Book to Curriculum"}
-                </button>
+                </Button>
               </div>
             </form>
           </ModalPanel>
@@ -972,33 +818,33 @@ export const CurriculumPage: React.FC = () => {
       {/* ==================================================== */}
       {deleteConfirmTopic && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <ModalPanel className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-center">
+          <DialogPanel onClose={() => setDeleteConfirmTopic(null)} aria-labelledby="delete-study-title" className="curriculum-dialog bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-100 space-y-4 text-center">
             <div data-modal-header className="space-y-4"><div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-charcoal">Delete Book Study?</h3>
+              <h3 id="delete-study-title" className="font-semibold text-base text-charcoal">Delete Book of Study?</h3>
               <p className="text-xs text-muted mt-1">
                 Are you sure you want to remove <strong>{deleteConfirmTopic.title}</strong> from the curriculum library?
               </p>
             </div></div>
             <div data-modal-footer className="flex items-center justify-center gap-2 pt-2">
-              <button
+              <Button
                 type="button"
                 onClick={() => setDeleteConfirmTopic(null)}
-                className="px-4 py-2 rounded-xl text-xs font-medium text-charcoal/70 bg-gray-100 hover:bg-gray-200 transition-colors"
+                variant="secondary"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={handleDelete}
-                className="px-5 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 text-xs font-medium transition-all shadow-xs"
+                variant="destructive"
               >
                 Yes, Delete
-              </button>
+              </Button>
             </div>
-          </ModalPanel>
+          </DialogPanel>
         </div>,
         document.body
       )}

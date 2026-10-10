@@ -1,6 +1,6 @@
 // @refresh reset
 // Remount this boundary when focus hooks change during development hot reload.
-import { useId, useLayoutEffect, useRef } from 'react';
+import { useId, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { gsap } from 'gsap';
 import { ArrowUpRight, BookOpen, CalendarDays, Church, Plus, Users } from 'lucide-react';
 import type { BibleStudyGroup, DashboardMetrics, EventItem } from '../../types';
@@ -22,10 +22,15 @@ interface ChurchOverviewProps {
   name: string;
   role: string;
   ministryName?: string;
-  metrics: DashboardMetrics | null;
-  memberCount: number | string;
-  groupCount: number;
-  ungroupedMemberCount: number;
+  metrics?: DashboardMetrics | null;
+  memberCount?: number | string;
+  groupCount?: number;
+  ungroupedMemberCount?: number;
+  description?: ReactNode;
+  actions?: ReactNode;
+  stats?: ChurchStat[];
+  groupTab?: NavTab | null;
+  "data-guide"?: string;
   onNavigate: (tab: NavTab) => void;
   onOpenChurchProfile?: () => void;
   events: EventItem[];
@@ -59,7 +64,7 @@ function OverviewNumber({ value, index }: { value: number | string; index: numbe
   </span>;
 }
 
-export function ChurchOverview({ name, role, ministryName, metrics, memberCount, groupCount, ungroupedMemberCount, onNavigate, onOpenChurchProfile, events }: ChurchOverviewProps) {
+export function ChurchOverview({ name, role, ministryName, metrics, memberCount = '—', groupCount = 0, ungroupedMemberCount = 0, description, actions, stats: roleStats, groupTab = 'biblestudy', "data-guide": guide, onNavigate, onOpenChurchProfile, events }: ChurchOverviewProps) {
   const focus = useChurchFocus();
   const panelId = useId();
   const now = useLocalTime();
@@ -67,7 +72,7 @@ export function ChurchOverview({ name, role, ministryName, metrics, memberCount,
   const greeting = timeOfDay === 'morning' ? 'Good morning' : timeOfDay === 'afternoon' ? 'Good afternoon' : 'Good evening';
   const openProfile = ['Admin', 'IT Admin', 'Pastor'].includes(role) ? onOpenChurchProfile : undefined;
   const greetingText = `${greeting}, ${name.trim().split(/\s+/)[0] || 'friend'}.`;
-  const stats: ChurchStat[] = [
+  const stats: ChurchStat[] = roleStats ?? [
     { label: 'Members', value: memberCount, tab: 'members' },
     { label: 'Without groups', value: ungroupedMemberCount, tab: 'biblestudy' },
     { label: 'Small groups', value: groupCount, tab: 'biblestudy' },
@@ -76,19 +81,20 @@ export function ChurchOverview({ name, role, ministryName, metrics, memberCount,
   const nextGathering = events.filter(event => new Date(event.start_time).getTime() >= now.getTime()).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0];
 
   return (
-    <><section ref={focus.heroRef} className="church-overview" aria-label="Church overview" data-time-of-day={timeOfDay} data-church-focused={focus.focused} data-church-visible={focus.visible}>
+    <><section ref={focus.heroRef} className="church-overview" aria-label="Church overview" data-guide={guide} data-time-of-day={timeOfDay} data-church-focused={focus.focused} data-church-visible={focus.visible}>
       <div className="overview-heading">
         <div>
-          <p className="overview-eyebrow"><span /> YOUR CHURCH, AT A GLANCE</p>
+          <p className="overview-eyebrow"><span /> {roleStats ? `${role.toUpperCase()} WORKSPACE` : 'YOUR CHURCH, AT A GLANCE'}</p>
           <h1 className="font-semibold" aria-label={greetingText}>
             <span className="greeting-text" aria-hidden="true">
               <span className="greeting-reserve">{greetingText}<span className="ml-1">|</span></span>
               <TextType key={greetingText} as="span" text={greetingText} typingSpeed={55} initialDelay={180} loop={false} cursorClassName="greeting-cursor" />
             </span>
           </h1>
-          <p className="overview-subtitle">A little clarity for a meaningful day of ministry.</p>
+          <p className="overview-subtitle">{description ?? 'A little clarity for a meaningful day of ministry.'}</p>
           <div className="overview-scope"><Church size={15} aria-hidden="true" /><span>{ministryName || 'Church-wide overview'}</span><span className="scope-tag">{role}</span></div>
           <button ref={focus.mobileTriggerRef} type="button" className="overview-profile-link" aria-controls={panelId} aria-expanded={focus.focused} onClick={event => focus.open(event.currentTarget)}>Open church overview <ArrowUpRight size={14} aria-hidden="true" /></button>
+          {actions && <div className="overview-role-assignment">{actions}</div>}
         </div>
       </div>
       <ChurchBuilding focused={focus.focused} panelId={panelId} buttonRef={focus.triggerRef} onToggle={trigger => focus.focused ? focus.close() : focus.open(trigger)} />
@@ -99,7 +105,7 @@ export function ChurchOverview({ name, role, ministryName, metrics, memberCount,
       </div>
     </section>
     <ChurchSky modelVisible={focus.visible} skyRef={focus.skyRef} />
-    {focus.visible && focus.geometry && <ChurchFocusOverlay focused={focus.focused} entered={focus.entered} geometry={focus.geometry} overlayRef={focus.overlayRef} triggerRef={focus.focusTriggerRef} panelId={panelId} timeOfDay={timeOfDay} stats={stats} nextGathering={nextGathering} onClose={() => focus.close()} onNavigate={onNavigate} onOpenProfile={openProfile} />}
+    {focus.visible && focus.geometry && <ChurchFocusOverlay focused={focus.focused} entered={focus.entered} geometry={focus.geometry} overlayRef={focus.overlayRef} triggerRef={focus.focusTriggerRef} panelId={panelId} timeOfDay={timeOfDay} stats={stats} groupTab={groupTab} nextGathering={nextGathering} onClose={() => focus.close()} onNavigate={onNavigate} onOpenProfile={openProfile} />}
     </>
   );
 }

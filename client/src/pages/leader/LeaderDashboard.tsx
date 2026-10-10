@@ -10,7 +10,9 @@ import {
   CheckCircle2, ArrowLeftRight, Check, X
 } from "lucide-react";
 import { NavTab } from "../../components/layout/Sidebar";
-import { getBookTotalChapters } from "../../utils/curriculumHelper";
+import { getCurriculumCompletion } from "../../utils/curriculumCompletion";
+import { STUDY_PROGRESS_STAGES } from "../../components/biblestudy/StudyProgressFields";
+import { Badge } from "../../components/common/Badge";
 
 // Real assignments for the selected personal group
 interface DutyRotationItem {
@@ -69,18 +71,8 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
   const capacityTheme = getCapacityTheme(capacityPercent);
 
   // Curriculum calculations
-  const totalChapters = useMemo(() => {
-    if (!activeGroup?.curriculum) return 12;
-    return getBookTotalChapters(activeGroup.curriculum, studyTopics);
-  }, [activeGroup?.curriculum, studyTopics]);
-
-  const currentChapterNum = useMemo(() => {
-    if (!activeGroup?.current_chapter) return 4;
-    const match = activeGroup.current_chapter.match(/\d+/);
-    return match ? parseInt(match[0], 10) : 4;
-  }, [activeGroup?.current_chapter]);
-
-  const courseProgressPercent = Math.min(100, Math.round((currentChapterNum / totalChapters) * 100));
+  const { total: totalChapters, current: currentChapterNum, finished: finishedChapters, percent: courseProgressPercent, complete: studyComplete } = getCurriculumCompletion(activeGroup, studyTopics);
+  const stageLabel = studyComplete ? "Completed study" : STUDY_PROGRESS_STAGES.find(stage => stage.value === activeGroup?.progress_stage)?.label || "In progress";
 
   const dutyRotations = useMemo<DutyRotationItem[]>(() => designatedDishwashing.map(duty => ({
     id: `${duty.duty_date}-${duty.team?.id}`,
@@ -110,49 +102,45 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* 1. Hero Group Banner (Matching Mockup) */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="relative overflow-hidden rounded-2xl bg-white p-6 sm:p-8 text-charcoal shadow-sm border border-stone-200 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+
+
+
 
         <div className="relative z-10 space-y-3 max-w-2xl">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[12px] font-medium uppercase tracking-wider backdrop-blur-md">
-              <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-muted text-[12px] font-medium uppercase tracking-wider ">
+              <BookOpen className="w-3.5 h-3.5 text-muted" />
               <span>Small Group Ministry Directory</span>
             </div>
-            <span className="text-[12px] bg-white/10 border border-white/15 text-slate-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
+            <span className="text-[12px] bg-stone-50 border border-stone-200 text-muted font-medium px-3 py-1 rounded-full ">
               January 2026 - Present
             </span>
-            <span className="text-[12px] bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
+            <span className="text-[12px] bg-indigo-500/20 border border-indigo-400/30 text-muted font-medium px-3 py-1 rounded-full ">
               Facilitator: {activeGroup.leader_name || "Sis April Cruz"}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-white/20 flex items-center justify-center font-medium text-amber-300 shadow-inner">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-stone-200 flex items-center justify-center font-medium text-muted shadow-inner">
               <Users className="w-6 h-6" />
             </div>
-            <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-semibold text-charcoal tracking-tight">
               {activeGroup.name}
             </h2>
           </div>
 
-          <p className="text-xs sm:text-sm text-slate-300/90 leading-relaxed">
+          <p className="text-xs sm:text-sm text-muted leading-relaxed">
             {activeGroup.description || "Weekly sisterhood fellowship focusing on intentional discipleship, gospel accountability, and holistic servant leadership in Camarines Norte."}
           </p>
 
           <div className="flex items-center gap-3 flex-wrap pt-1">
-            <div className="flex items-center gap-2 bg-white/10 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs text-white font-medium backdrop-blur-md">
-              <Calendar className="w-3.5 h-3.5 text-amber-300" />
+            <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 px-3.5 py-1.5 rounded-xl text-xs text-charcoal font-medium ">
+              <Calendar className="w-3.5 h-3.5 text-muted" />
               <span>Every {activeGroup.meeting_day} - {activeGroup.meeting_time || "5:00 PM - 6:30 PM"}</span>
             </div>
-            <div className="flex items-center gap-2 bg-white/10 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs text-white font-medium backdrop-blur-md">
-              <MapPin className="w-3.5 h-3.5 text-emerald-300" />
+            <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 px-3.5 py-1.5 rounded-xl text-xs text-charcoal font-medium ">
+              <MapPin className="w-3.5 h-3.5 text-muted" />
               <span>{activeGroup.location || "Fellowship Room 2 / Upper Chapel"}</span>
             </div>
 
@@ -161,9 +149,9 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               <button
                 type="button"
                 onClick={onOpenReschedule}
-                className="flex items-center gap-1.5 bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border border-amber-400/40 px-3 py-1.5 rounded-xl text-xs font-medium transition-all backdrop-blur-md cursor-pointer hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 bg-amber-400/20 hover:bg-amber-400/30 text-muted border border-amber-400/40 px-3 py-1.5 rounded-xl text-xs font-medium transition-all  cursor-pointer hover:scale-105 active:scale-95"
               >
-                <CalendarClock className="w-3.5 h-3.5 text-amber-300" />
+                <CalendarClock className="w-3.5 h-3.5 text-muted" />
                 <span>{activeGroup.is_rescheduled ? "Modify Reschedule / Rooms" : "Reschedule & Check Rooms"}</span>
               </button>
             )}
@@ -171,11 +159,11 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
 
           {/* Active Rescheduled Alert Pill */}
           {activeGroup.is_rescheduled && (
-            <div className="mt-2 bg-amber-500/20 border border-amber-400/50 rounded-2xl p-3 flex items-start justify-between gap-3 text-amber-100 backdrop-blur-md">
+            <div className="mt-2 bg-amber-500/20 border border-amber-400/50 rounded-2xl p-3 flex items-start justify-between gap-3 text-muted ">
               <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-muted shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <div className="text-xs font-medium text-amber-200 flex items-center gap-2">
+                  <div className="text-xs font-medium text-muted flex items-center gap-2">
                     <span><UICalendarClock aria-hidden="true" className="inline-block w-[1em] h-[1em] align-[-0.125em] shrink-0" /> Session Rescheduled</span>
                     {activeGroup.rescheduled_date && (
                       <span className="bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full text-[12px] font-medium">
@@ -183,9 +171,9 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
                       </span>
                     )}
                   </div>
-                  <p className="text-[12px] text-amber-100/90 font-medium">
-                    Time: <span className="font-medium text-white">{activeGroup.rescheduled_time || activeGroup.meeting_time}</span>
-                    {activeGroup.location && <> • Room: <span className="font-medium text-white">{activeGroup.location}</span></>}
+                  <p className="text-[12px] text-muted font-medium">
+                    Time: <span className="font-medium text-charcoal">{activeGroup.rescheduled_time || activeGroup.meeting_time}</span>
+                    {activeGroup.location && <> • Room: <span className="font-medium text-charcoal">{activeGroup.location}</span></>}
                     {activeGroup.reschedule_reason && <> • Reason: <span className="italic">"{activeGroup.reschedule_reason}"</span></>}
                   </p>
                 </div>
@@ -209,7 +197,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
               if (onOpenRollCall) onOpenRollCall();
               else onNavigateTab("biblestudy");
             }}
-            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-3 rounded-2xl text-xs shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium px-5 py-3 rounded-2xl text-xs shadow-lg hover:shadow-sm transition-all active:scale-95 cursor-pointer"
           >
             <ClipboardCheck className="w-4 h-4 text-indigo-950" />
             <span>Take Weekly Roll-Call</span>
@@ -219,18 +207,18 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             onClick={() => {
               if (onOpenBulletin) onOpenBulletin();
             }}
-            className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-medium px-4 py-2.5 rounded-2xl text-xs backdrop-blur-md shadow-xs transition-all active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 bg-stone-50 hover:bg-stone-100 text-charcoal border border-stone-200 font-medium px-4 py-2.5 rounded-2xl text-xs  shadow-xs transition-all active:scale-95 cursor-pointer"
           >
-            <Send className="w-4 h-4 text-amber-300" />
+            <Send className="w-4 h-4 text-muted" />
             <span>Send Group Bulletin</span>
           </button>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-2.5 flex items-center justify-between text-xs text-slate-300">
+          <div className="bg-stone-50 border border-stone-200 rounded-2xl p-2.5 flex items-center justify-between text-xs text-muted">
             <div className="flex items-center gap-2 font-medium text-[12px]">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <Clock className="w-3.5 h-3.5 text-amber-700" />
               <span>Weekly Session Arriving Soon</span>
             </div>
-            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-medium text-[12px] px-2 py-0.5 rounded-full uppercase">
+            <span className="bg-emerald-500/20 text-muted border border-emerald-400/30 font-medium text-[12px] px-2 py-0.5 rounded-full uppercase">
               In 2D
             </span>
           </div>
@@ -310,6 +298,23 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
             <p className="text-[12px] text-muted font-medium truncate mt-1">
               {activeGroup.curriculum || "Faith Foundations"}
             </p>
+            <div className="mt-2"><Badge variant={studyComplete || activeGroup.progress_stage === "chapter_completed" ? "success" : "info"}>{stageLabel}</Badge></div>
+            <div className="mt-3">
+              <div className="flex items-center justify-between gap-2 text-[12px] mb-1.5">
+                <span className="text-muted">Curriculum completion</span>
+                <span className="font-semibold text-[var(--status-info-text)]">{courseProgressPercent}%</span>
+              </div>
+              <div role="progressbar" aria-label="Discipleship curriculum progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={courseProgressPercent}
+                aria-valuetext={`${courseProgressPercent}% · ${finishedChapters} of ${totalChapters} chapters finished · Chapter ${currentChapterNum}: ${stageLabel}`}
+                className="h-1.5 rounded-full overflow-hidden bg-[var(--border)]">
+                <div className="h-full rounded-full bg-[var(--status-info-text)]" style={{ width: `${courseProgressPercent}%` }} />
+              </div>
+              <p className="mt-1 text-[11px] text-muted">{finishedChapters} of {totalChapters} chapters finished</p>
+            </div>
+            {activeGroup.progress_notes && <div className="mt-2 text-[12px] text-charcoal">
+              <span className="block font-medium text-muted">Lesson Notice & Specific Location</span>
+              <p className="mt-1 whitespace-pre-wrap break-words">{activeGroup.progress_notes}</p>
+            </div>}
           </div>
           <div className="flex items-center justify-between text-[12px] text-muted font-medium border-t border-gray-100 pt-2">
             <span>Faith Foundations</span>

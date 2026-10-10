@@ -32,6 +32,7 @@ interface Props {
   setSpouseFormData: React.Dispatch<React.SetStateAction<PartnerRegistrationData>>;
   formData: { address: string; invited_by: string; family_details: string };
   household?: Household;
+  newHouseholdName?: string;
   memberName: string;
   memberSuggestions: AutocompleteSuggestion[];
   onBack: () => void;
@@ -42,7 +43,7 @@ interface Props {
 const sanitizePhoneInput = (value: string) => value.replace(/\D/g, "").slice(0, 11);
 
 export const PartnerRegistrationModal: React.FC<Props> = ({
-  spouseFormData, setSpouseFormData, formData, household, memberName, memberSuggestions, onBack, onSubmit, isSaving
+  spouseFormData, setSpouseFormData, formData, household, newHouseholdName, memberName, memberSuggestions, onBack, onSubmit, isSaving
 }) => {
   const panelRef = useRef<HTMLElement>(null);
   useEffect(() => { panelRef.current?.focus(); }, []);
@@ -282,7 +283,12 @@ export const PartnerRegistrationModal: React.FC<Props> = ({
                 onChange={address => setSpouseFormData(prev => ({ ...prev, address }))} />
             )}
           </fieldset>
-          <p className="text-[12px] text-charcoal/70">Both records will be linked as spouses and use the selected family household.</p>
+          <div aria-label="Couple household summary" className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-1">
+            <p className="font-medium text-indigo-950">{newHouseholdName || household?.name || 'Selected household'}</p>
+            <p>{memberName || 'Main member'} · You</p>
+            <p>{`${spouseFormData.first_name} ${spouseFormData.last_name}`.trim() || 'Partner name'} · Spouse</p>
+            <p className="text-[12px] text-muted">Both profiles and this household are saved together.</p>
+          </div>
         </div>
         <footer className="p-4 sm:px-6 border-t border-indigo-100 flex items-center justify-between gap-2">
           <Button onClick={onBack} disabled={isSaving}>Back to Member</Button>

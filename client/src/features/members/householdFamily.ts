@@ -4,6 +4,7 @@ export type ParentRole = "father" | "mother" | "guardian";
 export const parentRoles: ParentRole[] = ["father", "mother", "guardian"];
 export const parentLabels: Record<string, string> = { father: "Father", mother: "Mother", guardian: "Guardian" };
 export const householdRoleLabels = {
+  husband: "Husband", wife: "Wife",
   father: "Father", mother: "Mother", guardian: "Guardian",
   son: "Son", daughter: "Daughter", child: "Child",
   grandfather: "Grandfather", grandmother: "Grandmother", grandparent: "Grandparent",
@@ -19,7 +20,10 @@ export const familyRelationships = ["Son", "Daughter", "Child", "Brother", "Sist
 
 export function memberHouseholdRole(household: Household | undefined, member: Member): HouseholdRole | "" {
   if (!household) return "";
+  const couple = household.family_members?.find(entry => entry.member_id === member.id && ['Husband', 'Wife'].includes(entry.relationship));
+  if (couple) return relationshipRole(couple.relationship);
   const parent = familyRole(household, memberName(member));
+  if (parent && member.civil_status === 'Married' && parent !== 'guardian') return parent === 'father' ? 'husband' : 'wife';
   if (parent) return parent;
   const entry = household.family_members?.find(entry => entry.member_id === member.id ||
     (!entry.member_id && normalizeName(entry.name) === normalizeName(memberName(member))));
@@ -40,7 +44,9 @@ export function householdFamilyMembers(household?: Household | null): HouseholdF
   const saved = household.family_members || [];
   const linked = members.map(member => {
     const entry = saved.find(entry => entry.member_id === member.id || (!entry.member_id && normalizeName(entry.name) === normalizeName(memberName(member))));
-    return { name: memberName(member), member_id: member.id, relationship: entry?.relationship || "Family Member", ...(entry?.aliases?.length ? { aliases: entry.aliases } : {}) };
+    const spouse = members.find(partner => partner.id === member.spouse_id || partner.spouse_id === member.id);
+    const relationship = spouse && (!entry?.relationship || entry.relationship === 'Family Member') ? 'Spouse' : entry?.relationship || 'Family Member';
+    return { name: memberName(member), member_id: member.id, relationship, ...(entry?.aliases?.length ? { aliases: entry.aliases } : {}) };
   });
   const names = new Set(linked.map(entry => normalizeName(entry.name)));
   const custom = saved.filter(entry => !entry.member_id && !names.has(normalizeName(entry.name)));
@@ -52,11 +58,12 @@ export function householdFamily(household?: Household | null) {
   const parents = parentRoles.flatMap(role => {
     const name = household[`${role}_name`]?.trim();
     if (!name) return [];
-    const saved = household.family_members?.find(entry => entry.relationship === parentLabels[role] &&
+    const saved = household.family_members?.find(entry => [parentLabels[role], role === 'father' ? 'Husband' : role === 'mother' ? 'Wife' : 'Guardian'].includes(entry.relationship) &&
       (normalizeName(entry.name) === normalizeName(name) || household.members?.some(member =>
         member.id === entry.member_id && normalizeName(memberName(member)) === normalizeName(name))));
     const member = household.members?.find(m => saved?.member_id ? m.id === saved.member_id : normalizeName(memberName(m)) === normalizeName(name));
-    return [{ name, role, relationship: parentLabels[role], member, aliases: saved?.aliases || [] }];
+    const couple = household.family_members?.find(entry => ['Husband','Wife'].includes(entry.relationship) && (entry.member_id ? entry.member_id === member?.id : normalizeName(entry.name) === normalizeName(name)));
+    return [{ name, role, relationship: couple?.relationship || parentLabels[role], member, aliases: saved?.aliases || [] }];
   });
   const others = householdFamilyMembers(household)
     .filter(entry => !familyRole(household, entry.name))

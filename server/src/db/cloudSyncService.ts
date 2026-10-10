@@ -49,6 +49,8 @@ export const SYNC_TABLES: TableSyncConfig[] = [
   { name: "user_ministries", label: "Staff Ministries", conflictTarget: "user_id, ministry_id", isSerial: true },
   { name: "households", label: "Households", conflictTarget: "id", isSerial: true },
   { name: "members", label: "Church Members", conflictTarget: "id", isSerial: true },
+  { name: "family_people", label: "Family People", conflictTarget: "stable_key", isSerial: true },
+  { name: "family_relationships", label: "Family Relationships", conflictTarget: "from_person_id, to_person_id, kind", isSerial: true },
   { name: "duty_teams", label: "Duty Teams", conflictTarget: "id", isSerial: true },
   { name: "duty_team_members", label: "Duty Members", conflictTarget: "team_id, member_id", isSerial: true },
   { name: "duty_schedules", label: "Duty Schedules", conflictTarget: "id", isSerial: true },
@@ -58,7 +60,12 @@ export const SYNC_TABLES: TableSyncConfig[] = [
   { name: "bible_study_group_transitions", label: "Group Transitions", conflictTarget: "id", isSerial: true },
   { name: "bible_study_group_transition_sources", label: "Transition Source Groups", conflictTarget: "transition_id, source_group_id", isSerial: true },
   { name: "bible_study_members", label: "Group Roster", conflictTarget: "group_id, member_id", isSerial: true },
+  { name: "recurring_sunday_events", label: "Annual Celebrations", conflictTarget: "id", isSerial: true },
+  { name: "recurring_event_ministries", label: "Celebration Ministries", conflictTarget: "recurring_event_id, ministry_id", isSerial: false },
   { name: "events", label: "Events", conflictTarget: "id", isSerial: true },
+  { name: "event_ministries", label: "Event Ministries", conflictTarget: "event_id, ministry_id", isSerial: false },
+  { name: "event_invitation_links", label: "Event Invitations", conflictTarget: "token", isSerial: true },
+  { name: "event_invitation_responses", label: "Invitation Responses", conflictTarget: "invitation_id, response_key", isSerial: true },
   { name: "event_registrations", label: "Event RSVPs", conflictTarget: "event_id, member_id", isSerial: true },
   { name: "announcements", label: "Announcements", conflictTarget: "id", isSerial: true },
   { name: "attendance", label: "Attendance Records", conflictTarget: "id", isSerial: true },
@@ -278,6 +285,50 @@ async function synchronize(
         if (compatibilityColumns.length < 3) {
           const migration = getMigrationFilePath("015_cloud_sync_columns.sql");
           if (!migration) throw new Error("Missing cloud sync compatibility migration 015. Rebuild the server before retrying.");
+          await tx.unsafe(fs.readFileSync(migration, "utf8"));
+        }
+      }
+      if (direction === "push") {
+        const familySchema = await tx.unsafe(`SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND
+          ((table_name='family_relationships' AND column_name='deleted_at') OR
+           (table_name='family_people' AND column_name='merged_into_id') OR
+           (table_name='members' AND column_name='parents_household_id') OR
+           (table_name='family_people' AND column_name='household_entry_key') OR
+           (table_name='family_relationships' AND column_name IN ('source_household_id','source_removed')))`);
+        if (familySchema.length < 6) {
+          const migration = getMigrationFilePath("017_family_tree.sql");
+          if (!migration) throw new Error("Missing family tree migration 017. Rebuild the server before retrying.");
+          await tx.unsafe(fs.readFileSync(migration, "utf8"));
+        }
+      }
+      if (direction === "push") {
+        const studyStages = await tx.unsafe(`SELECT column_name FROM information_schema.columns
+          WHERE table_schema = current_schema() AND table_name = 'bible_study_topics'
+          AND column_name IN ('has_discussion', 'has_review', 'has_exam')`);
+        if (studyStages.length < 3) {
+          const migration = getMigrationFilePath("019_study_topic_stages.sql");
+          if (!migration) throw new Error("Missing study topic stage migration 019. Rebuild the server before retrying.");
+          await tx.unsafe(fs.readFileSync(migration, "utf8"));
+
+        }
+      }
+      if (direction === "push") {
+        const invitationTables = await tx.unsafe("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('event_invitation_links', 'event_invitation_responses')");
+        if (invitationTables.length < 2) {
+          const migration = getMigrationFilePath("020_event_invitations.sql");
+          if (!migration) throw new Error("Missing event invitation migration 020");
+          await tx.unsafe(fs.readFileSync(migration, "utf8"));
+        }
+        const invitationMemberColumn = await tx.unsafe("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'event_invitation_responses' AND column_name = 'event_id'");
+        if (!invitationMemberColumn.length) {
+          const migration = getMigrationFilePath("021_invitation_member_responses.sql");
+          if (!migration) throw new Error("Missing invitation member migration 021");
+          await tx.unsafe(fs.readFileSync(migration, "utf8"));
+        }
+        const eventMinistryTables = await tx.unsafe("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('event_ministries', 'recurring_event_ministries')");
+        if (eventMinistryTables.length < 2) {
+          const migration = getMigrationFilePath("022_event_ministries.sql");
+          if (!migration) throw new Error("Missing event ministries migration 022");
           await tx.unsafe(fs.readFileSync(migration, "utf8"));
         }
       }

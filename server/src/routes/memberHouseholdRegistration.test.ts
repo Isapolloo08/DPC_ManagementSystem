@@ -31,6 +31,18 @@ async function application(options: { existing?: boolean; otherHousehold?: boole
     const client = { query: async (sql: string, params: any[] = []) => {
       const query = sql.replace(/\s+/g, " ").trim();
       queries.push(query);
+      if(query.startsWith('SELECT pg_advisory_xact_lock')) return {rows:[]};
+      if(query.startsWith('SELECT id,father_name,mother_name,guardian_name,family_members FROM households')) return {rows:[]};
+      if(query.startsWith('SELECT id, first_name, last_name FROM members WHERE id=')) return {rows:state.members.filter((m:any)=>m.id===params[0])};
+      if(query.startsWith('INSERT INTO family_people')) return {rows:[{id:1000+params[0]}]};
+      if(query.startsWith('SELECT spouse_id,spouse_name FROM members')) return {rows:state.members.filter((m:any)=>m.id===params[0])};
+      if(query.startsWith('SELECT id,first_name,last_name,household_id')) return {rows:state.members.filter((m:any)=>m.id===params[0])};
+      if(query.startsWith('SELECT r.*,p.member_id')) return {rows:[]};
+      if(query.startsWith('SELECT * FROM family_relationships')) return {rows:[]};
+      if(query.startsWith('SELECT id FROM family_people WHERE id=ANY')) return {rows:params[0].map((id:number)=>({id}))};
+      if(query.startsWith('INSERT INTO family_relationships')) return {rows:[{id:1}]};
+      if(query.startsWith('SELECT p.id,p.member_id')) return {rows:state.members.filter((m:any)=>params[0].includes(1000+m.id)).map((m:any)=>({id:1000+m.id,member_id:m.id,name:`${m.first_name} ${m.last_name}`}))};
+      if(query.startsWith('UPDATE members SET spouse_id=$1,spouse_name=$2')) return {rows:[]};
       if (query.startsWith("SELECT id FROM households")) return { rows: [] };
       if (query.startsWith("INSERT INTO households")) {
         const household = { id: 20, name: params[0], address: params[1], primary_contact_phone: params[2], family_members: [] };
@@ -158,8 +170,19 @@ test("invalid role names cannot write a household", async () => {
   const result = await application({ role: "father_name = NULL" });
   assert.equal(result.status, 400);
   assert.equal(result.state.households.length, 0);
-  assert.equal(result.queries.length, 0);
+  assert.equal(result.queries.filter(query=>!query.startsWith('SELECT pg_advisory_xact_lock')).length, 0);
 });
+
+for (const role of ['husband','wife']) {
+  test(`${role} can create a household with no children`, async () => {
+    const result = await application({role,noFamily:true});
+    assert.equal(result.status,201);
+    assert.equal(result.state.households[0][role === 'husband' ? 'father_name' : 'mother_name'],'Juan Santos');
+    assert.equal(result.state.households[0].family_members[0].relationship,role === 'husband' ? 'Husband' : 'Wife');
+    assert.equal(result.state.members[0].household_id,null);
+    assert.equal(result.transactions,1);
+  });
+}
 
 for (const [role, relationship] of [["son", "Son"], ["daughter", "Daughter"], ["grandfather", "Grandfather"], ["grandmother", "Grandmother"], ["grandchild", "Grandchild"]]) {
   test(`${relationship} joins an existing household with their saved relationship`, async () => {

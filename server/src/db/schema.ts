@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
+import { syncRecordedHouseholdChildren } from "../utils/householdTree";
 
 const envCandidates = [
   (process as any).resourcesPath ? path.resolve((process as any).resourcesPath, ".env") : null,
@@ -618,6 +619,7 @@ export async function initSchema() {
             session_date DATE NOT NULL,
             topic_title VARCHAR(255),
             chapter VARCHAR(100),
+            progress_stage VARCHAR(100),
             notes TEXT,
             is_special BOOLEAN DEFAULT FALSE,
             special_reason TEXT,
@@ -628,6 +630,7 @@ export async function initSchema() {
 
           ALTER TABLE bible_study_sessions ADD COLUMN IF NOT EXISTS is_special BOOLEAN DEFAULT FALSE;
           ALTER TABLE bible_study_sessions ADD COLUMN IF NOT EXISTS special_reason TEXT;
+          ALTER TABLE bible_study_sessions ADD COLUMN IF NOT EXISTS progress_stage VARCHAR(100);
 
           CREATE TABLE IF NOT EXISTS bible_study_attendance (
             id SERIAL PRIMARY KEY,
@@ -881,6 +884,25 @@ export async function initSchema() {
       const emailRetryMigration = getMigrationFilePath("016_email_retry_schedule.sql");
       if (!emailRetryMigration) throw new Error("Missing email retry migration 016");
       await sql.unsafe(fs.readFileSync(emailRetryMigration, "utf-8"));
+      const familyMigration = getMigrationFilePath("017_family_tree.sql");
+      if (!familyMigration) throw new Error("Missing family tree migration 017");
+      await sql.unsafe(fs.readFileSync(familyMigration, "utf-8"));
+      const studyNotificationsMigration = getMigrationFilePath("018_bible_study_update_notifications.sql");
+      if (!studyNotificationsMigration) throw new Error("Missing Bible study update notification migration 018");
+      await sql.unsafe(fs.readFileSync(studyNotificationsMigration, "utf-8"));
+      const studyStagesMigration = getMigrationFilePath("019_study_topic_stages.sql");
+      if (!studyStagesMigration) throw new Error("Missing study topic stage migration 019");
+      await sql.unsafe(fs.readFileSync(studyStagesMigration, "utf-8"));
+      const eventInvitationsPath = getMigrationFilePath("020_event_invitations.sql");
+      if (!eventInvitationsPath) throw new Error("Missing event invitation migration 020");
+      await sql.unsafe(fs.readFileSync(eventInvitationsPath, "utf-8"));
+      const invitationMembersPath = getMigrationFilePath("021_invitation_member_responses.sql");
+      if (!invitationMembersPath) throw new Error("Missing invitation member migration 021");
+      await sql.unsafe(fs.readFileSync(invitationMembersPath, "utf-8"));
+      const eventMinistriesPath = getMigrationFilePath("022_event_ministries.sql");
+      if (!eventMinistriesPath) throw new Error("Missing event ministries migration 022");
+      await sql.unsafe(fs.readFileSync(eventMinistriesPath, "utf-8"));
+      await db.transaction(client => syncRecordedHouseholdChildren(client));
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {
         message: err?.message,

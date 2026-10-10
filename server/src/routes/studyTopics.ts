@@ -1,3 +1,4 @@
+import { parsePagination, queryPage, validatePagination } from "../utils/pagination";
 import express from "express";
 import { db } from "../db/schema";
 import { authMiddleware, requireRoles } from "../middleware/auth";
@@ -5,6 +6,17 @@ import { emitRealtimeEvent } from "../socket";
 
 const router = express.Router();
 router.use(authMiddleware);
+
+const optionalStageFields = ["has_discussion", "has_review", "has_exam"] as const;
+const validateStageOptions: express.RequestHandler = (req, res, next) => {
+  for (const field of optionalStageFields) {
+    if (req.body[field] !== undefined && typeof req.body[field] !== "boolean") {
+      res.status(400).json({ error: `${field} must be a boolean` });
+      return;
+    }
+  }
+  next();
+};
 
 export const BIBLE_BOOKS_MAP: Record<string, number> = {
   // Old Testament
@@ -59,7 +71,7 @@ export function resolveTotalChapters(title: string, dbTopics: { title: string; t
 // ====================================================
 // 1. GET ALL STUDY TOPICS & CURRICULUM SUMMARY
 // ====================================================
-router.get("/", async (req, res) => {
+router.get("/", validatePagination, async (req, res) => {
   try {
     const { search } = req.query;
 
@@ -69,6 +81,7 @@ router.get("/", async (req, res) => {
         t.title,
         t.total_chapters,
         t.summary_notes,
+        t.has_discussion, t.has_review, t.has_exam,
         t.created_at
       FROM bible_study_topics t
       WHERE 1=1
@@ -80,16 +93,24 @@ router.get("/", async (req, res) => {
       sql += ` AND (t.title ILIKE $${params.length} OR t.summary_notes ILIKE $${params.length})`;
     }
 
-    sql += ` ORDER BY t.created_at DESC`;
+    sql += ` ORDER BY t.created_at DESC, t.id DESC`;
 
+    if (parsePagination(req.query).enabled) {
+      const result = await queryPage<any>(sql, params, req.query);
+      const topics = result.data;
+      const match = `(LOWER(TRIM(g.curriculum)) = LOWER(TRIM(t.title)) OR LOWER(g.curriculum) LIKE '%' || LOWER(TRIM(t.title)) || '%' OR LOWER(t.title) LIKE '%' || LOWER(TRIM(g.curriculum)) || '%' OR EXISTS (SELECT 1 FROM regexp_split_to_table(REGEXP_REPLACE(LOWER(t.title), '[^a-z0-9 ]', ' ', 'g'), ' +') word WHERE LENGTH(word) > 2 AND word NOT IN ('book', 'study', 'guide', 'life', 'test', 'with', 'from', 'paul', 'holy') AND LOWER(g.curriculum) LIKE '%' || word || '%'))`;
+      const details = topics.length ? await db.all<any>(`
+        SELECT t.id,
+          (SELECT json_build_object('active', COUNT(*) FILTER (WHERE COALESCE(g.status, 'active') <> 'merged'), 'completed', COUNT(*) FILTER (WHERE COALESCE(g.status, 'active') <> 'merged' AND g.progress_stage = 'completed'), 'ongoing', COUNT(*) FILTER (WHERE COALESCE(g.status, 'active') <> 'merged' AND COALESCE(g.progress_stage, '') <> 'completed'), 'merged', COUNT(*) FILTER (WHERE g.status = 'merged')) FROM bible_study_groups g WHERE NULLIF(TRIM(g.curriculum), '') IS NOT NULL AND ${match}) AS group_counts,
+          (SELECT COALESCE(json_agg(preview), '[]'::json) FROM (SELECT g.id, g.name, g.curriculum, g.status, g.progress_stage FROM bible_study_groups g WHERE NULLIF(TRIM(g.curriculum), '') IS NOT NULL AND ${match} ORDER BY g.id LIMIT 3) preview) AS group_preview
+        FROM bible_study_topics t WHERE t.id = ANY($1)
+      `, [topics.map(topic => topic.id)]) : [];
+      const byId = new Map(details.map(row => [row.id, row]));
+      const summary = await db.get<any>(`SELECT (SELECT COUNT(*) FROM bible_study_topics) AS "totalBooks", (SELECT COALESCE(SUM(total_chapters), 0) FROM bible_study_topics) AS "totalChapters", COUNT(*) FILTER (WHERE g.progress_stage = 'completed') AS "groupsDone", COUNT(*) FILTER (WHERE COALESCE(g.progress_stage, '') <> 'completed') AS "groupsOngoing", COUNT(*) AS "totalGroups" FROM bible_study_groups g WHERE NULLIF(TRIM(g.curriculum), '') IS NOT NULL AND COALESCE(g.status, 'active') <> 'merged'`);
+      return res.json({ topics: topics.map(topic => ({ ...topic, ...byId.get(topic.id) })), total_count: result.pagination.total, pagination: result.pagination, summary: Object.fromEntries(Object.entries(summary || {}).map(([key, value]) => [key, Number(value)])), bible_books_map: BIBLE_BOOKS_MAP });
+    }
     const topics = await db.all<any>(sql, params);
-    const total_count = topics.length;
-
-    res.json({
-      topics,
-      total_count,
-      bible_books_map: BIBLE_BOOKS_MAP
-    });
+    res.json({ topics, total_count: topics.length, bible_books_map: BIBLE_BOOKS_MAP });
   } catch (error: any) {
     console.error("Failed to fetch study topics:", error);
     res.status(500).json({ error: error.message || "Failed to fetch study topics" });
@@ -130,6 +151,7 @@ router.get("/:id", async (req, res) => {
         t.title,
         t.total_chapters,
         t.summary_notes,
+        t.has_discussion, t.has_review, t.has_exam,
         t.created_at
       FROM bible_study_topics t
       WHERE t.id = $1
@@ -172,7 +194,7 @@ router.get("/:id", async (req, res) => {
 // ====================================================
 // 3. CREATE STUDY TOPIC
 // ====================================================
-router.post("/", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req, res) => {
+router.post("/", requireRoles("Admin", "IT Admin", "Pastor", "Coordinator"), validateStageOptions, async (req, res) => {
   try {
     const {
       title,
@@ -191,13 +213,14 @@ router.post("/", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async
 
     const result = await db.run(`
       INSERT INTO bible_study_topics (
-        title, total_chapters, summary_notes
-      ) VALUES ($1, $2, $3)
+        title, total_chapters, summary_notes, has_discussion, has_review, has_exam
+      ) VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
     `, [
       title.trim(),
       Number(total_chapters) || 1,
-      summary_notes ? summary_notes.trim() : null
+      summary_notes ? summary_notes.trim() : null,
+      req.body.has_discussion ?? true, req.body.has_review ?? true, req.body.has_exam ?? true
     ]);
 
     const newId = result.lastInsertRowid || (result as any).id;
@@ -216,7 +239,7 @@ router.post("/", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async
 // ====================================================
 // 4. UPDATE STUDY TOPIC
 // ====================================================
-router.put("/:id", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req, res) => {
+router.put("/:id", requireRoles("Admin", "IT Admin", "Pastor", "Coordinator"), validateStageOptions, async (req, res) => {
   try {
     const topicId = Number(req.params.id);
     const {
@@ -241,13 +264,17 @@ router.put("/:id", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), asy
       SET 
         title = COALESCE($1, title),
         total_chapters = COALESCE($2, total_chapters),
-        summary_notes = COALESCE($3, summary_notes)
+        summary_notes = COALESCE($3, summary_notes),
+        has_discussion = COALESCE($5, has_discussion),
+        has_review = COALESCE($6, has_review),
+        has_exam = COALESCE($7, has_exam)
       WHERE id = $4
     `, [
       title ? title.trim() : null,
       total_chapters !== undefined ? Number(total_chapters) : null,
       summary_notes !== undefined ? (summary_notes ? summary_notes.trim() : null) : null,
-      topicId
+      topicId,
+      req.body.has_discussion ?? null, req.body.has_review ?? null, req.body.has_exam ?? null
     ]);
 
     emitRealtimeEvent("study_topics:changed", { action: "update", id: topicId });
@@ -262,7 +289,7 @@ router.put("/:id", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), asy
 // ====================================================
 // 5. DELETE STUDY TOPIC
 // ====================================================
-router.delete("/:id", requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req, res) => {
+router.delete("/:id", requireRoles("Admin", "IT Admin", "Pastor", "Coordinator"), async (req, res) => {
   try {
     const topicId = Number(req.params.id);
     await db.run("DELETE FROM bible_study_topics WHERE id = $1", [topicId]);

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --port 3000 --host 0.0.0.0",
     "build": "tsc && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
+    "build:invitations": "tsc && vite build --mode invitations --config vite.invitations.config.ts",
+    "preview:invitations": "vite preview --outDir dist-invitations --port 4174",
     "preview": "vite preview"
   },
   "dependencies": {

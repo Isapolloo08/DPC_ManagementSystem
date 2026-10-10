@@ -1,0 +1,23 @@
+.filter-panel { min-width: 0; max-width: 100%; padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-card); }
+.filter-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.filter-panel-toggle { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 4px 0; text-align: left; cursor: pointer; color: var(--text); }
+.filter-panel-toggle > svg { flex-shrink: 0; }
+.filter-panel-toggle > svg:first-child { color: rgb(var(--ink-indigo-600)); }
+.filter-panel-toggle > span { min-width: 0; flex: 1; }
+.filter-panel-toggle strong { display: block; font-size: 13px; font-weight: 500; }
+.filter-panel-summary { display: block; font-size: 11px; line-height: 1.5; color: var(--text-muted); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-panel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+.filter-panel-reset { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+.filter-panel-toggle:focus-visible, .filter-panel-reset:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 4px; }
+.filter-panel-fields:not([hidden]) { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.filter-panel-fields[hidden] { display: none; }
+/* Retain each page's control layout without nesting another card. */
+.filter-panel-fields > .filter-panel-layout { padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+.filter-panel-fields > * + .filter-panel-layout { margin-top: 12px; }
+@media (max-width: 600px) {
+  .filter-panel { padding: 12px 14px; }
+  .filter-panel-heading { gap: 8px; }
+  .filter-panel-toggle { gap: 7px; }
+  .filter-panel-toggle strong { font-size: 12px; }
+  .filter-panel-actions { max-width: 40%; }
+}

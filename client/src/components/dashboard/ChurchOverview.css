@@ -49,6 +49,9 @@
 .overview-summary { grid-column: 2; grid-row: 2; position: relative; z-index: 1; margin-top: -8px; padding-top: 16px; border-top: 1px solid var(--dashboard-line); }
 .overview-scope { display: flex; align-items: center; gap: 8px; font-size: 11px; flex-wrap: wrap; margin-top: 24px; }
 .overview-profile-link { display: none; }
+.overview-role-assignment { margin-top: 20px; display: flex; min-width: 0; }
+.role-church-hero .overview-subtitle { max-width: 540px; line-height: 1.7; }
+.role-church-hero .overview-scope { margin-top: 16px; }
 .scope-tag { padding: 4px 10px; background: var(--dashboard-soft-gold); border-radius: 20px; font-size: 10px; }
 .overview-stat-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .overview-stat { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-width: 0; text-align: center; padding: 0 8px; border-radius: 4px; }

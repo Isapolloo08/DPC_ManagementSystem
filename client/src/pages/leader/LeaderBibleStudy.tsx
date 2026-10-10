@@ -1,38 +1,38 @@
 import { AlertTriangle as UIAlertTriangle } from "lucide-react";
 import { ModalPanel } from "../../components/common/ModalPanel";
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { BibleStudyGroup, BibleStudyMember } from "../../types";
+import { BibleStudyGroup, BibleStudyMember, StudyTopic } from "../../types";
 import { api } from "../../api";
 import { TimePickerInput } from "../../components/common/TimePickerInput";
-import { DatePickerInput } from "../../components/common/DatePickerInput";
 import { ConfirmationModal, ModalType } from "../../components/common/ConfirmationModal";
 import { BibleStudyRescheduleModal } from "../../components/biblestudy/BibleStudyRescheduleModal";
-import { getBookTotalChapters, generateChapterOptions } from "../../utils/curriculumHelper";
-import { getScheduleDates, isDateMatchingSchedule } from "../../utils/scheduleHelper";
+import { useAuth } from "../../context/AuthContext";
+import { StudyProgressFields } from "../../components/biblestudy/StudyProgressFields";
+import { LessonNoticeField } from "../../components/biblestudy/LessonNoticeField";
 import {
   UserCheck, Calendar, Check, CheckCircle2, BookOpen,
-  Edit, Bookmark, BookmarkCheck, MapPin,
-  Clock, ShieldCheck, X, ChevronDown, Layers,
-  CalendarClock, Users
+  Edit, BookmarkCheck, MapPin,
+  Clock, ShieldCheck, X,
+  CalendarClock
 } from "lucide-react";
 
 interface LeaderBibleStudyProps {
   activeGroup: BibleStudyGroup | null;
   groupDisciples: BibleStudyMember[];
-  onSaveAttendanceSession: (date: string, checkedMemberIds: number[]) => void;
+  onOpenRollCall: () => void;
   onGroupUpdated?: () => void;
 }
 
 export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
   activeGroup,
   groupDisciples,
-  onSaveAttendanceSession,
+  onOpenRollCall,
   onGroupUpdated
 }) => {
-  const [sessionDate, setSessionDate] = useState(new Date().toISOString().split("T")[0]);
-  const [checkedMembers, setCheckedMembers] = useState<Record<number, boolean>>({});
-  const [sessionSavedSuccess, setSessionSavedSuccess] = useState(false);
+  const { user } = useAuth();
+  const canManageBooks = ["Coordinator", "Pastor", "Admin", "IT Admin"].includes(user?.role_name || "");
+  const [studyTopics, setStudyTopics] = useState<StudyTopic[]>([]);
 
   // Custom Confirmation & Alert Modal State
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
@@ -67,6 +67,9 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
   // Edit Study & Book Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  useEffect(() => {
+    api.getStudyTopics().then(result => setStudyTopics(result.topics || result.all || [])).catch(() => setStudyTopics([]));
+  }, [activeGroup, isEditModalOpen]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -94,10 +97,6 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
     description: ""
   });
 
-  // Curriculum Searchable Dropdown State
-  const [curriculumQuery, setCurriculumQuery] = useState("");
-  const [isCurriculumDropdownOpen, setIsCurriculumDropdownOpen] = useState(false);
-  const curriculumRef = useRef<HTMLDivElement>(null);
 
   // Church Rooms Lookups from Database
   const [churchRooms, setChurchRooms] = useState<string[]>([]);
@@ -153,66 +152,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
     }
   }, [activeGroup, isEditModalOpen, churchRooms]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (curriculumRef.current && !curriculumRef.current.contains(e.target as Node)) {
-        setIsCurriculumDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
-  const churchCurricula = [
-    { title: "Gospel of John", type: "bible_book", category: "New Testament" },
-    { title: "Book of Romans", type: "bible_book", category: "New Testament" },
-    { title: "Gospel of Matthew", type: "bible_book", category: "New Testament" },
-    { title: "Gospel of Mark", type: "bible_book", category: "New Testament" },
-    { title: "Gospel of Luke", type: "bible_book", category: "New Testament" },
-    { title: "Acts of the Apostles", type: "bible_book", category: "New Testament" },
-    { title: "Genesis: Beginnings of Faith", type: "bible_book", category: "Old Testament" },
-    { title: "Psalms of Worship & Praise", type: "bible_book", category: "Old Testament" },
-    { title: "Proverbs: Daily Wisdom", type: "bible_book", category: "Old Testament" },
-    { title: "Ephesians: Riches of Grace", type: "bible_book", category: "New Testament" },
-    { title: "Philippians: Joy in Christ", type: "bible_book", category: "New Testament" },
-    { title: "Hebrews: Supreme Christ", type: "bible_book", category: "New Testament" },
-    { title: "James: Practical Faith", type: "bible_book", category: "New Testament" },
-    { title: "Discipleship 101: Foundations", type: "curriculum", category: "Topical Track" },
-    { title: "Sacred Marriage by Gary Thomas", type: "curriculum", category: "Family & Marriage" },
-    { title: "The Cost of Discipleship", type: "curriculum", category: "Discipleship Track" },
-    { title: "Life of Prayer & Fasting", type: "curriculum", category: "Spiritual Disciplines" }
-  ];
-
-  const filteredCurricula = useMemo(() => {
-    const q = curriculumQuery.toLowerCase().trim();
-    if (!q) return churchCurricula;
-    return churchCurricula.filter(c =>
-      c.title.toLowerCase().includes(q) || c.category.toLowerCase().includes(q)
-    );
-  }, [curriculumQuery]);
-
-  const handleSaveAttendance = async () => {
-    if (!activeGroup) return;
-    const presentIds = Object.keys(checkedMembers)
-      .filter(id => checkedMembers[Number(id)])
-      .map(id => Number(id));
-
-    try {
-      await api.saveGroupAttendance(activeGroup.id, {
-        session_date: sessionDate,
-        topic_title: activeGroup.curriculum || "Weekly Bible Study",
-        chapter: activeGroup.current_chapter || "Chapter 1",
-        present_member_ids: presentIds
-      });
-
-      onSaveAttendanceSession(sessionDate, presentIds);
-      setSessionSavedSuccess(true);
-      setTimeout(() => setSessionSavedSuccess(false), 3000);
-    } catch (err: any) {
-      showAlert("Attendance Save Failed", err.message || "Failed to save attendance session", "danger");
-    }
-  };
 
   const handleSaveGroupDetails = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,10 +171,10 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
 
       await api.updateGroup(activeGroup.id, {
         name: formData.name.trim(),
-        curriculum: formData.curriculum ? formData.curriculum.trim() : null,
+        ...(canManageBooks ? { curriculum: formData.curriculum.trim() || null } : {}),
         current_chapter: formData.current_chapter,
         progress_stage: formData.progress_stage,
-        progress_notes: formData.progress_notes ? formData.progress_notes.trim() : null,
+        progress_notes: formData.progress_notes.trim(),
         meeting_day: formData.meeting_day,
         meeting_time: formattedMeetingTime,
         location: formData.location ? formData.location.trim() : null,
@@ -289,7 +229,13 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
           bg: "bg-indigo-50 text-indigo-900 border-indigo-200",
           dot: "bg-indigo-500"
         };
+      case "review":
+        return { label: "Review / Q&A", bg: "bg-sky-50 text-sky-900 border-sky-200", dot: "bg-sky-500" };
+      case "exam":
+        return { label: "Exam / Assessment", bg: "bg-amber-50 text-amber-900 border-amber-200", dot: "bg-amber-500" };
       case "completed":
+        return { label: "Completed Study", bg: "bg-emerald-50 text-emerald-900 border-emerald-200", dot: "bg-emerald-500" };
+      case "chapter_completed":
         return {
           label: "Chapter Finished",
           bg: "bg-sky-50 text-sky-900 border-sky-200",
@@ -361,145 +307,23 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2-Cols: Weekly Meeting Attendance Logger */}
         <div data-guide="my-group-rollcall" className="lg:col-span-2 bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-5">
-          <div className="space-y-3 border-b border-gray-100 pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo flex items-center justify-center font-medium">
-                  <UserCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm sm:text-base text-charcoal">
-                    Weekly Small Group Attendance Roll-Call
-                  </h3>
-                  <p className="text-[12px] text-muted">
-                    Check off disciples present for this week's Bible study session
-                  </p>
-                </div>
-              </div>
-
-              <div className="w-full sm:w-48">
-                <DatePickerInput
-                  value={sessionDate}
-                  onChange={(val) => setSessionDate(val)}
-                  placeholder="Select date"
-                />
-              </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+            <div>
+              <h3 className="font-semibold text-sm sm:text-base text-charcoal">Weekly Small Group Attendance</h3>
+              <p className="ui-help mt-1">Choose a session, record the lesson, and mark attendance in the roll-call form.</p>
             </div>
-
-            {/* Quick schedule date chips & alignment indicator */}
-            {(() => {
-              const scheduleInfo = getScheduleDates(activeGroup?.meeting_day);
-              const isMatching = isDateMatchingSchedule(sessionDate, activeGroup?.meeting_day);
-
-              return (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                  <div className="flex flex-wrap gap-1.5">
-                    {scheduleInfo.chips.map((chip, idx) => {
-                      const isSelected = sessionDate === chip.date;
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setSessionDate(chip.date)}
-                          className={`px-2.5 py-1 rounded-lg text-[12px] font-medium border transition-all cursor-pointer flex items-center gap-1 ${
-                            isSelected
-                              ? "bg-indigo text-white border-indigo shadow-2xs"
-                              : "bg-gray-50 text-charcoal/70 border-gray-200 hover:border-indigo/40 hover:bg-indigo-50/40"
-                          }`}
-                        >
-                          {chip.isToday && <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>}
-                          <span>{chip.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div>
-                    {isMatching ? (
-                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>Regular ({activeGroup?.meeting_day || "Regular Sched"})</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
-                        <CalendarClock className="w-3 h-3 text-amber-600" />
-                        <span>Rescheduled Date (Regular is {activeGroup?.meeting_day || "Scheduled"})</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-
-          {sessionSavedSuccess && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-medium flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Attendance successfully recorded for {sessionDate}!</span>
-            </div>
-          )}
-
-          {/* Attendance Checkbox List */}
-          <div className="space-y-2">
-            {groupDisciples.length === 0 ? (
-              <div className="text-center py-10 bg-ivory-light rounded-2xl border border-dashed border-gray-200 space-y-2">
-                <Users className="w-8 h-8 text-charcoal/30 mx-auto" />
-                <p className="text-xs font-medium text-charcoal/70">No disciples enrolled yet in this group</p>
-                <p className="text-[12px] text-muted max-w-xs mx-auto">
-                  Click on the "Members" tab to add disciples to this Small Group.
-                </p>
-              </div>
-            ) : (
-              groupDisciples.map((d) => {
-                const isChecked = Boolean(checkedMembers[d.id]);
-                const displayName = d.member_name || `${d.first_name || ""} ${d.last_name || ""}`.trim() || "Member";
-
-                return (
-                  <div
-                    key={d.id}
-                    onClick={() => setCheckedMembers(prev => ({ ...prev, [d.id]: !prev[d.id] }))}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${isChecked
-                      ? "bg-emerald-50/60 border-emerald-300 shadow-2xs"
-                      : "bg-gray-50/60 border-gray-200 hover:border-gray-300"
-                      }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center border ${isChecked ? "bg-emerald-600 border-emerald-600 text-white" : "border-gray-300 bg-white"
-                        }`}>
-                        {isChecked && <Check className="w-4 h-4" />}
-                      </div>
-                      <div>
-                        <div className="font-medium text-xs text-charcoal">{displayName}</div>
-                        <div className="text-[12px] text-muted">{d.contact_phone || "Member"}</div>
-                      </div>
-                    </div>
-
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-xl ${isChecked ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-muted"
-                      }`}>
-                      {isChecked ? "Present" : "Absent"}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-xs font-medium text-muted">
-              {Object.values(checkedMembers).filter(Boolean).length} / {groupDisciples.length} Disciples Present
-            </span>
-
-            <button
-              onClick={handleSaveAttendance}
-              data-guide="my-group-save"
-              className="px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <Check className="w-4 h-4 text-amber-300" />
-              <span>Save Session Attendance</span>
+            <button type="button" onClick={onOpenRollCall} data-guide="my-group-save"
+              className="shrink-0 px-5 py-2.5 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+              <UserCheck className="w-4 h-4" />Take Weekly Roll-Call
             </button>
           </div>
+          <p className="ui-help">{groupDisciples.length} disciples enrolled • {activeGroup.meeting_day} • {activeGroup.meeting_time}</p>
+          {groupDisciples.length ? <div className="space-y-2">
+            {groupDisciples.map(disciple => <div key={disciple.id} className="p-3 rounded-xl border border-gray-200 text-xs text-charcoal">
+              {disciple.member_name || `${disciple.first_name || ""} ${disciple.last_name || ""}`.trim() || "Member"}
+            </div>)}
+          </div> : <p className="ui-help text-center py-6">No disciples enrolled yet in this group.</p>}
         </div>
 
         {/* Right 1-Col: Group Settings & Details */}
@@ -546,8 +370,8 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                   <div className="bg-white/95 p-2 rounded-xl border border-indigo-100 text-[12px] text-charcoal/80 flex items-start gap-1.5 mt-1">
                     <BookmarkCheck className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                     <div className="leading-tight">
-                      <span className="font-medium text-indigo-950 text-[12px] uppercase tracking-wider block">Current Notice:</span>
-                      <span>{activeGroup.progress_notes}</span>
+                      <span className="font-medium text-indigo-950 text-[12px] uppercase tracking-wider block">Lesson Notice & Specific Location:</span>
+                      <span className="whitespace-pre-wrap break-words">{activeGroup.progress_notes}</span>
                     </div>
                   </div>
                 ) : (
@@ -573,7 +397,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                   className="flex-1 py-2 rounded-xl bg-indigo hover:bg-indigo-700 text-white font-medium text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer"
                 >
                   <Edit className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Update Book & Progress</span>
+                  <span>Update Progress & Schedule</span>
                 </button>
 
                 <button
@@ -605,7 +429,7 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
                   <BookOpen className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-base text-charcoal">Update Bible Study & Curriculum</h3>
+                  <h3 className="font-semibold text-base text-charcoal">Update Study Progress & Schedule</h3>
                   <p className="text-xs text-muted truncate max-w-xs">{activeGroup.name}</p>
                 </div>
               </div>
@@ -624,205 +448,19 @@ export const LeaderBibleStudy: React.FC<LeaderBibleStudyProps> = ({
               </div>
             )}
 
-            <form onSubmit={handleSaveGroupDetails} className="space-y-4 text-xs">
-              {/* Book / Study Topic Searchable Dropdown */}
-              <div ref={curriculumRef} className="relative">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-medium text-charcoal/70 flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Book / Study Topic *</span>
-                  </label>
-                  <span className="text-[12px] text-indigo-600 font-medium">Select or type custom</span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Search Bible book or topic (e.g. Gospel of John, Romans, Discipleship 101)"
-                    value={formData.curriculum}
-                    onFocus={() => {
-                      setCurriculumQuery("");
-                      setIsCurriculumDropdownOpen(true);
-                    }}
-                    onClick={() => {
-                      setCurriculumQuery("");
-                      setIsCurriculumDropdownOpen(true);
-                    }}
-                    onChange={(e) => {
-                      setFormData({ ...formData, curriculum: e.target.value });
-                      setCurriculumQuery(e.target.value);
-                      setIsCurriculumDropdownOpen(true);
-                    }}
-                    className="w-full bg-ivory-light p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal"
-                  />
-                  {formData.curriculum && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, curriculum: "" }));
-                        setCurriculumQuery("");
-                        setIsCurriculumDropdownOpen(true);
-                      }}
-                      className="absolute right-7 top-1/2 -translate-y-1/2 text-muted hover:text-rose-500 p-1 cursor-pointer transition-colors"
-                      title="Clear"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setIsCurriculumDropdownOpen(!isCurriculumDropdownOpen)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-indigo p-0.5 cursor-pointer"
-                  >
-                    <ChevronDown className={`w-4 h-4 transition-transform ${isCurriculumDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
-                </div>
-
-                {/* Dropdown Menu */}
-                {isCurriculumDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white rounded-2xl shadow-2xl border border-indigo-100 max-h-56 overflow-y-auto divide-y divide-gray-100">
-                    <div className="p-2 bg-indigo-50/80 text-[12px] font-medium text-indigo-950 uppercase tracking-wider sticky top-0 z-10">
-                      Bible Books & Curricula ({filteredCurricula.length})
-                    </div>
-                    {filteredCurricula.map((item) => (
-                      <button
-                        key={item.title}
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => ({ ...prev, curriculum: item.title }));
-                          setCurriculumQuery("");
-                          setIsCurriculumDropdownOpen(false);
-                        }}
-                        className="w-full text-left p-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between group cursor-pointer"
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="font-medium text-charcoal group-hover:text-indigo text-xs flex items-center gap-1.5">
-                            <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                            <span className="truncate">{item.title}</span>
-                          </div>
-                          <span className="text-[12px] px-1.5 py-0.2 rounded font-medium bg-indigo-100 text-indigo-800 ml-5">
-                            {item.category}
-                          </span>
-                        </div>
-                        {formData.curriculum === item.title && (
-                          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-
-              {(() => {
-                const bookTotalChapters = getBookTotalChapters(formData.curriculum);
-                const chapterOptions = generateChapterOptions(bookTotalChapters);
-
-                return (
-                  <div className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <label className="font-medium text-xs text-indigo-950 flex items-center gap-1.5">
-                        <Bookmark className="w-3.5 h-3.5 text-indigo-700" />
-                        <span>Current Chapter & Study Progress</span>
-                      </label>
-                      {formData.curriculum && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-amber-100 text-amber-900 border border-amber-300">
-                          {formData.curriculum} • {bookTotalChapters} Chapters Total
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-[12px] font-medium text-charcoal/70">
-                            What Chapter / Lesson na sila? *
-                          </label>
-                          <span className="text-[12px] text-indigo-700 font-medium">
-                            Max {bookTotalChapters} Ch.
-                          </span>
-                        </div>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            placeholder="e.g. Chapter 1, Introduction, Lesson 3"
-                            value={formData.current_chapter}
-                            onChange={(e) => setFormData({ ...formData, current_chapter: e.target.value })}
-                            className="w-full bg-white p-2.5 pr-14 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal text-xs"
-                          />
-                          <select
-                            value=""
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                setFormData({ ...formData, current_chapter: e.target.value });
-                              }
-                            }}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[12px] font-medium bg-indigo-50 text-indigo-900 px-1.5 py-1 rounded-lg border border-indigo-200 cursor-pointer outline-none"
-                            title="Pick from Book's Chapters"
-                          >
-                            <option value="">Pick ▼</option>
-                            {chapterOptions.map(opt => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Dynamic Quick Chips based on book */}
-                        <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto pr-1 no-scrollbar">
-                          {chapterOptions.slice(0, Math.min(chapterOptions.length, 12)).map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setFormData({ ...formData, current_chapter: opt.value })}
-                              className={`px-2 py-0.5 rounded-md border text-[12px] font-medium transition-colors cursor-pointer ${formData.current_chapter === opt.value
-                                ? "bg-indigo text-white border-indigo shadow-2xs font-medium"
-                                : "bg-white hover:bg-indigo-50 border-gray-200 text-charcoal/70 hover:text-indigo"
-                                }`}
-                            >
-                              {opt.label.replace("Chapter ", "Ch ")}
-                            </button>
-                          ))}
-                          {chapterOptions.length > 12 && (
-                            <span className="text-[12px] text-muted self-center pl-1 font-medium">
-                              +{chapterOptions.length - 12} more
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[12px] font-medium text-charcoal/70 mb-1">
-                          Study Stage (Nasaan sila banda?)
-                        </label>
-                        <select
-                          value={formData.progress_stage}
-                          onChange={(e) => setFormData({ ...formData, progress_stage: e.target.value })}
-                          className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo font-medium text-charcoal h-[41px]"
-                        >
-                          <option value="intro"> Intro / Just Starting (No. 1 pa lang)</option>
-                          <option value="midway"> Mid-way (Kalahati pa lang ng Chapter)</option>
-                          <option value="application"> Discussion & Reflection Questions</option>
-                          <option value="completed"> Chapter Completed / Ready for Next</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[12px] font-medium text-charcoal/70 mb-1">
-                        Lesson Notice & Specific Location (Saan Banda Sila)
-                      </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Maglagay ng notice o detalye (e.g., 'Nasa Chapter 1 verses 1-17 palang kami, natapos ang overview', 'Nasa Question #3 ng study guide')..."
-                        value={formData.progress_notes}
-                        onChange={(e) => setFormData({ ...formData, progress_notes: e.target.value })}
-                        className="w-full bg-white p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo text-xs"
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
+            <form data-guide="leader-study-form" onSubmit={handleSaveGroupDetails} className="space-y-4 text-xs">
+              <p className="ui-help">Update the group's current study progress and regular schedule. Record attendance separately for each session.</p>
+              <StudyProgressFields
+                value={{ book: formData.curriculum, chapter: formData.current_chapter, stage: formData.progress_stage }}
+                onChange={value => setFormData(previous => ({ ...previous, curriculum: value.book, current_chapter: value.chapter, progress_stage: value.stage }))}
+                topics={studyTopics}
+                fallbackBook={activeGroup.curriculum}
+                fallbackChapters={activeGroup.curriculum_total_chapters}
+                readOnlyBook={!canManageBooks}
+                disabled={isSaving}
+              />
+              <LessonNoticeField value={formData.progress_notes}
+                onChange={value => setFormData(previous => ({ ...previous, progress_notes: value }))} disabled={isSaving} />
 
               {/* Schedule: Meeting Day, Time In (Start Time), Time Out (End Time / end_time) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

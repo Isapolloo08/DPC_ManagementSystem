@@ -1,3 +1,10 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { useListPagination } from "../hooks/useListPagination";
+import { StatCard } from "../components/common/StatCard";
+import { PageHeader } from "../components/common/PageHeader";
+import { AttendanceTableSkeleton, AttendanceSummarySkeleton, CalendarSkeleton } from "../components/common/SkeletonLoader";
+import { Button } from "../components/common/Button";
 import { ViewportOverlay } from "../components/common/ViewportOverlay";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
@@ -101,6 +108,8 @@ export const ServiceCalendarPage: React.FC = () => {
   // Real-time synchronization
   useSocketEvent("services:changed", () => loadServices(true));
   useSocketEvent("attendance:changed", () => loadServices(true));
+
+  const servicesPage = useListPagination(services, JSON.stringify([fromDate, toDate, filterType, filterStatus]));
 
   // Summary counts
   const summary = useMemo(() => {
@@ -258,97 +267,46 @@ export const ServiceCalendarPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
       {/* Page Header */}
-      <div className="bg-white rounded-2xl p-6 sm:p-7 shadow-sm border border-stone-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo/10 rounded-xl text-indigo border border-indigo/20">
-            <CalendarIcon className="w-6 h-6 text-indigo" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-charcoal">Service Calendar</h1>
-            <p className="text-xs sm:text-sm font-medium text-stone-500">
-              Official registry of held, unrecorded, and cancelled worship services for reliable attendance and absence analytics.
-            </p>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+      <PageHeader icon={<CalendarIcon />} title={<>Service Calendar</>}
+        description={<>Official registry of held, unrecorded, and cancelled worship services for reliable attendance and absence analytics.</>}
+        actions={<><div className="flex items-center gap-2.5 flex-wrap">
           <div className="bg-stone-100 p-1 rounded-xl flex items-center border border-stone-200">
             <button data-guide="service-list"
               onClick={() => setViewMode("list")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
-                viewMode === "list" ? "bg-white text-indigo shadow-sm" : "text-stone-500 hover:text-charcoal"
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${viewMode === "list" ? "bg-white text-indigo shadow-sm" : "text-stone-500 hover:text-charcoal"
+                }`}
             >
               <List className="w-3.5 h-3.5" />
               <span>List</span>
             </button>
             <button data-guide="service-month"
               onClick={() => setViewMode("month")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
-                viewMode === "month" ? "bg-white text-indigo shadow-sm" : "text-stone-500 hover:text-charcoal"
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${viewMode === "month" ? "bg-white text-indigo shadow-sm" : "text-stone-500 hover:text-charcoal"
+                }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />
               <span>Month</span>
             </button>
           </div>
 
-          <button data-guide="service-generate"
-            onClick={handleGenerateSundays}
-            disabled={isGenerating}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-charcoal rounded-xl text-xs font-medium transition border border-stone-200 disabled:opacity-50"
-            title="Auto-generate upcoming Sunday worship services"
-          >
+          <Button data-guide="service-generate" onClick={handleGenerateSundays} disabled={isGenerating} title="Auto-generate upcoming Sunday worship services" variant="secondary">
             <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? "animate-spin text-indigo" : "text-stone-600"}`} />
             <span>Generate Sundays</span>
-          </button>
+          </Button>
 
-          <button data-guide="service-new"
-            onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo hover:bg-indigo-900 text-white rounded-xl text-xs font-medium transition shadow-sm"
-          >
+          <Button data-guide="service-new" onClick={handleOpenCreateModal} variant="primary">
             <Plus className="w-4 h-4" />
             <span>Add Special Service</span>
-          </button>
-        </div>
-      </div>
+          </Button>
+        </div></>} />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
-          <div className="text-[12px] font-medium uppercase tracking-wider text-stone-500">Total Services</div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-charcoal">{summary.total}</div>
-          <div className="text-[12px] text-stone-400 font-medium mt-0.5">In selected range</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium uppercase tracking-wider text-emerald-700">Held & Recorded</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-emerald-700">{summary.heldRecorded}</div>
-          <div className="text-[12px] text-emerald-600 font-medium mt-0.5">Active check-in logs</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium uppercase tracking-wider text-amber-700">Unrecorded</span>
-            <Clock className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-amber-700">{summary.heldUnrecorded}</div>
-          <div className="text-[12px] text-amber-600 font-medium mt-0.5">Zero check-ins logged</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium uppercase tracking-wider text-rose-700">Cancelled</span>
-            <XCircle className="w-4 h-4 text-rose-600" />
-          </div>
-          <div className="mt-1.5 text-2xl sm:text-3xl font-medium text-rose-700">{summary.cancelled}</div>
-          <div className="text-[12px] text-rose-600 font-medium mt-0.5">Excluded from absences</div>
-        </div>
-      </div>
+      {/* Service summary */}
+      {loading ? <AttendanceSummarySkeleton /> : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <StatCard label="Total Services" value={summary.total} icon={<CalendarIcon />} description="In selected range" />
+        <StatCard label="Held & Recorded" value={summary.heldRecorded} icon={<CheckCircle2 />} tone="emerald" description="Active check-in logs" />
+        <StatCard label="Unrecorded" value={summary.heldUnrecorded} icon={<Clock />} tone="amber" description="Zero check-ins logged" />
+        <StatCard label="Cancelled" value={summary.cancelled} icon={<XCircle />} tone="rose" description="Excluded from absences" />
+      </div>}
 
       {/* Explanatory Policy Banner */}
       <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-indigo-950 font-medium">
@@ -365,7 +323,8 @@ export const ServiceCalendarPage: React.FC = () => {
       {viewMode === "list" ? (
         <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
           {/* Filter Bar */}
-          <div className="p-4 border-b border-stone-100 bg-stone-50/60 flex flex-wrap items-center justify-between gap-3">
+          <FilterPanel title="Service filters" summary={[filterType ? filterType.replace(/_/g, " ") : "All service types", filterStatus || "All statuses"].join(" · ")}>
+            <div className="filter-panel-layout p-4 border-b border-stone-100 bg-stone-50/60 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 flex-wrap">
               <div className="flex items-center gap-1.5 text-xs font-medium text-stone-600">
                 <Filter className="w-3.5 h-3.5 text-indigo" />
@@ -396,10 +355,11 @@ export const ServiceCalendarPage: React.FC = () => {
               Showing {services.length} services
             </div>
           </div>
+          </FilterPanel>
 
           {/* Table */}
           {loading ? (
-            <div className="p-8 text-center text-xs font-medium text-stone-500">Loading service calendar...</div>
+            <AttendanceTableSkeleton columns={6} showAvatar={false} showDirectoryHeader={false} />
           ) : error ? (
             <div className="p-8 text-center text-xs font-medium text-rose-600">{error}</div>
           ) : services.length === 0 ? (
@@ -419,7 +379,7 @@ export const ServiceCalendarPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 text-xs">
-                  {services.map((srv) => {
+                  {servicesPage.items.map((srv) => {
                     const isSunday = srv.service_type === "sunday_service";
                     const isHeld = srv.status === "held";
                     const dayName = new Date(srv.service_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" });
@@ -522,6 +482,7 @@ export const ServiceCalendarPage: React.FC = () => {
               </table>
             </div>
           )}
+          <Pagination label="services" page={servicesPage.page} pageSize={servicesPage.pageSize} total={servicesPage.total} onPageChange={servicesPage.setPage} onPageSizeChange={servicesPage.setPageSize} loading={loading} />
         </div>
       ) : (
         /* Month Calendar View */
@@ -573,7 +534,7 @@ export const ServiceCalendarPage: React.FC = () => {
           </div>
 
           {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-2">
+          {loading ? <CalendarSkeleton /> : error ? <div role="alert" className="p-6 text-rose-600">{error}</div> : (<div className="grid grid-cols-7 gap-2">
             {monthDays.map((item, idx) => {
               if (!item.dateStr) {
                 return <div key={`empty-${idx}`} className="h-24 bg-stone-50/50 rounded-xl border border-dashed border-stone-100" />;
@@ -620,7 +581,7 @@ export const ServiceCalendarPage: React.FC = () => {
                 </div>
               );
             })}
-          </div>
+          </div>)}
         </div>
       )}
 

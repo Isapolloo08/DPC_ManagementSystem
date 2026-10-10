@@ -2,6 +2,7 @@ import { db } from "../db/schema";
 
 const roles = ["father", "mother", "guardian"] as const;
 const householdRelationships: Record<string, string> = {
+  husband: "Husband", wife: "Wife",
   father: "Father", mother: "Mother", guardian: "Guardian",
   son: "Son", daughter: "Daughter", child: "Child",
   grandfather: "Grandfather", grandmother: "Grandmother", grandparent: "Grandparent",
@@ -96,6 +97,25 @@ export async function linkHouseholdFamily(client: any, householdId: number, entr
   await client.query("UPDATE members SET household_id = $1 WHERE id = ANY($2)", [householdId, ids]);
 }
 
+// Household editing replaces the roster. Member registration remains additive.
+// Clearing an assignment must not delete the profile or its family relationships.
+export async function replaceHouseholdFamily(client: any, householdId: number, entries: ReturnType<typeof validateFamilyMembers>) {
+  if (entries === undefined) return;
+  await linkHouseholdFamily(client, householdId, entries);
+  const household = (await client.query("SELECT father_name,mother_name,guardian_name FROM households WHERE id=$1", [householdId])).rows[0];
+  const members = (await client.query("SELECT id,first_name,last_name FROM members WHERE household_id=$1 ORDER BY id FOR UPDATE", [householdId])).rows;
+  const retained = new Set(entries.flatMap(entry => entry.member_id ? [entry.member_id] : []));
+  // Older clients may supply parent names without IDs. Preserve only unique matches.
+  for (const role of roles) {
+    const name = normalize(household?.[`${role}_name`] || "");
+    if (!name) continue;
+    const matches = members.filter((member: any) => normalize(fullName(member)) === name);
+    if (matches.length === 1) retained.add(matches[0].id);
+  }
+  const removed = members.filter((member: any) => !retained.has(member.id)).map((member: any) => member.id);
+  if (removed.length) await client.query("UPDATE members SET household_id=NULL WHERE household_id=$1 AND id=ANY($2::integer[])", [householdId, removed]);
+}
+
 export function validateHouseholdParent(parent: any, householdId: any) {
   if (parent === undefined) return;
   if (!householdId || !parent || !roles.includes(parent.role) || typeof parent.name !== "string" || !parent.name.trim() || parent.name.trim().length > 255) {
@@ -134,6 +154,7 @@ export async function writeMemberWithParent(query: string, params: any[], househ
 export async function prepareMemberHousehold(client: any, registration: any, member: any) {
   if (!registration || !["create", "existing"].includes(registration.mode)) invalid("Choose a valid household registration mode");
   const role = registration.role || null;
+  const slot = role === 'husband' ? 'father' : role === 'wife' ? 'mother' : role;
   if (role && !Object.hasOwn(householdRelationships, role)) invalid("Choose a valid relationship in this household");
   const family = validateFamilyMembers(registration.family_members) || [];
   if (family.some(entry => !entry.member_id || entry.member_id === member.id)) invalid("Select existing family members other than this member");
@@ -154,11 +175,11 @@ export async function prepareMemberHousehold(client: any, registration: any, mem
   }
   if (registration.relative) await validateRelativeRegistration(client, household, registration, member);
   const name = fullName(member);
-  if (role && roles.includes(role)) {
-    const current = household[`${role}_name`];
+  if (slot && roles.includes(slot)) {
+    const current = household[`${slot}_name`];
     if (current?.trim() && ![name, member.previous_name || "", registration.relative?.name || ""].some(candidate => normalize(current) === normalize(candidate))) invalid(`This household already has a ${role}: ${current}. Update the household first.`);
-    if (roles.some(other => other !== role && normalize(household[`${other}_name`] || "") === normalize(name))) invalid("This person already has a different parent/guardian role. Update the household first.");
-    await client.query(`UPDATE households SET ${role}_name = $1 WHERE id = $2`, [name, household.id]);
+    if (roles.some(other => other !== slot && normalize(household[`${other}_name`] || "") === normalize(name))) invalid("This person already has a different parent/guardian role. Update the household first.");
+    await client.query(`UPDATE households SET ${slot}_name = $1 WHERE id = $2`, [name, household.id]);
   } else if (role && roles.some(parent => [name, member.previous_name || ""].some(candidate => candidate &&
     normalize(household[`${parent}_name`] || "") === normalize(candidate)))) {
     invalid("This person already has a parent/guardian role. Update the household to change it first.");
@@ -199,6 +220,41 @@ export async function saveMemberHouseholdRelationship(client: any, householdId: 
   await client.query("UPDATE households SET family_members = $1::jsonb WHERE id = $2", [JSON.stringify(family), householdId]);
 }
 
+// Marriage is independent of parenthood. Only use the couple slots when one
+// partner is already a household head; married children can live with parents.
+export async function syncHouseholdSpouseRole(client: any, memberId: number) {
+  const member = (await client.query("SELECT id,first_name,last_name,household_id,spouse_id FROM members WHERE id=$1", [memberId])).rows[0];
+  if (!member?.household_id || !member.spouse_id) return;
+  const partner = (await client.query("SELECT id,first_name,last_name,household_id FROM members WHERE id=$1", [member.spouse_id])).rows[0];
+  if (!partner || Number(partner.household_id) !== Number(member.household_id)) return;
+  const household = (await client.query("SELECT * FROM households WHERE id=$1 FOR UPDATE", [member.household_id])).rows[0];
+  if (!household) return;
+  const name = fullName(member), partnerName = fullName(partner);
+  const father = normalize(household.father_name || ''), mother = normalize(household.mother_name || '');
+  const memberSlot = father === normalize(name) ? 'father' : mother === normalize(name) ? 'mother' : null;
+  const partnerSlot = father === normalize(partnerName) ? 'father' : mother === normalize(partnerName) ? 'mother' : null;
+  let ownRole = 'Spouse', partnerRole = 'Spouse';
+  if (memberSlot && (!household[`${memberSlot === 'father' ? 'mother' : 'father'}_name`] || partnerSlot)) {
+    ownRole = memberSlot === 'father' ? 'Husband' : 'Wife';
+    partnerRole = memberSlot === 'father' ? 'Wife' : 'Husband';
+    if (!partnerSlot) await client.query(`UPDATE households SET ${memberSlot === 'father' ? 'mother' : 'father'}_name=$1 WHERE id=$2`, [partnerName, household.id]);
+  } else if (partnerSlot && !household[`${partnerSlot === 'father' ? 'mother' : 'father'}_name`]) {
+    ownRole = partnerSlot === 'father' ? 'Wife' : 'Husband';
+    partnerRole = partnerSlot === 'father' ? 'Husband' : 'Wife';
+    await client.query(`UPDATE households SET ${partnerSlot === 'father' ? 'mother' : 'father'}_name=$1 WHERE id=$2`, [name, household.id]);
+  }
+  const family = household.family_members || [];
+  for (const [person, relationship] of [[member, ownRole], [partner, partnerRole]] as const) {
+    const index = family.findIndex((entry: any) => entry.member_id === person.id || (!entry.member_id && normalize(entry.name) === normalize(fullName(person))));
+    const entry = index >= 0 ? family[index] : {};
+    if (relationship === 'Spouse' && entry.relationship && !['Spouse','Family Member'].includes(entry.relationship)) continue;
+    const next = {...entry, member_id:person.id, name:fullName(person), relationship};
+    if (index >= 0) family[index] = next; else family.push(next);
+  }
+  validateFamilyMembers(family);
+  await client.query("UPDATE households SET family_members=$1::jsonb WHERE id=$2", [JSON.stringify(family),household.id]);
+}
+
 async function validateRelativeRegistration(client: any, household: any, registration: any, member: any) {
   const relative = registration.relative;
   if (registration.mode !== "existing" || !registration.role || !relative || typeof relative.name !== "string" || !relative.name.trim() || relative.name.trim().length > 255) invalid("Choose the relative's existing household and relationship");
@@ -207,7 +263,8 @@ async function validateRelativeRegistration(client: any, household: any, registr
   const saved = (household.family_members || []).find((entry: any) => normalize(entry.name) === sourceName || (entry.aliases || []).some((alias: string) => normalize(alias) === sourceName));
   if (saved?.member_id && saved.member_id !== member.id) invalid("This relative is already linked to a registered member. Refresh the family list.");
   const parent = roles.find(role => normalize(household[`${role}_name`] || "") === sourceName);
-  if (parent && parent !== registration.role) invalid("Keep the relative's existing parent/guardian relationship or update the household first.");
+  const slot = registration.role === 'husband' ? 'father' : registration.role === 'wife' ? 'mother' : registration.role;
+  if (parent && parent !== slot) invalid("Keep the relative's existing parent/guardian relationship or update the household first.");
   if (saved || parent) return;
   if (!Number.isSafeInteger(relative.source_member_id) || relative.source_member_id <= 0) invalid("The original family entry is required");
   const source = (await client.query("SELECT id, household_id, family_details FROM members WHERE id = $1 FOR UPDATE", [relative.source_member_id])).rows[0];

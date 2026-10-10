@@ -29,7 +29,7 @@ export const httpLogger = pinoHttp({
     req: (req) => ({
       id: req.id,
       method: req.method,
-      url: req.url
+      url: safeRequestUrl(req.url)
     }),
     res: (res) => ({
       statusCode: res.statusCode
@@ -41,12 +41,16 @@ export const httpLogger = pinoHttp({
     return "info";
   },
   customSuccessMessage: (req, res, responseTime) => {
-    return `${req.method} ${req.url} ${res.statusCode} - ${Math.round(responseTime)}ms`;
+    return `${req.method} ${safeRequestUrl(req.url)} ${res.statusCode} - ${Math.round(responseTime)}ms`;
   },
   customErrorMessage: (req, res, err) => {
-    return `${req.method} ${req.url} ${res.statusCode} - Error: ${err.message}`;
+    return `${req.method} ${safeRequestUrl(req.url)} ${res.statusCode} - Error: ${err.message}`;
   }
 });
+
+function safeRequestUrl(url: string) {
+  return url.replace(/(\/event-invitations\/public\/)[^/?]+/g, '$1[REDACTED]');
+}
 
 /**
  * Helper to log slow database queries (>200ms)

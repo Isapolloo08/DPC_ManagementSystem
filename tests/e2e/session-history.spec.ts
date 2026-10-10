@@ -1,0 +1,90 @@
+import { test, expect } from '@playwright/test';
+
+for (const theme of ['light', 'dark']) {
+  test(`Pastor can review session logs from group cards (${theme})`, async ({ page }, info) => {
+    const group = { id: 11, name: 'Discipleship group', status: 'active', curriculum: 'Romans', current_chapter: 'Chapter 5', progress_stage: 'midway', meeting_day: 'Wednesday', meeting_time: '7:00 PM', category: 'General', leader_name: 'Test Leader', member_count: 2, members: [] };
+    const member = { member_id: 2, name: 'Grace Reyes', status: 'present' };
+    const session = { id: 7, session_date: '2026-10-07', topic_title: 'Romans', chapter: 'Chapter 3', progress_stage: 'review', notes: 'Page 18, question #3\nNext: review verses 1–7.', recorded_by_name: 'Test Leader', present_count: 1, absent_count: 1, excused_count: 0, attendees: [member], absentees: [{ member_id: 3, name: 'Anna Cruz', status: 'absent' }], excused: [] };
+    let sessions = [session, { ...session, id: 6, session_date: '2026-09-30', topic_title: 'John', chapter: 'Chapter 2', progress_stage: 'intro', absent_count: 0, notes: 'Introduction' }];
+    let failHistory = true;
+    const mutations: string[] = [];
+    const errors: string[] = [];
+    page.on('pageerror', err => errors.push(err.message));
+    await page.addInitScript(theme => {
+      sessionStorage.setItem('dpc_intro_shown', 'true');
+      localStorage.setItem('chms_token', 'e30.' + btoa(JSON.stringify({ exp: 4102444800 })) + '.test');
+      localStorage.setItem('dpc_theme_mode', theme);
+      localStorage.setItem('dpc_help_welcome_v1:1:Pastor', 'seen');
+    }, theme);
+    await page.route('**/api/**', async route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.includes('/groups') && route.request().method() !== 'GET') mutations.push(path);
+      let json: any = [];
+      if (path.endsWith('/auth/setup-status')) json = { hasUsers: true, hasAdmin: true };
+      else if (path.endsWith('/auth/me')) json = { user: { id: 1, name: 'Test Pastor', email: 'pastor@example.test', username: 'pastor', role_name: 'Pastor', ministries: [] } };
+      else if (path.endsWith('/groups')) json = [group];
+      else if (path.endsWith('/groups/11/attendance')) {
+        if (failHistory) return route.fulfill({ status: 500, json: { error: 'Session history unavailable' } });
+        json = { group, sessions: [...sessions].reverse(), summary: {}, members: [] };
+      }
+      else if (path.endsWith('/study-topics')) json = { topics: [], total_count: 0 };
+      else if (path.endsWith('/notifications')) json = { items: [], unread_count: 0 };
+      else if (path.endsWith('/reports/dashboard')) json = { metrics: {}, ministry_breakdown: [] };
+      else if (path.endsWith('/members/birthdays')) json = { celebrants: [], counts: {} };
+      else if (path.endsWith('/members/baptism-candidates/qualified')) json = { candidates: [], counts: {} };
+      else if (path.endsWith('/settings/general')) json = { settings: {}, list: [] };
+      await route.fulfill({ json });
+    });
+    await page.goto('/');
+    await page.locator('aside').getByTitle('Bible Study Groups', { exact: true }).click();
+    await page.getByRole('button', { name: 'Session History', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Session History', exact: true });
+    await expect(dialog.getByRole('alert')).toHaveText(/Session history unavailable/);
+    failHistory = false;
+    await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
+    await expect(dialog.getByRole('article').first()).toHaveAttribute('aria-label', 'Session 2026-10-07');
+    await expect(dialog.getByRole('article').first().locator('time')).toHaveText('Oct 7, 2026');
+    await expect(dialog.getByRole('article').nth(1).locator('time')).toHaveText('Sep 30, 2026');
+    await expect(dialog.getByRole('article').first()).toContainText('Romans · Chapter 3');
+    await expect(dialog.getByRole('article').first()).toContainText('Review / Q&A');
+    await expect(dialog.getByRole('article').first()).toContainText('Recorded by: Test Leader');
+    await expect(dialog.getByRole('article').first()).toContainText('Page 18, question #3');
+    await dialog.getByText('View attendance details', { exact: true }).first().click();
+    await expect(dialog.getByText('Grace Reyes', { exact: true }).first()).toBeVisible();
+    await expect(dialog.getByText('Anna Cruz', { exact: true }).first()).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`session-history-${theme}.png`) });
+    await dialog.getByRole('textbox', { name: 'Search session history' }).fill('Introduction');
+    await expect(dialog.getByRole('article')).toHaveCount(1);
+    await dialog.getByRole('textbox', { name: 'Search session history' }).fill('no match');
+    await expect(dialog.getByText('No sessions match your search.')).toBeVisible();
+    await dialog.getByRole('textbox', { name: 'Search session history' }).fill('');
+    await dialog.getByText('Filter sessions', { exact: true }).click();
+    await dialog.getByLabel('Filter sessions by book').selectOption('John');
+    await dialog.getByLabel('Filter sessions by study stage').selectOption('intro');
+    await expect(dialog.getByRole('article')).toHaveCount(1);
+    await expect(dialog.getByRole('article')).toContainText('Sep 30, 2026');
+    await dialog.getByLabel('Session history from date').fill('2026-10-01');
+    await expect(dialog.getByText('No sessions match your search.')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Clear filters' }).click();
+    await dialog.getByLabel('Filter sessions by attendance').selectOption('absences');
+    await expect(dialog.getByRole('article')).toHaveCount(1);
+    await expect(dialog.getByRole('article')).toContainText('Oct 7, 2026');
+    await dialog.getByRole('button', { name: 'Clear filters' }).click();
+    await dialog.getByLabel('Session history from date').fill('2026-10-07');
+    await dialog.getByLabel('Session history to date').fill('2026-10-07');
+    await expect(dialog.getByRole('article')).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Clear filters' }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await dialog.getByText('Filter sessions', { exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Close Session History', exact: true })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`session-history-mobile-${theme}.png`) });
+    sessions = [];
+    await dialog.getByRole('button', { name: 'Refresh session history' }).click();
+    await expect(dialog.getByText('No sessions logged yet')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    expect(mutations).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}

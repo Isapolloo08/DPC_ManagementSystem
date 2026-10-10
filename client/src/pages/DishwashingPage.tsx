@@ -1,3 +1,9 @@
+import { FilterPanel } from "../components/common/FilterPanel";
+import { Pagination } from "../components/common/Pagination";
+import { useListPagination } from "../hooks/useListPagination";
+import { StatCard } from "../components/common/StatCard";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/common/Button";
 import { Target as UITarget } from "lucide-react";
 import { ModalPanel } from "../components/common/ModalPanel";
 import React, { useEffect, useState, useMemo } from "react";
@@ -154,7 +160,7 @@ const getProtocolTheme = (color: string) => {
 export const DishwashingPage: React.FC = () => {
   const { user } = useAuth();
   const { showToast, deleteWithUndo } = useToast();
-  const isAdminOrCoordinator = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "Coordinator" || user?.role_name === "IT Admin";
+  const canManage = user?.role_name === "Admin" || user?.role_name === "Pastor" || user?.role_name === "IT Admin";
 
   const [activeTab, setActiveTab] = useState<"teams" | "schedule" | "tasks">("teams");
   const [teams, setTeams] = useState<DishwashingTeam[]>([]);
@@ -484,7 +490,7 @@ export const DishwashingPage: React.FC = () => {
         (t.leader_name && t.leader_name.toLowerCase().includes(searchQuery.toLowerCase()));
       const hasBS = Boolean(t.biblestudy_group_ids && t.biblestudy_group_ids.length > 0) || Boolean(t.biblestudy_group_id);
       const hasMin = Boolean(t.ministry_ids && t.ministry_ids.length > 0) || Boolean(t.ministry_id);
-      
+
       const isCombined = t.cycle_mode === "combined" || (hasBS && hasMin);
       const isBS = (t.cycle_mode === "biblestudy_group" || (hasBS && !hasMin)) && !isCombined;
       const isMin = (t.cycle_mode === "ministry" || (hasMin && !hasBS)) && !isCombined;
@@ -1080,6 +1086,8 @@ export const DishwashingPage: React.FC = () => {
     }
   };
 
+  const teamsPage = useListPagination(filteredTeams, JSON.stringify([searchQuery, filterMode]));
+  const schedulePage = useListPagination(schedule.map((item, index) => ({ item, index })));
   const guideData = useGuideDataState("washing-teams", { loading, count: activeTab === "teams" ? filteredTeams.length : teams.length, filtered: activeTab === "teams" && Boolean(searchQuery || filterMode !== "all"), retry: loadDishwashingData });
 
   if (loading && teams.length === 0) {
@@ -1089,123 +1097,49 @@ export const DishwashingPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* TOP HEADER: Culinary Fellowship Command */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 sm:p-8 text-white shadow-xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <img
-          src="/container_bg.jpg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-35 mix-blend-screen pointer-events-none"
-        />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 space-y-2">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-xs font-medium uppercase tracking-wider backdrop-blur-md">
-              <Utensils className="w-3.5 h-3.5 text-amber-300" />
-              <span>Rotating Service Cycle</span>
-            </div>
-            <span className="text-xs bg-white/10 border border-white/15 text-slate-200 font-medium px-3 py-1 rounded-full backdrop-blur-md">
-              {teams.length} Teams in Loop
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
-            Sunday Dishwashing & Kitchen Care
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300/90 max-w-2xl leading-relaxed">
-            Automated weekly post-fellowship dishwashing cycle across Bible Study Groups and Church Ministries.
-          </p>
-        </div>
-
-        <div className="relative z-10 flex items-center gap-2.5 flex-wrap shrink-0">
-          <button
-            onClick={loadDishwashingData}
-            className="p-2.5 rounded-2xl border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all shadow-2xs backdrop-blur-md cursor-pointer active:scale-95"
-            title="Refresh schedule"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-amber-300" : ""}`} />
-          </button>
-          {isAdminOrCoordinator && (
-            <button data-guide="washing-new"
-              onClick={handleOpenCreateTeam}
-              className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-indigo-950 font-medium text-xs px-5 py-2.5 rounded-2xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <Plus className="w-4 h-4 text-indigo-950" />
+      <PageHeader icon={<Utensils />} title={<>Sunday Dishwashing & Kitchen Care</>}
+        description={<>Automated weekly post-fellowship dishwashing cycle across Bible Study Groups and Church Ministries.</>}
+        actions={<><div className="relative z-10 flex items-center gap-2.5 flex-wrap shrink-0">
+          <Button onClick={loadDishwashingData} title="Refresh schedule" variant="secondary" size="icon">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin " : ""}`} />
+          </Button>
+          {canManage && (
+            <Button data-guide="washing-new" onClick={handleOpenCreateTeam} variant="primary">
+              <Plus className="w-4 h-4 " />
               <span>Add Team to Cycle</span>
-            </button>
+            </Button>
           )}
-        </div>
-      </div>
+        </div></>} />
 
-      {/* QUICK STATS ROW */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-teal-50 text-teal-600 border border-teal-100">
-            <ListOrdered className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">Rotating Units</span>
-            <span className="text-lg font-medium text-slate-800">{teams.length} Teams in Loop</span>
-          </div>
-        </div>
-
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
-            <CalendarDays className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">Turn Repeat</span>
-            <span className="text-lg font-medium text-slate-800">Every {teams.length || 1} Weeks</span>
-          </div>
-        </div>
-
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">Completed Cleanups</span>
-            <span className="text-lg font-medium text-slate-800">{completedCount} Verified</span>
-          </div>
-        </div>
-
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-amber-50 text-amber-600 border border-amber-100">
-            <CalendarCheck className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider block">This Sunday</span>
-            <span className="text-sm font-medium text-slate-800 truncate block max-w-[140px]">
-              {thisSunday?.team?.name || "Pending Assign"}
-            </span>
-          </div>
-        </div>
+      {/* Rotation summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+        <StatCard label="Rotating Units" value={teams.length} icon={<ListOrdered />} tone="sage" description={teams.length === 1 ? 'team in rotation' : 'teams in rotation'} />
+        <StatCard label="Turn Repeat" value={teams.length === 0 ? 'No rotation yet' : teams.length === 1 ? 'Every week' : 'Every ' + teams.length + ' weeks'} valueSize="text" icon={<CalendarDays />} description="Rotation interval" />
+        <StatCard label="Completed Cleanups" value={completedCount} icon={<CheckCircle2 />} tone="emerald" description="Verified" />
+        <StatCard label="This Sunday" value={thisSunday?.team?.name || "Pending Assign"} valueSize="text" icon={<CalendarCheck />} tone="amber" description="Assigned dishwashing crew" />
       </div>
 
       {/* DUAL SHOWCASE HERO: [THIS SUNDAY SPOTLIGHT (7 cols)] + [UPCOMING ROTATION FORECAST CONTAINER (5 cols)] */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* LEFT CONTAINER: THIS SUNDAY SPOTLIGHT */}
-        <div className="lg:col-span-7 relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-teal-800/40 flex flex-col justify-between space-y-5">
-          {/* Subtle Ambient Glow */}
-          <div className="absolute -top-12 -right-12 w-64 h-64 bg-teal-500/15 pointer-events-none rounded-full blur-3xl"></div>
-          <div className="absolute -bottom-10 -left-10 w-52 h-52 bg-emerald-500/10 pointer-events-none rounded-full blur-2xl"></div>
-
+        <div data-dishwashing-spotlight className="lg:col-span-7 min-w-0 relative overflow-hidden bg-white rounded-2xl p-6 sm:p-7 text-charcoal shadow-sm border border-stone-200 flex flex-col justify-between space-y-5">
           <div className="relative z-10 space-y-4">
             {/* Header Badge Row */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="bg-emerald-500 text-slate-950 font-medium text-[12px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm animate-pulse">
-                  <Droplets className="w-3.5 h-3.5 text-slate-950" />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium text-[12px] px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+                  <Droplets className="w-3.5 h-3.5 text-emerald-800" />
                   <span>THIS SUNDAY ON DISHWASHING</span>
                 </span>
                 {thisSunday && (
-                  <span className="text-xs text-teal-100 font-medium bg-white/10 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
+                  <span className="text-xs text-muted font-medium bg-stone-50 px-3 py-1 rounded-full  border border-stone-200">
                     {thisSunday.date_formatted}
                   </span>
                 )}
               </div>
 
               {thisSunday?.status === "completed" && (
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[12px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[12px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
                   <Check className="w-3 h-3" />
                   <span>Sanitation Done</span>
                 </span>
@@ -1215,63 +1149,63 @@ export const DishwashingPage: React.FC = () => {
             {/* Main Team Info */}
             {thisSunday?.team ? (
               <div>
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
+                <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+                  <h2 className="w-full text-xl sm:text-2xl font-semibold text-charcoal tracking-tight leading-snug [overflow-wrap:anywhere]">
                     {thisSunday.team.name}
                   </h2>
                   <span
-                    className="w-3.5 h-3.5 rounded-full ring-2 ring-white/60 shadow-md inline-block"
+                    className="w-3.5 h-3.5 shrink-0 rounded-full ring-2 ring-white/60 shadow-md inline-block"
                     style={{ backgroundColor: thisSunday.team.color }}
                   ></span>
                   {thisSunday.team.cycle_mode === "biblestudy_group" && (
-                    <span className="text-[12px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[12px] bg-indigo-50 text-indigo-800 border border-indigo-200 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
                       <BookOpen className="w-3 h-3" />
                       <span>Bible Study Group</span>
                     </span>
                   )}
                   {thisSunday.team.cycle_mode === "ministry" && (
-                    <span className="text-[12px] bg-teal-500/30 text-teal-200 border border-teal-400/30 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[12px] bg-teal-50 text-teal-800 border border-teal-200 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Building2 className="w-3 h-3" />
                       <span>Ministry Unit</span>
                     </span>
                   )}
                 </div>
 
-                <p className="text-xs text-teal-100/85 mt-2 leading-relaxed max-w-xl">
+                <p className="text-sm text-muted mt-2 leading-relaxed max-w-xl">
                   {thisSunday.notes || thisSunday.team.tasks_checklist || "Fellowship dinnerware pre-rinse, sudsy washing, sanitizing dip, drying rack storage & kitchen counter wipedown."}
                 </p>
 
                 {/* Point Person & Volunteers row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
-                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-2.5">
-                    <UserCheck className="w-4 h-4 text-amber-300 shrink-0" />
+                  <div className="bg-stone-50  p-3 rounded-2xl border border-stone-200 flex items-center gap-2.5 min-w-0">
+                    <UserCheck className="w-4 h-4 text-muted shrink-0" />
                     <div className="min-w-0">
-                      <span className="text-[12px] text-teal-200/70 block uppercase font-medium">Crew Leader / Contact</span>
-                      <span className="text-xs font-medium text-white truncate block">
+                      <span className="text-[12px] text-muted block uppercase font-medium">Crew Leader / Contact</span>
+                      <span className="text-sm font-medium text-charcoal block [overflow-wrap:anywhere]">
                         {thisSunday.team.leader_name || "Assigned Point Person"}
                       </span>
                       {(thisSunday.team.leader_contact || thisSunday.team.leader_phone) && (
-                        <span className="text-[12px] text-teal-300 font-mono block">
+                        <span className="text-xs text-muted block [overflow-wrap:anywhere]">
                           {thisSunday.team.leader_contact || thisSunday.team.leader_phone}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 flex items-center gap-2.5">
-                    <Users className="w-4 h-4 text-emerald-300 shrink-0" />
-                    <div>
-                      <span className="text-[12px] text-teal-200/70 block uppercase font-medium">Volunteer Crew</span>
-                      <span className="text-xs font-medium text-white">
-                        {thisSunday.team.members?.length || thisSunday.team.members_count || thisSunday.team.volunteers_count || 5} Members Assigned
+                  <div className="bg-stone-50  p-3 rounded-2xl border border-stone-200 flex items-center gap-2.5 min-w-0">
+                    <Users className="w-4 h-4 text-muted shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-[12px] text-muted block uppercase font-medium">Volunteer Crew</span>
+                      <span className="text-xs font-medium text-charcoal">
+                        {thisSunday.team.members?.length || thisSunday.team.members_count || thisSunday.team.volunteers_count || 0} Members Assigned
                       </span>
-                      <span className="text-[12px] text-emerald-300 block">Ready for fellowship duty</span>
+                      <span className="text-[12px] text-muted block">Ready for fellowship duty</span>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="py-6 text-center text-teal-200/60 text-xs">
+              <div className="py-6 text-center text-muted text-xs">
                 No dishwashing team active for this Sunday.
               </div>
             )}
@@ -1279,20 +1213,20 @@ export const DishwashingPage: React.FC = () => {
 
           {/* Action Row */}
           {thisSunday?.team && (
-            <div className="relative z-10 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-teal-200 font-medium bg-white/10 border border-white/20 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs backdrop-blur-xs">
-                  <CheckCircle2 className="w-4 h-4 text-teal-300" />
+            <div className="relative z-10 pt-3 border-t border-stone-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-xs text-teal-800 font-medium bg-teal-50 border border-teal-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs ">
+                  <CheckCircle2 className="w-4 h-4 text-muted" />
                   <span>Active Live Cycle • {thisSunday.date_formatted}</span>
                 </div>
 
-                <button data-guide="washing-swap"
+                {canManage && (<button data-guide="washing-swap"
                   onClick={() => handleOpenSwapModal(thisSunday)}
-                  className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white font-medium text-xs py-2 px-3.5 rounded-xl border border-white/15 transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1.5 bg-stone-50 hover:bg-stone-100 text-charcoal font-medium text-xs py-2 px-3.5 rounded-xl border border-stone-200 transition-all active:scale-95 cursor-pointer"
                 >
-                  <ArrowLeftRight className="w-3.5 h-3.5 text-teal-300" />
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-muted" />
                   <span>Swap Turn</span>
-                </button>
+                </button>)}
               </div>
 
               {thisSunday.team.members && thisSunday.team.members.length > 0 && (
@@ -1300,14 +1234,14 @@ export const DishwashingPage: React.FC = () => {
                   {thisSunday.team.members.slice(0, 4).map((m, i) => (
                     <div
                       key={i}
-                      className="w-7 h-7 rounded-full bg-teal-800 border-2 border-slate-900 flex items-center justify-center text-[12px] font-medium text-white"
+                      className="w-7 h-7 rounded-full bg-indigo-50 border-2 border-white flex items-center justify-center text-[12px] font-medium text-charcoal"
                       title={`${m.first_name} ${m.last_name}`}
                     >
                       {m.first_name.charAt(0)}
                     </div>
                   ))}
                   {thisSunday.team.members.length > 4 && (
-                    <div className="w-7 h-7 rounded-full bg-teal-900 border-2 border-slate-900 flex items-center justify-center text-[12px] font-medium text-teal-200">
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[12px] font-medium text-muted">
                       +{thisSunday.team.members.length - 4}
                     </div>
                   )}
@@ -1318,72 +1252,72 @@ export const DishwashingPage: React.FC = () => {
         </div>
 
         {/* RIGHT CONTAINER: UPCOMING ROTATION FORECAST CONTAINER */}
-        <div className="lg:col-span-5 bg-slate-50 rounded-3xl p-6 border border-teal-200/70 shadow-sm flex flex-col justify-between space-y-4">
+        <div data-dishwashing-queue className="lg:col-span-5 min-w-0 bg-white rounded-2xl p-6 border border-stone-200 shadow-sm flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-teal-100">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between pb-3 border-b border-stone-200">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="p-1.5 rounded-xl bg-teal-100 text-teal-800">
                   <Calendar className="w-4 h-4" />
                 </span>
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Upcoming Rotation Queue</h3>
+                  <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Upcoming rotation</h3>
                   <span className="text-[12px] text-slate-500">Next scheduled kitchen steward units</span>
                 </div>
               </div>
               <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
-                16-Wk Forecast
+                {schedule.length}-week forecast
               </span>
             </div>
 
             {/* Next Sunday Card */}
             {nextSunday ? (
               <div className="mt-4 p-4 rounded-2xl bg-white border border-teal-200/80 shadow-2xs space-y-2.5 relative overflow-hidden group hover:border-teal-400 transition-all">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between">
                   <span className="text-[12px] font-medium uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200">
                     NEXT SUNDAY • {nextSunday.date_formatted}
                   </span>
-                  <span className="text-[12px] text-slate-400 font-medium">Week #{nextSunday.week_number}</span>
+                  <span className="text-[12px] text-muted font-medium">Week #{nextSunday.week_number}</span>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <span
-                      className="w-3.5 h-3.5 rounded-full ring-2 ring-slate-100"
+                      className="w-3.5 h-3.5 shrink-0 rounded-full ring-2 ring-slate-100"
                       style={{ backgroundColor: nextSunday.team?.color || "#0D9488" }}
                     ></span>
-                    <div>
-                      <h4 className="font-semibold text-sm text-slate-900">{nextSunday.team?.name || "Unassigned"}</h4>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-semibold text-sm text-charcoal [overflow-wrap:anywhere]">{nextSunday.team?.name || "Unassigned"}</h4>
                       <span className="text-[12px] text-slate-500">
                         Lead: <strong className="text-slate-700">{nextSunday.team?.leader_name || "Team Leader"}</strong>
                       </span>
                     </div>
                   </div>
-                  <button
+                  {canManage && (<button
                     onClick={() => handleOpenSwapModal(nextSunday)}
-                    className="p-1.5 rounded-lg bg-slate-50 hover:bg-teal-50 text-slate-400 hover:text-teal-700 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg bg-slate-50 hover:bg-teal-50 text-muted hover:text-teal-700 transition-colors cursor-pointer"
                     title="Swap this upcoming date"
                   >
                     <ArrowLeftRight className="w-3.5 h-3.5" />
-                  </button>
+                  </button>)}
                 </div>
               </div>
             ) : (
-              <div className="p-4 text-center text-xs text-slate-400">No next Sunday data</div>
+              <div className="p-4 text-center text-xs text-muted">No next Sunday data</div>
             )}
 
             {/* Third Sunday Card (On Deck) */}
             {thirdSunday && (
-              <div className="mt-2.5 p-3.5 rounded-2xl bg-white/70 border border-slate-200/80 shadow-2xs flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2.5">
+              <div className="mt-2.5 p-3.5 rounded-2xl bg-white/70 border border-stone-200 shadow-2xs flex flex-wrap items-center justify-between text-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <span
-                    className="w-3 h-3 rounded-full"
+                    className="w-3 h-3 shrink-0 rounded-full"
                     style={{ backgroundColor: thirdSunday.team?.color || "#64748B" }}
                   ></span>
-                  <div>
-                    <span className="text-[12px] font-medium text-slate-400 block uppercase">
+                  <div className="min-w-0">
+                    <span className="text-[12px] font-medium text-muted block uppercase">
                       ON DECK • {thirdSunday.date_formatted}
                     </span>
-                    <span className="font-medium text-slate-800">{thirdSunday.team?.name}</span>
+                    <span className="font-medium text-charcoal [overflow-wrap:anywhere]">{thirdSunday.team?.name}</span>
                   </div>
                 </div>
                 <span className="text-[12px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
@@ -1394,10 +1328,10 @@ export const DishwashingPage: React.FC = () => {
           </div>
 
           {/* Quick Rotation Indicator */}
-          <div className="pt-3 border-t border-teal-100 flex items-center justify-between text-xs font-medium text-slate-600">
+          <div className="pt-3 border-t border-stone-200 flex flex-wrap items-center justify-between text-xs font-medium text-slate-600">
             <span className="flex items-center gap-1.5 text-teal-800">
               <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-              <span>Full 16-Week Schedule is Active</span>
+              <span>{schedule.length}-week rotation available</span>
             </span>
             <button
               onClick={() => setActiveTab("schedule")}
@@ -1413,14 +1347,14 @@ export const DishwashingPage: React.FC = () => {
       {/* FILTER & TAB CONTROLS BAR */}
       <div className="bg-white/95 rounded-3xl p-3 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+        <div className="page-tabs flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
           <button data-guide="washing-teams-tab"
             onClick={() => setActiveTab("teams")}
             className={`flex items-center gap-2 text-xs font-medium px-4 py-2.5 rounded-2xl transition-all cursor-pointer ${activeTab === "teams"
               ? "bg-slate-900 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
-          >
+           aria-pressed={activeTab === "teams"}>
             <Users className="w-4 h-4" />
             <span>Duty Units & Teams ({teams.length})</span>
           </button>
@@ -1432,7 +1366,7 @@ export const DishwashingPage: React.FC = () => {
               ? "bg-slate-900 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
-          >
+           aria-pressed={activeTab === "schedule"}>
             <CalendarCheck className="w-4 h-4" />
             <span>16-Week Rotation Timeline ({schedule.length})</span>
           </button>
@@ -1443,7 +1377,7 @@ export const DishwashingPage: React.FC = () => {
               ? "bg-slate-900 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               }`}
-          >
+           aria-pressed={activeTab === "tasks"}>
             <CheckSquare className="w-4 h-4" />
             <span>Kitchen Sanitation Protocol</span>
           </button>
@@ -1451,7 +1385,8 @@ export const DishwashingPage: React.FC = () => {
 
         {/* Filter & Search Bar (Active in Teams Tab) */}
         {activeTab === "teams" && (
-          <div data-guide="washing-filters" className="flex items-center gap-2">
+          <FilterPanel title="Duty unit filters" summary={[filterMode === "all" ? "All types" : filterMode.replace(/_/g, " "), searchQuery].filter(Boolean).join(" · ")}>
+            <div data-guide="washing-filters" className="filter-panel-layout flex items-center gap-2">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
@@ -1475,6 +1410,7 @@ export const DishwashingPage: React.FC = () => {
               <option value="custom">Custom Teams</option>
             </select>
           </div>
+          </FilterPanel>
         )}
       </div>
 
@@ -1487,7 +1423,7 @@ export const DishwashingPage: React.FC = () => {
             <CardGridSkeleton count={6} columns={3} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredTeams.map((team) => (
+              {teamsPage.items.map((team) => (
                 <div
                   key={team.id}
                   className="bg-white rounded-3xl border border-slate-200/90 hover:border-teal-400 shadow-sm hover:shadow-md transition-all p-5 sm:p-6 flex flex-col justify-between space-y-4 relative overflow-hidden group"
@@ -1574,20 +1510,20 @@ export const DishwashingPage: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-1">
-                        <button
+                        {canManage && (<button
                           onClick={() => handleOpenEditTeam(team)}
                           className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                           title="Edit Unit"
                         >
                           <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
+                        </button>)}
+                        {canManage && (<button
                           onClick={() => handleDeleteTeam(team.id, team.name)}
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                           title="Remove Unit"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        </button>)}
                       </div>
                     </div>
 
@@ -1659,13 +1595,13 @@ export const DishwashingPage: React.FC = () => {
                         <div className="mt-4 space-y-2">
                           <div className="flex items-center justify-between text-xs font-medium text-slate-800 flex-wrap gap-1">
                             <span>Members ({displayMembers.length})</span>
-                            <button
+                            {canManage && (<button
                               onClick={() => handleOpenAddMember(team)}
                               className="text-teal-700 hover:text-teal-900 text-[12px] flex items-center gap-1 font-medium cursor-pointer transition-colors"
                             >
                               <UserPlus className="w-3.5 h-3.5" />
                               <span>Add Member</span>
-                            </button>
+                            </button>)}
                           </div>
 
                           {displayMembers.length > 0 ? (
@@ -1687,25 +1623,25 @@ export const DishwashingPage: React.FC = () => {
                                     )}
                                   </div>
 
-                                  <button
+                                  {canManage && (<button
                                     onClick={() => handleRemoveMember(team.id, m.member_id, `${m.first_name} ${m.last_name}`)}
                                     className="p-1 text-slate-300 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                                     title="Remove from unit"
                                   >
                                     <X className="w-3 h-3" />
-                                  </button>
+                                  </button>)}
                                 </div>
                               ))}
                             </div>
                           ) : (
                             <div className="p-3.5 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
                               No members assigned yet.
-                              <button
+                              {canManage && (<button
                                 onClick={() => handleOpenAddMember(team)}
                                 className="block mx-auto mt-1 text-teal-700 font-medium underline cursor-pointer"
                               >
                                 + Add first member
-                              </button>
+                              </button>)}
                             </div>
                           )}
                         </div>
@@ -1732,18 +1668,19 @@ export const DishwashingPage: React.FC = () => {
                   ? "Try resetting your search filter to see all active rotating teams."
                   : "Add Bible Study Groups, Ministries, or Custom Teams to start the automatic Sunday duty cycle."}
               </p>
-              <button data-guide="washing-new"
+              {canManage && (<button data-guide="washing-new"
                 onClick={handleOpenCreateTeam}
                 className="mt-4 bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs px-5 py-2.5 rounded-2xl shadow-sm cursor-pointer"
               >
                 + Add First Dishwashing Team
-              </button>
+              </button>)}
             </div>
           )}
         </div>
       )}
 
       {/* ========================================================================= */}
+      {activeTab === "teams" && <Pagination label="kitchen teams" page={teamsPage.page} pageSize={teamsPage.pageSize} total={teamsPage.total} onPageChange={teamsPage.setPage} onPageSizeChange={teamsPage.setPageSize} loading={loading} />}
       {/* TAB 2: 16-WEEK PERPETUAL ROTATION SCHEDULE TIMELINE */}
       {/* ========================================================================= */}
       {activeTab === "schedule" && (
@@ -1764,7 +1701,7 @@ export const DishwashingPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {schedule.map((item, idx) => (
+            {schedulePage.items.map(({ item, index: idx }) => (
               <div
                 key={idx}
                 className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 ${item.is_this_sunday
@@ -1863,21 +1800,21 @@ export const DishwashingPage: React.FC = () => {
                     </span>
                   )}
 
-                  <button
+                  {canManage && (<button
                     onClick={() => handleOpenSwapModal(item)}
                     className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
                     title="Swap with another Sunday"
                   >
                     <ArrowLeftRight className="w-4 h-4" />
-                  </button>
+                  </button>)}
 
-                  <button data-guide="washing-override"
+                  {canManage && (<button data-guide="washing-override"
                     onClick={() => handleOpenOverrideModal(item)}
                     className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
                     title="Edit/Override single date"
                   >
                     <Edit className="w-4 h-4" />
-                  </button>
+                  </button>)}
                 </div>
               </div>
             ))}
@@ -1888,6 +1825,7 @@ export const DishwashingPage: React.FC = () => {
       {/* ========================================================================= */}
       {/* TAB 3: SANITATION PROTOCOL & KITCHEN SOPs (DYNAMIC & EDITABLE) */}
       {/* ========================================================================= */}
+      {activeTab === "schedule" && <Pagination label="Sunday schedule" page={schedulePage.page} pageSize={schedulePage.pageSize} total={schedulePage.total} onPageChange={schedulePage.setPage} onPageSizeChange={schedulePage.setPageSize} loading={loading} />}
       {activeTab === "tasks" && (
         <div className="space-y-6">
           {/* Action Header */}
@@ -1902,7 +1840,7 @@ export const DishwashingPage: React.FC = () => {
               </p>
             </div>
 
-            {isAdminOrCoordinator && (
+            {canManage && (
               <div className="flex items-center gap-2.5 flex-wrap">
                 <button
                   onClick={handleResetProtocols}
@@ -1953,7 +1891,7 @@ export const DishwashingPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {isAdminOrCoordinator && (
+                      {canManage && (
                         <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => handleOpenEditProtocol(proto)}
@@ -2000,7 +1938,7 @@ export const DishwashingPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {isAdminOrCoordinator && (
+                  {canManage && (
                     <button data-guide="washing-checklist-new"
                       onClick={handleOpenAddChecklist}
                       className="text-[12px] font-medium text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
@@ -2019,7 +1957,7 @@ export const DishwashingPage: React.FC = () => {
                         ? "bg-emerald-50/60 border-emerald-200/80 text-emerald-900"
                         : "bg-slate-50 hover:bg-slate-100/80 border-slate-100 text-slate-700"
                         }`}
-                      onClick={() => handleToggleChecklistItem(item.id)}
+                      onClick={canManage ? () => handleToggleChecklistItem(item.id) : undefined}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         {item.completed ? (
@@ -2035,7 +1973,7 @@ export const DishwashingPage: React.FC = () => {
                         </span>
                       </div>
 
-                      {isAdminOrCoordinator && (
+                      {canManage && (
                         <div
                           className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                           onClick={(e) => e.stopPropagation()}

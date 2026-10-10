@@ -285,6 +285,7 @@ export const SearchableAutocomplete: React.FC<SearchableAutocompleteProps> = ({
       <div className="relative">
         <input
           ref={inputRef}
+          aria-label={label || undefined}
           type="text"
           required={required}
           value={value}

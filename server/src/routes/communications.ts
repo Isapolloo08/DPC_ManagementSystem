@@ -1,3 +1,4 @@
+import { parsePagination, queryPage, validatePagination } from "../utils/pagination";
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
@@ -6,9 +7,9 @@ import { emitRealtimeEvent } from "../socket";
 const router = Router();
 
 // List announcements
-router.get("/announcements", async (req: Request, res: Response) => {
+router.get("/announcements", validatePagination, async (req: Request, res: Response) => {
   try {
-    const { ministry_id } = req.query;
+    const { ministry_id, search } = req.query;
 
     let query = `
       SELECT a.*, 
@@ -27,7 +28,12 @@ router.get("/announcements", async (req: Request, res: Response) => {
       query += ` AND (a.ministry_id = $${params.length} OR a.ministry_id IS NULL)`;
     }
 
-    query += " ORDER BY a.is_pinned DESC, a.created_at DESC";
+    if (typeof search === "string" && search.trim()) {
+      params.push("%" + search.trim() + "%");
+      query += ` AND (a.title ILIKE $${params.length} OR a.body ILIKE $${params.length} OR u.name ILIKE $${params.length})`;
+    }
+    query += " ORDER BY a.is_pinned DESC, a.created_at DESC, a.id DESC";
+    if (parsePagination(req.query).enabled) return res.json(await queryPage(query, params, req.query));
 
     const announcements = await db.all(query, params);
     res.json(announcements);
@@ -82,4 +88,3 @@ router.delete("/announcements/:id", authMiddleware, requireRoles("Admin", "Pasto
 });
 
 export default router;
-

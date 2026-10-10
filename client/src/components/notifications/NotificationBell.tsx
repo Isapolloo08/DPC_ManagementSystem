@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CheckCheck, ChevronRight, Clock, Loader2 } from "lucide-react";
+import { Bell, BookOpen, CheckCheck, ChevronRight, Clock, Loader2 } from "lucide-react";
+import { NotificationMessage } from "./NotificationMessage";
 import { api } from "../../api";
 import { useToast } from "../../context/ToastContext";
 import { useSocketEvent } from "../../socket";
@@ -79,6 +80,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
         onClick={() => { setOpen(value => !value); if (!open) void load(); }}
         className="relative p-2 rounded-full hover:bg-gray-100 text-muted hover:text-charcoal cursor-pointer transition-colors"
         aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
+        aria-expanded={open}
       >
         <Bell className="w-4 h-4" />
         {unreadCount > 0 && (
@@ -89,11 +91,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
       </button>
 
       {open && (
-        <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-11 w-[calc(100vw-1.5rem)] sm:w-96 max-h-[75vh] overflow-hidden rounded-2xl bg-white border border-indigo-100 shadow-2xl text-charcoal z-50">
+        <div aria-label="Notification panel" className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-11 w-[calc(100vw-1.5rem)] sm:w-[420px] max-h-[75vh] overflow-hidden rounded-2xl bg-white border border-indigo-100 shadow-2xl text-charcoal z-50">
           <div className="px-4 py-3 bg-indigo-950 text-white flex items-center justify-between">
-            <div>
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-white/10"><Bell className="w-4 h-4 text-amber-300" /></span>
+              <div>
               <p className="font-medium text-sm">Notifications</p>
-              <p className="text-[12px] text-indigo-200">{unreadCount} unread</p>
+              <p className="text-[12px] text-indigo-200">{unreadCount ? `${unreadCount} unread updates` : "You're all caught up"}</p>
+              </div>
             </div>
             {unreadCount > 0 && (
               <button type="button" onClick={() => void markAllRead()} className="text-[12px] font-medium text-amber-300 hover:text-amber-200 flex items-center gap-1">
@@ -102,7 +107,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
             )}
           </div>
 
-          <div className="max-h-[55vh] overflow-y-auto">
+          <div className="max-h-[55vh] overflow-y-auto p-2 space-y-2 bg-ivory-light">
             {loading && items.length === 0 ? (
               <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-indigo-500" /></div>
             ) : items.length === 0 ? (
@@ -112,13 +117,16 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
                 type="button"
                 key={notification.id}
                 onClick={() => void openNotification(notification)}
-                className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-indigo-50 transition-colors flex gap-3 ${notification.is_read ? "bg-white" : "bg-amber-50/60"}`}
+                className={`w-full text-left p-3 rounded-xl border hover:border-indigo-200 hover:bg-indigo-50 transition-colors flex gap-2.5 ${notification.is_read ? "bg-white border-gray-200" : "bg-white border-amber-200 shadow-sm"}`}
               >
-                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${notification.is_read ? "bg-slate-300" : "bg-amber-500"}`} />
+                <span className="relative self-start rounded-lg bg-indigo-50 text-indigo p-2 shrink-0">
+                  {notification.type === "bible_study_update" ? <BookOpen className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                  {!notification.is_read && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white" />}
+                </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium text-indigo-950 truncate">{notification.title}</span>
-                  <span className="block text-[12px] text-slate-600 line-clamp-2 mt-0.5 whitespace-pre-line">{notification.message}</span>
-                  <span className="mt-1 text-[12px] text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" />{relativeTime(notification.created_at)}</span>
+                  <span className="block text-xs font-semibold text-indigo-950 break-words" style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>{notification.title}</span>
+                  <NotificationMessage notification={notification} compact />
+                  <span className="mt-2 text-[11px] text-muted flex items-center gap-1"><Clock className="w-3 h-3" />{relativeTime(notification.created_at)}</span>
                 </span>
                 <ChevronRight className="w-4 h-4 text-slate-300 self-center" />
               </button>

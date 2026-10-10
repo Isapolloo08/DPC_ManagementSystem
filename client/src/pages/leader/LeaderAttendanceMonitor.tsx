@@ -1,3 +1,4 @@
+import { FilterPanel } from "../../components/common/FilterPanel";
 import { MessageSquare as UIMessageSquare } from "lucide-react";
 import React, { useState, useEffect, useMemo } from "react";
 import {
@@ -16,6 +17,7 @@ import {
   ChevronLeft, ChevronRight, CalendarClock
 } from "lucide-react";
 import { ConfirmationModal } from "../../components/common/ConfirmationModal";
+import { StatCardSkeleton, TableSkeleton } from "../../components/common/SkeletonLoader";
 
 interface LeaderAttendanceMonitorProps {
   activeGroup: BibleStudyGroup | null;
@@ -191,6 +193,8 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
     );
   }
 
+  if (loading && !data) return <div role="status" aria-busy="true" aria-label="Loading group attendance..." className="space-y-6"><StatCardSkeleton /><TableSkeleton columns={6} /></div>;
+
   const summary = data?.summary || {
     total_sessions: 0,
     total_enrolled: activeGroup.members?.length || 0,
@@ -362,7 +366,8 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
         </div>
 
         {/* Search & Filter Toolbar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <FilterPanel title="Attendance monitor filters" summary={[activeSubTab, statusFilter !== "all" && statusFilter.replace(/_/g, " "), searchQuery].filter(Boolean).join(" · ")}>
+          <div className="filter-panel-layout flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search Input */}
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
@@ -437,6 +442,7 @@ export const LeaderAttendanceMonitor: React.FC<LeaderAttendanceMonitorProps> = (
             </div>
           )}
         </div>
+        </FilterPanel>
 
         {/* ==================================================== */}
         {/* SUB-TAB 1: DISCIPLE ABSENTEE & ATTENDANCE BREAKDOWN */}

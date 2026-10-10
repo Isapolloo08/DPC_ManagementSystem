@@ -1,0 +1,7 @@
+.ui-badge { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; border: 1px solid var(--badge-border); border-radius: 6px; background: var(--badge-bg); color: var(--badge-text); font-size: 12px; font-weight: 500; line-height: 1.5; vertical-align: middle; }
+.ui-badge svg { color: inherit; flex-shrink: 0; }
+.ui-badge--success { --badge-bg: var(--status-success-bg); --badge-text: var(--status-success-text); --badge-border: var(--status-success-border); }
+.ui-badge--warning { --badge-bg: var(--status-warning-bg); --badge-text: var(--status-warning-text); --badge-border: var(--status-warning-border); }
+.ui-badge--danger { --badge-bg: var(--status-danger-bg); --badge-text: var(--status-danger-text); --badge-border: var(--status-danger-border); }
+.ui-badge--info { --badge-bg: var(--status-info-bg); --badge-text: var(--status-info-text); --badge-border: var(--status-info-border); }
+.ui-badge--neutral { --badge-bg: var(--status-neutral-bg); --badge-text: var(--status-neutral-text); --badge-border: var(--status-neutral-border); }

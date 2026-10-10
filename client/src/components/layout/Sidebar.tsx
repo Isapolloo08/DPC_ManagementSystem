@@ -1,4 +1,5 @@
 import { ViewportOverlay } from "../common/ViewportOverlay";
+import './sidebar.css';
 import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { ChurchLogo } from "../common/ChurchLogo";
@@ -41,6 +42,23 @@ interface SidebarProps {
   onClose?: () => void;
   onOpenProfile?: () => void;
 }
+
+// Keep related pages together across roles without changing their access.
+const NAVIGATION_ORDER: NavTab[] = [
+  "dashboard", "leader-dashboard",
+  "members", "leader-members", "plannedvisits",
+  "attendance", "attendancelog", "servicecalendar",
+  "biblestudy", "leaderportal", "leader-biblestudy", "curriculum", "biblereading",
+  "events", "sundaycycle",
+  "duty", "dishwashing",
+  "communications", "notifications",
+  "reports", "users", "audit", "settings", "profile",
+];
+
+const navigationRank = (tab: NavTab) => {
+  const rank = NAVIGATION_ORDER.indexOf(tab);
+  return rank < 0 ? NAVIGATION_ORDER.length : rank;
+};
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpen = false, onClose, onOpenProfile }) => {
   const { user, logout } = useAuth();
@@ -87,111 +105,110 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
   const isMember = user?.role_name === "Member";
 
   // 1. Super Admin (Full System Access)
-  const superAdminNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
+  const superAdminNavItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
     { id: 'plannedvisits', label: 'Planned visits', icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-600" /> },
-    { id: "dashboard", label: "System Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-cyan-500" />, badge: "Super" },
-    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
-    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Live" },
-    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" />, badge: "Log" },
-    { id: "servicecalendar", label: "Service Calendar", icon: <Church className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Services" },
+    { id: "dashboard", label: "System Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-cyan-500" /> },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" /> },
+    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" /> },
+    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" /> },
+    { id: "servicecalendar", label: "Service Calendar", icon: <Church className="w-4 h-4 shrink-0 text-indigo-600" /> },
     { id: "members", label: "Members & Families", icon: <Users className="w-4 h-4 shrink-0 text-indigo-500" /> },
-    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "My Group" },
-    { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "Groups" },
-    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" /> },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" /> },
     { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
-    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "reports", label: "Analytics & Trends", icon: <BarChart3 className="w-4 h-4 shrink-0" /> },
-    { id: "users", label: "User Management", icon: <UserCog className="w-4 h-4 shrink-0" />, badge: "Admin" },
-    { id: "settings", label: "Settings & Backups", icon: <Sliders className="w-4 h-4 shrink-0" />, badge: "CRUD" },
+    { id: "users", label: "User Management", icon: <UserCog className="w-4 h-4 shrink-0" /> },
+    { id: "settings", label: "Settings & Backups", icon: <Sliders className="w-4 h-4 shrink-0" /> },
     { id: "audit", label: "System Audit Logs", icon: <ShieldAlert className="w-4 h-4 shrink-0" /> },
   ];
 
   // 2. Pastor (Executive Pastoral Oversight)
-  const pastorNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
+  const pastorNavItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
     { id: 'plannedvisits', label: 'Planned visits', icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-600" /> },
-    { id: "dashboard", label: "Pastoral Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Pastor" },
-    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
-    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Live" },
-    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" />, badge: "Log" },
-    { id: "servicecalendar", label: "Service Calendar", icon: <Church className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Services" },
+    { id: "dashboard", label: "Pastoral Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" /> },
+    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" /> },
+    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" /> },
+    { id: "servicecalendar", label: "Service Calendar", icon: <Church className="w-4 h-4 shrink-0 text-indigo-600" /> },
     { id: "members", label: "Members & Families", icon: <Users className="w-4 h-4 shrink-0 text-indigo-500" /> },
-    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "My Group" },
-    { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "Groups" },
-    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" /> },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" /> },
     { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
-    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "reports", label: "Analytics & Trends", icon: <BarChart3 className="w-4 h-4 shrink-0" /> },
-    { id: "users", label: "User Management", icon: <UserCog className="w-4 h-4 shrink-0" />, badge: "Users" },
-    { id: "settings", label: "Settings & Lookups", icon: <Sliders className="w-4 h-4 shrink-0" />, badge: "CRUD" },
+    { id: "users", label: "User Management", icon: <UserCog className="w-4 h-4 shrink-0" /> },
+    { id: "settings", label: "Settings & Lookups", icon: <Sliders className="w-4 h-4 shrink-0" /> },
     { id: "audit", label: "System Audit Logs", icon: <ShieldAlert className="w-4 h-4 shrink-0" /> },
   ];
 
   // 3. Coordinator (Ministry Leader / Dept Overseer)
-  const coordinatorNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: "dashboard", label: "Ministry Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-emerald-600" />, badge: "Coord" },
-    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
-    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Live" },
-    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" />, badge: "Log" },
-    { id: "servicecalendar", label: "Service Calendar", icon: <Church className="w-4 h-4 shrink-0 text-indigo-600" />, badge: "Services" },
+  const coordinatorNavItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
+    { id: "dashboard", label: "Ministry Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-emerald-600" /> },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" /> },
+    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-indigo-600" /> },
+    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" /> },
+    { id: "servicecalendar", label: "Service Calendar", icon: <Church className="w-4 h-4 shrink-0 text-indigo-600" /> },
     { id: "members", label: "Members & Families", icon: <Users className="w-4 h-4 shrink-0 text-indigo-500" /> },
-    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "My Group" },
-    { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "Groups" },
-    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "biblestudy", label: "Bible Study Groups", icon: <HeartHandshake className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" /> },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" /> },
     { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
-    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
     { id: "reports", label: "Analytics & Trends", icon: <BarChart3 className="w-4 h-4 shrink-0" /> },
   ];
 
   // 4. Dedicated navigation for Small Group / Discipleship Leaders
-  const leaderNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: "dashboard", label: "Leader Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Leader" },
-    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-500" />, badge: "1-Yr" },
-    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "My Group" },
-    { id: "curriculum", label: "Bible Study Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "Topics" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
+  const leaderNavItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
+    { id: "dashboard", label: "Leader Dashboard", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-500" /> },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" /> },
     { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
-    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
   ];
 
   // 5. Dedicated navigation for Ministry Volunteers & Helpers
-  const volunteerNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: "dashboard", label: "Volunteer Hub", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-emerald-500" />, badge: "Volunteer" },
-    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
-    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-sky-500" />, badge: "Live" },
-    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" />, badge: "Log" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Duty" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "Cycle" },
+  const volunteerNavItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
+    { id: "dashboard", label: "Volunteer Hub", icon: <LayoutDashboard className="w-4 h-4 shrink-0 text-emerald-500" /> },
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" /> },
+    { id: "attendance", label: "Attendance Live", icon: <UserCheck className="w-4 h-4 shrink-0 text-sky-500" /> },
+    { id: "attendancelog", label: "Attendance Log", icon: <ClipboardList className="w-4 h-4 shrink-0 text-emerald-600" /> },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" /> },
     { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
-    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "Annual" },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
   ];
 
   // 6. Navigation for Church Members (View Only on Fellowship, Rosters, Curriculum & Bulletin)
-  const memberNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" />, badge: "1-Year" },
-    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" />, badge: "View" },
-    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" />, badge: "View" },
-    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" />, badge: "View" },
-    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" />, badge: "View" },
+  const memberNavItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
+    { id: "biblereading", label: "Daily Bible Reading", icon: <BookOpen className="w-4 h-4 shrink-0 text-sky-600" /> },
+    { id: "leaderportal", label: "My Bible Study Group", icon: <BookmarkCheck className="w-4 h-4 shrink-0 text-indigo-500" /> },
+    { id: "curriculum", label: "Curriculum Books/Topics", icon: <BookMarked className="w-4 h-4 shrink-0 text-amber-600" /> },
+    { id: "duty", label: "Saturday Duty Roster", icon: <CalendarCheck className="w-4 h-4 shrink-0 text-amber-500" /> },
+    { id: "dishwashing", label: "Dishwashing Roster", icon: <Utensils className="w-4 h-4 shrink-0 text-teal-500" /> },
     { id: "events", label: "Calendar", icon: <Calendar className="w-4 h-4 shrink-0" /> },
-    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" />, badge: "View" },
+    { id: "sundaycycle", label: "Events & Celebrations", icon: <Sun className="w-4 h-4 shrink-0 text-amber-500" /> },
     { id: "communications", label: "Announcements", icon: <MessageSquare className="w-4 h-4 shrink-0" /> },
   ];
 
-  const activeNavItems = isSuperAdmin
+  const roleNavItems = isSuperAdmin
     ? superAdminNavItems
     : (isPastor
       ? pastorNavItems
@@ -202,6 +219,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
           : (isVolunteer
             ? volunteerNavItems
             : memberNavItems))));
+
+  const activeNavItems = [...roleNavItems].sort((a, b) => navigationRank(a.id) - navigationRank(b.id));
 
   const getSidebarTitle = () => {
     if (isSuperAdmin) return "Super Admin Console";
@@ -222,22 +241,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
 
   const ministryList = (isCoordinator && user?.ministries && user.ministries.length > 0
     ? [
-      { name: "Kinder", age: "3-5 yrs", color: "bg-[#E07A5F]" },
-      { name: "Elementary", age: "6-12 yrs", color: "bg-[#D9A441]" },
-      { name: "Highschool", age: "13-16 yrs", color: "bg-[#B85C56]" },
-      { name: "Youth", age: "17-21 yrs", color: "bg-[#6E8B74]" },
-      { name: "Young Adult", age: "22-35 yrs", color: "bg-[#2C3968]" },
-      { name: "Junior Adult", age: "36-55 yrs", color: "bg-[#4A5568]" },
-      { name: "Old Adult", age: "56+ yrs", color: "bg-[#8D5B4C]" },
+      { name: "Kinder", age: "3-5 yrs", color: "bg-[var(--ministry-kinder)]" },
+      { name: "Elementary", age: "6-12 yrs", color: "bg-[var(--ministry-elementary)]" },
+      { name: "Highschool", age: "13-16 yrs", color: "bg-[var(--ministry-highschool)]" },
+      { name: "Youth", age: "17-21 yrs", color: "bg-[var(--ministry-youth)]" },
+      { name: "Young Adult", age: "22-35 yrs", color: "bg-[var(--ministry-young-adult)]" },
+      { name: "Junior Adult", age: "36-55 yrs", color: "bg-[var(--ministry-junior-adult)]" },
+      { name: "Old Adult", age: "56+ yrs", color: "bg-[var(--ministry-old-adult)]" },
     ].filter(m => user.ministries.some(um => um.name.toLowerCase().includes(m.name.toLowerCase())))
     : [
-      { name: "Kinder", age: "3-5 yrs", color: "bg-[#E07A5F]" },
-      { name: "Elementary", age: "6-12 yrs", color: "bg-[#D9A441]" },
-      { name: "Highschool", age: "13-16 yrs", color: "bg-[#B85C56]" },
-      { name: "Youth", age: "17-21 yrs", color: "bg-[#6E8B74]" },
-      { name: "Young Adult", age: "22-35 yrs", color: "bg-[#2C3968]" },
-      { name: "Junior Adult", age: "36-55 yrs", color: "bg-[#4A5568]" },
-      { name: "Old Adult", age: "56+ yrs", color: "bg-[#8D5B4C]" },
+      { name: "Kinder", age: "3-5 yrs", color: "bg-[var(--ministry-kinder)]" },
+      { name: "Elementary", age: "6-12 yrs", color: "bg-[var(--ministry-elementary)]" },
+      { name: "Highschool", age: "13-16 yrs", color: "bg-[var(--ministry-highschool)]" },
+      { name: "Youth", age: "17-21 yrs", color: "bg-[var(--ministry-youth)]" },
+      { name: "Young Adult", age: "22-35 yrs", color: "bg-[var(--ministry-young-adult)]" },
+      { name: "Junior Adult", age: "36-55 yrs", color: "bg-[var(--ministry-junior-adult)]" },
+      { name: "Old Adult", age: "56+ yrs", color: "bg-[var(--ministry-old-adult)]" },
     ]
   );
 
@@ -253,7 +272,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
       )}
 
       {/* Sidebar / Off-canvas drawer (Front Full-Height Column) */}
-      <aside data-guide="navigation" data-collapsed={isCollapsed} className={`
+      <aside data-guide="navigation" data-collapsed={isCollapsed} className={`shared-layout-sidebar
         fixed md:sticky top-0 left-0 z-50 md:z-30
         h-screen
         bg-white border-r border-indigo-100 flex flex-col shadow-2xl md:shadow-xs
@@ -262,7 +281,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
         ${isCollapsed ? "md:w-20" : "md:w-64"}
       `}>
         {/* STICKY TOP HEADER: Church Brand Logo & Name */}
-        <div className="p-3.5 pb-3 border-b border-indigo-100/80 bg-white shrink-0 z-10">
+        <div className="sidebar-brand p-3.5 pb-3 border-b border-indigo-100/80 bg-white shrink-0 z-10">
           {isCollapsed ? (
             /* COLLAPSED HEADER: Logo is the Un-collapse button; hovering reveals the right arrow icon */
             <div className="flex flex-col items-center">
@@ -323,26 +342,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
         {/* SCROLLABLE MIDDLE NAVIGATION CONTAINER */}
         <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
           {/* Up Scroll Indicator */}
-          {canScrollUp && (
-            <button
-              type="button"
-              onClick={scrollUp}
-              className="absolute top-1 left-1/2 -translate-x-1/2 z-20 p-1 text-indigo-600/80 hover:text-indigo-900 hover:scale-125 active:scale-95 transition-all cursor-pointer"
-              title="Scroll Up"
-            >
-              <ChevronUp className="w-6 h-6 stroke-[2.5] animate-pulse" />
-            </button>
-          )}
+          <div className="sidebar-scroll-controls">
+            {canScrollUp && (
+              <button
+                type="button"
+                onClick={scrollUp}
+                className="sidebar-scroll-button"
+                title="Scroll Up"
+                aria-label="Scroll Up"
+              >
+                <ChevronUp className="w-5 h-5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
 
           <div
             ref={scrollRef}
             onScroll={checkScroll}
-            className="flex-1 overflow-y-auto no-scrollbar p-3.5 space-y-4"
+            className="sidebar-nav-scroll flex-1 overflow-y-auto no-scrollbar px-3.5 pb-3.5 space-y-4"
           >
             {/* Navigation Items */}
             <div className="space-y-1">
               {!isCollapsed && (
-                <p className="px-3 text-[12px] font-medium uppercase tracking-wider text-muted mb-1.5 truncate">
+                <p className="sidebar-section-title px-3 text-[12px] font-medium uppercase tracking-wider text-muted mb-2.5 truncate">
                   {getSidebarTitle()}
                 </p>
               )}
@@ -359,25 +381,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
                     key={item.id}
                     onClick={() => handleTabClick(item.id)}
                     title={item.label}
-                    className={`w-full flex items-center ${isCollapsed ? "justify-center px-2 py-2.5" : "justify-between px-3 py-2"} rounded-xl text-xs transition-colors cursor-pointer ${isActive
-                      ? "bg-charcoal text-white shadow-sm font-medium"
-                      : "text-charcoal/70 hover:bg-ivory-light hover:text-charcoal font-medium"
-                      }`}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`sidebar-nav-item w-full flex items-center ${isCollapsed ? "justify-center px-2 py-2" : "px-3 py-2 text-left"} rounded-xl text-xs cursor-pointer font-medium`}
                   >
-                    <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-2.5 min-w-0 pr-1"}`}>
-                      <span className={isActive ? "text-amber-400" : "text-muted"}>
+                    <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-2.5 min-w-0"}`}>
+                      <span className="sidebar-nav-icon shrink-0">
                         {item.icon}
                       </span>
-                      {!isCollapsed && <span className="truncate">{item.label}</span>}
+                      {!isCollapsed && <span className="min-w-0 whitespace-normal leading-snug">{item.label}</span>}
                     </div>
-                    {!isCollapsed && item.badge && (
-                      <span className={`text-[12px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${isActive
-                        ? "bg-amber text-charcoal font-medium"
-                        : "bg-indigo-50 text-indigo border border-indigo-100/80"
-                        }`}>
-                        {item.badge}
-                      </span>
-                    )}
                   </button>
                 );
               })}
@@ -404,11 +416,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
                 </p>
                 <div className="space-y-1.5 px-3">
                   {ministryList.map((m) => (
-                    <div key={m.name} className={`flex items-center justify-between text-xs py-1 px-2 rounded-lg ${isCoordinator ? "bg-indigo-50/70 border border-indigo-100 font-medium" : "py-0.5"
+                    <div key={m.name} className={`sidebar-ministry-row flex items-center justify-between text-xs py-1 px-2 rounded-lg ${isCoordinator ? "bg-indigo-50/70 border border-indigo-100 font-medium" : "py-0.5"
                       }`}>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span className={`w-2.5 h-2.5 rounded-full ${m.color}`}></span>
-                        <span className="text-charcoal font-medium">{m.name} Ministry</span>
+                        <span className="text-charcoal font-medium truncate" title={`${m.name} Ministry`}>{m.name} Ministry</span>
                       </div>
                       <span className={`text-[12px] ${isCoordinator ? "bg-white text-indigo px-1.5 py-0.5 rounded shadow-2xs font-medium" : "text-muted"}`}>
                         {m.age}
@@ -421,16 +433,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
           </div>
 
           {/* Down Scroll Indicator */}
-          {canScrollDown && (
-            <button
-              type="button"
-              onClick={scrollDown}
-              className="absolute bottom-1 left-1/2 -translate-x-1/2 z-20 p-1 text-amber-600/90 hover:text-amber-700 hover:scale-125 active:scale-95 transition-all cursor-pointer"
-              title="Scroll Down"
-            >
-              <ChevronDown className="w-6 h-6 stroke-[2.5] animate-bounce" />
-            </button>
-          )}
+          <div className="sidebar-scroll-controls">
+            {canScrollDown && (
+              <button
+                type="button"
+                onClick={scrollDown}
+                className="sidebar-scroll-button"
+                title="Scroll Down"
+                aria-label="Scroll Down"
+              >
+                <ChevronDown className="w-5 h-5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* STICKY BOTTOM FOOTER: Profile, Logout Action & Info Card */}
@@ -457,7 +472,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, isOpe
           </button>
 
           {!isCollapsed && (
-            <div className="bg-ivory rounded-xl p-3 border border-amber/20 text-xs text-charcoal/80">
+            <div className="bg-[var(--surface-2)] rounded-xl p-3 border border-[var(--border)] text-xs text-muted">
               <div className="flex items-center gap-2 font-medium text-indigo mb-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
                 <span>Sunday Live System</span>

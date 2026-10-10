@@ -335,10 +335,9 @@ export const HelpCenter: React.FC<HelpCenterProps> = ({ userId, role, currentTab
       {currentTab !== "dashboard" && <div className="help-page-bar">
         <div className="flex items-center gap-2 min-w-0">
           <Compass className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <button ref={launcherRef} type="button" onClick={openHome} className="help-text-button">Start Here</button>
           <span className="hidden sm:inline text-xs text-muted">Step-by-step guides for your {role.toLowerCase()} role</span>
         </div>
-        <button type="button" onClick={() => setView("page")} className="help-text-button flex items-center gap-1.5">
+        <button ref={launcherRef} type="button" onClick={() => setView("page")} className="help-text-button flex items-center gap-1.5">
           <HelpCircle className="w-4 h-4" aria-hidden="true" />
           <span className="hidden sm:inline">How to use this page</span><span className="sm:hidden">Page help</span>
         </button>

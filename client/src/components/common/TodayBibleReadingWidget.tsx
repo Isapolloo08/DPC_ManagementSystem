@@ -2,15 +2,18 @@ import React, { useState, useEffect } from "react";
 import { BookOpen, ArrowRight, Calendar, BookMarked, BookmarkCheck } from "lucide-react";
 import { getTodaysReading, DayReading, TOTAL_BIBLE_CHAPTERS, getScheduledTargetUpToDate } from "../../utils/bibleReadingPlan";
 import { ScripturePassageModal } from "./ScripturePassageModal";
+import './today-bible-reading.css';
 
 interface TodayBibleReadingWidgetProps {
   onNavigateToPlan?: () => void;
   compact?: boolean;
+  layout?: 'default' | 'dashboard';
 }
 
 export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = ({
   onNavigateToPlan,
-  compact = false
+  compact = false,
+  layout = 'default'
 }) => {
   const [todayReading, setTodayReading] = useState<DayReading>(getTodaysReading());
   const [scheduledTarget, setScheduledTarget] = useState(getScheduledTargetUpToDate(new Date()));
@@ -93,33 +96,28 @@ export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = (
   }
 
   return (
-    <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-white/10">
-      <img
-        src="/container_bg.jpg"
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover object-center opacity-30 mix-blend-screen pointer-events-none"
-      />
-      {/* Decorative Glow Elements */}
-      <div className="absolute top-0 right-0 -mr-16 -mt-16 w-56 h-56 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-56 h-56 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+    <div className={`${layout === 'dashboard' ? 'leader-reading' : ''} relative overflow-hidden bg-white rounded-2xl p-6 sm:p-7 text-charcoal shadow-sm border border-stone-200`}>
 
-      <div className="relative z-10 space-y-4">
+      {/* Decorative Glow Elements */}
+
+
+
+      <div className="reading-content relative z-10 space-y-4">
         {/* Top Row: Left Badges & Right Annual Coverage Progress */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="reading-heading flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium uppercase tracking-wider bg-white/15 text-white border border-white/20 backdrop-blur-md">
-              <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium uppercase tracking-wider bg-stone-50 text-charcoal border border-stone-200 ">
+              <BookOpen className="w-3.5 h-3.5 text-sky-700" />
               <span>1-Year Bible Reading Plan</span>
             </span>
-            <span className="px-2.5 py-1 rounded-full text-[12px] font-medium bg-amber-400/20 text-amber-300 border border-amber-400/30">
+            <span className="px-2.5 py-1 rounded-full text-[12px] font-medium bg-amber-400/20 text-muted border border-amber-400/30">
               NIV
             </span>
-            <span className={`px-2.5 py-1 rounded-full text-[12px] font-medium ${todayReading.isSunday ? "bg-amber-400/20 text-amber-300 border border-amber-400/30" : "bg-white/10 text-slate-200 border border-white/15"
-              }`}>
+            <span className="reading-frequency" data-sunday={todayReading.isSunday}>
               {todayReading.isSunday ? "Sunday: 5 Chapters" : "Weekday: 3 Chapters"}
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[12px] font-medium rounded-full">
-              <BookmarkCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 border border-emerald-400/30 text-muted text-[12px] font-medium rounded-full">
+              <BookmarkCheck className="w-3.5 h-3.5 text-emerald-700" />
               <span>Schedule Synced</span>
             </span>
           </div>
@@ -129,7 +127,7 @@ export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = (
               <span className="text-[12px] font-medium text-slate-400 uppercase tracking-wider">Annual Coverage</span>
               <span className="font-medium text-cyan-400 text-sm">{progressPercent}%</span>
             </div>
-            <div className="w-44 bg-white/15 rounded-full h-2 overflow-hidden">
+            <div className="reading-inline-progress w-44 bg-stone-50 rounded-full h-2 overflow-hidden">
               <div
                 className="bg-teal-400 h-full rounded-full transition-all duration-500 shadow-sm"
                 style={{ width: `${progressPercent}%` }}
@@ -141,23 +139,25 @@ export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = (
           </div>
         </div>
 
+        {layout === 'dashboard' && <div className="reading-dashboard-progress" role="progressbar" aria-label="Annual Bible reading schedule coverage" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progressPercent}%` }} /></div>}
+
         {/* Middle Row: Today's Assigned Passage */}
-        <div className="pt-1">
-          <div className="text-xs text-slate-300 font-medium">
+        <div className="reading-passage pt-1">
+          <div className="text-xs text-muted font-medium">
             Day {todayReading.dayIndex} of 365 • {todayReading.dayName}, {new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
           </div>
-          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-white tracking-tight mt-0.5">
+          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-charcoal tracking-tight mt-0.5">
             {todayReading.passageDisplay}
           </h3>
         </div>
 
         {/* Bottom Row: Chapter Breakdown Chips & Read Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-white/10">
+        <div className="reading-actions flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-stone-200">
           <div className="flex items-center gap-2 flex-wrap">
             {todayReading.chapters.map((chap, i) => (
               <span
                 key={`${chap.book}-${chap.chapter}`}
-                className="px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-slate-100 text-xs font-medium backdrop-blur-md border border-white/15 transition-all shadow-xs"
+                className="px-3 py-1 rounded-xl bg-stone-50 hover:bg-stone-100 text-muted text-xs font-medium  border border-stone-200 transition-all shadow-xs"
               >
                 {chap.shortName} {chap.chapter} {i === 0 ? "· Today's Start" : i === todayReading.chapters.length - 1 ? "· Reading Target" : ""}
               </span>
@@ -181,7 +181,7 @@ export const TodayBibleReadingWidget: React.FC<TodayBibleReadingWidgetProps> = (
               <button
                 type="button"
                 onClick={onNavigateToPlan}
-                className="inline-flex items-center gap-1 text-xs font-medium text-slate-300 hover:text-white transition-colors px-2 py-1"
+                className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-charcoal transition-colors px-2 py-1"
               >
                 <span>Full Plan</span>
               </button>

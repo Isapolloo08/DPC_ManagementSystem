@@ -1,3 +1,4 @@
+import { isCalendarDate, parsePagination, queryPage, validatePagination } from "../utils/pagination";
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
 import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
@@ -6,6 +7,8 @@ import { resolveTotalChapters } from "./studyTopics";
 import { notify } from "../services/notificationService";
 import { countConsecutiveAbsences } from "../utils/groupAttendanceIntelligence";
 import { MY_GROUP_SCOPE, MY_GROUP_LEADER_SCOPE } from "../utils/myGroupScope";
+import { validStudyProgressStage } from "../utils/studyProgress";
+import { sendBibleStudyUpdateNotification } from "../services/bibleStudyNotifications";
 
 const router = Router();
 
@@ -24,71 +27,6 @@ function htmlEscape(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-async function sendAbsenceSessionNotification(groupId: number, sessionDate: string): Promise<void> {
-  try {
-    const group = await db.get<GroupNotificationRow>("SELECT id, name, ministry_id, leader_name, leader_contact, curriculum, meeting_day, meeting_time FROM bible_study_groups WHERE id = $1", [groupId]);
-    const session = await db.get<{ id: number; topic_title: string | null }>(
-      "SELECT id, topic_title FROM bible_study_sessions WHERE group_id = $1 AND session_date = $2",
-      [groupId, sessionDate]
-    );
-    if (!group || !session) return;
-
-    const absentMembers = await db.all<{ member_id: number; display_name: string }>(`
-      SELECT bsa.member_id, COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), bsm.member_name, 'Disciple') AS display_name
-      FROM bible_study_attendance bsa
-      LEFT JOIN members m ON m.id = bsa.member_id
-      LEFT JOIN bible_study_members bsm ON bsm.group_id = bsa.group_id AND bsm.member_id = bsa.member_id
-      WHERE bsa.group_id = $1 AND bsa.session_date = $2 AND bsa.status = 'absent'
-      ORDER BY display_name ASC
-    `, [groupId, sessionDate]);
-    if (absentMembers.length === 0) return;
-
-    const thresholdRow = await db.get<{ threshold: number | null }>(`
-      SELECT threshold FROM notification_rules
-      WHERE event_type = 'absence_alert' AND enabled = TRUE AND threshold IS NOT NULL
-      ORDER BY threshold ASC LIMIT 1
-    `);
-    const threshold = Number(thresholdRow?.threshold || 3);
-    const absentIds = absentMembers.map(member => member.member_id);
-    const history = await db.all<{ member_id: number; session_date: string; status: string }>(`
-      SELECT member_id, session_date, status
-      FROM bible_study_attendance
-      WHERE group_id = $1 AND member_id = ANY($2::int[]) AND session_date <= $3
-      ORDER BY member_id ASC, session_date DESC
-    `, [groupId, absentIds, sessionDate]);
-    const histories = new Map<number, typeof history>();
-    for (const item of history) {
-      const list = histories.get(item.member_id) || [];
-      list.push(item);
-      histories.set(item.member_id, list);
-    }
-    const streaks = new Map(absentMembers.map(member => [member.member_id, countConsecutiveAbsences(histories.get(member.member_id) || [])]));
-    const absentLines = absentMembers.map(member => {
-      const streak = streaks.get(member.member_id) || 0;
-      return streak >= threshold ? `${member.display_name} (${streak} consecutive absences — attention needed)` : member.display_name;
-    });
-    const topic = session.topic_title || group.curriculum || "Weekly Bible Study";
-    const message = `${group.name} attendance for ${sessionDate}\nTopic: ${topic}\nAbsent: ${absentLines.join(", ")}`;
-    const listHtml = absentMembers.map(member => {
-      const streak = streaks.get(member.member_id) || 0;
-      const flag = streak >= threshold ? ` <strong style="color:#b45309">(${streak} consecutive absences)</strong>` : "";
-      return `<li>${htmlEscape(member.display_name)}${flag}</li>`;
-    }).join("");
-
-    await notify("absence_alert", {
-      eventKey: `group-session:${session.id}`,
-      title: `Absence summary: ${group.name}`,
-      message,
-      linkTab: "biblestudy",
-      linkRefId: groupId,
-      ministryId: group.ministry_id,
-      emailSubject: `Bible Study absence summary — ${group.name} — ${sessionDate}`,
-      emailHtml: `<div style="font-family:Arial,sans-serif;line-height:1.6"><h2>${htmlEscape(group.name)}</h2><p><strong>Date:</strong> ${htmlEscape(sessionDate)}<br><strong>Topic:</strong> ${htmlEscape(topic)}</p><p>The following disciples were marked absent:</p><ul>${listHtml}</ul><p style="font-size:12px;color:#64748b">This message contains private attendance information and was sent only to configured church recipients.</p></div>`
-    });
-  } catch (error) {
-    console.error("Failed to prepare absence notification:", error);
-  }
-}
 
 async function sendRescheduleNotification(group: GroupNotificationRow, date: string | null, time: string | null, reason: string | null): Promise<void> {
   try {
@@ -125,8 +63,8 @@ async function sendRescheduleNotification(group: GroupNotificationRow, date: str
 }
 
 // List Bible study groups with members
-router.get("/mine", authMiddleware, listGroups);
-router.get("/", listGroups);
+router.get("/mine", authMiddleware, validatePagination, listGroups);
+router.get("/", validatePagination, listGroups);
 
 async function listGroups(req: AuthRequest, res: Response) {
   try {
@@ -144,6 +82,10 @@ async function listGroups(req: AuthRequest, res: Response) {
       whereClause += ` AND ${MY_GROUP_SCOPE}`;
     }
 
+    if (req.query.id) {
+      params.push(req.query.id);
+      whereClause += ` AND g.id = $${params.length}`;
+    }
     if (ministry_id) {
       params.push(ministry_id);
       whereClause += ` AND g.ministry_id = $${params.length}`;
@@ -184,19 +126,19 @@ async function listGroups(req: AuthRequest, res: Response) {
     if (search && typeof search === "string" && search.trim()) {
       params.push(`%${search.trim()}%`);
       const pIdx = params.length;
-      whereClause += ` AND (g.name ILIKE $${pIdx} OR g.leader_name ILIKE $${pIdx} OR g.curriculum ILIKE $${pIdx} OR g.location ILIKE $${pIdx} OR COALESCE(g.assistant_leader_name, '') ILIKE $${pIdx})`;
+      whereClause += ` AND (g.name ILIKE $${pIdx} OR g.leader_name ILIKE $${pIdx} OR g.curriculum ILIKE $${pIdx} OR g.location ILIKE $${pIdx} OR COALESCE(g.assistant_leader_name, '') ILIKE $${pIdx} OR g.description ILIKE $${pIdx} OR g.archive_reason ILIKE $${pIdx} OR g.completed_book_title_snapshot ILIKE $${pIdx} OR EXISTS (SELECT 1 FROM users au WHERE au.id = g.archived_by AND au.name ILIKE $${pIdx}) OR EXISTS (SELECT 1 FROM bible_study_group_transitions gt JOIN bible_study_group_transition_sources gs ON gs.transition_id = gt.id JOIN bible_study_groups source ON source.id = gs.source_group_id WHERE gt.new_group_id = g.id AND source.name ILIKE $${pIdx}))`;
     }
 
-    const isPaginated = page !== undefined || limit !== undefined;
+    const { enabled: isPaginated, page: requestedPage, limit: curLimit } = parsePagination(req.query);
+    let curPage = requestedPage;
     let totalCount = 0;
-    const curPage = Math.max(1, page ? parseInt(String(page), 10) : 1);
-    const curLimit = Math.min(100, Math.max(1, limit ? parseInt(String(limit), 10) : 20));
 
     if (isPaginated) {
       const countRes = await db.get<{ total: string | number }>(`
         SELECT COUNT(*) as total FROM bible_study_groups g ${whereClause}
       `, params);
       totalCount = parseInt(String(countRes?.total || 0), 10);
+      curPage = Math.min(curPage, Math.max(1, Math.ceil(totalCount / curLimit)));
     }
 
     let query = `
@@ -239,6 +181,7 @@ async function listGroups(req: AuthRequest, res: Response) {
       groups = await db.all(query, params);
     }
 
+    if (req.query.view === "calendar") return res.json(groups.map(g => ({ ...g, current_member_count: Number(g.current_member_count || 0) })));
     const groupIds = groups.map(g => g.id);
     const [dbTopics, allGroupMembers, allTransitions] = await Promise.all([
       db.all<{ title: string; total_chapters: number }>("SELECT title, total_chapters FROM bible_study_topics").catch(() => []),
@@ -297,6 +240,13 @@ async function listGroups(req: AuthRequest, res: Response) {
       };
     });
 
+    if (isPaginated) {
+      const scopeParams = ministry_id ? [ministry_id] : [];
+      const scope = ministry_id ? " AND g.ministry_id = $1" : "";
+      const counts = await db.get<any>(`SELECT COUNT(*) FILTER (WHERE COALESCE(g.status, 'active') = 'active') AS active, COUNT(*) FILTER (WHERE g.status = 'completed') AS completed, COUNT(*) FILTER (WHERE g.status = 'archived') AS archived, COUNT(*) FILTER (WHERE COALESCE(g.status, 'active') <> 'merged') AS "all", COALESCE(SUM((SELECT COUNT(*) FROM bible_study_members bsm WHERE bsm.group_id = g.id AND COALESCE(bsm.status, 'active') = 'active')) FILTER (WHERE COALESCE(g.status, 'active') = 'active'), 0) AS enrolled FROM bible_study_groups g WHERE 1=1 ${scope}`, scopeParams);
+      const summary = Object.fromEntries(Object.entries(counts || {}).map(([key, value]) => [key, Number(value)]));
+      return res.json({ data: detailed, summary, pagination: { page: curPage, limit: curLimit, total: totalCount, totalPages: Math.max(1, Math.ceil(totalCount / curLimit)) } });
+    }
     res.json(detailed);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -879,6 +829,18 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
     const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Small group not found" });
 
+    if (req.user?.role_name === "Leader") {
+      const assigned = await db.get(`SELECT g.id FROM bible_study_groups g WHERE g.id = $2 AND ${MY_GROUP_LEADER_SCOPE}`, [req.user.id, Number(id)]);
+      if (!assigned) return res.status(403).json({ error: "This group is not assigned to you." });
+      if (curriculum !== undefined && (typeof curriculum !== "string" || curriculum.trim() !== (current.curriculum || "").trim())) {
+        return res.status(403).json({ error: "Only a coordinator, pastor or administrator can change the assigned book." });
+      }
+    }
+
+    if (progress_stage !== undefined && !validStudyProgressStage(progress_stage)) {
+      return res.status(400).json({ error: "Select a valid study progress stage." });
+    }
+
     if (name !== undefined) {
       if (!name.trim()) return res.status(400).json({ error: "Group name cannot be empty" });
       const duplicate = await db.get("SELECT id FROM bible_study_groups WHERE LOWER(name) = LOWER($1) AND id != $2 AND COALESCE(status, 'active') = 'active'", [name.trim(), id]);
@@ -913,7 +875,7 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
     `, [
       name !== undefined ? name.trim() : null,
       description,
-      curriculum,
+      req.user?.role_name === "Leader" ? null : curriculum,
       ministry_id !== undefined ? (ministry_id ? Number(ministry_id) : null) : null,
       leader_name !== undefined ? leader_name.trim() : null,
       leader_contact,
@@ -952,6 +914,9 @@ router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"
 
     await logAuditAction(req.user?.id || null, "UPDATE", "bible_study_groups", Number(id), `Updated small group: ${name || current.name}`);
     emitRealtimeEvent("groups:changed", { action: "update", id: Number(id) });
+    if (["curriculum", "current_chapter", "progress_stage", "progress_notes", "meeting_day", "meeting_time", "location"].some(field => req.body[field] !== undefined)) {
+      await sendBibleStudyUpdateNotification(Number(id), { actorName: req.user?.name || "Group facilitator" });
+    }
     res.json({ message: "Small group updated successfully" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1022,15 +987,22 @@ router.post("/:id/complete", authMiddleware, requireRoles("Admin", "Pastor", "Co
 });
 
 // Dedicated Fast Endpoint: Update Study Chapter Progress & Notice
-router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch("/:id/progress", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const { current_chapter, progress_stage, progress_notes } = req.body;
+    if (progress_stage !== undefined && !validStudyProgressStage(progress_stage)) {
+      return res.status(400).json({ error: "Select a valid study progress stage." });
+    }
 
     const current = await db.get("SELECT * FROM bible_study_groups WHERE id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Small group not found" });
 
     const newStage = progress_stage || current.progress_stage || 'in_progress';
+    if (req.user?.role_name === "Leader") {
+      const assigned = await db.get(`SELECT g.id FROM bible_study_groups g WHERE g.id = $2 AND ${MY_GROUP_LEADER_SCOPE}`, [req.user.id, Number(id)]);
+      if (!assigned) return res.status(403).json({ error: "This group is not assigned to you." });
+    }
     const isNowCompleted = newStage === 'completed';
 
     const dbTopics = await db.all<{ id: number; title: string; total_chapters: number }>("SELECT id, title, total_chapters FROM bible_study_topics").catch(() => []);
@@ -1083,6 +1055,7 @@ router.patch("/:id/progress", authMiddleware, async (req: AuthRequest, res: Resp
     );
 
     emitRealtimeEvent("groups:changed", { action: "update_progress", id: Number(id) });
+    await sendBibleStudyUpdateNotification(Number(id), { actorName: req.user?.name || "Group facilitator" });
     res.json({ message: "Study chapter progress updated successfully!" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1343,8 +1316,47 @@ router.post("/:id/join", authMiddleware, async (req: AuthRequest, res: Response)
 // =========================================================================
 
 // Get comprehensive attendance statistics, history, and absentee breakdown for a group
-router.get("/:id/attendance", async (req: Request, res: Response) => {
+async function listSessionHistory(req: AuthRequest, res: Response) {
+  const groupId = Number(req.params.id);
+  if (!Number.isSafeInteger(groupId) || groupId < 1) return res.status(400).json({ error: "Invalid group." });
+  const group = await db.get<any>("SELECT id, name, curriculum FROM bible_study_groups WHERE id = $1", [groupId]);
+  if (!group) return res.status(404).json({ error: "Small group not found" });
+  const params: unknown[] = [groupId];
+  let where = " WHERE s.group_id = $1";
+  const equal = (column: string, value: unknown) => {
+    if (typeof value !== "string" || !value) return;
+    params.push(value); where += ` AND ${column} = $${params.length}`;
+  };
+  if (typeof req.query.book === "string" && req.query.book) {
+    params.push(req.query.book);
+    where += ` AND COALESCE(NULLIF(s.topic_title, ''), NULLIF(g.curriculum, ''), 'Weekly Session') = $${params.length}`;
+  }
+  equal("COALESCE(s.progress_stage, 'not_recorded')", req.query.stage);
+  if (typeof req.query.search === "string" && req.query.search.trim()) {
+    params.push("%" + req.query.search.trim() + "%");
+    where += ` AND CONCAT_WS(' ', to_char(s.session_date, 'YYYY-MM-DD'), s.topic_title, s.chapter, s.notes, u.name) ILIKE $${params.length}`;
+  }
+  for (const [key, comparison] of [["from", ">="], ["to", "<="]]) {
+    const value = req.query[key];
+    if (value) {
+      if (!isCalendarDate(value)) return res.status(400).json({ error: "Choose valid session dates." });
+      params.push(value); where += ` AND s.session_date ${comparison} $${params.length}::date`;
+    }
+  }
+  if (req.query.attendance === "absences") where += " AND COALESCE(counts.absent_count, 0) > 0";
+  if (req.query.attendance === "no_absences") where += " AND COALESCE(counts.absent_count, 0) = 0";
+  const sql = `SELECT s.id, to_char(s.session_date, 'YYYY-MM-DD') AS session_date, COALESCE(NULLIF(s.topic_title, ''), NULLIF(g.curriculum, ''), 'Weekly Session') AS topic_title, COALESCE(NULLIF(s.chapter, ''), 'Session') AS chapter, s.progress_stage, s.notes, s.is_special, s.special_reason, COALESCE(u.name, 'Leader') AS recorded_by_name, COALESCE(counts.present_count, 0)::int AS present_count, COALESCE(counts.absent_count, 0)::int AS absent_count, COALESCE(counts.excused_count, 0)::int AS excused_count, COALESCE(counts.total_enrolled, 0)::int AS total_enrolled FROM bible_study_sessions s JOIN bible_study_groups g ON g.id = s.group_id LEFT JOIN users u ON u.id = s.recorded_by LEFT JOIN LATERAL (SELECT COUNT(*) FILTER (WHERE a.status = 'present') AS present_count, COUNT(*) FILTER (WHERE a.status = 'absent') AS absent_count, COUNT(*) FILTER (WHERE a.status = 'excused') AS excused_count, COUNT(*) AS total_enrolled FROM bible_study_attendance a WHERE a.group_id = s.group_id AND a.session_date = s.session_date) counts ON TRUE ${where} ORDER BY s.session_date DESC, s.id DESC`;
+  const result = await queryPage<any>(sql, params, req.query);
+  const logs = result.data.length ? await db.all<any>(`SELECT a.member_id, a.status, a.notes, to_char(a.session_date, 'YYYY-MM-DD') AS session_date, CONCAT_WS(' ', m.first_name, m.last_name) AS name, m.photo_url, m.contact_phone FROM bible_study_attendance a LEFT JOIN members m ON m.id = a.member_id WHERE a.group_id = $1 AND a.session_date = ANY($2::date[]) ORDER BY m.first_name, m.last_name, a.member_id`, [groupId, result.data.map(session => session.session_date)]) : [];
+  const byDate = new Map<string, any[]>();
+  for (const log of logs) { if (!byDate.has(log.session_date)) byDate.set(log.session_date, []); byDate.get(log.session_date)!.push(log); }
+  const metadata = await db.get<any>(`SELECT COUNT(*) AS total, to_char(MAX(s.session_date), 'YYYY-MM-DD') AS latest, array_agg(DISTINCT COALESCE(NULLIF(s.topic_title, ''), NULLIF(g.curriculum, ''), 'Weekly Session')) AS books, array_agg(DISTINCT COALESCE(s.progress_stage, 'not_recorded')) AS stages FROM bible_study_sessions s JOIN bible_study_groups g ON g.id = s.group_id WHERE s.group_id = $1`, [groupId]);
+  res.json({ ...result, data: result.data.map(session => { const entries = byDate.get(session.session_date) || []; return { ...session, attendees: entries.filter(row => row.status === "present"), absentees: entries.filter(row => row.status === "absent"), excused: entries.filter(row => row.status === "excused") }; }), history_summary: { total: Number(metadata?.total || 0), latest: metadata?.latest || null }, options: { books: metadata?.books || [], stages: metadata?.stages || [] } });
+}
+
+router.get("/:id/attendance", authMiddleware, validatePagination, async (req: AuthRequest, res: Response) => {
   try {
+    if (req.query.history === "true") return await listSessionHistory(req, res);
     const groupId = Number(req.params.id);
 
     const group = await db.get(`
@@ -1375,7 +1387,7 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
     const offset = req.query.offset ? Math.max(0, parseInt(String(req.query.offset), 10)) : 0;
 
     let sessionsQuery = `
-      SELECT s.*, u.name as recorded_by_name
+      SELECT s.*, to_char(s.session_date, 'YYYY-MM-DD') AS session_date, u.name as recorded_by_name
       FROM bible_study_sessions s
       LEFT JOIN users u ON s.recorded_by = u.id
       WHERE s.group_id = $1
@@ -1392,7 +1404,7 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
 
     // 3. Fetch all attendance logs for this group
     const attendanceLogs = await db.all(`
-      SELECT a.*, m.first_name, m.last_name, m.photo_url, m.contact_phone
+      SELECT a.*, to_char(a.session_date, 'YYYY-MM-DD') AS session_date, m.first_name, m.last_name, m.photo_url, m.contact_phone
       FROM bible_study_attendance a
       JOIN members m ON a.member_id = m.id
       WHERE a.group_id = $1
@@ -1404,7 +1416,8 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
     const logsByMember = new Map<number, any[]>();
 
     for (const log of attendanceLogs) {
-      const dateStr = log.session_date instanceof Date ? log.session_date.toISOString().split("T")[0] : String(log.session_date).split("T")[0];
+      // PostgreSQL DATE is a calendar day, not an instant to convert to UTC.
+      const dateStr = log.session_date;
       
       if (!logsBySession.has(dateStr)) logsBySession.set(dateStr, []);
       logsBySession.get(dateStr)!.push(log);
@@ -1439,7 +1452,7 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
 
       // History across all sessions
       const history = sessions.map((s) => {
-        const sDateStr = s.session_date instanceof Date ? s.session_date.toISOString().split("T")[0] : String(s.session_date).split("T")[0];
+        const sDateStr = s.session_date;
         const record = logMap.get(sDateStr);
         let status = record ? record.status : "absent"; // if session held without explicit record, counted as absent
         
@@ -1451,6 +1464,7 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
           session_date: sDateStr,
           topic_title: s.topic_title || group.curriculum || "Weekly Bible Study",
           chapter: s.chapter || group.current_chapter || "Session",
+          progress_stage: s.progress_stage || null,
           status,
           notes: record?.notes || s.notes || ""
         };
@@ -1500,7 +1514,7 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
 
     // Detailed sessions list with attendees vs absentees
     const detailedSessions = sessions.map((s) => {
-      const sDateStr = s.session_date instanceof Date ? s.session_date.toISOString().split("T")[0] : String(s.session_date).split("T")[0];
+      const sDateStr = s.session_date;
       const sLogs = logsBySession.get(sDateStr) || [];
 
       const attendees: any[] = [];
@@ -1533,6 +1547,7 @@ router.get("/:id/attendance", async (req: Request, res: Response) => {
         session_date: sDateStr,
         topic_title: s.topic_title || group.curriculum || "Weekly Session",
         chapter: s.chapter || group.current_chapter || "Chapter 1",
+        progress_stage: s.progress_stage || null,
         notes: s.notes || "",
         is_special: Boolean(s.is_special),
         special_reason: s.special_reason || null,
@@ -1578,6 +1593,7 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
       session_date,
       topic_title,
       chapter,
+      progress_stage,
       notes,
       records,
       present_member_ids,
@@ -1598,6 +1614,13 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
     if (update_group_progress !== undefined && typeof update_group_progress !== "boolean") {
       return res.status(400).json({ error: "update_group_progress must be a boolean" });
     }
+    if (progress_stage !== undefined && !validStudyProgressStage(progress_stage)) {
+      return res.status(400).json({ error: "Select a valid study progress stage." });
+    }
+    if (req.user?.role_name === "Leader") {
+      const assigned = await db.get(`SELECT g.id FROM bible_study_groups g WHERE g.id = $2 AND ${MY_GROUP_LEADER_SCOPE}`, [req.user.id, groupId]);
+      if (!assigned) return res.status(403).json({ error: "This group is not assigned to you." });
+    }
     if (update_group_progress) {
       if (typeof topic_title !== "string" || !topic_title.trim() || topic_title.length > 300 ||
           typeof chapter !== "string" || !chapter.trim() || chapter.length > 120) {
@@ -1606,10 +1629,6 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
       const role = req.user?.role_name;
       if (!["Admin", "IT Admin", "Pastor", "Coordinator", "Leader"].includes(role || "")) {
         return res.status(403).json({ error: "Only group facilitators can update study progress." });
-      }
-      if (role === "Leader") {
-        const assigned = await db.get(`SELECT g.id FROM bible_study_groups g WHERE g.id = $2 AND ${MY_GROUP_LEADER_SCOPE}`, [req.user!.id, groupId]);
-        if (!assigned) return res.status(403).json({ error: "This group is not assigned to you." });
       }
     }
 
@@ -1658,7 +1677,19 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
     // 3. Upsert session record and attendance records inside a transaction
     await db.transaction(async (client) => {
       // Serialize lesson updates with attendance so a failed save cannot advance progress.
-      const locked = await client.query("SELECT status FROM bible_study_groups WHERE id = $1 FOR UPDATE", [groupId]);
+      const locked = await client.query("SELECT status, curriculum FROM bible_study_groups WHERE id = $1 FOR UPDATE", [groupId]);
+      let sessionBook = topic_title || group.curriculum || "Weekly Bible Study";
+      if (req.user?.role_name === "Leader") {
+        const existing = await client.query("SELECT topic_title FROM bible_study_sessions WHERE group_id = $1 AND session_date = $2", [groupId, session_date]);
+        const currentBook = locked.rows[0]?.curriculum || "Weekly Bible Study";
+        const recordedBook = existing.rows[0]?.topic_title || currentBook;
+        const requestedBook = topic_title ?? recordedBook;
+        if (typeof requestedBook !== "string" || requestedBook.trim() !== recordedBook.trim()
+            || (update_group_progress && requestedBook.trim() !== currentBook.trim())) {
+          throw Object.assign(new Error("Only a coordinator, pastor or administrator can change the assigned book."), { status: 403 });
+        }
+        sessionBook = requestedBook.trim();
+      }
       if (update_group_progress) {
         if (locked.rows[0]?.status !== "active") {
           throw Object.assign(new Error("Only active groups can update their study progress."), { status: 409 });
@@ -1669,11 +1700,12 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
         }
       }
       await client.query(`
-        INSERT INTO bible_study_sessions (group_id, session_date, topic_title, chapter, notes, is_special, special_reason, recorded_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO bible_study_sessions (group_id, session_date, topic_title, chapter, notes, is_special, special_reason, recorded_by, progress_stage)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (group_id, session_date) DO UPDATE SET
           topic_title = EXCLUDED.topic_title,
           chapter = EXCLUDED.chapter,
+          progress_stage = COALESCE(EXCLUDED.progress_stage, bible_study_sessions.progress_stage),
           notes = EXCLUDED.notes,
           is_special = EXCLUDED.is_special,
           special_reason = EXCLUDED.special_reason,
@@ -1681,12 +1713,13 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
       `, [
         groupId,
         session_date,
-        topic_title || group.curriculum || "Weekly Bible Study",
+        sessionBook,
         chapter || group.current_chapter || "Chapter 1",
         notes || "",
         isSpecialBool,
         cleanReason,
-        req.user?.id || null
+        req.user?.id || null,
+        progress_stage ?? null
       ]);
 
       const groupMembersRes = await client.query<{ member_id: number }>(
@@ -1697,9 +1730,10 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
 
       if (update_group_progress) {
         await client.query(`UPDATE bible_study_groups
-          SET curriculum = $1, current_chapter = $2,
-              progress_stage = CASE WHEN curriculum IS DISTINCT FROM $1 THEN 'in_progress' ELSE progress_stage END
-          WHERE id = $3`, [topic_title.trim(), chapter.trim(), groupId]);
+          SET curriculum = CASE WHEN $5 THEN curriculum ELSE $1 END, current_chapter = $2,
+              progress_stage = COALESCE($3, CASE WHEN NOT $5 AND curriculum IS DISTINCT FROM $1 THEN 'in_progress' ELSE progress_stage END),
+              progress_notes = COALESCE($6, progress_notes)
+          WHERE id = $4`, [topic_title.trim(), chapter.trim(), progress_stage ?? null, groupId, req.user?.role_name === "Leader", notes ?? null]);
       }
 
       if (Array.isArray(records) && records.length > 0) {
@@ -1754,7 +1788,7 @@ router.post("/:id/attendance", authMiddleware, async (req: AuthRequest, res: Res
     emitRealtimeEvent("attendance:changed", { action: "save_session", group_id: groupId, session_date });
     emitRealtimeEvent("groups:changed", { action: "attendance_update", id: groupId });
 
-    void sendAbsenceSessionNotification(groupId, session_date);
+    await sendBibleStudyUpdateNotification(groupId, { actorName: req.user?.name || "Group facilitator", sessionDate: session_date });
 
     res.json({ message: `✓ Attendance session for ${session_date} logged successfully!` });
   } catch (err: any) {

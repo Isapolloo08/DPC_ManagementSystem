@@ -1,5 +1,55 @@
 import React from "react";
 
+export const PageHeaderSkeleton: React.FC = () => (
+  <div aria-hidden="true" className="page-header">
+    <div className="page-header-row">
+      <div className="page-header-main">
+        <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 rounded-2xl" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-8 w-80 max-w-full" />
+          <Skeleton className="h-5 w-96 max-w-full" />
+        </div>
+      </div>
+      <div className="page-header-actions">
+        <Skeleton className="h-11 w-32 rounded-xl" />
+        <Skeleton className="h-11 w-32 rounded-xl" />
+      </div>
+    </div>
+  </div>
+);
+
+export const ListSkeleton: React.FC<{ count?: number; label?: string }> = ({ count = 5, label = "Loading records..." }) => (
+  <div role="status" aria-busy="true" aria-label={label} className="divide-y divide-stone-100 bg-white rounded-2xl border border-stone-200 overflow-hidden">
+    {Array.from({ length: count }, (_, i) => <div key={i} aria-hidden="true" className="flex items-start gap-3 p-4 sm:p-5">
+      <Skeleton variant="circular" className="h-9 w-9 shrink-0" />
+      <div className="flex-1 min-w-0 space-y-2">
+        <Skeleton className="h-5 w-56 max-w-full" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-3 w-32 max-w-full" />
+      </div>
+    </div>)}
+  </div>
+);
+
+export const CalendarSkeleton: React.FC = () => (
+  <div role="status" aria-busy="true" aria-label="Loading calendar..." className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-4">
+    <div aria-hidden="true" className="flex justify-between gap-3"><Skeleton className="h-6 w-40" /><Skeleton className="h-9 w-28" /></div>
+    <div aria-hidden="true" className="grid grid-cols-7 gap-1 sm:gap-2">
+      {Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-4 w-full" />)}
+      {Array.from({ length: 35 }, (_, i) => <Skeleton key={i + 7} className="h-16 sm:h-24 w-full rounded-lg" />)}
+    </div>
+  </div>
+);
+
+export const GroupPortalSkeleton: React.FC = () => (
+  <div role="status" aria-busy="true" aria-label="Loading your Bible study group..." className="page-skeleton space-y-6">
+    <PageHeaderSkeleton />
+    <div aria-hidden="true" className="flex gap-2 overflow-hidden">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-10 w-32 shrink-0" />)}</div>
+    <StatCardSkeleton />
+    <CardGridSkeleton count={4} columns={2} />
+  </div>
+);
+
 interface SkeletonProps {
   className?: string;
   variant?: "rectangular" | "circular" | "rounded" | "text";
@@ -34,6 +84,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 
   return (
     <div
+      aria-hidden="true"
       className={`skeleton-box ${getVariantClass()} ${className}`}
       style={style}
     />
@@ -43,9 +94,9 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 // Generic KPI / Stat Card Skeleton
 export const StatCardSkeleton: React.FC<{ count?: number }> = ({ count = 4 }) => {
   return (
-    <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${count} gap-5`}>
+    <div className={`grid grid-cols-1 sm:grid-cols-2 ${count === 3 ? "lg:grid-cols-3" : count === 2 ? "lg:grid-cols-2" : "lg:grid-cols-4"} gap-5`}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-3">
+        <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <Skeleton className="h-4 w-28" />
             <Skeleton className="h-10 w-10 rounded-2xl" />
@@ -64,7 +115,7 @@ export const TableSkeleton: React.FC<{ rows?: number; columns?: number }> = ({
   columns = 5
 }) => {
   return (
-    <div className="bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden">
+    <div className="bg-white/95 rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
       {/* Table Head */}
       <div className="bg-indigo-50/70 px-6 py-4 border-b border-indigo-100 flex items-center justify-between gap-4">
         {Array.from({ length: columns }).map((_, i) => (
@@ -103,7 +154,7 @@ export const CardGridSkeleton: React.FC<{ count?: number; columns?: number }> = 
   return (
     <div className={`grid grid-cols-1 sm:grid-cols-2 ${colClass} gap-5`}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 shadow-sm space-y-4">
+        <div key={i} className="bg-white/95 rounded-2xl border border-stone-200 p-6 shadow-sm space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2 flex-1">
               <Skeleton className="h-4 w-24 rounded-full" />
@@ -130,35 +181,28 @@ export const CardGridSkeleton: React.FC<{ count?: number; columns?: number }> = 
 };
 
 // =========================================================================
-// 1. DASHBOARD PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 1. DASHBOARD PAGE LOADING SKELETON
 // =========================================================================
-export const DashboardSkeleton: React.FC = () => {
-  return (
-    <div className="space-y-6">
-      {/* Welcome Banner Shadow */}
-      <div className="rounded-3xl bg-indigo-950/80 p-7 sm:p-8 border border-indigo-900 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-start gap-4">
-          <Skeleton className="w-14 h-14 rounded-2xl bg-white/15 shrink-0" />
-          <div className="space-y-2.5 min-w-0">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-5 w-28 rounded-full bg-white/20" />
-              <Skeleton className="h-5 w-36 rounded-full bg-white/10" />
-            </div>
-            <Skeleton className="h-8 w-64 sm:w-96 bg-white/20" />
-            <Skeleton className="h-4 w-80 sm:w-120 bg-white/10" />
-          </div>
-        </div>
-        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-          <Skeleton className="h-10 w-32 rounded-2xl bg-amber-400/30" />
-          <Skeleton className="h-10 w-28 rounded-2xl bg-white/15" />
-          <Skeleton className="h-10 w-28 rounded-2xl bg-white/15" />
-        </div>
+export const DashboardSkeleton: React.FC<{ variant?: "overview" | "service" }> = ({ variant = "overview" }) => {
+  if (variant === "overview") return (
+    <div role="status" aria-busy="true" aria-label="Loading dashboard..." className="page-skeleton space-y-6">
+      <div aria-hidden="true" className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-3 md:self-center"><Skeleton className="h-4 w-40" /><Skeleton className="h-7 w-52" /><Skeleton className="h-5 w-60" /></div>
+        <div className="space-y-4"><Skeleton className="h-56 w-full" /><div className="grid grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, i) => <div key={i} className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-3 w-full" /></div>)}</div></div>
       </div>
+      <CardGridSkeleton count={3} columns={3} />
+      <div aria-hidden="true" className="grid grid-cols-1 lg:grid-cols-2 gap-5"><Skeleton className="h-64 w-full" /><Skeleton className="h-64 w-full" /></div>
+    </div>
+  );
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading dashboard..." className="page-skeleton space-y-6">
+      {/* Welcome Banner Shadow */}
+      <PageHeaderSkeleton />
 
       {/* 4 KPI Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-3">
+          <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <Skeleton className="h-4 w-28" />
               <Skeleton className="h-10 w-10 rounded-2xl" />
@@ -174,7 +218,7 @@ export const DashboardSkeleton: React.FC = () => {
         {/* Left Column (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
           {/* Aging out banner card */}
-          <div className="bg-white/95 rounded-3xl p-6 border border-rose-200 shadow-sm space-y-3">
+          <div className="bg-white/95 rounded-2xl p-6 border border-rose-200 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-6 w-20 rounded-full" />
@@ -183,7 +227,7 @@ export const DashboardSkeleton: React.FC = () => {
           </div>
 
           {/* Today's Small Groups */}
-          <div className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4">
+          <div className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <Skeleton className="h-5 w-44" />
               <Skeleton className="h-4 w-24" />
@@ -196,12 +240,12 @@ export const DashboardSkeleton: React.FC = () => {
 
           {/* Duty & Dishwashing preview */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-3">
+            <div className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-3">
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-6 w-44" />
               <Skeleton className="h-12 w-full rounded-2xl" />
             </div>
-            <div className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-3">
+            <div className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-3">
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-6 w-44" />
               <Skeleton className="h-12 w-full rounded-2xl" />
@@ -212,7 +256,7 @@ export const DashboardSkeleton: React.FC = () => {
         {/* Right Column (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
           {/* Birthdays Celebrants Widget */}
-          <div className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4">
+          <div className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <Skeleton className="h-5 w-36" />
               <Skeleton className="h-5 w-16 rounded-full" />
@@ -232,7 +276,7 @@ export const DashboardSkeleton: React.FC = () => {
           </div>
 
           {/* Announcements Widget */}
-          <div className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4">
+          <div className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-4">
             <Skeleton className="h-5 w-40" />
             <div className="space-y-3">
               <Skeleton className="h-20 rounded-2xl" />
@@ -246,41 +290,20 @@ export const DashboardSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 2. MEMBERS PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 2. MEMBERS PAGE LOADING SKELETON
 // =========================================================================
 export const MembersPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading members..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* 4 Summary Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-5 border border-indigo-100/90 shadow-sm space-y-2">
-            <Skeleton className="h-3.5 w-24" />
-            <Skeleton className="h-7 w-16" />
-            <Skeleton className="h-3 w-28" />
-          </div>
-        ))}
-      </div>
+
 
       {/* Tabs & Search Toolbar */}
       <div className="space-y-3">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white/95 p-4 rounded-3xl border border-indigo-100/90 shadow-sm">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white/95 p-4 rounded-2xl border border-stone-200 shadow-sm">
           <div className="flex items-center gap-2">
             <Skeleton className="h-9 w-32 rounded-xl" />
             <Skeleton className="h-9 w-32 rounded-xl" />
@@ -308,98 +331,121 @@ export const MembersPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 3. SUNDAY CHECK-IN PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// Attendance loading follows the same cards and table spacing as the loaded pages.
 // =========================================================================
-export const CheckInPageSkeleton: React.FC = () => {
-  return (
-    <div className="space-y-6">
-      {/* Top Header Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 p-4 sm:p-5 rounded-3xl border border-indigo-100/90 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Skeleton className="w-10 h-10 rounded-2xl" />
-          <div className="space-y-1.5">
-            <Skeleton className="h-6 w-56" />
-            <Skeleton className="h-3.5 w-40" />
-          </div>
+export const AttendanceSummarySkeleton: React.FC = () => (
+  <div role="status" aria-busy="true" className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4">
+    <span className="sr-only">Loading attendance summary...</span>
+    {Array.from({ length: 4 }, (_, i) => (
+      <div key={i} aria-hidden="true" className="stat-card">
+        <div className="stat-card-heading">
+          <Skeleton className="h-4 w-24 max-w-full" />
+          <Skeleton className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-xl" />
         </div>
-        <div className="flex items-center gap-2.5">
-          <Skeleton className="h-9 w-32 rounded-xl" />
+        <Skeleton className="h-8 sm:h-9 w-16 mt-2" />
+        <Skeleton className="h-[18px] w-28 max-w-full mt-3" />
+      </div>
+    ))}
+  </div>
+);
+
+export const AttendanceTableSkeleton: React.FC<{ rows?: number; columns?: number; showAvatar?: boolean; showDirectoryHeader?: boolean }> = ({
+  rows = 8, columns = 6, showAvatar = true, showDirectoryHeader = true,
+}) => (
+  <div role="status" aria-busy="true" className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+    <span className="sr-only">Loading attendance records...</span>
+    <div aria-hidden="true">
+      {showDirectoryHeader && (
+        <div className="p-4 sm:p-5 border-b border-stone-100 bg-stone-50/50 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Skeleton className="h-10 w-10 shrink-0" />
+            <div className="space-y-2 min-w-0">
+              <Skeleton className="h-5 w-64 max-w-full" />
+              <Skeleton className="h-3 w-80 max-w-full" />
+            </div>
+          </div>
+          <Skeleton className="h-9 w-36" />
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] table-fixed">
+          <thead className="bg-stone-50 border-b border-stone-200">
+            <tr>{Array.from({ length: columns }, (_, i) => <th key={i} className="px-4 py-3.5"><Skeleton className="h-4 w-24 max-w-full" /></th>)}</tr>
+          </thead>
+          <tbody className="divide-y divide-stone-100">
+            {Array.from({ length: rows }, (_, r) => (
+              <tr key={r}>
+                {Array.from({ length: columns }, (_, c) => (
+                  <td key={c} className="px-4 py-3">
+                    <div className="flex items-center gap-2.5 min-h-6">
+                      {c === 0 && showAvatar && <Skeleton variant="circular" className="w-9 h-9 shrink-0" />}
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+);
+
+export const CheckInPageSkeleton: React.FC = () => (
+  <div role="status" aria-busy="true" className="space-y-6 pb-12">
+    <span className="sr-only">Loading attendance...</span>
+    <div aria-hidden="true" className="flex flex-wrap items-center justify-between gap-4 pb-1">
+      <div className="flex flex-wrap gap-2 min-w-0">
+        <Skeleton className="h-11 w-56 max-w-full rounded-xl" />
+        <Skeleton className="h-11 w-52 max-w-full rounded-xl" />
+      </div>
+      <Skeleton className="h-8 w-64 max-w-full rounded-xl" />
+    </div>
+    <div aria-hidden="true" className="bg-white rounded-2xl p-6 sm:p-7 shadow-sm border border-stone-200/80 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <div className="flex items-start gap-2.5 min-w-0">
+        <Skeleton className="w-11 h-11 rounded-xl shrink-0" />
+        <div className="space-y-2 min-w-0">
+          <Skeleton className="h-14 sm:h-8 w-80 max-w-full" />
+          <Skeleton className="h-24 sm:h-10 w-96 max-w-full" />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2.5 xl:shrink-0">
+        <Skeleton className="h-11 w-64 max-w-full rounded-xl" />
+        <Skeleton className="h-10 w-32 rounded-xl" />
+        <Skeleton className="h-10 w-10 rounded-xl" />
+      </div>
+    </div>
+    <AttendanceSummarySkeleton />
+    <div aria-hidden="true" className="bg-white rounded-2xl p-4 border border-stone-200 shadow-sm space-y-3">
+      <div className="flex gap-2 overflow-hidden">
+        {Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-8 w-28 rounded-xl shrink-0" />)}
+      </div>
+      <div className="flex flex-wrap justify-between gap-3 pt-3 border-t border-stone-100">
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-8 w-24 rounded-xl" />)}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Skeleton className="h-9 w-52 max-w-full rounded-xl" />
           <Skeleton className="h-9 w-36 rounded-xl" />
         </div>
       </div>
-
-      {/* Dark Navy Attendance Status Hero Banner */}
-      <div className="rounded-3xl bg-indigo-950/90 p-6 sm:p-7 text-white shadow-xl border border-indigo-800 space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-5 w-32 rounded-full bg-white/20" />
-              <Skeleton className="h-5 w-44 rounded-full bg-white/10" />
-            </div>
-            <Skeleton className="h-8 w-72 sm:w-96 bg-white/20" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-9 w-28 rounded-xl bg-white/15" />
-            <Skeleton className="h-9 w-28 rounded-xl bg-white/15" />
-          </div>
-        </div>
-
-        {/* 4 Counter Metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-white/10">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white/10 rounded-2xl p-3.5 border border-white/10 space-y-1.5">
-              <Skeleton className="h-3.5 w-20 bg-white/20" />
-              <Skeleton className="h-7 w-12 bg-white/30" />
-              <Skeleton className="h-3 w-28 bg-white/10" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Ministry Filter Bar & Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 p-4 rounded-2xl border border-gray-200 shadow-2xs">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <Skeleton className="h-8 w-24 rounded-xl" />
-          <Skeleton className="h-8 w-28 rounded-xl" />
-          <Skeleton className="h-8 w-28 rounded-xl" />
-          <Skeleton className="h-8 w-28 rounded-xl" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-8 w-48 rounded-xl" />
-          <Skeleton className="h-8 w-32 rounded-xl" />
-        </div>
-      </div>
-
-      {/* Roster Table */}
-      <TableSkeleton rows={8} columns={6} />
     </div>
-  );
-};
+    <AttendanceTableSkeleton />
+  </div>
+);
 
 // =========================================================================
-// 4. EVENTS & MASTER CALENDAR SHADOW SKELETON (Exact 1:1 Mirror)
+// 4. EVENTS & MASTER CALENDAR LOADING SKELETON
 // =========================================================================
 export const EventsPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading events..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-56 sm:w-72" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-28 rounded-2xl" />
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* Toolbar & Filters */}
-      <div className="bg-white/95 p-4 sm:p-5 rounded-3xl border border-indigo-100/90 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white/95 p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Skeleton className="h-9 w-44 rounded-2xl" />
           <Skeleton className="h-9 w-44 rounded-2xl" />
@@ -410,18 +456,18 @@ export const EventsPageSkeleton: React.FC = () => {
       {/* 2-Column Grid: Calendar on Left (8 cols) + Inspector on Right (4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Monthly Calendar Box */}
-        <div className="lg:col-span-8 bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm overflow-hidden space-y-4">
-          <div className="p-5 bg-indigo-950 text-white flex items-center justify-between">
+        <div className="lg:col-span-8 bg-white/95 rounded-2xl border border-stone-200 shadow-sm overflow-hidden space-y-4">
+          <div className="p-5 bg-white text-charcoal flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Skeleton className="w-9 h-9 rounded-2xl bg-white/20" />
+              <Skeleton className="w-9 h-9 rounded-2xl bg-stone-50" />
               <div className="space-y-1.5">
-                <Skeleton className="h-5 w-36 bg-white/20" />
-                <Skeleton className="h-3 w-56 bg-white/10" />
+                <Skeleton className="h-5 w-36 bg-stone-50" />
+                <Skeleton className="h-3 w-56 bg-stone-50" />
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Skeleton className="w-8 h-8 rounded-xl bg-white/15" />
-              <Skeleton className="w-8 h-8 rounded-xl bg-white/15" />
+              <Skeleton className="w-8 h-8 rounded-xl bg-stone-50" />
+              <Skeleton className="w-8 h-8 rounded-xl bg-stone-50" />
             </div>
           </div>
 
@@ -438,7 +484,7 @@ export const EventsPageSkeleton: React.FC = () => {
         </div>
 
         {/* Right Event Inspector Box */}
-        <div className="lg:col-span-4 bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4">
+        <div className="lg:col-span-4 bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-indigo-50">
             <Skeleton className="h-5 w-36" />
             <Skeleton className="h-5 w-16 rounded-full" />
@@ -457,30 +503,18 @@ export const EventsPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 5. BIBLE STUDY GROUPS PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 5. BIBLE STUDY GROUPS PAGE LOADING SKELETON
 // =========================================================================
 export const BibleStudyPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading bible study..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Skeleton className="w-10 h-10 rounded-2xl" />
-          <div className="space-y-1.5">
-            <Skeleton className="h-7 w-64" />
-            <Skeleton className="h-3.5 w-44" />
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* 3 Summary Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm flex items-center justify-between">
+          <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm flex items-center justify-between">
             <div className="space-y-2">
               <Skeleton className="h-3.5 w-28" />
               <Skeleton className="h-7 w-20" />
@@ -512,7 +546,7 @@ export const BibleStudyPageSkeleton: React.FC = () => {
       {/* 3-Column Small Groups Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4">
+          <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-indigo-50">
               <Skeleton className="h-5 w-24 rounded-full" />
               <Skeleton className="h-5 w-20 rounded-full" />
@@ -535,31 +569,18 @@ export const BibleStudyPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 6. TOPICS & BOOKS CURRICULUM SHADOW SKELETON (Exact 1:1 Mirror)
+// 6. TOPICS & BOOKS CURRICULUM LOADING SKELETON
 // =========================================================================
 export const CurriculumPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading curriculum..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* 4 Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm flex items-center justify-between">
+          <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm flex items-center justify-between">
             <div className="space-y-1.5">
               <Skeleton className="h-3.5 w-24" />
               <Skeleton className="h-7 w-16" />
@@ -571,7 +592,7 @@ export const CurriculumPageSkeleton: React.FC = () => {
       </div>
 
       {/* Filter Chips & Search Bar */}
-      <div className="bg-white/95 rounded-3xl p-4 sm:p-5 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white/95 rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           <Skeleton className="h-9 w-28 rounded-2xl" />
           <Skeleton className="h-9 w-32 rounded-2xl" />
@@ -586,7 +607,7 @@ export const CurriculumPageSkeleton: React.FC = () => {
         <div className="lg:col-span-7 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white/95 rounded-3xl border border-indigo-100/90 p-5 shadow-sm space-y-3">
+              <div key={i} className="bg-white/95 rounded-2xl border border-stone-200 p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <Skeleton className="h-5 w-20 rounded-full" />
                   <Skeleton className="h-5 w-24 rounded-full" />
@@ -604,7 +625,7 @@ export const CurriculumPageSkeleton: React.FC = () => {
         </div>
 
         {/* Right Topic Detail Inspector Shadow */}
-        <div className="lg:col-span-5 bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-4">
+        <div className="lg:col-span-5 bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-indigo-50">
             <Skeleton className="h-5 w-32" />
             <Skeleton className="h-6 w-20 rounded-full" />
@@ -622,39 +643,30 @@ export const CurriculumPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 7. SATURDAY DUTY ROSTER SHADOW SKELETON (Exact 1:1 Mirror)
+// 7. SATURDAY DUTY ROSTER LOADING SKELETON
 // =========================================================================
 export const DutyPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading duty..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 p-6 rounded-3xl border border-indigo-100/90 shadow-sm">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-60" />
-          </div>
-          <Skeleton className="h-3.5 w-80" />
-        </div>
-        <Skeleton className="h-10 w-36 rounded-2xl" />
-      </div>
+      <PageHeaderSkeleton />
 
       {/* THIS SATURDAY ON-DUTY HERO CARD */}
-      <div className="rounded-3xl bg-indigo-950 p-7 sm:p-8 text-white shadow-xl border border-indigo-800 space-y-4">
+      <div className="rounded-2xl bg-white p-7 sm:p-8 text-charcoal shadow-sm border border-stone-200 space-y-4">
         <div className="flex items-center justify-between">
           <Skeleton className="h-5 w-44 rounded-full bg-amber-400/30" />
-          <Skeleton className="h-5 w-32 rounded-full bg-white/10" />
+          <Skeleton className="h-5 w-32 rounded-full bg-stone-50" />
         </div>
-        <Skeleton className="h-8 w-56 bg-white/20" />
-        <Skeleton className="h-4 w-72 bg-white/10" />
-        <div className="p-4 bg-white/10 rounded-2xl border border-white/10 space-y-2">
-          <Skeleton className="h-3.5 w-32 bg-white/20" />
-          <Skeleton className="h-3 w-64 bg-white/10" />
+        <Skeleton className="h-8 w-56 bg-stone-50" />
+        <Skeleton className="h-4 w-72 bg-stone-50" />
+        <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+          <Skeleton className="h-3.5 w-32 bg-stone-50" />
+          <Skeleton className="h-3 w-64 bg-stone-50" />
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 bg-white/95 p-1.5 rounded-2xl border border-indigo-100 w-fit">
+      <div className="flex items-center gap-2 bg-white/95 p-1.5 rounded-2xl border border-indigo-100 w-fit max-w-full overflow-hidden">
         <Skeleton className="h-9 w-32 rounded-xl" />
         <Skeleton className="h-9 w-44 rounded-xl" />
         <Skeleton className="h-9 w-32 rounded-xl" />
@@ -663,7 +675,7 @@ export const DutyPageSkeleton: React.FC = () => {
       {/* 3-Column Team Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 shadow-sm space-y-4">
+          <div key={i} className="bg-white/95 rounded-2xl border border-stone-200 p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-indigo-50">
               <div className="flex items-center gap-2.5">
                 <Skeleton variant="circular" className="w-4 h-4" />
@@ -688,42 +700,29 @@ export const DutyPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 8. DISHWASHING ROSTER SHADOW SKELETON (Exact 1:1 Mirror)
+// 8. DISHWASHING ROSTER LOADING SKELETON
 // =========================================================================
 export const DishwashingPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading dishwashing..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-60" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* 2-Column Hero: This Sunday (7 cols) + Next Sunday (5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 rounded-3xl bg-indigo-950 p-6 sm:p-7 text-white shadow-xl space-y-4">
+        <div className="lg:col-span-7 rounded-2xl bg-white p-6 sm:p-7 text-charcoal shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <Skeleton className="h-5 w-36 rounded-full bg-amber-400/30" />
-            <Skeleton className="h-5 w-24 rounded-full bg-white/10" />
+            <Skeleton className="h-5 w-24 rounded-full bg-stone-50" />
           </div>
-          <Skeleton className="h-8 w-56 bg-white/20" />
-          <Skeleton className="h-4 w-72 bg-white/10" />
-          <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-            <Skeleton className="h-4 w-40 bg-white/20" />
+          <Skeleton className="h-8 w-56 bg-stone-50" />
+          <Skeleton className="h-4 w-72 bg-stone-50" />
+          <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200">
+            <Skeleton className="h-4 w-40 bg-stone-50" />
           </div>
         </div>
 
-        <div className="lg:col-span-5 bg-white/95 rounded-3xl p-6 sm:p-7 border border-indigo-100/90 shadow-sm space-y-4">
+        <div className="lg:col-span-5 bg-white/95 rounded-2xl p-6 sm:p-7 border border-stone-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <Skeleton className="h-5 w-36 rounded-full" />
             <Skeleton className="h-4 w-20" />
@@ -740,28 +739,16 @@ export const DishwashingPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 10. COMMUNICATIONS PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 10. COMMUNICATIONS PAGE LOADING SKELETON
 // =========================================================================
 export const CommunicationsPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading communications..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-60" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* Tabs */}
-      <div className="flex items-center justify-between gap-3 bg-white/95 p-4 rounded-3xl border border-indigo-100 shadow-sm">
+      <div className="flex items-center justify-between gap-3 bg-white/95 p-4 rounded-2xl border border-indigo-100 shadow-sm">
         <div className="flex items-center gap-2">
           <Skeleton className="h-9 w-36 rounded-xl" />
           <Skeleton className="h-9 w-36 rounded-xl" />
@@ -772,7 +759,7 @@ export const CommunicationsPageSkeleton: React.FC = () => {
       {/* Announcement Cards List */}
       <div className="space-y-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-3">
+          <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {i === 0 && <Skeleton className="h-5 w-16 rounded-full" />}
@@ -793,31 +780,18 @@ export const CommunicationsPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 11. USERS & ROLES PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 11. USERS & ROLES PAGE LOADING SKELETON
 // =========================================================================
 export const UsersPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading users..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-60" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* 5 Role Summary Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-5 border border-indigo-100 shadow-sm space-y-1.5">
+          <div key={i} className="bg-white/95 rounded-2xl p-5 border border-indigo-100 shadow-sm space-y-1.5">
             <div className="flex items-center justify-between">
               <Skeleton className="h-4 w-20" />
               <Skeleton className="w-8 h-8 rounded-xl" />
@@ -829,7 +803,7 @@ export const UsersPageSkeleton: React.FC = () => {
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/95 p-4 rounded-3xl border border-indigo-100 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/95 p-4 rounded-2xl border border-indigo-100 shadow-sm">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <Skeleton className="h-8 w-20 rounded-2xl" />
           <Skeleton className="h-8 w-20 rounded-2xl" />
@@ -846,34 +820,23 @@ export const UsersPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 12. SETTINGS & LOOKUPS PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 12. SETTINGS & LOOKUPS PAGE LOADING SKELETON
 // =========================================================================
 export const SettingsPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading settings..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-64" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
-        </div>
-      </div>
+      <PageHeaderSkeleton />
 
       {/* Tab Navigation Pill Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto p-2 bg-white/95 rounded-3xl border border-indigo-100/90 shadow-sm">
+      <div className="flex items-center gap-2 overflow-x-auto p-2 bg-white/95 rounded-2xl border border-stone-200 shadow-sm">
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-10 w-32 rounded-2xl shrink-0" />
         ))}
       </div>
 
       {/* Action Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 p-4 sm:p-5 rounded-3xl border border-indigo-100/90 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-sm">
         <Skeleton className="h-9 w-full sm:w-72 rounded-2xl" />
         <Skeleton className="h-9 w-36 rounded-2xl" />
       </div>
@@ -881,7 +844,7 @@ export const SettingsPageSkeleton: React.FC = () => {
       {/* Grid of Settings Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl border border-indigo-100/90 p-6 shadow-sm space-y-4">
+          <div key={i} className="bg-white/95 rounded-2xl border border-stone-200 p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Skeleton variant="circular" className="w-4 h-4" />
@@ -905,28 +868,18 @@ export const SettingsPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 13. REPORTS & ANALYTICS PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 13. REPORTS & ANALYTICS PAGE LOADING SKELETON
 // =========================================================================
 export const ReportsPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading reports..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-72" />
-            <Skeleton className="h-6 w-28 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <Skeleton className="h-10 w-32 rounded-2xl" />
-      </div>
+      <PageHeaderSkeleton />
 
       {/* 4 Analytics KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-3">
+          <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <Skeleton className="h-4 w-28" />
               <Skeleton className="h-10 w-10 rounded-2xl" />
@@ -938,7 +891,7 @@ export const ReportsPageSkeleton: React.FC = () => {
       </div>
 
       {/* Attendance Trends Graph Box */}
-      <div className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-5">
+      <div className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-5">
         <div className="flex items-center justify-between">
           <Skeleton className="h-6 w-52" />
           <Skeleton className="h-5 w-24 rounded-full" />
@@ -949,7 +902,7 @@ export const ReportsPageSkeleton: React.FC = () => {
       {/* Ministry Breakdown Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white/95 rounded-3xl p-6 border border-indigo-100/90 shadow-sm space-y-3">
+          <div key={i} className="bg-white/95 rounded-2xl p-6 border border-stone-200 shadow-sm space-y-3">
             <Skeleton className="h-5 w-32" />
             <Skeleton className="h-8 w-16" />
             <Skeleton className="h-2.5 w-full rounded-full" />
@@ -961,23 +914,13 @@ export const ReportsPageSkeleton: React.FC = () => {
 };
 
 // =========================================================================
-// 14. AUDIT TRAIL PAGE SHADOW SKELETON (Exact 1:1 Mirror)
+// 14. AUDIT TRAIL PAGE LOADING SKELETON
 // =========================================================================
 export const AuditPageSkeleton: React.FC = () => {
   return (
-    <div className="space-y-6">
+    <div role="status" aria-busy="true" aria-label="Loading audit..." className="page-skeleton space-y-6">
       {/* Header Banner */}
-      <div className="bg-white/95 rounded-3xl p-6 sm:p-8 border border-indigo-100/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <Skeleton className="w-10 h-10 rounded-2xl" />
-            <Skeleton className="h-8 w-60" />
-            <Skeleton className="h-6 w-32 rounded-full" />
-          </div>
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </div>
-        <Skeleton className="h-10 w-28 rounded-2xl" />
-      </div>
+      <PageHeaderSkeleton />
 
       {/* Audit Log Table */}
       <TableSkeleton rows={8} columns={5} />

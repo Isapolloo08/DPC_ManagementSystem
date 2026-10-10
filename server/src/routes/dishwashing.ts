@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
-import { authMiddleware, AuthRequest, logAuditAction } from "../middleware/auth";
+import { authMiddleware, AuthRequest, requireRoles, logAuditAction } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
 
 const router = Router();
@@ -114,7 +114,7 @@ router.get("/teams", authMiddleware, async (req: AuthRequest, res: Response) => 
 // ====================================================
 // 2. CREATE DISHWASHING ROTATING TEAM / UNIT
 // ====================================================
-router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/teams", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { 
       name, 
@@ -263,7 +263,7 @@ router.post("/teams", authMiddleware, async (req: AuthRequest, res: Response) =>
 // ====================================================
 // 3. UPDATE DISHWASHING ROTATING TEAM
 // ====================================================
-router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.put("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     const { 
@@ -408,7 +408,7 @@ router.put("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response)
 // ====================================================
 // 4. DELETE DISHWASHING ROTATING TEAM
 // ====================================================
-router.delete("/teams/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete("/teams/:id", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id;
     await db.run("DELETE FROM dishwashing_teams WHERE id = $1", [id]);
@@ -427,7 +427,7 @@ router.delete("/teams/:id", authMiddleware, async (req: AuthRequest, res: Respon
 // ====================================================
 // 5. ADD MEMBER TO DISHWASHING TEAM
 // ====================================================
-router.post("/teams/:id/members", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/teams/:id/members", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const teamId = req.params.id;
     const { member_id, role = "Member" } = req.body;
@@ -452,7 +452,7 @@ router.post("/teams/:id/members", authMiddleware, async (req: AuthRequest, res: 
 // ====================================================
 // 5b. BATCH ADD MEMBERS TO DISHWASHING TEAM
 // ====================================================
-router.post("/teams/:id/members/batch", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/teams/:id/members/batch", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const teamId = req.params.id;
     const { member_ids, role = "Member" } = req.body;
@@ -480,7 +480,7 @@ router.post("/teams/:id/members/batch", authMiddleware, async (req: AuthRequest,
 // ====================================================
 // 6. REMOVE MEMBER FROM DISHWASHING TEAM
 // ====================================================
-router.delete("/teams/:id/members/:memberId", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete("/teams/:id/members/:memberId", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { id, memberId } = req.params;
     await db.run("DELETE FROM dishwashing_team_members WHERE team_id = $1 AND member_id = $2", [id, memberId]);
@@ -618,7 +618,7 @@ router.get("/schedule", authMiddleware, async (req: AuthRequest, res: Response) 
 // ====================================================
 // 8. COMPLETE SUNDAY DISHWASHING DUTY
 // ====================================================
-router.post("/schedule/complete", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/schedule/complete", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { duty_date, team_id, notes } = req.body;
 
@@ -660,7 +660,7 @@ router.post("/schedule/complete", authMiddleware, async (req: AuthRequest, res: 
 // ====================================================
 // 9. SWAP SUNDAY DISHWASHING DUTIES
 // ====================================================
-router.post("/schedule/swap", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/schedule/swap", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { date1, teamId1, date2, teamId2 } = req.body;
 
@@ -728,7 +728,7 @@ router.post("/schedule/swap", authMiddleware, async (req: AuthRequest, res: Resp
 // ====================================================
 // 10. OVERRIDE / EDIT SINGLE SUNDAY DATE
 // ====================================================
-router.post("/schedule/override", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/schedule/override", authMiddleware, requireRoles("Admin", "Pastor", "IT Admin"), async (req: AuthRequest, res: Response) => {
   try {
     const { duty_date, team_id, notes, status = "scheduled" } = req.body;
 

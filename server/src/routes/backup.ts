@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { db, sql } from "../db/schema";
+import { restoreFamilyGraph } from '../utils/familyBackup';
 import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
 
@@ -292,71 +293,85 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
     const tables: Record<string, any[]> = {};
 
     if (!targetYear) {
-      // FULL DATABASE BACKUP (No prayer_requests)
-      const [
-        roles,
-        ministries,
-        system_lookups,
-        system_settings,
-        users,
-        user_ministries,
-        households,
-        members,
-        events,
-        event_registrations,
-        attendance,
-        announcements,
-        bible_study_topics,
-        bible_study_groups,
-        bible_study_members,
-        duty_teams,
-        duty_team_members,
-        duty_schedules,
-        dishwashing_roster,
-        audit_logs
-      ] = await Promise.all([
-        db.all("SELECT * FROM roles ORDER BY id ASC"),
-        db.all("SELECT * FROM ministries ORDER BY id ASC"),
-        db.all("SELECT * FROM system_lookups ORDER BY id ASC"),
-        db.all("SELECT * FROM system_settings ORDER BY key ASC"),
-        db.all("SELECT id, name, username, email, password_hash, role_id, created_at FROM users ORDER BY id ASC"),
-        db.all("SELECT * FROM user_ministries ORDER BY id ASC"),
-        db.all("SELECT * FROM households ORDER BY id ASC"),
-        db.all("SELECT * FROM members ORDER BY id ASC"),
-        db.all("SELECT * FROM events ORDER BY id ASC"),
-        db.all("SELECT * FROM event_registrations ORDER BY id ASC"),
-        db.all("SELECT * FROM attendance ORDER BY id ASC"),
-        db.all("SELECT * FROM announcements ORDER BY id ASC"),
-        db.all("SELECT * FROM bible_study_topics ORDER BY id ASC"),
-        db.all("SELECT * FROM bible_study_groups ORDER BY id ASC"),
-        db.all("SELECT * FROM bible_study_members ORDER BY id ASC"),
-        db.all("SELECT * FROM duty_teams ORDER BY id ASC"),
-        db.all("SELECT * FROM duty_team_members ORDER BY id ASC"),
-        db.all("SELECT * FROM duty_schedules ORDER BY id ASC"),
-        db.all("SELECT * FROM dishwashing_roster ORDER BY id ASC"),
-        db.all("SELECT * FROM audit_logs ORDER BY id ASC LIMIT 5000")
-      ]);
+      await sql.begin(async tx => {
+        await tx.unsafe('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const read = (query: string) => tx.unsafe(query);
+        // FULL DATABASE BACKUP (No prayer_requests)
+        const [
+          roles,
+          ministries,
+          system_lookups,
+          system_settings,
+          users,
+          user_ministries,
+          households,
+          members,
+          events,
+          event_registrations,
+          attendance,
+          announcements,
+          bible_study_topics,
+          bible_study_groups,
+          bible_study_members,
+          duty_teams,
+          duty_team_members,
+          duty_schedules,
+          dishwashing_roster,
+          audit_logs
+        ] = await Promise.all([
+          read("SELECT * FROM roles ORDER BY id ASC"),
+          read("SELECT * FROM ministries ORDER BY id ASC"),
+          read("SELECT * FROM system_lookups ORDER BY id ASC"),
+          read("SELECT * FROM system_settings ORDER BY key ASC"),
+          read("SELECT id, name, username, email, password_hash, role_id, created_at FROM users ORDER BY id ASC"),
+          read("SELECT * FROM user_ministries ORDER BY id ASC"),
+          read("SELECT * FROM households ORDER BY id ASC"),
+          read("SELECT * FROM members ORDER BY id ASC"),
+          read("SELECT * FROM events ORDER BY id ASC"),
+          read("SELECT * FROM event_registrations ORDER BY id ASC"),
+          read("SELECT * FROM attendance ORDER BY id ASC"),
+          read("SELECT * FROM announcements ORDER BY id ASC"),
+          read("SELECT * FROM bible_study_topics ORDER BY id ASC"),
+          read("SELECT * FROM bible_study_groups ORDER BY id ASC"),
+          read("SELECT * FROM bible_study_members ORDER BY id ASC"),
+          read("SELECT * FROM duty_teams ORDER BY id ASC"),
+          read("SELECT * FROM duty_team_members ORDER BY id ASC"),
+          read("SELECT * FROM duty_schedules ORDER BY id ASC"),
+          read("SELECT * FROM dishwashing_roster ORDER BY id ASC"),
+          read("SELECT * FROM audit_logs ORDER BY id ASC LIMIT 5000")
+        ]);
 
-      tables.roles = roles;
-      tables.ministries = ministries;
-      tables.system_lookups = system_lookups;
-      tables.system_settings = system_settings;
-      tables.users = users;
-      tables.user_ministries = user_ministries;
-      tables.households = households;
-      tables.members = members;
-      tables.events = events;
-      tables.event_registrations = event_registrations;
-      tables.attendance = attendance;
-      tables.announcements = announcements;
-      tables.bible_study_topics = bible_study_topics;
-      tables.bible_study_groups = bible_study_groups;
-      tables.bible_study_members = bible_study_members;
-      tables.duty_teams = duty_teams;
-      tables.duty_team_members = duty_team_members;
-      tables.duty_schedules = duty_schedules;
-      tables.dishwashing_roster = dishwashing_roster;
-      tables.audit_logs = audit_logs;
+        tables.roles = roles;
+        tables.ministries = ministries;
+        tables.system_lookups = system_lookups;
+        tables.system_settings = system_settings;
+        tables.users = users;
+        tables.user_ministries = user_ministries;
+        tables.households = households;
+        tables.members = members;
+        const [familyPeople,familyRelationships] = await Promise.all([
+          read('SELECT * FROM family_people ORDER BY id'),read('SELECT * FROM family_relationships ORDER BY id')
+        ]);
+        tables.family_people = familyPeople;
+        tables.family_relationships = familyRelationships;
+        tables.event_invitation_links = await read('SELECT * FROM event_invitation_links ORDER BY id');
+        tables.event_invitation_responses = await read('SELECT * FROM event_invitation_responses ORDER BY id');
+        tables.events = events;
+        tables.recurring_sunday_events = await read('SELECT * FROM recurring_sunday_events ORDER BY id');
+        tables.recurring_event_ministries = await read('SELECT * FROM recurring_event_ministries ORDER BY recurring_event_id, ministry_id');
+        tables.event_ministries = await read('SELECT * FROM event_ministries ORDER BY event_id, ministry_id');
+        tables.event_registrations = event_registrations;
+        tables.attendance = attendance;
+        tables.announcements = announcements;
+        tables.bible_study_topics = bible_study_topics;
+        tables.bible_study_groups = bible_study_groups;
+        tables.bible_study_members = bible_study_members;
+        tables.duty_teams = duty_teams;
+        tables.duty_team_members = duty_team_members;
+        tables.duty_schedules = duty_schedules;
+        tables.dishwashing_roster = dishwashing_roster;
+        tables.audit_logs = audit_logs;
+      });
     } else {
       // YEAR SPECIFIC BACKUP
       const [
@@ -383,6 +398,11 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
       ]);
 
       tables.events = events;
+      tables.event_invitation_links = await db.all('SELECT i.* FROM event_invitation_links i JOIN events e ON e.id=i.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1 ORDER BY i.id', [targetYear]);
+      tables.event_invitation_responses = await db.all('SELECT r.* FROM event_invitation_responses r JOIN event_invitation_links i ON i.id=r.invitation_id JOIN events e ON e.id=i.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1 ORDER BY r.id', [targetYear]);
+      tables.recurring_sunday_events = await db.all('SELECT * FROM recurring_sunday_events ORDER BY id');
+      tables.recurring_event_ministries = await db.all('SELECT * FROM recurring_event_ministries ORDER BY recurring_event_id, ministry_id');
+      tables.event_ministries = await db.all('SELECT em.* FROM event_ministries em JOIN events e ON e.id=em.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1', [targetYear]);
       tables.event_registrations = event_registrations;
       tables.attendance = attendance;
       tables.duty_schedules = duty_schedules;
@@ -451,8 +471,8 @@ router.post("/preview", async (req: Request, res: Response) => {
 
     const knownTables = [
       "roles", "ministries", "system_lookups", "system_settings", "users",
-      "user_ministries", "households", "members",
-      "events", "event_registrations", "attendance", "announcements",
+      "user_ministries", "households", "members", "family_people", "family_relationships",
+      "events", "recurring_sunday_events", "event_ministries", "recurring_event_ministries", "event_invitation_links", "event_invitation_responses", "event_registrations", "attendance", "announcements",
       "bible_study_topics", "bible_study_groups",
       "bible_study_members", "duty_teams", "duty_team_members",
       "duty_schedules", "dishwashing_roster", "audit_logs"
@@ -514,11 +534,19 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
 
     // Execute in PostgreSQL transaction with correct insertion order
     await sql.begin(async (tx) => {
+      await tx.unsafe('SELECT pg_advisory_xact_lock(170017)');
       // If mode is 'replace', truncate transactional and master tables safely
       if (mode === "replace") {
         await tx.unsafe(`
           TRUNCATE TABLE 
+            family_relationships,
+            family_people,
             attendance,
+            event_ministries,
+            recurring_event_ministries,
+            recurring_sunday_events,
+            event_invitation_responses,
+            event_invitation_links,
             event_registrations,
             events,
             announcements,
@@ -537,6 +565,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
         `);
       }
 
+      const restoredMemberIds=new Set<number>();
       // Helper function to insert rows for a table safely with conflict handling
       const insertRows = async (tableName: string, rows: any[]) => {
         if (!Array.isArray(rows) || rows.length === 0) return 0;
@@ -548,7 +577,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
 
           const columns = keys.map(k => `"${k}"`).join(", ");
           const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
-          const values = keys.map(k => row[k]);
+          const values = keys.map(k => typeof row[k] === 'object' && row[k] !== null && !(row[k] instanceof Date) ? JSON.stringify(row[k]) : row[k]);
 
           let conflictClause = "ON CONFLICT DO NOTHING";
 
@@ -572,10 +601,11 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
           }
 
           try {
-            await tx.unsafe(
-              `INSERT INTO "${tableName}" (${columns}) VALUES (${placeholders}) ${conflictClause};`,
+            const saved = await tx.unsafe(
+              `INSERT INTO "${tableName}" (${columns}) VALUES (${placeholders}) ${conflictClause}${tableName==='members'?' RETURNING id':''};`,
               values
             );
+            if(tableName==='members') for(const member of saved) restoredMemberIds.add(member.id);
             count++;
           } catch (rowErr: any) {
             // Fallback: If ON CONFLICT (id) failed due to a secondary unique constraint (e.g. username/email/name),
@@ -605,6 +635,11 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
         "households",
         "members",
         "events",
+        "recurring_sunday_events",
+        "recurring_event_ministries",
+        "event_ministries",
+        "event_invitation_links",
+        "event_invitation_responses",
         "event_registrations",
         "attendance",
         "announcements",
@@ -620,16 +655,39 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
 
       for (const table of restoreOrder) {
         if (payload[table] && Array.isArray(payload[table])) {
-          const inserted = await insertRows(table, payload[table]);
+          const restoredRows = table === 'members' ? payload[table].map((member:any)=>({...member,spouse_id:null})) : table === 'event_invitation_responses' ? payload[table].map((response: any) => {
+            // Backups created before migration 021 derive member/event identity from their link.
+            const link = (payload.event_invitation_links || []).find((item: any) => item.id === response.invitation_id);
+            return { ...response, event_id: response.event_id ?? link?.event_id, member_id: response.member_id ?? link?.member_id ?? null };
+          }) : payload[table];
+          const inserted = await insertRows(table, restoredRows);
           restoredCounts[table] = inserted;
+        }
+        if (table === 'members') {
+          for (const member of payload.members || []) if(member.spouse_id && restoredMemberIds.has(member.id)) {
+            await tx.unsafe('UPDATE members SET spouse_id=$1 WHERE id=$2',[member.spouse_id,member.id]);
+          }
+          const client = {query:async(query:string,params:any[]=[])=>({rows:await tx.unsafe(query,params)})} as any;
+          await restoreFamilyGraph(client,payload.family_people,payload.family_relationships);
+          if(payload.family_people) {
+            restoredCounts.family_people=payload.family_people.length;
+            restoredCounts.family_relationships=payload.family_relationships.length;
+          } else {
+            // Older backups contain only explicit registered spouse links.
+            await tx.unsafe(`INSERT INTO family_people(member_id,name) SELECT id,trim(first_name || ' ' || last_name) FROM members ON CONFLICT(member_id) DO NOTHING`);
+            await tx.unsafe(`INSERT INTO family_relationships(from_person_id,to_person_id,kind)
+              SELECT LEAST(a.id,b.id),GREATEST(a.id,b.id),'spouse' FROM members m
+              JOIN family_people a ON a.member_id=m.id JOIN family_people b ON b.member_id=m.spouse_id
+              WHERE m.id<>m.spouse_id ON CONFLICT DO NOTHING`);
+          }
         }
       }
 
       // Synchronize all sequence counters
       const sequenceTables = [
         "roles", "ministries", "system_lookups", "users", "user_ministries",
-        "households", "members", "events",
-        "event_registrations", "attendance", "announcements",
+        "households", "members", "family_people", "family_relationships", "events", "recurring_sunday_events",
+        "event_invitation_links", "event_invitation_responses", "event_registrations", "attendance", "announcements",
         "bible_study_topics", "bible_study_groups", "bible_study_members",
         "duty_teams", "duty_team_members", "duty_schedules", "dishwashing_roster",
         "audit_logs"
