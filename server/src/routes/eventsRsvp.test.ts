@@ -22,7 +22,7 @@ test('RSVP selects a real member, rejects missing selection, and preserves atten
   await new Promise<void>(r=>server.once('listening',r));
   const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}/events/501/rsvp`;
   try {
-    for(const file of ['001_init_postgres.sql','007_notifications.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',file),'utf8'));
+    for(const file of ['001_init_postgres.sql','007_notifications.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql','025_invitation_link_archive.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',file),'utf8'));
     await pool.query("INSERT INTO roles(id,name) VALUES(501,'Admin'),(502,'Member'); INSERT INTO users(id,name,email,password_hash,role_id) VALUES(501,'Admin','admin@fixture.test','fixture',501),(502,'Member','member@fixture.test','fixture',502)");
     await pool.query("INSERT INTO events(id,title,start_time,end_time) VALUES(501,'RSVP fixture','2099-01-01','2099-01-02'); INSERT INTO members(id,first_name,last_name,birthdate,status,user_id) VALUES(501,'Linked','Member','2000-01-01','active',502),(502,'Other','Member','2000-01-01','active',NULL)");
     db.get=(async(q:string,p:any[]) => (await pool.query(q,p)).rows[0]) as any;

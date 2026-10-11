@@ -585,6 +585,7 @@ export const api = {
     method: "DELETE"
   }),
   getEventInvitations: (eventId: number) => request<InvitationOverview>(`/event-invitations/events/${eventId}`),
+  deleteEventInvitation: (eventId:number,linkId:number) => request<{message:string}>(`/event-invitations/events/${eventId}/links/${linkId}`,{method:'DELETE'},0),
   getInvitationSyncState: () => request<InvitationSyncState>('/invitation-sync/state').then(checkedSyncState),
   inspectInvitationEvent: (event_identity:string) => request<EventVerification>('/invitation-sync/verify-event/inspect',{method:'POST',body:JSON.stringify({event_identity})},0),
   verifyInvitationEvent: (body:{event_identity:string;event_id:number;local_identity:string;local_fingerprint:string;source:string;fingerprint:string;confirm_same_event:boolean}) => request<{event_id:number;verified_links:number;unmatched_online_links:number;state:InvitationSyncState}>('/invitation-sync/verify-event/confirm',{method:'POST',body:JSON.stringify(body)},0),

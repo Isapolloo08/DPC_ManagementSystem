@@ -6,6 +6,10 @@ Tracked in [GitHub issue #11](https://github.com/Isapolloo08/DPC_ManagementSyste
 
 Calendar -> select a church event -> Invitation Links & Responses opens a full event page. Invitations & responses contains link generation, response reasons, online previews and explicit manual Pull. Attendance & check-in opens actual attendance for that event. Open in Attendance Live selects the same event in Special Event Check-In; both locations use the same attendance panel.
 
+Pending online submissions use a paginated table. The header checkbox selects eligible rows on the current page; Select all pending selects eligible submissions across every page. Selection persists while paging. Pull Selected is always explicit and processes at most 25 submissions per request. Interrupted requests or unprocessed items stop the sequence and leave remaining eligible items selected for review and manual retry. Preview, selection and paging never import responses.
+
+Invitation links also have pagination. Delete requires confirmation, removes the link from this installation's list and closes its public submission endpoint. It retains the link internally, including its stable identity, existing responses, guest attendance and pending synchronization. Existing responses remain visible; repeated Delete is idempotent. Deleting a personal link and deliberately generating another invitation for the same member restores the retained personal link. A separately hosted backend keeps its own link state until that installation is updated or synchronized through the existing deployment/cloud workflow.
+
 ## Attendance rules
 
 | Invitation or action | Attendance result |
@@ -34,6 +38,8 @@ Online discovery and previews still do not import business records. Previously u
 ## Updating an installation
 
 Update client and backend together. The normal backend schema initialization applies migration 024 on restart. Back up the installation before updating. This implementation was verified in disposable PostgreSQL schemas and mocked browser journeys; live migration, production deployment and real invitation submissions were not performed by the agent.
+
+Link deletion additionally requires migration 025 (`archived` on invitation links), applied by normal schema initialization. Tracked in [GitHub issue #12](https://github.com/Isapolloo08/DPC_ManagementSystem/issues/12). The archived flag is included in existing link backup exports.
 
 ## Verification
 

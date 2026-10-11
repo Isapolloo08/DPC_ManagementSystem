@@ -32,9 +32,9 @@ router.get("/events/:eventId", ...organizer, async (req: AuthRequest, res) => {
   try {
     const event = await managedEvent(req, res); if (!event) return;
     const links = await db.all(`SELECT i.*, concat_ws(' ', m.first_name, m.last_name) AS member_name,
-      (i.enabled AND i.deadline > CURRENT_TIMESTAMP AND e.start_time > CURRENT_TIMESTAMP) AS accepting
+      (i.enabled AND NOT i.archived AND i.deadline > CURRENT_TIMESTAMP AND e.start_time > CURRENT_TIMESTAMP) AS accepting
       FROM event_invitation_links i JOIN events e ON e.id = i.event_id LEFT JOIN members m ON m.id = i.member_id
-      WHERE i.event_id = $1 ORDER BY i.created_at DESC, i.id DESC`, [event.id]);
+      WHERE i.event_id = $1 AND NOT i.archived ORDER BY i.created_at DESC, i.id DESC`, [event.id]);
     const responses = await db.all(`SELECT r.id, r.invitation_id, r.member_id, r.name, r.contact, r.answer, r.reason, r.updated_at
       FROM event_invitation_responses r JOIN event_invitation_links i ON i.id = r.invitation_id
       WHERE i.event_id = $1 ORDER BY r.updated_at DESC, r.id DESC LIMIT 1000`, [event.id]);
@@ -42,7 +42,7 @@ router.get("/events/:eventId", ...organizer, async (req: AuthRequest, res) => {
       COUNT(*) FILTER (WHERE r.answer = 'no')::int AS no, COUNT(*) FILTER (WHERE r.answer = 'maybe')::int AS maybe,
       COUNT(*) FILTER (WHERE i.member_id IS NOT NULL AND r.id IS NULL AND NOT EXISTS
         (SELECT 1 FROM event_invitation_responses other WHERE other.event_id = i.event_id AND other.member_id = i.member_id))::int AS pending
-      FROM event_invitation_links i LEFT JOIN event_invitation_responses r ON r.invitation_id = i.id WHERE i.event_id = $1`, [event.id]);
+      FROM event_invitation_links i LEFT JOIN event_invitation_responses r ON r.invitation_id = i.id WHERE i.event_id = $1 AND (NOT i.archived OR r.id IS NOT NULL)`, [event.id]);
     res.json({ links, responses, counts, limit: 1000 });
   } catch { res.status(500).json({ error: "Unable to load invitations. Please try again." }); }
 });
@@ -74,7 +74,7 @@ router.post("/events/:eventId", ...organizer, async (req: AuthRequest, res) => {
     }
     const link = await db.get(`INSERT INTO event_invitation_links (event_id, member_id, token, deadline, created_by)
       VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (event_id, member_id) WHERE member_id IS NOT NULL DO UPDATE SET enabled = TRUE, deadline = EXCLUDED.deadline
+      ON CONFLICT (event_id, member_id) WHERE member_id IS NOT NULL DO UPDATE SET enabled = TRUE, archived = FALSE, deadline = EXCLUDED.deadline
       RETURNING *`, [event.id, memberId, randomBytes(32).toString("hex"), deadline.toISOString(), req.user!.id]);
     await logAuditAction(req.user!.id, "CREATE", "events", event.id, "Generated an event invitation link");
     res.status(201).json(link);
@@ -86,11 +86,35 @@ router.patch("/events/:eventId/links/:linkId", ...organizer, async (req: AuthReq
     const event = await managedEvent(req, res); if (!event) return;
     const id = Number(req.params.linkId);
     if (!Number.isSafeInteger(id) || id < 1 || typeof req.body.enabled !== 'boolean') return res.status(400).json({ error: "Choose a valid link status." });
-    const result = await db.run("UPDATE event_invitation_links SET enabled = $1 WHERE id = $2 AND event_id = $3", [req.body.enabled, id, event.id]);
+    const result = await db.run("UPDATE event_invitation_links SET enabled = $1 WHERE id = $2 AND event_id = $3 AND NOT archived", [req.body.enabled, id, event.id]);
     if (!result.changes) return res.status(404).json({ error: "Invitation link not found." });
     await logAuditAction(req.user!.id, "UPDATE", "events", event.id, req.body.enabled ? "Activated an invitation link" : "Deactivated an invitation link");
     res.json({ enabled: req.body.enabled });
   } catch { res.status(500).json({ error: "Unable to change the invitation link." }); }
+});
+
+router.delete('/events/:eventId/links/:linkId', ...organizer, async (req:AuthRequest,res) => {
+  try {
+    const event=await managedEvent(req,res);if(!event)return;
+    const id=Number(req.params.linkId);
+    if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Choose a valid invitation link.'});
+    const result=await db.transaction(async client=>{
+      await client.query('SELECT pg_advisory_xact_lock(237024)');
+      const current=(await client.query(`SELECT e.id,e.created_by,e.ministry_id,${eventMinistryIdsSql('e')} AS ministry_ids FROM events e WHERE e.id=$1 FOR SHARE`,[event.id])).rows[0];
+      const staff=(await client.query('SELECT u.id,r.name AS role_name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=$1',[req.user!.id])).rows[0];
+      const ministry_ids=(await client.query('SELECT ministry_id FROM user_ministries WHERE user_id=$1',[req.user!.id])).rows.map(row=>row.ministry_id);
+      if(!current||!staff||!canManageInvitation({...req.user!,...staff,ministry_ids},current))return {status:403,error:'You cannot manage invitations for this event.'};
+      const link=(await client.query('SELECT id,archived FROM event_invitation_links WHERE id=$1 AND event_id=$2 FOR UPDATE',[id,event.id])).rows[0];
+      if(!link)return {status:404,error:'Invitation link not found.'};
+      if(!link.archived) {
+        await client.query('UPDATE event_invitation_links SET archived=TRUE,enabled=FALSE WHERE id=$1',[id]);
+        await client.query("INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'DELETE_INVITATION_LINK','event_invitation_links',$2,'Removed link from list; existing responses retained')",[req.user!.id,id]);
+      }
+      return {status:200};
+    });
+    if(result.error)return res.status(result.status).json({error:result.error});
+    res.json({message:'Invitation link deleted. Existing responses were preserved.'});
+  } catch {res.status(503).json({error:'Unable to delete the invitation link. Please retry.'});}
 });
 
 router.use("/public", publicLimiter, (_req, res, next) => { res.set("Cache-Control", "no-store"); res.set("Referrer-Policy", "no-referrer"); next(); });
@@ -100,7 +124,7 @@ router.get("/public/:token", async (req, res) => {
     const invitation = await db.get(`SELECT e.title, e.description, e.start_time, e.end_time, e.location,
       COALESCE((SELECT string_agg(mn.name, ' + ' ORDER BY mn.id) FROM event_ministries em JOIN ministries mn ON mn.id=em.ministry_id WHERE em.event_id=e.id AND em.enabled), min.name, 'All-Church') AS ministry_name,
       i.deadline, i.member_id IS NOT NULL AS personal, concat_ws(' ', m.first_name, m.last_name) AS member_name,
-      (i.enabled AND i.deadline > CURRENT_TIMESTAMP AND e.start_time > CURRENT_TIMESTAMP) AS accepting
+      (i.enabled AND NOT i.archived AND i.deadline > CURRENT_TIMESTAMP AND e.start_time > CURRENT_TIMESTAMP) AS accepting
       FROM event_invitation_links i JOIN events e ON e.id = i.event_id LEFT JOIN members m ON m.id = i.member_id
       LEFT JOIN ministries min ON min.id = e.ministry_id WHERE i.token = $1`, [req.params.token]);
     if (!invitation) return res.status(404).json({ error: "Invitation not found." });
@@ -113,7 +137,7 @@ router.get("/public/:token/members", async (req, res) => {
   try {
     if (!tokenPattern.test(req.params.token)) return res.status(404).json({ error: "Invitation not found." });
     const invitation = await db.get(`SELECT i.member_id, e.ministry_id, ${eventMinistryIdsSql()} AS ministry_ids,
-      (i.enabled AND i.deadline > CURRENT_TIMESTAMP AND e.start_time > CURRENT_TIMESTAMP) AS accepting
+      (i.enabled AND NOT i.archived AND i.deadline > CURRENT_TIMESTAMP AND e.start_time > CURRENT_TIMESTAMP) AS accepting
       FROM event_invitation_links i JOIN events e ON e.id = i.event_id WHERE i.token = $1`, [req.params.token]);
     if (!invitation) return res.status(404).json({ error: "Invitation not found." });
     if (!invitation.accepting) return res.status(410).json({ error: "Responses are closed for this invitation." });
@@ -149,7 +173,7 @@ router.post("/public/:token", async (req, res) => {
         WHERE i.token = $1 FOR UPDATE OF i`, [req.params.token]);
       const invitation = rows[0];
       if (!invitation) return { status: 404, error: "Invitation not found." };
-      if (!invitation.enabled || new Date(invitation.deadline).getTime() <= Date.now() || new Date(invitation.start_time).getTime() <= Date.now()) return { status: 410, error: "Responses are closed for this invitation." };
+      if (invitation.archived || !invitation.enabled || new Date(invitation.deadline).getTime() <= Date.now() || new Date(invitation.start_time).getTime() <= Date.now()) return { status: 410, error: "Responses are closed for this invitation." };
       const memberId = invitation.member_id || (req.body.attendeeType === 'member' ? req.body.member_id : null);
       let name = invitation.member_id ? invitation.member_name : req.body.name;
       if (memberId && !invitation.member_id) {

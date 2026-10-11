@@ -908,6 +908,9 @@ export async function initSchema() {
         const guestAttendancePath=getMigrationFilePath('024_event_guest_attendance.sql');
         if(!guestAttendancePath)throw new Error('Missing guest attendance migration 024');
         await sql.unsafe(fs.readFileSync(guestAttendancePath,'utf-8'));
+      const invitationArchivePath=getMigrationFilePath('025_invitation_link_archive.sql');
+      if(!invitationArchivePath)throw new Error('Missing invitation link archive migration 025');
+      await sql.unsafe(fs.readFileSync(invitationArchivePath,'utf-8'));
       await db.transaction(client => syncRecordedHouseholdChildren(client));
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {

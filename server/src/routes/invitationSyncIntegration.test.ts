@@ -41,7 +41,7 @@ test('online guest discovery and preview never import; manual Pull is atomic and
   const call=(side:number,route:string,body?:any)=>fetch(origins[side]+'/api/invitation-sync/'+route,{headers:auth,method:body===undefined?'GET':'POST',body:body===undefined?undefined:JSON.stringify(body)});
   try {
     for(const pool of pools) {
-      for(const name of ['001_init_postgres.sql','007_notifications.sql','015_cloud_sync_columns.sql','017_family_tree.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql']) await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',name),'utf8'));
+      for(const name of ['001_init_postgres.sql','007_notifications.sql','015_cloud_sync_columns.sql','017_family_tree.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql','025_invitation_link_archive.sql']) await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',name),'utf8'));
       await pool.query("ALTER TABLE users ADD COLUMN temp_password TEXT; INSERT INTO roles(id,name) VALUES(501,'Admin'),(502,'Pastor')");
       await pool.query("INSERT INTO users(id,name,email,password_hash,role_id) VALUES(501,'Admin','admin@example.test',$1,501),(502,'Pastor','pastor@example.test',$1,502)",[await bcrypt.hash('fixture-password',4)]);
     }
@@ -212,6 +212,23 @@ test('online guest discovery and preview never import; manual Pull is atomic and
       await pools[0].query("UPDATE event_registrations SET status='registered' WHERE event_id=999");
       await transfer(0,1,'pull','event_registrations');assert.equal((await pools[1].query('SELECT status FROM event_registrations WHERE event_id=999')).rows[0].status,actual);
     }
+    // Deletion removes list clutter while retaining submissions awaiting manual Pull.
+    const remove=()=>fetch(origins[0]+'/api/event-invitations/events/501/links/501',{method:'DELETE',headers:auth});
+    await pools[0].query(`CREATE FUNCTION fixture_fail_archive_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='DELETE_INVITATION_LINK' THEN RAISE EXCEPTION 'controlled audit failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER fixture_fail_archive_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fixture_fail_archive_audit()`);
+    assert.equal((await remove()).status,503);
+    assert.equal((await pools[0].query('SELECT archived FROM event_invitation_links WHERE id=501')).rows[0].archived,false);
+    await pools[0].query('DROP TRIGGER fixture_fail_archive_audit ON audit_logs');
+    const unauthorized=await fetch(origins[0]+'/api/event-invitations/events/501/links/501',{method:'DELETE'});assert.equal(unauthorized.status,401);
+    assert.equal((await fetch(origins[0]+'/api/event-invitations/events/999/links/501',{method:'DELETE',headers:auth})).status,404);
+    assert.equal((await remove()).status,200);assert.equal((await remove()).status,200);
+    const overview=await fetch(origins[0]+'/api/event-invitations/events/501',{headers:auth});const retained=await overview.json() as any;
+    assert.equal(retained.links.length,0);assert.equal(retained.responses.length,2);
+    assert.equal((await pools[0].query("SELECT count(*)::int n FROM audit_logs WHERE action='DELETE_INVITATION_LINK'")).rows[0].n,1);
+    const closedLink=await fetch(origins[0]+'/api/event-invitations/public/'+token);assert.equal((await closedLink.json() as any).accepting,false);
+    assert.equal((await fetch(origins[0]+'/api/event-invitations/public/'+token,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Late Guest',contact:'late@example.test',answer:'yes'})})).status,410);
+    assert.equal((await fetch(origins[0]+'/api/event-invitations/events/501/links/501',{method:'PATCH',headers:auth,body:JSON.stringify({enabled:true})})).status,404);
+    assert.equal((await call(1,'preview',{submission:id})).status,200);
     const receiver=(await pools[1].query('SELECT identity FROM invitation_sync_node')).rows[0].identity;
     await call(0,'source/revoke',{receiver});const revoked=await call(1,'refresh',{});assert.equal(revoked.status,409);
     const revokedState=await call(1,'state');assert.equal((await revokedState.json() as any).state,'Reconnect required');

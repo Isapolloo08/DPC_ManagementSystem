@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link2, Copy, RefreshCw } from 'lucide-react';
+import { Link2, Copy, RefreshCw, Trash2 } from 'lucide-react';
 import { ModalShell } from '../common/ModalShell';
 import { Button } from '../common/Button';
+import {Dialog} from '../common/Dialog';
+import {Pagination} from '../common/Pagination';
+import {useListPagination} from '../../hooks/useListPagination';
 import { api } from '../../api';
 import type { EventItem, Member } from '../../types';
 import { invitationUrl, type InvitationOverview, type InvitationLink } from '../../services/eventInvitations';
@@ -15,6 +18,8 @@ export function EventInvitationsPanel({ event }: { event: EventItem }) {
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [message, setMessage] = useState('');
   const [mode, setMode] = useState('general'), [query, setQuery] = useState(''), [memberId, setMemberId] = useState('');
   const [members, setMembers] = useState<Member[]>([]), [deadline, setDeadline] = useState('');
+  const [deleting,setDeleting]=useState<InvitationLink|null>(null);
+  const linksPage=useListPagination(data?.links||[],String(event.id),10);
   const [baseUrl, setBaseUrl] = useState(() => {
     try { return localStorage.getItem('dpc_invitation_site_url') || import.meta.env.VITE_PUBLIC_APP_URL || (window.location.protocol.startsWith('http') ? window.location.origin + window.location.pathname : 'http://localhost:3000/'); }
     catch { return import.meta.env.VITE_PUBLIC_APP_URL || 'http://localhost:3000/'; }
@@ -47,6 +52,7 @@ export function EventInvitationsPanel({ event }: { event: EventItem }) {
       const link = await api.createEventInvitation(event.id, { member_id: mode === 'personal' ? Number(memberId) : undefined, deadline: due });
       try { localStorage.setItem('dpc_invitation_site_url', baseUrl); } catch { /* Clipboard still works without persistent preferences. */ }
       await load(); setMessage('Invitation link generated. Copy it below to share.');
+      linksPage.setPage(1);
       setGenerated(link.id);
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to generate invitation.'); }
     finally { setBusy(false); }
@@ -61,6 +67,12 @@ export function EventInvitationsPanel({ event }: { event: EventItem }) {
     try { await api.setEventInvitationEnabled(event.id, link.id, !link.enabled); await load(); }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to change link status.'); }
     finally { setBusy(false); }
+  };
+  const remove=async()=>{
+    if(!deleting)return;setBusy(true);setError('');setMessage('');
+    try{const result=await api.deleteEventInvitation(event.id,deleting.id);setDeleting(null);await load();setMessage(result.message);}
+    catch(failure){setError(failure instanceof Error?failure.message:'Unable to delete invitation link.');}
+    finally{setBusy(false);}
   };
   return <div data-modal-body className="event-invitations-body">
       {error && <p role="alert" className="event-invitations-error">{error}</p>}
@@ -79,13 +91,15 @@ export function EventInvitationsPanel({ event }: { event: EventItem }) {
         {ended && <p className="text-xs text-muted">This event has started. New invitation responses are closed.</p>}
       </section>
       <section><div className="event-invitations-heading"><h3>Invitation links</h3><Button size="sm" onClick={() => void load()} disabled={loading || busy}><RefreshCw size={14} />Refresh</Button></div>
-        {loading && !data ? <p role="status">Loading invitations…</p> : !data?.links.length ? <p className="text-xs text-muted">No invitation links yet.</p> : <div className="event-invitations-links">{data.links.map(link => {
+        {loading && !data ? <p role="status">Loading invitations…</p> : !data?.links.length ? <p className="text-xs text-muted">No invitation links yet.</p> : <div className="event-invitations-links">{linksPage.items.map(link => {
           let url = ''; try { url = invitationUrl(baseUrl, link.token); } catch { /* Correct the website URL above before copying. */ }
           return <div key={link.id} className="event-invitations-link" data-generated={generated === link.id}><div><strong>{link.member_id ? link.member_name : 'Members & guests invitation'}</strong><span>{!link.enabled ? 'Deactivated' : link.accepting ? 'Open' : 'Closed'} · Respond by {new Date(link.deadline).toLocaleString()}</span></div>
             <input className="ui-input" aria-label={`Invitation link ${link.id}`} readOnly value={url} onFocus={e => e.target.select()} />
-            <div className="event-invitations-link-actions"><Button size="sm" onClick={() => void copy(link)} disabled={!url}><Copy size={14} />Copy Link</Button><Button size="sm" onClick={() => void toggle(link)} disabled={busy}>{link.enabled ? 'Deactivate' : 'Activate'}</Button></div>
+            <div className="event-invitations-link-actions"><Button size="sm" onClick={() => void copy(link)} disabled={!url}><Copy size={14} />Copy Link</Button><div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void toggle(link)} disabled={busy}>{link.enabled ? 'Deactivate' : 'Activate'}</Button><Button size="sm" disabled={busy} onClick={()=>{setError('');setDeleting(link);}}><Trash2 size={14}/>Delete</Button></div></div>
           </div>;
         })}</div>}
+        {!!data?.links.length&&<Pagination page={linksPage.page} pageSize={linksPage.pageSize} total={linksPage.total} onPageChange={linksPage.setPage} onPageSizeChange={linksPage.setPageSize} label="invitation links" loading={busy||loading}/>}
+        {deleting&&<Dialog title="Delete invitation link?" busy={busy} onClose={()=>{if(!busy)setDeleting(null);}} footer={<><Button disabled={busy} onClick={()=>setDeleting(null)}>Cancel</Button><Button variant="primary" disabled={busy} onClick={()=>void remove()}>Delete invitation link</Button></>}><p>This removes the link from this list and stops new responses through it. Existing responses, attendance and pending online submissions are kept.</p>{error&&<p role="alert" className="event-invitations-error">{error}</p>}</Dialog>}
       </section>
       <section><h3>Event responses</h3><div className="event-invitations-counts">{([['yes', 'Attending'], ['no', 'Cannot attend'], ['maybe', 'Not sure'], ['pending', 'Members pending']] as const).map(([key, label]) => <div key={key}><strong>{data?.counts[key] || 0}</strong><span>{label}</span></div>)}</div>
         <p className="text-xs text-muted">These are planned responses. Record actual arrivals using Event Attendance & Check-In. Guest links cannot count people who have not replied.</p>

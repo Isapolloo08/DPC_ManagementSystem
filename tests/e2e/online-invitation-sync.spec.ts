@@ -94,3 +94,43 @@ for(const theme of ['light','dark'])test(`Admin bell preview and explicit select
   await expect(page.getByText('Guest Online',{exact:true})).toHaveCount(0);
   await expect(panel).toContainText('Administrator session expired');
 });
+
+for(const theme of ['light','dark'])test(`paginated bulk Pull keeps selection and stops on interruption (${theme})`,async({page},info)=>{
+  await page.setViewportSize(theme==='dark'?{width:390,height:844}:{width:1440,height:1000});
+  const f=await fixture(page,theme);
+  const base=f.state.pending[0];
+  f.state.pending.splice(0,2,...Array.from({length:27},(_,index)=>({...base,submission:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`})));
+  await page.route('**/api/invitation-sync/refresh',route=>route.fulfill({json:f.state}));
+  await page.route('**/api/invitation-sync/pull',route=>{
+    const payload=route.request().postDataJSON();f.pulls.push(payload);
+    if(f.pulls.length===2)return theme==='light'?route.fulfill({status:503,json:{error:'Controlled connection failure'}}):route.fulfill({json:{results:[],unprocessed:payload.submissions}});
+    for(const item of f.state.pending)if(payload.submissions.includes(item.submission))item.status='Synchronized';
+    return route.fulfill({json:{results:payload.submissions.map((submission:string)=>({submission,status:'Synchronized'})),unprocessed:[]}});
+  });
+  await page.getByRole('button',{name:'Notifications, 1 unread',exact:true}).click();
+  await page.getByRole('button',{name:/Online invitation submissions/}).click();
+  const panel=page.getByRole('region',{name:'Pending online submissions'});
+  await expect(panel.getByRole('table')).toBeVisible();
+  await expect(panel.getByRole('table').getByRole('row')).toHaveCount(11);
+  expect(f.pulls).toHaveLength(0);
+  await panel.getByLabel('Select pending submissions on this page').check();
+  await expect(panel.getByRole('button',{name:'Pull Selected (10)',exact:true})).toBeEnabled();
+  await panel.getByRole('button',{name:'Next submissions page',exact:true}).click();
+  await expect(panel.getByLabel('Select submission 11')).not.toBeChecked();
+  await expect(panel.getByRole('button',{name:'Pull Selected (10)',exact:true})).toBeEnabled();
+  await panel.getByRole('button',{name:'Select all pending (27)',exact:true}).click();
+  await expect(panel.getByLabel('Select submission 11')).toBeChecked();
+  await expect(panel.getByRole('button',{name:'Pull Selected (27)',exact:true})).toBeEnabled();
+  expect(f.pulls).toHaveLength(0);
+  await page.screenshot({path:info.outputPath('submission-table-'+theme+'.png'),fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  await panel.getByRole('button',{name:'Pull Selected (27)',exact:true}).click();
+  await expect(panel.getByRole('button',{name:'Pull Selected (2)',exact:true})).toBeEnabled();
+  await expect(panel).toContainText('Remaining items stay selected');
+  expect(f.pulls.map(p=>p.submissions.length)).toEqual([25,2]);
+  expect(new Set(f.pulls[0].submissions).size).toBe(25);
+  await panel.getByRole('button',{name:'Pull Selected (2)',exact:true}).click();
+  await expect(panel.getByRole('button',{name:'Pull Selected (0)',exact:true})).toBeDisabled();
+  expect(f.pulls.map(p=>p.submissions.length)).toEqual([25,2,2]);
+  expect(f.pulls[2].submissions).toEqual(f.pulls[1].submissions);
+});

@@ -182,6 +182,7 @@ test('organizer generates guest and personal links, sees responses and deactivat
       const link = { id: links.length + 1, token: String(links.length + 1).repeat(64), member_id: payload.member_id || null, member_name: 'Maria Reyes', enabled: true, accepting: true, deadline: event.start_time };
       links.unshift(link); return route.fulfill({ status: 201, json: link });
     }
+    if (method === 'DELETE') { links.splice(0,1); return route.fulfill({json:{message:'Invitation link deleted. Existing responses were preserved.'}}); }
     if (method === 'PATCH') { links[0].enabled = route.request().postDataJSON().enabled; links[0].accepting = links[0].enabled; return route.fulfill({ json: {} }); }
     return route.fulfill({ json: { links, responses: [{ id: 1, name: 'Juan Santos', contact: 'juan@example.test', answer: 'no', reason: 'Working', updated_at: event.start_time }], counts: { yes: 0, no: 1, maybe: 0, pending: 1 }, limit: 1000 } });
   });
@@ -201,6 +202,13 @@ test('organizer generates guest and personal links, sees responses and deactivat
   await expect(dialog.getByRole('button', { name: 'Activate', exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   const box = await dialog.boundingBox(); expect(box && box.x >= 0 && box.x + box.width <= 391).toBeTruthy();
+  await dialog.getByRole('button',{name:'Delete',exact:true}).first().click();
+  await expect(page.getByRole('dialog',{name:'Delete invitation link?'})).toBeVisible();
+  expect(links).toHaveLength(2);
+  await page.getByRole('dialog',{name:'Delete invitation link?'}).getByRole('button',{name:'Delete invitation link',exact:true}).click();
+  await expect(dialog.getByText('Invitation link deleted. Existing responses were preserved.')).toBeVisible();
+  expect(links).toHaveLength(1);
+  await expect(dialog.getByText('Reason: Working')).toBeVisible();
   await page.screenshot({ path: info.outputPath('organizer-invitations.png') });
 });
 
