@@ -1,3 +1,4 @@
+import {eventParticipation,markEventParticipant,markEventParticipants,closeEventAttendance,ParticipationError} from '../services/eventParticipation';
 import { isCalendarDate, parsePagination, validatePagination } from "../utils/pagination";
 import { Router, Request, Response } from "express";
 import { db } from "../db/schema";
@@ -511,7 +512,7 @@ router.post("/:id/rsvp", authMiddleware, async (req: AuthRequest, res: Response)
     }
     const saved = await db.get(`INSERT INTO event_registrations(event_id,member_id,status) VALUES($1,$2,$3)
       ON CONFLICT(event_id,member_id) DO UPDATE SET status=CASE
-        WHEN event_registrations.status IN ('attended','checked_in') THEN event_registrations.status ELSE EXCLUDED.status END
+        WHEN event_registrations.status IN ('attended','checked_in','absent','excused') THEN event_registrations.status ELSE EXCLUDED.status END
       RETURNING status`,[eventId,targetMemberId,status]);
     emitRealtimeEvent('events:changed',{action:'rsvp',id:eventId});
     res.json({message:'RSVP saved',status:saved.status});
@@ -521,340 +522,36 @@ router.post("/:id/rsvp", authMiddleware, async (req: AuthRequest, res: Response)
 });
 
 // Get Event Attendance Roster & Check-In status
-router.get("/:id/attendance-roster", authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const eventId = Number(req.params.id);
-    const event = await db.get("SELECT * FROM events WHERE id = $1", [eventId]);
-    if (!event) {
-      return res.status(404).json({ error: "Event not found" });
-    }
-
-    const attendees = await db.all(`
-      SELECT
-        m.id AS member_id,
-        m.first_name,
-        m.last_name,
-        m.contact_phone,
-        m.contact_email,
-        m.ministry_id,
-        COALESCE(min.name, 'Unassigned') AS ministry_name,
-        min.color AS ministry_color,
-        CASE
-          WHEN att.id IS NOT NULL AND att.notes ILIKE '%[ABSENT]%' THEN 'absent'
-          WHEN att.id IS NOT NULL AND att.notes ILIKE '%[EXCUSED]%' THEN 'excused'
-          WHEN att.id IS NOT NULL OR er.status = 'attended' THEN 'attended'
-          WHEN er.status = 'absent' THEN 'absent'
-          WHEN er.status = 'excused' THEN 'excused'
-          WHEN er.status = 'registered' THEN 'registered'
-          ELSE 'unregistered'
-        END AS status,
-        att.notes AS attendance_notes,
-        er.created_at AS registered_at,
-        att.checked_in_at,
-        att.id AS attendance_id
-      FROM members m
-      LEFT JOIN ministries min ON m.ministry_id = min.id
-      LEFT JOIN event_registrations er ON er.event_id = $1 AND er.member_id = m.id
-      LEFT JOIN attendance att ON att.event_id = $1 AND att.member_id = m.id
-      WHERE m.status = 'active'
-      ORDER BY
-        CASE
-          WHEN att.id IS NOT NULL AND (att.notes ILIKE '%[ABSENT]%' OR att.notes ILIKE '%[EXCUSED]%') THEN 2
-          WHEN att.id IS NOT NULL OR er.status = 'attended' THEN 1
-          WHEN er.status = 'registered' THEN 3
-          ELSE 4
-        END ASC,
-        LOWER(m.first_name) ASC,
-        LOWER(m.last_name) ASC
-    `, [eventId]);
-
-    const totalAttended = attendees.filter(a => a.status === 'attended').length;
-    const totalAbsent = attendees.filter(a => a.status === 'absent').length;
-    const totalExcused = attendees.filter(a => a.status === 'excused').length;
-    const totalRegistered = attendees.filter(a => a.status === 'registered').length;
-
-    res.json({
-      event: {
-        id: event.id,
-        title: event.title,
-        start_time: event.start_time,
-        end_time: event.end_time,
-        location: event.location
-      },
-      summary: {
-        total_registered: totalRegistered,
-        total_attended: totalAttended,
-        total_absent: totalAbsent,
-        total_excused: totalExcused,
-        total_active_members: attendees.length
-      },
-      attendees
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+router.get("/:id/attendance-roster",authMiddleware,requireRoles('Admin','Pastor','Coordinator','Leader','Volunteer'),async(req:AuthRequest,res)=>{
+  try{res.json(await eventParticipation(Number(req.params.id),req.user!));}
+  catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Unable to load event attendance.'});}
+});
+router.post('/:id/participation/mark',authMiddleware,requireRoles('Admin','Pastor','Coordinator','Leader','Volunteer'),async(req:AuthRequest,res)=>{
+  try{await markEventParticipant(Number(req.params.id),req.body,req.user!);emitRealtimeEvent('events:changed',{id:Number(req.params.id)});emitRealtimeEvent('attendance:new',{event_id:Number(req.params.id)});res.json({success:true});}
+  catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Attendance was not saved. Please retry.'});}
 });
 
-// Mark one or more members as Present / Absent / Excused / Registered for an event
-router.post("/:id/attendance/mark", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "Volunteer"), async (req: AuthRequest, res: Response) => {
-  try {
-    const eventId = Number(req.params.id);
-    const { member_ids, member_id, status = "attended", notes, reason } = req.body;
-
-    const event = await db.get("SELECT * FROM events WHERE id = $1", [eventId]);
-    if (!event) {
-      return res.status(404).json({ error: "Event not found" });
-    }
-
-    const ids: number[] = Array.isArray(member_ids)
-      ? member_ids.map(Number).filter(id => !isNaN(id) && id > 0)
-      : (member_id ? [Number(member_id)] : []);
-
-    if (ids.length === 0) {
-      return res.status(400).json({ error: "member_id or member_ids array is required" });
-    }
-
-    const noteReason = reason || notes;
-
-    for (const mId of ids) {
-      const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
-      if (!member) continue;
-
-      if (status === "attended" || status === "present") {
-        // 1. Update/Insert in event_registrations
-        await db.run(`
-          INSERT INTO event_registrations (event_id, member_id, status)
-          VALUES ($1, $2, 'attended')
-          ON CONFLICT (event_id, member_id)
-          DO UPDATE SET status = 'attended'
-        `, [eventId, mId]);
-
-        // 2. Ensure record exists in attendance table
-        const existingAtt = await db.get("SELECT id FROM attendance WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-        if (existingAtt) {
-          await db.run(`
-            UPDATE attendance
-            SET notes = $1,
-                checked_in_by = $2,
-                checked_in_at = CURRENT_TIMESTAMP
-            WHERE id = $3
-          `, [noteReason || `Event attendance for ${event.title}`, req.user?.id || null, existingAtt.id]);
-        } else {
-          await db.run(`
-            INSERT INTO attendance (member_id, ministry_id, event_id, checked_in_at, checked_in_by, notes)
-            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5)
-          `, [
-            mId,
-            member.ministry_id || 1,
-            eventId,
-            req.user?.id || null,
-            noteReason || `Event attendance for ${event.title}`
-          ]);
-        }
-      } else if (status === "absent") {
-        await db.run(`
-          INSERT INTO event_registrations (event_id, member_id, status)
-          VALUES ($1, $2, 'absent')
-          ON CONFLICT (event_id, member_id)
-          DO UPDATE SET status = 'absent'
-        `, [eventId, mId]);
-
-        const absentNotes = noteReason
-          ? (noteReason.includes("[ABSENT]") ? noteReason : `[ABSENT] ${noteReason}`)
-          : `[ABSENT] Absent from event ${event.title}`;
-
-        const existingAtt = await db.get("SELECT id FROM attendance WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-        if (existingAtt) {
-          await db.run(`
-            UPDATE attendance
-            SET notes = $1,
-                checked_in_by = $2,
-                checked_in_at = CURRENT_TIMESTAMP
-            WHERE id = $3
-          `, [absentNotes, req.user?.id || null, existingAtt.id]);
-        } else {
-          await db.run(`
-            INSERT INTO attendance (member_id, ministry_id, event_id, checked_in_at, checked_in_by, notes)
-            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5)
-          `, [
-            mId,
-            member.ministry_id || 1,
-            eventId,
-            req.user?.id || null,
-            absentNotes
-          ]);
-        }
-      } else if (status === "excused") {
-        await db.run(`
-          INSERT INTO event_registrations (event_id, member_id, status)
-          VALUES ($1, $2, 'excused')
-          ON CONFLICT (event_id, member_id)
-          DO UPDATE SET status = 'excused'
-        `, [eventId, mId]);
-
-        const excusedNotes = noteReason
-          ? (noteReason.includes("[EXCUSED]") ? noteReason : `[EXCUSED] ${noteReason}`)
-          : `[EXCUSED] Excused from event ${event.title}`;
-
-        const existingAtt = await db.get("SELECT id FROM attendance WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-        if (existingAtt) {
-          await db.run(`
-            UPDATE attendance
-            SET notes = $1,
-                checked_in_by = $2,
-                checked_in_at = CURRENT_TIMESTAMP
-            WHERE id = $3
-          `, [excusedNotes, req.user?.id || null, existingAtt.id]);
-        } else {
-          await db.run(`
-            INSERT INTO attendance (member_id, ministry_id, event_id, checked_in_at, checked_in_by, notes)
-            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5)
-          `, [
-            mId,
-            member.ministry_id || 1,
-            eventId,
-            req.user?.id || null,
-            excusedNotes
-          ]);
-        }
-      } else if (status === "registered") {
-        await db.run(`
-          INSERT INTO event_registrations (event_id, member_id, status)
-          VALUES ($1, $2, 'registered')
-          ON CONFLICT (event_id, member_id)
-          DO UPDATE SET status = 'registered'
-        `, [eventId, mId]);
-        await db.run("DELETE FROM attendance WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-      } else if (status === "unregistered") {
-        await db.run("DELETE FROM event_registrations WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-        await db.run("DELETE FROM attendance WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-      }
-    }
-
-    await logAuditAction(
-      req.user?.id || null,
-      "UPDATE_ATTENDANCE",
-      "events",
-      eventId,
-      `Marked ${ids.length} member(s) as '${status}' for event '${event.title}' (Member IDs: ${ids.join(", ")})`
-    );
-
-    emitRealtimeEvent("events:changed", { action: "attendance_mark", event_id: eventId, member_ids: ids });
-    emitRealtimeEvent("attendance:new", { event_id: eventId, action: "event_attendance" });
-
-    res.json({
-      success: true,
-      message: `Successfully updated attendance for ${ids.length} member(s)!`,
-      count: ids.length,
-      status
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+router.post('/:id/participation/:action',authMiddleware,requireRoles('Admin','Pastor','Coordinator'),async(req:AuthRequest,res)=>{
+  if(!['close','reopen'].includes(req.params.action))return res.status(404).json({error:'Unknown attendance action.'});
+  try{const result=await closeEventAttendance(Number(req.params.id),req.user!,req.params.action==='reopen');emitRealtimeEvent('events:changed',{id:Number(req.params.id)});emitRealtimeEvent('attendance:changed',{event_id:Number(req.params.id)});res.json(result);}
+  catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Attendance closing failed. No partial result was committed.'});}
 });
 
-// Batch Mark Event Attendance (Fast bulk roll call: present vs absent / pending)
-router.post("/:id/attendance/batch-mark", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator", "Leader", "Volunteer"), async (req: AuthRequest, res: Response) => {
-  try {
-    const eventId = Number(req.params.id);
-    const {
-      present_ids = [],
-      absent_ids = [],
-      notes
-    } = req.body;
-
-    const event = await db.get("SELECT * FROM events WHERE id = $1", [eventId]);
-    if (!event) {
-      return res.status(404).json({ error: "Event not found" });
-    }
-
-    let markedPresentCount = 0;
-    let markedAbsentCount = 0;
-
-    // 1. Process Present IDs
-    if (Array.isArray(present_ids) && present_ids.length > 0) {
-      for (const mId of present_ids) {
-        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
-        if (!member) continue;
-
-        // Upsert into event_registrations as 'attended'
-        await db.run(`
-          INSERT INTO event_registrations (event_id, member_id, status)
-          VALUES ($1, $2, 'attended')
-          ON CONFLICT (event_id, member_id)
-          DO UPDATE SET status = 'attended'
-        `, [eventId, mId]);
-
-        // Upsert/Insert into attendance table
-        const existingAtt = await db.get("SELECT id FROM attendance WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-        if (existingAtt) {
-          await db.run(`
-            UPDATE attendance
-            SET notes = $1,
-                checked_in_by = $2,
-                checked_in_at = CURRENT_TIMESTAMP
-            WHERE id = $3
-          `, [notes || `Event attendance for ${event.title}`, req.user?.id || null, existingAtt.id]);
-        } else {
-          await db.run(`
-            INSERT INTO attendance (member_id, ministry_id, event_id, checked_in_at, checked_in_by, notes)
-            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5)
-          `, [
-            mId,
-            member.ministry_id || 1,
-            eventId,
-            req.user?.id || null,
-            notes || `Event attendance for ${event.title}`
-          ]);
-        }
-        markedPresentCount++;
-      }
-    }
-
-    // 2. Process Absent IDs (Mark as 'registered' / not attended, and remove from attendance table)
-    if (Array.isArray(absent_ids) && absent_ids.length > 0) {
-      for (const mId of absent_ids) {
-        const member = await db.get("SELECT * FROM members WHERE id = $1", [mId]);
-        if (!member) continue;
-
-        // If registered, ensure status is 'registered'
-        await db.run(`
-          UPDATE event_registrations
-          SET status = 'registered'
-          WHERE event_id = $1 AND member_id = $2 AND status = 'attended'
-        `, [eventId, mId]);
-
-        // Remove from attendance table
-        await db.run("DELETE FROM attendance WHERE event_id = $1 AND member_id = $2", [eventId, mId]);
-        markedAbsentCount++;
-      }
-    }
-
-    await logAuditAction(
-      req.user?.id || null,
-      "BATCH_UPDATE_ATTENDANCE",
-      "events",
-      eventId,
-      `Batch roll call for event '${event.title}': ${markedPresentCount} Present, ${markedAbsentCount} Absent/Reset`
-    );
-
-    emitRealtimeEvent("events:changed", { action: "attendance_batch_mark", event_id: eventId });
-    emitRealtimeEvent("attendance:new", { event_id: eventId, action: "event_attendance_batch" });
-
-    res.json({
-      success: true,
-      message: `Batch roll call processed: ${markedPresentCount} Present, ${markedAbsentCount} Absent / Reset`,
-      stats: {
-        present: markedPresentCount,
-        absent: markedAbsentCount
-      }
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+// Legacy attendance clients use the same validated transactional write boundary.
+router.post('/:id/attendance/mark',authMiddleware,requireRoles('Admin','Pastor','Coordinator','Leader','Volunteer'),async(req:AuthRequest,res)=>{
+  const {member_ids,member_id,status='attended',reason,notes}=req.body;
+  const ids=Array.isArray(member_ids)?member_ids:[member_id];
+  const planned=['registered','unregistered'].includes(status)?'pending':status==='present'?'attended':status;
+  try{await markEventParticipants(Number(req.params.id),ids.map(id=>({member_id:id,status:planned,reason:reason||notes||(status==='absent'?'Absent from event':status==='excused'?'Excused from event':'')})),req.user!);emitRealtimeEvent('events:changed',{id:Number(req.params.id)});emitRealtimeEvent('attendance:changed',{event_id:Number(req.params.id)});res.json({success:true,count:ids.length,status});}
+  catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Attendance was not saved.'});}
+});
+router.post('/:id/attendance/batch-mark',authMiddleware,requireRoles('Admin','Pastor','Coordinator','Leader','Volunteer'),async(req:AuthRequest,res)=>{
+  const {present_ids=[],absent_ids=[],notes=''}=req.body;
+  if(!Array.isArray(present_ids)||!Array.isArray(absent_ids)||new Set([...present_ids,...absent_ids]).size!==present_ids.length+absent_ids.length)return res.status(400).json({error:'Select distinct participants.'});
+  try{await markEventParticipants(Number(req.params.id),[...present_ids.map(id=>({member_id:id,status:'attended'})),...absent_ids.map(id=>({member_id:id,status:'absent',reason:notes||'Absent from event'}))],req.user!);emitRealtimeEvent('events:changed',{id:Number(req.params.id)});emitRealtimeEvent('attendance:changed',{event_id:Number(req.params.id)});res.json({success:true,marked_present:present_ids.length,marked_absent:absent_ids.length});}
+  catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Attendance was not saved.'});}
 });
 
-// Update event
 router.put("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"), async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);

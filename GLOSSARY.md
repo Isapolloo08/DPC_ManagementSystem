@@ -12,11 +12,20 @@ A recipient's answer to an event invitation: Attending, Cannot attend, or Not ye
 _Avoid_: Attendance record, check-in
 
 **Event registration**:
-A member's planned participation status for an event. An invitation response may change this status, while actual arrivals are confirmed separately.
+A member's participation status for an event, initially planned and later updated when attendance is confirmed. Invitation changes do not replace confirmed attendance decisions.
 
 **Actual attendance**:
-A person's confirmed arrival at an event, recorded through Event Attendance & Check-In.
+A person's recorded attendance decision for an event: confirmed Present, Absent with a reason, or Excused with a reason.
 _Avoid_: Invitation response, RSVP
+
+**RSVP decline**:
+A Cannot attend answer with the recipient's reason. It appears as Absent from RSVP until an attendance decision is recorded.
+
+**No-show**:
+An expected participant with no confirmed arrival when the organizer closes event attendance. A no-show is recorded as Absent with a reason.
+
+**Closed event attendance**:
+Attendance finalized by the organizer after the scheduled event ends. Corrections require reopening it; reopening preserves previously recorded decisions.
 
 ## Online-to-local submissions
 

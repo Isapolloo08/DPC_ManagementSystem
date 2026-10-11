@@ -1170,6 +1170,8 @@ export const api = {
   // Event Attendance Roster & Marking
   getEventAttendanceRoster: (eventId: number) =>
     request<EventAttendanceRosterResponse>(`/events/${eventId}/attendance-roster`),
+  markEventParticipant: (eventId:number,body:{member_id?:number;response_id?:number;status:string;reason?:string}) => request(`/events/${eventId}/participation/mark`,{method:'POST',body:JSON.stringify(body)},0),
+  closeEventAttendance: (eventId:number,reopen=false) => request<{closed:boolean;no_shows:number;declined:number}>(`/events/${eventId}/participation/${reopen?'reopen':'close'}`,{method:'POST',body:'{}'},0),
   markEventAttendance: (eventId: number, data: { member_ids?: number[]; member_id?: number; status?: string; notes?: string; reason?: string }) =>
     request<{ success: boolean; message: string; count: number; status: string }>(`/events/${eventId}/attendance/mark`, {
       method: "POST",

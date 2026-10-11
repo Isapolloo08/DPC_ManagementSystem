@@ -237,7 +237,7 @@ export class InvitationSync {
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(sync_identity) DO UPDATE SET
         name=EXCLUDED.name,contact=EXCLUDED.contact,answer=EXCLUDED.answer,reason=EXCLUDED.reason,sync_revision=EXCLUDED.sync_revision,updated_at=now() RETURNING id`,params)).rows[0];
       if(member) await c.query(`INSERT INTO event_registrations(event_id,member_id,status) VALUES($1,$2,$3)
-        ON CONFLICT(event_id,member_id) DO UPDATE SET status=EXCLUDED.status WHERE event_registrations.status NOT IN ('attended','checked_in')`,[event.id,member.id,payload.answer==='yes'?'registered':payload.answer==='no'?'cancelled':'pending']);
+        ON CONFLICT(event_id,member_id) DO UPDATE SET status=EXCLUDED.status WHERE event_registrations.status NOT IN ('attended','checked_in','absent','excused')`,[event.id,member.id,payload.answer==='yes'?'registered':payload.answer==='no'?'cancelled':'pending']);
       await c.query('INSERT INTO invitation_sync_receipts(source,receiver,submission,revision,response_id) VALUES($1,$2,$3,$4,$5)',[node.source_id,node.identity,id,payload.revision,saved.id]);
       return {revision:payload.revision,already:false,confirmed:false};
     });

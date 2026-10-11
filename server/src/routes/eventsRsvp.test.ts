@@ -8,6 +8,7 @@ import express from 'express';
 import {AddressInfo} from 'net';
 import jwt from 'jsonwebtoken';
 import router from './events';
+import attendanceRouter from './attendance';
 import {db} from '../db/schema';
 import {JWT_SECRET} from '../middleware/auth';
 
@@ -16,17 +17,18 @@ test('RSVP selects a real member, rejects missing selection, and preserves atten
   const admin=new Pool(config),schema='rsvp_'+randomUUID().replace(/-/g,'');
   await admin.query(`CREATE SCHEMA ${schema}`);
   const pool=new Pool({...config,options:`-c search_path=${schema}`});
-  const original={get:db.get,all:db.all,run:db.run};
-  const app=express();app.use(express.json());app.use('/events',router);const server=app.listen(0);
+  const original={get:db.get,all:db.all,run:db.run,transaction:db.transaction};
+  const app=express();app.use(express.json());app.use('/events',router);app.use('/attendance',attendanceRouter);const server=app.listen(0);
   await new Promise<void>(r=>server.once('listening',r));
   const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}/events/501/rsvp`;
   try {
-    for(const file of ['001_init_postgres.sql','022_event_ministries.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',file),'utf8'));
+    for(const file of ['001_init_postgres.sql','007_notifications.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',file),'utf8'));
     await pool.query("INSERT INTO roles(id,name) VALUES(501,'Admin'),(502,'Member'); INSERT INTO users(id,name,email,password_hash,role_id) VALUES(501,'Admin','admin@fixture.test','fixture',501),(502,'Member','member@fixture.test','fixture',502)");
     await pool.query("INSERT INTO events(id,title,start_time,end_time) VALUES(501,'RSVP fixture','2099-01-01','2099-01-02'); INSERT INTO members(id,first_name,last_name,birthdate,status,user_id) VALUES(501,'Linked','Member','2000-01-01','active',502),(502,'Other','Member','2000-01-01','active',NULL)");
     db.get=(async(q:string,p:any[]) => (await pool.query(q,p)).rows[0]) as any;
     db.all=(async(q:string,p:any[]) => (await pool.query(q,p)).rows) as any;
     db.run=(async(q:string,p:any[]) => {const result=await pool.query(q,p);return {changes:result.rowCount};}) as any;
+    db.transaction=(async(fn:any)=>{const c=await pool.connect();try{await c.query('BEGIN');const result=await fn(c);await c.query('COMMIT');return result;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}) as any;
     const call=(id:number,body:any)=>fetch(url,{method:'POST',headers:{Authorization:'Bearer '+jwt.sign({id},JWT_SECRET,{expiresIn:'1h'}),'Content-Type':'application/json'},body:JSON.stringify(body)});
     const missing=await call(501,{});assert.equal(missing.status,400);assert.match((await missing.json() as any).error,/select.*member/i);
     assert.equal((await call(501,{member_id:502,status:'attended'})).status,400);
@@ -39,6 +41,72 @@ test('RSVP selects a real member, rejects missing selection, and preserves atten
     await pool.query("UPDATE event_registrations SET status='checked_in' WHERE member_id=502");
     const repeated=await call(501,{member_id:502});assert.equal((await repeated.json() as any).status,'checked_in');
     assert.equal((await pool.query('SELECT count(*)::int n FROM attendance')).rows[0].n,0);
+    // Invitation intentions shape the roster, without writing an actual arrival.
+    await pool.query("INSERT INTO ministries(id,name) VALUES(501,'Fixture'); UPDATE members SET ministry_id=501; INSERT INTO members(id,first_name,last_name,birthdate,status,ministry_id) VALUES(503,'Uninvited','Member','2000-01-01','active',501)");
+    await pool.query('DELETE FROM event_registrations');
+    await pool.query("INSERT INTO event_invitation_links(id,event_id,token,deadline) VALUES(501,501,$1,'2099-01-01')",['d'.repeat(64)]);
+    await pool.query(`INSERT INTO event_invitation_responses(id,invitation_id,response_key,name,answer,reason,event_id,member_id)
+      VALUES(501,501,'m1','Linked Member','yes','',501,501),(502,501,'m2','Other Member','no','Working',501,502),
+        (503,501,'g1','Guest Expected','yes','',501,NULL),(504,501,'g2','Guest Declined','no','Travel',501,NULL)`);
+    const headers={Authorization:'Bearer '+jwt.sign({id:501},JWT_SECRET,{expiresIn:'1h'}),'Content-Type':'application/json'};
+    const roster=async()=>{const result=await fetch(url.replace('/rsvp','/attendance-roster'),{headers});assert.equal(result.status,200,await result.clone().text());return result.json() as Promise<any>;};
+    const mark=(body:any)=>fetch(url.replace('/rsvp','/participation/mark'),{method:'POST',headers,body:JSON.stringify(body)});
+    await pool.query("INSERT INTO roles(id,name) VALUES(503,'Volunteer'); INSERT INTO users(id,name,email,password_hash,role_id) VALUES(503,'Volunteer','volunteer@fixture.test','fixture',503)");
+    const volunteerHeaders={...headers,Authorization:'Bearer '+jwt.sign({id:503},JWT_SECRET,{expiresIn:'1h'})};
+    assert.equal((await fetch(url.replace('/rsvp','/participation/mark'),{method:'POST',headers:volunteerHeaders,body:JSON.stringify({member_id:501,status:'attended'})})).status,403);
+    assert.equal((await fetch(url.replace('/rsvp','/participation/mark'),{method:'POST',headers:volunteerHeaders,body:JSON.stringify({response_id:503,status:'attended'})})).status,403);
+    assert.equal((await fetch(url.replace('/rsvp','/participation/close'),{method:'POST',headers:volunteerHeaders,body:'{}'})).status,403);
+    assert.equal((await fetch(url.replace('/events/501/rsvp','/attendance/check-in'),{method:'POST',headers,body:JSON.stringify({member_id:501,event_id:501})})).status,400);
+    const planned=await roster();assert.equal(planned.attendees.length,2);
+    assert.equal(planned.attendees.find((m:any)=>m.member_id===501).status,'registered');
+    assert.equal(planned.attendees.find((m:any)=>m.member_id===502).status,'absent');
+    assert.match(planned.attendees.find((m:any)=>m.member_id===502).attendance_notes,/Working/);
+    assert.equal(planned.guests.find((g:any)=>g.response_id===503).status,'unconfirmed');
+    assert.equal(planned.guests.find((g:any)=>g.response_id===504).reason,'Travel');
+    assert.equal((await pool.query('SELECT count(*)::int n FROM attendance')).rows[0].n,0);
+    await pool.query(`CREATE FUNCTION fail_fixture_registration() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'controlled failure'; END $$;
+      CREATE TRIGGER fail_fixture_registration BEFORE INSERT ON event_registrations FOR EACH ROW EXECUTE FUNCTION fail_fixture_registration()`);
+    assert.equal((await mark({member_id:501,status:'attended'})).status,503);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM attendance')).rows[0].n,0);
+    await pool.query('DROP TRIGGER fail_fixture_registration ON event_registrations');
+    assert.equal((await mark({member_id:501,status:'attended'})).status,200);
+    assert.equal((await mark({response_id:503,status:'attended'})).status,200);
+    assert.equal((await mark({response_id:504,status:'absent',reason:''})).status,400);
+    await pool.query("UPDATE event_invitation_responses SET answer='no',reason='Changed intention' WHERE id=501");
+    const confirmed=await roster();assert.equal(confirmed.attendees.find((m:any)=>m.member_id===501).status,'attended');
+    assert.equal(confirmed.guests.find((g:any)=>g.response_id===503).status,'attended');
+    assert.equal((await mark({response_id:503,status:'pending'})).status,200);
+    assert.equal((await roster()).guests.find((g:any)=>g.response_id===503).status,'unconfirmed');
+    assert.equal((await pool.query('SELECT count(*)::int n FROM members')).rows[0].n,3);
+    const close=(action='close')=>fetch(url.replace('/rsvp','/participation/'+action),{method:'POST',headers,body:'{}'});
+    assert.equal((await close()).status,409); // Never finalize a future event's no-shows.
+    await pool.query("UPDATE events SET start_time='2020-01-01',end_time='2020-01-02' WHERE id=501");
+    await pool.query(`CREATE FUNCTION fail_fixture_guest() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'controlled guest failure'; END $$;
+      CREATE TRIGGER fail_fixture_guest BEFORE INSERT ON event_guest_attendance FOR EACH ROW EXECUTE FUNCTION fail_fixture_guest()`);
+    assert.equal((await close()).status,503);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM event_attendance_sessions')).rows[0].n,0);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM attendance WHERE member_id=502')).rows[0].n,0);
+    await pool.query('DROP TRIGGER fail_fixture_guest ON event_guest_attendance');
+    const closed=await close();assert.equal(closed.status,200,await closed.clone().text());
+    const outcome=await closed.json() as any;assert.equal(outcome.no_shows,1);assert.equal(outcome.declined,2);
+    assert.equal((await roster()).attendees.find((m:any)=>m.member_id===501).status,'attended');
+    assert.match((await roster()).guests.find((g:any)=>g.response_id===503).reason,/No-show/);
+    assert.equal((await mark({response_id:503,status:'attended'})).status,409);
+    assert.equal((await fetch(url.replace('/rsvp','/attendance/mark'),{method:'POST',headers,body:JSON.stringify({member_id:502,status:'attended'})})).status,409);
+    assert.equal((await call(501,{member_id:502,status:'registered'})).status,200);
+    assert.equal((await pool.query('SELECT status FROM event_registrations WHERE member_id=502')).rows[0].status,'absent');
+    // A Sunday roll call on the same day must never change special-event attendance.
+    const sundayUrl=url.replace('/events/501/rsvp','/attendance');
+    const sunday=(action:string,body:any)=>fetch(sundayUrl+'/'+action,{method:'POST',headers,body:JSON.stringify(body)});
+    assert.equal((await sunday('batch-mark',{present_ids:[502]})).status,200);
+    const eventAbsence=(await pool.query('SELECT id,notes FROM attendance WHERE event_id=501 AND member_id=502')).rows[0];
+    assert.match(eventAbsence.notes,/Working/);
+    assert.equal((await sunday('batch-mark',{unmark_ids:[502]})).status,200);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM attendance WHERE event_id=501 AND member_id=502')).rows[0].n,1);
+    assert.equal((await sunday('check-out',{attendance_id:eventAbsence.id,force:true})).status,400);
+    assert.equal((await fetch(sundayUrl+'/'+eventAbsence.id,{method:'DELETE',headers})).status,400);
+    assert.equal((await close()).status,200);assert.equal((await pool.query('SELECT count(*)::int n FROM event_guest_attendance')).rows[0].n,2);
+    assert.equal((await close('reopen')).status,200);assert.equal((await mark({response_id:503,status:'attended'})).status,200);
   }finally{
     Object.assign(db,original);await new Promise<void>(r=>server.close(()=>r()));await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();
   }

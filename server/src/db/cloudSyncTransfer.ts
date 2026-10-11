@@ -108,9 +108,9 @@ export async function transferTables(
       rows=rows.filter((r,index)=>{
         if(!protectedKeys.has(r.event_id+':'+r.member_id)&&!sourceProtected.has(sourceRows[index].event_id+':'+sourceRows[index].member_id)) return true;
         const existing=registrations.find(e=>e.event_id===r.event_id&&e.member_id===r.member_id);
-        // Actual arrivals may transfer; a planned answer never creates or overwrites RSVP.
-        if(existing&&['attended','checked_in'].includes(existing.status)) {r.status=existing.status;return true;}
-        if(['attended','checked_in'].includes(r.status)) return true;
+        // Actual attendance decisions may transfer; a planned answer never creates or overwrites RSVP.
+        if(existing&&['attended','checked_in','absent','excused'].includes(existing.status)) {r.status=existing.status;return true;}
+        if(['attended','checked_in','absent','excused'].includes(r.status)) return true;
         if(!existing) return false;
         r.status=existing.status;return true;
       });

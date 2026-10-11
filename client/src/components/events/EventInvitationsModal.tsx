@@ -9,7 +9,7 @@ import './event-invitations.css';
 import {useAuth} from '../../context/AuthContext';
 import {PendingOnlineSubmissions} from './PendingOnlineSubmissions';
 
-export function EventInvitationsModal({ event, onClose }: { event: EventItem; onClose: () => void }) {
+export function EventInvitationsPanel({ event }: { event: EventItem }) {
   const {user}=useAuth();
   const [data, setData] = useState<InvitationOverview | null>(null), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [message, setMessage] = useState('');
@@ -62,8 +62,7 @@ export function EventInvitationsModal({ event, onClose }: { event: EventItem; on
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to change link status.'); }
     finally { setBusy(false); }
   };
-  return <ModalShell title="Event invitations & responses" subtitle={event.title} icon={<Link2 />} size="lg" onClose={onClose} busy={busy}>
-    <div data-modal-body className="event-invitations-body">
+  return <div data-modal-body className="event-invitations-body">
       {error && <p role="alert" className="event-invitations-error">{error}</p>}
       {message && <p role="status" className="event-invitations-message">{message}</p>}
       {['Admin','IT Admin'].includes(user?.role_name||'')&&<PendingOnlineSubmissions eventId={event.id} onImported={()=>void load()}/>}
@@ -92,6 +91,9 @@ export function EventInvitationsModal({ event, onClose }: { event: EventItem; on
         <p className="text-xs text-muted">These are planned responses. Record actual arrivals using Event Attendance & Check-In. Guest links cannot count people who have not replied.</p>
         {!data?.responses.length ? <p className="text-xs text-muted mt-3">No responses yet.</p> : <div className="event-invitations-responses">{data.responses.map(response => <article key={response.id}><div><strong>{response.name}</strong><span>{response.answer === 'yes' ? 'Attending' : response.answer === 'no' ? 'Cannot attend' : 'Not sure'}</span></div><p>{response.contact || 'Church member'} · {new Date(response.updated_at).toLocaleString()}</p>{response.reason && <p className="event-invitations-reason">Reason: {response.reason}</p>}</article>)}{data.responses.length === data.limit && <p className="text-xs text-muted">Showing the latest {data.limit} responses. Counts include all responses.</p>}</div>}
       </section>
-    </div>
-  </ModalShell>;
+    </div>;
+}
+
+export function EventInvitationsModal({event,onClose}:{event:EventItem;onClose:()=>void}) {
+  return <ModalShell title="Event invitations & responses" subtitle={event.title} icon={<Link2/>} size="lg" onClose={onClose}><EventInvitationsPanel event={event}/></ModalShell>;
 }

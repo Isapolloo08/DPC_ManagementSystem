@@ -168,7 +168,7 @@ router.post("/public/:token", async (req, res) => {
         [invitation.id, key, name.trim(), contact.trim(), req.body.answer, req.body.answer === 'no' ? req.body.reason.trim() : '', invitation.event_id, memberId]);
       if (memberId) await client.query(`INSERT INTO event_registrations (event_id, member_id, status)
         VALUES ($1, $2, $3) ON CONFLICT (event_id, member_id) DO UPDATE SET status = EXCLUDED.status
-        WHERE event_registrations.status NOT IN ('attended', 'checked_in')`,
+        WHERE event_registrations.status NOT IN ('attended', 'checked_in', 'absent', 'excused')`,
         [invitation.event_id, memberId, req.body.answer === 'yes' ? 'registered' : req.body.answer === 'no' ? 'cancelled' : 'pending']);
       return { status: 200, eventId: invitation.event_id, responseKey: memberId ? undefined : key };
     });

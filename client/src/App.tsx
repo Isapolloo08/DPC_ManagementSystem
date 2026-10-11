@@ -143,7 +143,7 @@ const MainLayout: React.FC<{ initialTab?: NavTab; initialGuide?: TaskGuide; init
       case "leader-biblestudy":
         return <LeaderPortalPage onNavigateGeneralTab={setCurrentTab} />;
       case "attendance":
-        return <CheckInPage />;
+        return <CheckInPage initialEventId={navigationRefId} onEventOpened={()=>setNavigationRefId(null)}/>;
       case "attendancelog":
         return <AttendanceLogPage />;
       case "servicecalendar":
@@ -159,7 +159,7 @@ const MainLayout: React.FC<{ initialTab?: NavTab; initialGuide?: TaskGuide; init
       case "dishwashing":
         return <DishwashingPage />;
       case "events":
-        return <EventsPage onNavigate={setCurrentTab} initialInvitationEventId={navigationRefId} onInvitationOpened={()=>setNavigationRefId(null)} />;
+        return <EventsPage onNavigate={navigateToTab} initialInvitationEventId={navigationRefId} onInvitationOpened={()=>setNavigationRefId(null)} />;
       case "sundaycycle":
         return <SundayEventsCyclePage />;
       case "communications":

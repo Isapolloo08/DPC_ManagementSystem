@@ -1252,6 +1252,9 @@ export interface MemberComprehensiveAttendanceSummary {
 }
 
 export interface EventAttendeeItem {
+  invitation_answer?: 'yes'|'no'|'maybe'|null;
+  invitation_reason?:string|null;
+  attendance_confirmed?:boolean;
   member_id: number;
   first_name: string;
   last_name: string;
@@ -1268,6 +1271,8 @@ export interface EventAttendeeItem {
 }
 
 export interface EventAttendanceRosterResponse {
+  attendance_closed_at?:string|null;
+  guests?: {response_id:number;name:string;answer:'yes'|'no'|'maybe';invitation_reason:string;status:string;reason:string;attendance_confirmed:boolean;recorded_at:string|null}[];
   event: {
     id: number;
     title: string;

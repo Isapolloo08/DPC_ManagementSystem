@@ -1,5 +1,5 @@
 import { EventMinistryPicker } from "../components/events/EventMinistryPicker";
-import { EventInvitationsModal } from "../components/events/EventInvitationsModal";
+import {EventWorkspacePage} from "./EventWorkspacePage";
 import { EventRsvpModal } from "../components/events/EventRsvpModal";
 import {useToast} from '../context/ToastContext';
 import { FilterPanel } from "../components/common/FilterPanel";
@@ -28,7 +28,7 @@ import { DateTimePickerInput } from "../components/common/DateTimePickerInput";
 import { useSocketEvent } from "../socket";
 import { EventsPageSkeleton } from "../components/common/SkeletonLoader";
 import { ConfirmationModal, ModalType } from "../components/common/ConfirmationModal";
-import { EventAttendanceModal } from "../components/common/EventAttendanceModal";
+
 import "./EventsPage.css";
 import { Dialog } from "../components/common/Dialog";
 import { Button } from "../components/common/Button";
@@ -142,7 +142,7 @@ const isActivityOnDate = (act: UnifiedActivity, dateStr: string): boolean => {
 };
 
 export interface EventsPageProps {
-  onNavigate?: (tab: any) => void;
+  onNavigate?: (tab: any,refId?:number) => void;
   initialInvitationEventId?:number|null;
   onInvitationOpened?:()=>void;
 }
@@ -875,6 +875,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate,initialInvita
     return <EventsPageSkeleton />;
   }
 
+  const workspaceEvent=invitationEvent||attendanceModalEvent;
+  if(workspaceEvent)return <EventWorkspacePage key={workspaceEvent.id} event={workspaceEvent} initialTab={attendanceModalEvent?'attendance':'invitations'} onBack={()=>{setInvitationEvent(null);setAttendanceModalEvent(null);void loadAllMasterData();}} onAttendanceLive={()=>onNavigate?.('attendance',workspaceEvent.id)}/>;
   return (
     <div className="church-calendar space-y-5 animate-fade-in">
       {/* ========================================================================= */}
@@ -1883,14 +1885,8 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate,initialInvita
         onClose={() => setConfirmModalConfig(prev => ({ ...prev, isOpen: false }))}
       />
 
-      {invitationEvent && <EventInvitationsModal event={invitationEvent} onClose={() => setInvitationEvent(null)} />}
+
       {rsvpEventId!==null&&<EventRsvpModal eventId={rsvpEventId} onClose={()=>setRsvpEventId(null)} onSaved={()=>{void loadAllMasterData();showToast('RSVP saved','success');}}/>}
-      {/* Event Attendance & Check-In Modal */}
-      <EventAttendanceModal
-        event={attendanceModalEvent}
-        isOpen={!!attendanceModalEvent}
-        onClose={() => setAttendanceModalEvent(null)}
-      />
     </div>
   );
 };

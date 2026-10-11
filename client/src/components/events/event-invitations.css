@@ -27,3 +27,8 @@
 .event-invitations-error { color: rgb(var(--ink-rose-700)); }
 .event-invitations-message { color: rgb(var(--ink-emerald-700)); }
 @media (max-width: 600px) { .event-invitations-grid { grid-template-columns: 1fr; } .event-invitations-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.event-participant {display:flex;justify-content:space-between;align-items:center;gap:16px;border:1px solid var(--border);border-radius:12px;padding:16px;flex-wrap:wrap;}
+.event-workspace .event-invitations-body {grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;}
+.event-workspace .event-invitations-online,.event-workspace .event-invitations-body>section:last-child {grid-column:1/-1;}
+@media(max-width:900px){.event-workspace .event-invitations-body{grid-template-columns:minmax(0,1fr);}}

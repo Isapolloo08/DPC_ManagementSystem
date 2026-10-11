@@ -41,7 +41,7 @@ test('online guest discovery and preview never import; manual Pull is atomic and
   const call=(side:number,route:string,body?:any)=>fetch(origins[side]+'/api/invitation-sync/'+route,{headers:auth,method:body===undefined?'GET':'POST',body:body===undefined?undefined:JSON.stringify(body)});
   try {
     for(const pool of pools) {
-      for(const name of ['001_init_postgres.sql','007_notifications.sql','015_cloud_sync_columns.sql','017_family_tree.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql']) await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',name),'utf8'));
+      for(const name of ['001_init_postgres.sql','007_notifications.sql','015_cloud_sync_columns.sql','017_family_tree.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql']) await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',name),'utf8'));
       await pool.query("ALTER TABLE users ADD COLUMN temp_password TEXT; INSERT INTO roles(id,name) VALUES(501,'Admin'),(502,'Pastor')");
       await pool.query("INSERT INTO users(id,name,email,password_hash,role_id) VALUES(501,'Admin','admin@example.test',$1,501),(502,'Pastor','pastor@example.test',$1,502)",[await bcrypt.hash('fixture-password',4)]);
     }
@@ -135,12 +135,21 @@ test('online guest discovery and preview never import; manual Pull is atomic and
     await transfer(0,1,'pull');assert.equal((await pools[1].query('SELECT answer FROM event_invitation_responses')).rows[0].answer,'maybe');
     await transfer(1,0,'push');assert.equal((await pools[0].query('SELECT answer FROM event_invitation_responses')).rows[0].answer,'yes');
     // Backup transport excludes credentials; an older restored receipt needs another manual Pull.
+    const guestResponse=(await pools[1].query('SELECT id FROM event_invitation_responses WHERE sync_identity=$1',[id])).rows[0].id;
+    await pools[1].query("INSERT INTO event_guest_attendance(response_id,status,recorded_by) VALUES($1,'attended',501)",[guestResponse]);
+    await pools[1].query('INSERT INTO event_attendance_sessions(event_id,closed_by) VALUES(701,501)');
     const exported=await fetch(origins[1]+'/api/backup/export',{method:'POST',headers:auth,body:JSON.stringify({year:'all',password:'fixture-password'})});
     assert.equal(exported.status,200,await exported.clone().text());const backup=await exported.json() as any;
     assert.equal(backup.data.invitation_sync_node[0].credential,undefined);
     assert.equal(backup.data.invitation_sync_receipts.length,3);
+    assert.equal(backup.data.event_guest_attendance.length,1);
+    assert.equal(backup.data.event_attendance_sessions.length,1);
+    await pools[1].query("UPDATE event_guest_attendance SET status='absent',reason='Changed after export'");
+    await pools[1].query('DELETE FROM event_attendance_sessions');
     const restored=await fetch(origins[1]+'/api/backup/restore',{method:'POST',headers:auth,body:JSON.stringify({data:backup,mode:'replace',password:'fixture-password'})});
     assert.equal(restored.status,200,await restored.clone().text());
+    assert.equal((await pools[1].query('SELECT status FROM event_guest_attendance WHERE response_id=$1',[guestResponse])).rows[0].status,'attended');
+    assert.equal((await pools[1].query('SELECT closed_by FROM event_attendance_sessions WHERE event_id=701')).rows[0].closed_by,501);
     const restoredState=await call(1,'refresh',{});assert.equal((await restoredState.json() as any).pending[0].status,'Pending');
     assert.equal((await pools[1].query('SELECT answer FROM event_invitation_responses')).rows[0].answer,'maybe');
     // Member provenance differs from numeric IDs; a failed registration rolls back the response too.
@@ -168,6 +177,13 @@ test('online guest discovery and preview never import; manual Pull is atomic and
     assert.equal((await pools[1].query('SELECT count(*)::int n FROM event_invitation_responses WHERE member_id=901')).rows[0].n,1);
     assert.equal((await pools[1].query('SELECT status FROM event_registrations WHERE member_id=901')).rows[0].status,'checked_in');
     assert.equal((await pools[1].query('SELECT count(*)::int n FROM attendance')).rows[0].n,0);
+    // A newer manual answer cannot overwrite a confirmed absence or excuse.
+    for(const actual of ['absent','excused']) {
+      await pools[1].query('UPDATE event_registrations SET status=$1 WHERE member_id=901',[actual]);
+      const change=await fetch(origins[0]+'/api/event-invitations/public/'+token,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({attendeeType:'member',member_id:801,answer:actual==='absent'?'maybe':'yes'})});assert.equal(change.status,200);
+      await call(1,'refresh',{});const changed=await call(1,'pull',{submissions:[memberId],event_id:701});assert.equal((await changed.json() as any).results[0].status,'Synchronized');
+      assert.equal((await pools[1].query('SELECT status FROM event_registrations WHERE member_id=901')).rows[0].status,actual);
+    }
     // Publication rejects the same bearer token with a different stable invitation identity.
     const conflictingLink=randomUUID();await pools[1].query('UPDATE event_invitation_links SET sync_identity=$1 WHERE id=701',[conflictingLink]);
     await assert.rejects(transfer(0,1,'pull','event_invitation_links'),/Invitation identity conflict/);
@@ -191,6 +207,11 @@ test('online guest discovery and preview never import; manual Pull is atomic and
     await pools[0].query("UPDATE event_registrations SET status='pending' WHERE event_id=999");
     await pools[1].query("UPDATE event_registrations SET status='checked_in' WHERE event_id=999");
     await transfer(1,0,'push','event_registrations');assert.equal((await pools[0].query('SELECT status FROM event_registrations WHERE event_id=999')).rows[0].status,'checked_in');
+    for(const actual of ['absent','excused']) {
+      await pools[1].query('UPDATE event_registrations SET status=$1 WHERE event_id=999',[actual]);
+      await pools[0].query("UPDATE event_registrations SET status='registered' WHERE event_id=999");
+      await transfer(0,1,'pull','event_registrations');assert.equal((await pools[1].query('SELECT status FROM event_registrations WHERE event_id=999')).rows[0].status,actual);
+    }
     const receiver=(await pools[1].query('SELECT identity FROM invitation_sync_node')).rows[0].identity;
     await call(0,'source/revoke',{receiver});const revoked=await call(1,'refresh',{});assert.equal(revoked.status,409);
     const revokedState=await call(1,'state');assert.equal((await revokedState.json() as any).state,'Reconnect required');

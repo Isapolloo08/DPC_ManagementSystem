@@ -25,10 +25,11 @@ import { useSocketEvent } from "../socket";
 import { CheckInPageSkeleton, AttendanceSummarySkeleton, AttendanceTableSkeleton } from "../components/common/SkeletonLoader";
 import { EventAttendanceCheckInView } from "../components/attendance/EventAttendanceCheckInView";
 
-export const CheckInPage: React.FC = () => {
+export const CheckInPage: React.FC<{initialEventId?:number|null;onEventOpened?:()=>void}> = ({initialEventId,onEventOpened}) => {
   const { user, ministries, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
   const { deleteWithUndo } = useToast();
-  const [activeAttendanceTab, setActiveAttendanceTab] = useState<"sunday" | "event">("sunday");
+  const [activeAttendanceTab, setActiveAttendanceTab] = useState<"sunday" | "event">(initialEventId?"event":"sunday");
+  const [focusedEventId,setFocusedEventId]=useState<number|null>(initialEventId||null);
   const coordinatorMinistryId = isRestricted && allowedMinistries.length > 0
     ? allowedMinistries[0].id
     : (user?.role_name !== "Admin" && user?.role_name !== "Pastor" && user?.role_name !== "IT Admin" && selectedMinistryId ? selectedMinistryId : null);
@@ -729,6 +730,8 @@ export const CheckInPage: React.FC = () => {
 
   const rosterPage = useListPagination(filteredRoster, JSON.stringify([searchQuery, selectedHousehold, coordinatorMinistryId, filterMinistry, statusFilter, isFastMode]), 30);
 
+  useEffect(()=>{if(initialEventId){setFocusedEventId(initialEventId);setActiveAttendanceTab("event");onEventOpened?.();}},[initialEventId]);
+
   // Households list
   const householdsList = useMemo(() => {
     const names = new Set<string>();
@@ -751,7 +754,7 @@ export const CheckInPage: React.FC = () => {
 
   const guideData = useGuideDataState("attendance-roster", { loading, count: roster.length, filtered: Boolean(coordinatorMinistryId), retry: () => loadAttendanceData(true) });
 
-  if (loading && roster.length === 0) {
+  if (activeAttendanceTab === "sunday" && loading && roster.length === 0) {
     return <CheckInPageSkeleton />;
   }
 
@@ -805,7 +808,7 @@ export const CheckInPage: React.FC = () => {
       </div>
 
       {activeAttendanceTab === "event" ? (
-        <EventAttendanceCheckInView />
+        <EventAttendanceCheckInView initialEventId={focusedEventId||undefined} />
       ) : (
         <>
       {/* Page header */}

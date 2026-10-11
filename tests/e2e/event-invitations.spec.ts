@@ -188,7 +188,7 @@ test('organizer generates guest and personal links, sees responses and deactivat
   await navigate(page, 'Calendar');
   await page.getByText('Church Family Gathering', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Invitation Links & Responses' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Event invitations & responses' });
+  const dialog = page.locator('.event-workspace');
   await expect(dialog.getByText('Reason: Working')).toBeVisible();
   await dialog.getByLabel('Invitation website URL').fill('https://church.example.test/');
   await dialog.getByRole('button', { name: 'Generate Link' }).click();
@@ -242,3 +242,76 @@ for (const theme of ['light', 'dark']) test(`collaborative celebration targets p
   expect(payloads[1].ministry_ids).toEqual([]);
 });
 
+
+for (const theme of ['light', 'dark']) test(`event workspace requires actual arrivals and closes no-shows (${theme})`, async ({page}, info) => {
+  if (theme === 'dark') await page.setViewportSize({width:390,height:844});
+  const state=await prepare(page,theme);
+  const event={id:21,title:'Event attendance fixture',start_time:'2026-10-08T09:00:00+08:00',end_time:'2026-10-08T12:00:00+08:00',location:'Sanctuary',ministry_ids:[]};
+  const roster:any={event,attendance_closed_at:null,summary:{},attendees:[
+    {member_id:7,first_name:'Maria',last_name:'Reyes',status:'registered',invitation_answer:'yes',attendance_confirmed:false},
+    {member_id:8,first_name:'Juan',last_name:'Santos',status:'absent',invitation_answer:'no',invitation_reason:'Working',attendance_notes:'[RSVP DECLINED] Working',attendance_confirmed:false},
+    {member_id:9,first_name:'Pedro',last_name:'Cruz',status:'registered',invitation_answer:'yes',attendance_confirmed:false}
+  ],guests:[{response_id:10,name:'Guest Visitor',answer:'yes',status:'unconfirmed',attendance_confirmed:false}]};
+  const actions:any[]=[];
+  await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
+  await page.route('**/api/event-invitations/events/**',route=>route.fulfill({json:{links:[],responses:[],counts:{yes:0,no:0,maybe:0,pending:0},limit:1000}}));
+  await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
+  await page.route('**/api/events/21/attendance-roster',route=>route.fulfill({json:roster}));
+  await page.route('**/api/events/21/participation/*',route=>{
+    const path=new URL(route.request().url()).pathname;
+    const body=route.request().postDataJSON();actions.push({path,body});
+    if(path.endsWith('/mark')) {
+      const person=body.member_id?roster.attendees.find((m:any)=>m.member_id===body.member_id):roster.guests.find((g:any)=>g.response_id===body.response_id);
+      person.status=body.status;person.attendance_confirmed=true;
+      return route.fulfill({json:{success:true}});
+    }
+    if(path.endsWith('/close')) {
+      roster.attendance_closed_at='2026-10-09T06:00:00Z';
+      for(const person of [...roster.attendees,...roster.guests]) if(!person.attendance_confirmed) {
+        person.status='absent';person.attendance_confirmed=true;
+        person.attendance_notes=person.invitation_reason||'No-show - arrival was not confirmed when attendance closed';
+      }
+      return route.fulfill({json:{closed:true,no_shows:1,declined:1}});
+    }
+    roster.attendance_closed_at=null;return route.fulfill({json:{closed:false,no_shows:0,declined:0}});
+  });
+  await navigate(page,'Calendar');
+  await page.getByText(event.title,{exact:true}).first().click();
+  await page.getByRole('button',{name:'Invitation Links & Responses'}).click();
+  await expect(page.locator('.event-workspace')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'Attendance & check-in',exact:true}).click();
+  const maria=page.getByRole('article',{name:'Maria Reyes'});
+  await expect(maria.getByText('Member \u00b7 Waiting for check-in')).toBeVisible();
+  await expect(page.getByRole('article',{name:'Juan Santos'})).toHaveCount(0);
+  expect(actions).toEqual([]);
+  await page.getByRole('button',{name:'Absent / Excused',exact:true}).click();
+  await expect(page.getByRole('article',{name:'Juan Santos'}).getByText('Reason / notes: Working')).toBeVisible();
+  await page.getByRole('button',{name:'Expected & present',exact:true}).click();
+  await maria.getByRole('button',{name:'Confirm present'}).click();
+  expect(actions).toEqual([]);
+  await page.getByRole('dialog',{name:'Confirm actual arrival'}).getByRole('button',{name:'Person is here \u2014 mark Present'}).click();
+  await expect(maria.getByText('Member \u00b7 Present',{exact:true})).toBeVisible();
+  await page.getByRole('article',{name:'Guest Visitor'}).getByRole('button',{name:'Confirm present'}).click();
+  await page.getByRole('dialog',{name:'Confirm actual arrival'}).getByRole('button',{name:'Person is here \u2014 mark Present'}).click();
+  await expect(page.getByRole('article',{name:'Guest Visitor'}).getByText('Guest \u00b7 Present',{exact:true})).toBeVisible();
+  expect(actions.map(a=>a.body)).toEqual([{member_id:7,status:'attended',reason:''},{response_id:10,status:'attended',reason:''}]);
+  await page.getByRole('button',{name:'Close attendance',exact:true}).click();
+  await page.getByRole('dialog',{name:'Close event attendance'}).getByRole('button',{name:'Confirm close attendance'}).click();
+  await expect(page.getByRole('button',{name:'Reopen attendance',exact:true})).toBeVisible();
+  await expect(maria.getByText('Member \u00b7 Present',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Absent / Excused',exact:true}).click();
+  await expect(page.getByRole('article',{name:'Pedro Cruz'}).getByText(/No-show/)).toBeVisible();
+  await expect(page.getByRole('article',{name:'Pedro Cruz'}).getByRole('button',{name:'Confirm present'})).toBeDisabled();
+  await page.screenshot({path:info.outputPath('event-workspace-'+theme+'.png'),fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  await page.getByRole('button',{name:'Open in Attendance Live'}).click();
+  await expect(page.getByRole('heading',{name:'Special event attendance'})).toBeVisible();
+  await expect(page.getByLabel('Select special event')).toHaveValue('21');
+  await page.getByRole('button',{name:'Reopen attendance',exact:true}).click();
+  await page.getByRole('dialog',{name:'Reopen event attendance'}).getByRole('button',{name:'Confirm reopen attendance'}).click();
+  await expect(page.getByRole('button',{name:'Close attendance',exact:true})).toBeVisible();
+  await expect(page.getByRole('article',{name:'Maria Reyes'}).getByText('Member \u00b7 Present',{exact:true})).toBeVisible();
+  expect(actions.map(a=>a.path.split('/').pop())).toEqual(['mark','mark','close','reopen']);
+  expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
+});

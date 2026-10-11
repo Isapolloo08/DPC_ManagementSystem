@@ -905,6 +905,9 @@ export async function initSchema() {
       const invitationSyncPath = getMigrationFilePath("023_invitation_sync.sql");
       if (!invitationSyncPath) throw new Error("Missing invitation synchronization migration 023");
       await sql.unsafe(fs.readFileSync(invitationSyncPath, "utf-8"));
+        const guestAttendancePath=getMigrationFilePath('024_event_guest_attendance.sql');
+        if(!guestAttendancePath)throw new Error('Missing guest attendance migration 024');
+        await sql.unsafe(fs.readFileSync(guestAttendancePath,'utf-8'));
       await db.transaction(client => syncRecordedHouseholdChildren(client));
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {

@@ -30,7 +30,7 @@ router.get("/today", async (req: Request, res: Response) => {
       JOIN ministries min ON a.ministry_id = min.id
       LEFT JOIN households h ON m.household_id = h.id
       LEFT JOIN users u ON a.checked_in_by = u.id
-      WHERE DATE(a.checked_in_at) = ${targetDate ? "$1" : "CURRENT_DATE"}
+      WHERE a.event_id IS NULL AND DATE(a.checked_in_at) = ${targetDate ? "$1" : "CURRENT_DATE"}
     `;
     const params: any[] = [];
 
@@ -80,7 +80,7 @@ router.get("/roster", async (req: Request, res: Response) => {
       FROM members m
       LEFT JOIN ministries min ON m.ministry_id = min.id
       LEFT JOIN households h ON m.household_id = h.id
-      LEFT JOIN attendance a ON a.member_id = m.id AND DATE(a.checked_in_at) = ${targetDate ? "$1" : "CURRENT_DATE"}
+      LEFT JOIN attendance a ON a.member_id = m.id AND a.event_id IS NULL AND DATE(a.checked_in_at) = ${targetDate ? "$1" : "CURRENT_DATE"}
       LEFT JOIN users u ON a.checked_in_by = u.id
       WHERE m.status = 'active'
     `;
@@ -120,6 +120,8 @@ router.post("/check-in", authMiddleware, requireRoles("Admin", "Pastor", "Coordi
   try {
     const { member_id, ministry_id, event_id, notes, service_name, status = "present", reason, target_date } = req.body;
 
+    if (event_id != null) return res.status(400).json({ error: "Use the event attendance workspace to record special-event attendance." });
+
     if (!member_id) {
       return res.status(400).json({ error: "member_id is required" });
     }
@@ -141,7 +143,7 @@ router.post("/check-in", authMiddleware, requireRoles("Admin", "Pastor", "Coordi
     // Check if member already has an attendance record for this date
     const existing = await db.get(`
       SELECT * FROM attendance
-      WHERE member_id = $1 AND ${dateClause}
+      WHERE event_id IS NULL AND member_id = $1 AND ${dateClause}
     `, dateParams);
 
     let securityCode: string | null = null;
@@ -278,7 +280,7 @@ router.post("/batch-mark", authMiddleware, requireRoles("Admin", "Pastor", "Coor
     const existingRows = await db.all(`
       SELECT id, member_id, security_code
       FROM attendance
-      WHERE member_id = ANY($1) AND ${dateClause}
+      WHERE event_id IS NULL AND member_id = ANY($1) AND ${dateClause}
     `, existingParams);
 
     const existingMap = new Map<number, any>();
@@ -389,7 +391,7 @@ router.post("/batch-mark", authMiddleware, requireRoles("Admin", "Pastor", "Coor
         const deleteParams = target_date ? [unmark_ids, target_date] : [unmark_ids];
         const delRes = await client.query(`
           DELETE FROM attendance
-          WHERE member_id = ANY($1) AND ${dateClause}
+          WHERE event_id IS NULL AND member_id = ANY($1) AND ${dateClause}
         `, deleteParams);
         unmarkedCount += delRes.rowCount || 0;
       }
@@ -449,7 +451,7 @@ router.post("/batch-check-in", authMiddleware, requireRoles("Admin", "Pastor", "
       const ministry = await db.get("SELECT * FROM ministries WHERE id = $1", [ministryId]);
 
       // Check if already checked in today
-      const existing = await db.get("SELECT id FROM attendance WHERE member_id = $1 AND DATE(checked_in_at) = CURRENT_DATE", [mId]);
+      const existing = await db.get("SELECT id FROM attendance WHERE event_id IS NULL AND member_id = $1 AND DATE(checked_in_at) = CURRENT_DATE", [mId]);
       if (existing) continue;
 
       let securityCode: string | null = null;
@@ -502,13 +504,15 @@ router.post("/check-out", authMiddleware, requireRoles("Admin", "Pastor", "Coord
         SELECT a.*, min.name as ministry_name
         FROM attendance a
         JOIN ministries min ON a.ministry_id = min.id
-        WHERE a.member_id = $1 AND DATE(a.checked_in_at) = CURRENT_DATE AND a.checked_out_at IS NULL
+        WHERE a.event_id IS NULL AND a.member_id = $1 AND DATE(a.checked_in_at) = CURRENT_DATE AND a.checked_out_at IS NULL
       `, [member_id]);
     }
 
     if (!record) {
       return res.status(404).json({ error: "Active check-in record not found" });
     }
+
+    if (record.event_id != null) return res.status(400).json({ error: "Use the event attendance workspace to change special-event attendance." });
 
     // Security code matching for Kinder & Elementary minors unless forced/verified directly
     if (!force && record.security_code && security_code) {
@@ -543,6 +547,8 @@ router.delete("/:id", authMiddleware, requireRoles("Admin", "Pastor", "Coordinat
     const { id } = req.params;
     const current = await db.get("SELECT a.*, m.first_name, m.last_name FROM attendance a JOIN members m ON a.member_id = m.id WHERE a.id = $1", [id]);
     if (!current) return res.status(404).json({ error: "Attendance record not found" });
+
+    if (current.event_id != null) return res.status(400).json({ error: "Use the event attendance workspace to reset special-event attendance." });
 
     await db.run("DELETE FROM attendance WHERE id = $1", [id]);
     await logAuditAction(req.user?.id || null, "DELETE", "attendance", Number(id), `Undid attendance mark for ${current.first_name} ${current.last_name}`);
