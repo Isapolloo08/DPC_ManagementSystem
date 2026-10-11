@@ -29,6 +29,16 @@ Full backups include receiver/source identity and import receipts without the en
 
 No secrets were added to source control. No production deployment, live schema migration or real submission import was performed during development.
 
+## Verify event in Settings
+
+Added October 12, 2026 for [ticket #9](https://github.com/Isapolloo08/DPC_ManagementSystem/issues/9). Settings → Backup & Data Management groups unmatched submissions by online event and provides **Verify event**. Create a full backup first. Review the authenticated online event title, dates and location, choose an existing local event, compare its details and explicitly confirm they are the same event. No local event is chosen automatically.
+
+Verification changes the selected event's stable identity in a local transaction. Existing invitation links can also be verified when their token fingerprints match exactly and their personal member identities already match. Titles and numeric IDs are never used as automatic evidence. The audit entry records previous/new event and changed link identities. Source data, responses, registrations, receipts and remote confirmations are untouched. Stale review data, duplicate identities and reassigning imported history are rejected; errors roll back the complete change.
+
+After verification, open the existing event invitation panel and preview/Pull deliberately. An unmatched invitation link or member remains blocked and requires its own verified recovery; Verify event does not create these records. Both local and online backends must be updated for the authenticated event-details endpoint. No extra schema migration is required beyond 023. The follow-up was checked with real isolated source/local HTTP/PostgreSQL, authorization/stale/conflict/rollback assertions and 10 browser checks covering verification, existing manual Pull and backup UI.
+
+The follow-up Standards review identified stale local comparison details; confirmation now checks the locked local title/date/location fingerprint as well as the online fingerprint. Regression checks reject intervening online and local edits. Specification review reported no material findings. The final feature HTTP/database checks and three feature browser journeys passed after this fix; the seven backup regression checks passed in the preceding combined run. No live identity repair or production deployment was performed.
+
 ## Validation and review
 
 The authenticated HTTP integration journey uses distinct disposable PostgreSQL source/local schemas. It checks metadata-only discovery, transient preview, manual guest/member imports, numeric-ID divergence, rollback, duplicate/concurrent clicks, failed confirmation and ACK-only recovery, newer revisions, retention guards, partial batch outcomes, full export/restore, scoped revocation and broad transfer boundaries. The final focused backend run passed 19 tests with no skips. A separate disposable-database runner (`npm --prefix server run test:isolated`) makes the full backend suite safe to run without targeting the business database.

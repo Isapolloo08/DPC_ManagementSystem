@@ -1,5 +1,5 @@
 import type { InvitationOverview, InvitationLink } from "./services/eventInvitations";
-import type {InvitationSyncState,SubmissionPreview,PullOutcome} from './services/invitationSync';
+import type {InvitationSyncState,SubmissionPreview,PullOutcome,EventVerification} from './services/invitationSync';
 import {checkedSyncState} from './services/invitationSync';
 import type { BibleStudySessionDetail } from "./types";
 import type { ListPage } from "./hooks/useListPagination";
@@ -586,6 +586,8 @@ export const api = {
   }),
   getEventInvitations: (eventId: number) => request<InvitationOverview>(`/event-invitations/events/${eventId}`),
   getInvitationSyncState: () => request<InvitationSyncState>('/invitation-sync/state').then(checkedSyncState),
+  inspectInvitationEvent: (event_identity:string) => request<EventVerification>('/invitation-sync/verify-event/inspect',{method:'POST',body:JSON.stringify({event_identity})},0),
+  verifyInvitationEvent: (body:{event_identity:string;event_id:number;local_identity:string;local_fingerprint:string;source:string;fingerprint:string;confirm_same_event:boolean}) => request<{event_id:number;verified_links:number;unmatched_online_links:number;state:InvitationSyncState}>('/invitation-sync/verify-event/confirm',{method:'POST',body:JSON.stringify(body)},0),
   refreshInvitationSync: () => request<InvitationSyncState>('/invitation-sync/refresh',{method:'POST',body:'{}'},0).then(checkedSyncState),
   inspectInvitationSource: (body:{url:string;username:string;password:string}) => request<{source:string;origin:string}>('/invitation-sync/inspect',{method:'POST',body:JSON.stringify(body)},0),
   pairInvitationSource: (body:{url:string;username:string;password:string;expected_source:string}) => request<InvitationSyncState>('/invitation-sync/pair',{method:'POST',body:JSON.stringify(body)},0),

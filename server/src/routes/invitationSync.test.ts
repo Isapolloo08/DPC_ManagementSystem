@@ -30,6 +30,7 @@ test('Admin can inspect readiness while Pastor cannot access pending submissions
     db.run=(async(q:string,p:any[]) => {const r=await pool.query(q,p);return {changes:r.rowCount,lastInsertRowid:r.rows[0]?.id};}) as any;
     const headers=(id:number)=>({Authorization:'Bearer '+jwt.sign({id},JWT_SECRET)});
     assert.equal((await fetch(base+'/state',{headers:headers(502)})).status,403);
+    for(const route of ['/verify-event/inspect','/verify-event/confirm']) assert.equal((await fetch(base+route,{method:'POST',headers:{...headers(502),'Content-Type':'application/json'},body:'{}'})).status,403);
     const response=await fetch(base+'/state',{headers:headers(501)});
     assert.equal(response.status,200);
     const state=await response.json() as any;

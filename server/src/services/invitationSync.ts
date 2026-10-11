@@ -103,6 +103,60 @@ export class InvitationSync {
       return claims.id===id&&user&&['Admin','IT Admin'].includes(user.name);
     } catch { return false; }
   }
+  private async eventDetails(identity: unknown) {
+    if(!uuid(identity)) throw new SyncError('Invalid online event identity.',400);
+    const remote=await this.request('events/'+identity);
+    const event=remote.event;
+    if(!event||event.sync_identity!==identity||typeof event.title!=='string'||!Number.isFinite(Date.parse(event.start_time))||!Number.isFinite(Date.parse(event.end_time))||!Array.isArray(remote.links)||remote.links.length>10000||!remote.links.every((l:any)=>uuid(l.sync_identity)&&(l.member_identity===null||uuid(l.member_identity))&&/^[a-f0-9]{64}$/.test(l.token_fingerprint))) throw new SyncError('Online event verification details are invalid.',409);
+    return {...remote,fingerprint:digest(JSON.stringify({source:remote.source,event,links:remote.links}))};
+  }
+  async inspectEvent(identity: unknown) {
+    const remote=await this.eventDetails(identity);
+    const events=await db.all('SELECT id,sync_identity,title,start_time,end_time,location FROM events ORDER BY start_time DESC,id DESC LIMIT 1000');
+    return {source:remote.source,event:remote.event,fingerprint:remote.fingerprint,events:events.map(event=>({...event,fingerprint:digest(JSON.stringify(event))}))};
+  }
+  async verifyEvent(body:any,userId:number,header:string) {
+    if(!Number.isSafeInteger(body.event_id)||body.event_id<1||!uuid(body.local_identity)||body.confirm_same_event!==true) throw new SyncError('Select an existing local event and confirm that it is the same event.',400);
+    const remote=await this.eventDetails(body.event_identity);
+    if(remote.source!==body.source||remote.fingerprint!==body.fingerprint) throw new SyncError('Online event details changed. Review them again before confirming.',409);
+    const result=await db.transaction(async c=>{
+      await c.query('SELECT pg_advisory_xact_lock(237024)');
+      if(!(await this.authorized(header,userId))) throw new SyncError('Admin authorization expired or revoked.',403);
+      const node=(await c.query('SELECT source_id,source_enabled FROM invitation_sync_node WHERE id=1 FOR UPDATE')).rows[0];
+      if(node.source_enabled||node.source_id!==remote.source) throw new SyncError('Verify events on the paired Local Master only.',409);
+      const event=(await c.query('SELECT id,sync_identity,title,start_time,end_time,location FROM events WHERE id=$1 FOR UPDATE',[body.event_id])).rows[0];
+      if(!event||event.sync_identity!==body.local_identity||body.local_fingerprint!==digest(JSON.stringify(event))) throw new SyncError('Local event changed. Review your selection again.',409);
+      const conflict=await c.query('SELECT id FROM events WHERE sync_identity=$1 AND id<>$2',[body.event_identity,event.id]);
+      if(conflict.rowCount) throw new SyncError('This online event is already linked to another local event.',409);
+      if(event.sync_identity!==body.event_identity) {
+        const history=await c.query(`SELECT 1 FROM invitation_sync_receipts r JOIN event_invitation_responses b ON b.id=r.response_id WHERE b.event_id=$1 LIMIT 1`,[event.id]);
+        const pending=await c.query('SELECT 1 FROM invitation_sync_pending WHERE event_identity=$1 LIMIT 1',[event.sync_identity]);
+        if(history.rowCount||pending.rowCount) throw new SyncError('This local event already has online synchronization history. Choose its existing counterpart instead.',409);
+      }
+      const links=(await c.query(`SELECT i.id,i.sync_identity,i.token,m.sync_identity AS member_identity FROM event_invitation_links i LEFT JOIN members m ON m.id=i.member_id WHERE i.event_id=$1 FOR UPDATE OF i`,[event.id])).rows;
+      let verifiedLinks=0;
+      const changedLinks:{id:number;previous_identity:string;verified_identity:string}[]=[];
+      for(const link of links) {
+        const matches=remote.links.filter((r:any)=>r.token_fingerprint===digest(link.token)&&r.member_identity===link.member_identity);
+        if(matches.length!==1) continue;
+        if(link.sync_identity!==matches[0].sync_identity) {
+          const history=await c.query(`SELECT 1 FROM invitation_sync_receipts r JOIN event_invitation_responses b ON b.id=r.response_id WHERE b.invitation_id=$1 LIMIT 1`,[link.id]);
+          if(history.rowCount) throw new SyncError('An invitation with import history cannot be reassigned.',409);
+          changedLinks.push({id:link.id,previous_identity:link.sync_identity,verified_identity:matches[0].sync_identity});
+        }
+        const other=await c.query('SELECT id FROM event_invitation_links WHERE sync_identity=$1 AND id<>$2',[matches[0].sync_identity,link.id]);
+        if(other.rowCount) throw new SyncError('An invitation identity already belongs to another local link.',409);
+        await c.query('UPDATE event_invitation_links SET sync_identity=$1 WHERE id=$2',[matches[0].sync_identity,link.id]);verifiedLinks++;
+      }
+      await c.query('UPDATE events SET sync_identity=$1 WHERE id=$2',[body.event_identity,event.id]);
+      await c.query(`UPDATE notifications SET link_ref_id=$1 WHERE invitation_event_identity=$2`,[event.id,body.event_identity]);
+      // The audit entry is part of the same transaction as the identity change.
+      await c.query(`INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'VERIFY_INVITATION_EVENT','events',$2,$3)`,[userId,event.id,JSON.stringify({source:remote.source,previous_identity:event.sync_identity,verified_identity:body.event_identity,verified_links:verifiedLinks,changed_links:changedLinks})]);
+      return {event_id:event.id,verified_links:verifiedLinks,unmatched_online_links:remote.links.length-verifiedLinks};
+    });
+    for(const id of await getActiveAdminIds()) emitUserEvent(id,'invitation-sync:changed',{});
+    return {...result,state:await this.state()};
+  }
   async refresh() {
     if(this.refreshing) return this.refreshing;
     this.refreshing=this.discover().finally(()=>{this.refreshing=null;});

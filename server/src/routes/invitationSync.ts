@@ -58,6 +58,14 @@ const integration:RequestHandler=handle(async(req,res,next)=>{
   res.locals.receiver=receiver;res.locals.source=node.identity;next();
 });
 router.use('/source',integration);
+router.get('/source/events/:id',handle(async(req,res)=>{
+  if(!uuid(req.params.id)) throw new SyncError('Invalid event identity.',400);
+  const event=await db.get('SELECT sync_identity,title,start_time,end_time,location FROM events WHERE sync_identity=$1',[req.params.id]);
+  if(!event) throw new SyncError('Online event is unavailable.',409);
+  const links=await db.all(`SELECT i.sync_identity,i.token,m.sync_identity AS member_identity FROM event_invitation_links i
+    JOIN events e ON e.id=i.event_id LEFT JOIN members m ON m.id=i.member_id WHERE e.sync_identity=$1 ORDER BY i.sync_identity`,[req.params.id]);
+  res.json({source:res.locals.source,event,links:links.map(({token,...link})=>({...link,token_fingerprint:digest(token)}))});
+}));
 router.get('/source/metadata',handle(async(req,res)=>{
   const cursor=req.query.cursor;
   if(cursor!==undefined&&!uuid(cursor)) throw new SyncError('Invalid availability cursor.',400);
@@ -84,6 +92,10 @@ router.post('/source/confirm',handle(async(req,res)=>{
 }));
 router.use(authMiddleware, requireRoles('Admin'));
 router.get('/state',handle(async(_req,res)=>{res.json(await invitationSync.state());}));
+router.post('/verify-event/inspect',handle(async(req,res)=>{res.json(await invitationSync.inspectEvent(req.body.event_identity));}));
+router.post('/verify-event/confirm',handle(async(req:AuthRequest,res)=>{
+  res.json(await invitationSync.verifyEvent(req.body,req.user!.id,req.headers.authorization!));
+}));
 router.post('/inspect',handle(async(req,res)=>{const remote=await invitationSync.inspect(req.body);res.json({source:remote.source,origin:remote.origin});}));
 router.post('/pair',handle(async(req,res)=>{res.json(await invitationSync.pair(req.body));}));
 router.post('/refresh',handle(async(_req,res)=>{await invitationSync.refresh();res.json(await invitationSync.state());}));

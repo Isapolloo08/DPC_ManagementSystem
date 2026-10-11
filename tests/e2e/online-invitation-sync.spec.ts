@@ -42,6 +42,32 @@ async function fixture(page:Page,theme:string,role='Admin') {
   });await page.goto('/');return {pulls,state};
 }
 
+test('Admin explicitly verifies an existing local event without importing submissions',async({page})=>{
+  const f=await fixture(page,'light');
+  f.state.pending.forEach(p=>{(p as any).event_id=null;});
+  const confirmations:any[]=[];
+  await page.route('**/api/invitation-sync/verify-event/**',async route=>{
+    if(route.request().url().endsWith('/inspect'))return route.fulfill({json:{source:first,fingerprint:'reviewed',event:{sync_identity:first,title:'Online Fellowship',start_time:'2099-10-20T09:00:00Z',end_time:'2099-10-20T12:00:00Z',location:'Sanctuary'},events:[{id:11,sync_identity:second,fingerprint:'local-review',title:'Local Fellowship',start_time:'2099-10-20T09:00:00Z',end_time:'2099-10-20T12:00:00Z',location:'Sanctuary'}]}});
+    confirmations.push(route.request().postDataJSON());f.state.pending.forEach(p=>{p.event_id=11;});
+    return route.fulfill({json:{event_id:11,verified_links:1,unmatched_online_links:0,state:f.state}});
+  });
+  await page.locator('aside').getByRole('button',{name:/Settings & Backups/}).click();
+  await page.getByRole('button',{name:'Backup & Data Management',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Online invitation synchronization'});
+  await expect(panel.getByRole('button',{name:'Verify event',exact:true})).toHaveCount(1);
+  await panel.getByRole('button',{name:'Verify event',exact:true}).click();
+  await expect(panel.getByRole('button',{name:'Confirm event verification'})).toBeDisabled();
+  await panel.getByLabel('Existing local event').selectOption('11');
+  await expect(panel.getByText('Local Fellowship',{exact:true})).toBeVisible();
+  expect(confirmations).toHaveLength(0);expect(f.pulls).toHaveLength(0);
+  await panel.getByLabel('I checked the details and confirm these are the same event.').check();
+  await panel.getByRole('button',{name:'Confirm event verification'}).click();
+  await expect(panel).toContainText('Event and matching invitation links verified');
+  expect(confirmations).toEqual([{event_identity:first,event_id:11,local_identity:second,local_fingerprint:'local-review',source:first,fingerprint:'reviewed',confirm_same_event:true}]);
+  expect(f.pulls).toHaveLength(0);
+  await expect(panel.getByRole('button',{name:'Verify event',exact:true})).toHaveCount(0);
+});
+
 for(const theme of ['light','dark'])test(`Admin bell preview and explicit selected Pull (${theme})`,async({page},info)=>{
   await page.setViewportSize(theme==='dark'?{width:390,height:844}:{width:1440,height:1000});
   const f=await fixture(page,theme);await page.getByRole('button',{name:'Notifications, 1 unread',exact:true}).click();

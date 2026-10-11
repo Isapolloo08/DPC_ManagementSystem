@@ -52,8 +52,8 @@ test('online guest discovery and preview never import; manual Pull is atomic and
     db.transaction=(async(fn:any)=>{const c=await context.getStore()!.connect();try {await c.query('BEGIN');const result=await fn(c);await c.query('COMMIT');return result;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}) as any;
     sql.begin=(fn:any)=>db.transaction(c=>fn({unsafe:async(q:string,p:any[]) => (await c.query(q,p)).rows}));
     for(const [i,pool] of pools.entries()) {
-      await pool.query("INSERT INTO events(id,title,start_time,end_time,sync_identity) VALUES($1,'Fixture Fellowship','2099-10-20','2099-10-21',$2)",[i?701:501,eventIdentity]);
-      await pool.query("INSERT INTO event_invitation_links(id,event_id,token,deadline,sync_identity) VALUES($1,$2,$3,'2099-10-19',$4)",[i?701:501,i?701:501,token,linkIdentity]);
+      await pool.query("INSERT INTO events(id,title,start_time,end_time,sync_identity) VALUES($1,'Fixture Fellowship','2099-10-20','2099-10-21',$2)",[i?701:501,i?randomUUID():eventIdentity]);
+      await pool.query("INSERT INTO event_invitation_links(id,event_id,token,deadline,sync_identity) VALUES($1,$2,$3,'2099-10-19',$4)",[i?701:501,i?701:501,token,i?randomUUID():linkIdentity]);
     }
     const credentials={url:origins[0],username:'admin@example.test',password:'fixture-password'};
     const inspected=await call(1,'inspect',credentials);assert.equal(inspected.status,200);const identity=(await inspected.json() as any).source;
@@ -64,6 +64,32 @@ test('online guest discovery and preview never import; manual Pull is atomic and
     const state=await refreshed.json() as any;assert.equal(state.pending.length,1);assert.equal(state.pending[0].name,undefined);
     assert.equal((await pools[1].query('SELECT count(*)::int n FROM event_invitation_responses')).rows[0].n,0);
     const id=state.pending[0].submission;
+    assert.equal(state.pending[0].event_id,null);
+    const reviewResponse=await call(1,'verify-event/inspect',{event_identity:eventIdentity});assert.equal(reviewResponse.status,200);
+    const review=await reviewResponse.json() as any;
+    assert.equal(review.event.title,'Fixture Fellowship');assert.equal(review.links,undefined);
+    const localChoice=review.events.find((e:any)=>e.id===701);
+    const verification={event_identity:eventIdentity,event_id:701,local_identity:localChoice.sync_identity,local_fingerprint:localChoice.fingerprint,source:review.source,fingerprint:review.fingerprint,confirm_same_event:true};
+    assert.equal((await call(1,'verify-event/confirm',{...verification,confirm_same_event:false})).status,400);
+    assert.equal((await call(1,'verify-event/confirm',{...verification,fingerprint:'stale'})).status,409);
+    await pools[0].query("UPDATE events SET title='Changed online title' WHERE id=501");
+    assert.equal((await call(1,'verify-event/confirm',verification)).status,409);
+    await pools[0].query("UPDATE events SET title='Fixture Fellowship' WHERE id=501");
+    await pools[1].query("UPDATE events SET location='Changed location' WHERE id=701");
+    assert.equal((await call(1,'verify-event/confirm',verification)).status,409);
+    await pools[1].query('UPDATE events SET location=NULL WHERE id=701');
+    await pools[1].query("INSERT INTO events(id,title,start_time,end_time) VALUES(702,'Conflicting link fixture','2099-12-20','2099-12-21')");
+    await pools[1].query("INSERT INTO event_invitation_links(id,event_id,token,deadline,sync_identity) VALUES(702,702,$1,'2099-12-19',$2)",['c'.repeat(64),linkIdentity]);
+    assert.equal((await call(1,'verify-event/confirm',verification)).status,409);
+    assert.equal((await pools[1].query('SELECT sync_identity FROM events WHERE id=701')).rows[0].sync_identity,localChoice.sync_identity);
+    assert.equal((await pools[1].query("SELECT count(*)::int n FROM audit_logs WHERE action='VERIFY_INVITATION_EVENT'")).rows[0].n,0);
+    await pools[1].query('DELETE FROM events WHERE id=702');
+    const verified=await call(1,'verify-event/confirm',verification);assert.equal(verified.status,200,await verified.clone().text());
+    const verifiedBody=await verified.json() as any;assert.equal(verifiedBody.verified_links,1);assert.equal(verifiedBody.state.pending[0].event_id,701);
+    assert.equal((await pools[1].query('SELECT count(*)::int n FROM event_invitation_responses')).rows[0].n,0);
+    assert.equal((await pools[0].query('SELECT count(*)::int n FROM invitation_sync_confirmations')).rows[0].n,0);
+    assert.equal((await pools[1].query("SELECT count(*)::int n FROM audit_logs WHERE action='VERIFY_INVITATION_EVENT'")).rows[0].n,1);
+    assert.equal((await call(1,'verify-event/confirm',verification)).status,409); // stale local identity
     await assert.rejects(pools[0].query('DELETE FROM events WHERE id=501'),/Pending online invitation/);
     await assert.rejects(pools[0].query('TRUNCATE event_invitation_responses CASCADE'),/Pending online invitation/);
     const preview=await call(1,'preview',{submission:id});assert.equal(preview.status,200);assert.equal((await preview.json() as any).name,'Guest Fixture');
@@ -71,6 +97,11 @@ test('online guest discovery and preview never import; manual Pull is atomic and
     const pull=await call(1,'pull',{submissions:[id],event_id:701});assert.equal(pull.status,200);assert.equal((await pull.json() as any).results[0].status,'Synchronized');
     const repeated=await call(1,'pull',{submissions:[id],event_id:701});assert.equal(repeated.status,200);
     assert.equal((await pools[1].query('SELECT count(*)::int n FROM event_invitation_responses')).rows[0].n,1);
+    const otherIdentity=randomUUID();
+    await pools[0].query("INSERT INTO events(id,title,start_time,end_time,sync_identity) VALUES(555,'Different event','2099-11-20','2099-11-21',$1)",[otherIdentity]);
+    const otherReview=await (await call(1,'verify-event/inspect',{event_identity:otherIdentity})).json() as any;
+    const historyConflict=await call(1,'verify-event/confirm',{...verification,event_identity:otherIdentity,local_identity:eventIdentity,local_fingerprint:otherReview.events.find((e:any)=>e.id===701).fingerprint,fingerprint:otherReview.fingerprint});
+    assert.equal(historyConflict.status,409);assert.match((await historyConflict.json() as any).error,/history/);
     assert.equal((await pools[1].query('SELECT count(*)::int n FROM members')).rows[0].n,0);
     assert.equal((await pools[1].query('SELECT count(*)::int n FROM event_registrations')).rows[0].n,0);
     // An answer changed online is pending again; source closures do not prevent Pull.
