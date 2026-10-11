@@ -1,8 +1,46 @@
 import { db } from "../db/schema";
-import { emitUserEvent } from "../socket";
+import { emitUserEvent,emitAuthorizedAdminEvent } from "../socket";
 import { logger } from "../utils/logger";
 import { getNotificationEmailSettings } from "./notificationSettings";
 import { processEmailOutbox } from "./emailOutboxWorker";
+
+/** Claim revisions individually, then update one event alert per Admin. */
+export async function notifyPendingInvitations(source: string, pending: {submission:string;revision:string;event_identity:string;event_title:string;event_id:number|null}[]) {
+  const admins=await db.all<{id:number}>("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.name IN ('Admin','IT Admin')");
+  const groups=new Map<string,typeof pending>();
+  for(const p of pending) groups.set(p.event_identity,[...(groups.get(p.event_identity)||[]),p]);
+  for(const admin of admins) for(const [event,items] of groups) {
+    const saved=await db.transaction(async c=>{
+      let changed=false;
+      for(const p of items) {
+        const claim=await c.query(`INSERT INTO notification_log(event_type,event_key,channel,recipient,status) VALUES('online_invitation_submission',$1,'in_app',$2,'sent') ON CONFLICT DO NOTHING RETURNING id`,[source+':'+p.submission+':'+p.revision,String(admin.id)]);
+        changed ||= !!claim.rowCount;
+      }
+      if(!changed) return null;
+      const existing=await c.query("SELECT id FROM notifications WHERE user_id=$1 AND type='online_invitation_submission' AND invitation_event_identity=$2 ORDER BY id DESC LIMIT 1 FOR UPDATE",[admin.id,event]);
+      const title='Online invitation submissions · '+items[0].event_title;
+      const message=items.length+' pending submission(s) require manual Pull.'+(items[0].event_id?'':' Local event counterpart is not verified.');
+      if(existing.rows[0]) return (await c.query('UPDATE notifications SET title=$1,message=$2,is_read=false,created_at=now(),link_ref_id=$3 WHERE id=$4 RETURNING *',[title.slice(0,255),message,items[0].event_id,existing.rows[0].id])).rows[0];
+      return (await c.query(`INSERT INTO notifications(user_id,type,title,message,link_tab,link_ref_id,invitation_event_identity) VALUES($1,'online_invitation_submission',$2,$3,'events',$4,$5) RETURNING *`,[admin.id,title.slice(0,255),message,items[0].event_id,event])).rows[0];
+    });
+    if(saved) await emitAuthorizedAdminEvent(admin.id,'notification:updated',saved);
+  }
+}
+
+export async function updateOnlineInvitationCounts() {
+  const alerts=await db.all(`SELECT n.id,n.user_id,COUNT(p.submission) FILTER(WHERE r.submission IS NULL)::int AS pending,
+      COUNT(p.submission) FILTER(WHERE r.submission IS NOT NULL AND NOT r.confirmed)::int AS confirming
+    FROM notifications n JOIN invitation_sync_node node ON node.id=1
+    LEFT JOIN invitation_sync_pending p ON p.event_identity=n.invitation_event_identity AND p.source=node.source_id
+    LEFT JOIN invitation_sync_receipts r ON r.source=p.source AND r.receiver=node.identity AND r.submission=p.submission AND r.revision=p.revision
+      AND EXISTS(SELECT 1 FROM event_invitation_responses b WHERE b.id=r.response_id AND b.sync_identity=r.submission AND b.sync_revision=r.revision)
+    WHERE n.type='online_invitation_submission' GROUP BY n.id,n.user_id`);
+  for(const a of alerts) {
+    const message=a.pending+' pending submission(s) require manual Pull.'+(a.confirming?' '+a.confirming+' imported locally; confirmation pending.':'');
+    const saved=await db.get('UPDATE notifications SET message=$1 WHERE id=$2 AND message<>$1 RETURNING *',[message,a.id]);
+    if(saved)await emitAuthorizedAdminEvent(a.user_id,'notification:updated',saved);
+  }
+}
 
 export type NotificationEventType =
   | "bible_study_update"

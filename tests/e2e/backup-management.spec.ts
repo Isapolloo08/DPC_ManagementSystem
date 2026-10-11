@@ -132,7 +132,7 @@ test('empty annual records still allow a full backup and prevent deletion', asyn
   const { errors, writes } = await prepare(page, 'light', { empty: true });
   await expect(page.getByText('No annual activity records yet.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create backup', exact: true })).toBeEnabled();
-  await page.locator('details summary').click();
+  await page.locator('[data-guide="backup-purge"]').click();
   await expect(page.getByLabel('Year to delete')).toBeDisabled();
   expect(errors).toEqual([]);
   expect(writes).toEqual([]);

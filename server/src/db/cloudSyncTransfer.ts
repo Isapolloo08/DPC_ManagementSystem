@@ -36,6 +36,11 @@ export async function transferTables(
   const targetColumnSet = new Set(targetColumns.map(c => `${c.table_name}.${c.column_name}`));
   const sourceTableSet = new Set(sourceColumns.map(c => c.table_name));
   const targetTableSet = new Set(targetColumns.map(c => c.table_name));
+  const invitationBoundary=sourceTableSet.has('invitation_sync_node') || targetTableSet.has('invitation_sync_node');
+  if(invitationBoundary) {
+    if(!sourceTableSet.has('invitation_sync_node')||!targetTableSet.has('invitation_sync_node')) throw new Error('Apply invitation synchronization migration 023 to both environments before Cloud Sync. No transfer was committed.');
+    await target.unsafe('SELECT pg_advisory_xact_lock(237024)');
+  }
   for (const { name } of tables) {
     if (!sourceTableSet.has(name) || !targetTableSet.has(name)) {
       throw new Error(`Cloud sync schema mismatch: table ${name} is missing. Apply the application migrations before retrying.`);
@@ -71,14 +76,21 @@ export async function transferTables(
 
   for (const [index, config] of tables.entries()) {
     checkActive();
+    // Invitation answers cross this boundary only through explicit per-submission Pull.
+    if(invitationBoundary && config.name==='event_invitation_responses') continue;
     const table = quote(config.name);
     onProgress?.({ step: config.name, current: index, total: tables.length,
       percentage: Math.round(index / tables.length * 100), message: `Reading ${config.label}...` });
     // Connection settings and completion metadata belong to each server.
-    const filter = config.name === "system_settings" ? " WHERE LEFT(key, 6) <> 'cloud_'" : "";
+    const filter = config.name === "system_settings" ? " WHERE LEFT(key, 6) <> 'cloud_' AND LEFT(key,16) <> 'invitation_sync_'" : "";
     const columns = sourceColumns.filter(column => column.table_name === config.name);
     const sourceRows = await source.unsafe(`SELECT ${columns.map(selectColumn).join(", ")} FROM ${table}${filter}${config.isSerial ? " ORDER BY id" : ""}`);
-    const rows = sourceRows.map(row => ({ ...row }));
+    let rows = sourceRows.map(row => ({ ...row }));
+    const sourceProtected=new Set<string>();
+    if(invitationBoundary&&config.name==='event_registrations') {
+      const protectedRows=await source.unsafe('SELECT DISTINCT event_id,member_id FROM event_invitation_responses WHERE member_id IS NOT NULL');
+      for(const p of protectedRows) sourceProtected.add(p.event_id+':'+p.member_id);
+    }
     for (const fk of foreignKeys.filter(f => f.table_name === config.name)) {
       const mapping = idMaps.get(fk.referenced_table);
       if (mapping) for (const row of rows) {
@@ -89,18 +101,33 @@ export async function transferTables(
     if (config.name === "family_relationships") for (const row of rows) {
       if (row.kind === "spouse" && row.from_person_id > row.to_person_id) [row.from_person_id,row.to_person_id] = [row.to_person_id,row.from_person_id];
     }
+    if(invitationBoundary && config.name==='event_registrations') {
+      const protectedRows=await target.unsafe('SELECT DISTINCT event_id,member_id FROM event_invitation_responses WHERE member_id IS NOT NULL');
+      const protectedKeys=new Set(protectedRows.map(r=>r.event_id+':'+r.member_id));
+      const registrations=await target.unsafe('SELECT event_id,member_id,status FROM event_registrations');
+      rows=rows.filter((r,index)=>{
+        if(!protectedKeys.has(r.event_id+':'+r.member_id)&&!sourceProtected.has(sourceRows[index].event_id+':'+sourceRows[index].member_id)) return true;
+        const existing=registrations.find(e=>e.event_id===r.event_id&&e.member_id===r.member_id);
+        // Actual arrivals may transfer; a planned answer never creates or overwrites RSVP.
+        if(existing&&['attended','checked_in'].includes(existing.status)) {r.status=existing.status;return true;}
+        if(['attended','checked_in'].includes(r.status)) return true;
+        if(!existing) return false;
+        r.status=existing.status;return true;
+      });
+    }
 
     // Natural-key matches retain the destination ID. Allocate a new ID when a
     // different destination entity already occupies the incoming numeric ID.
     // Users can have no email, so match by either unique account identifier.
-    const identityColumns = config.name === "users" ? ["email", "username"]
+    const stableIdentity=invitationBoundary && ['events','members'].includes(config.name);
+    const identityColumns = stableIdentity ? ['sync_identity'] : config.name === "users" ? ["email", "username"]
       : config.name === "family_people" ? ["stable_key", "member_id", "household_id", "household_entry_key"]
       : config.conflictTarget.split(",").map(c => c.trim());
     if (config.isSerial) {
       const mapping = new Map<number, number>();
       idMaps.set(config.name, mapping);
-      if (config.conflictTarget !== "id") {
-        const existingColumns = ["id", ...identityColumns].map(key =>
+      if (config.conflictTarget !== "id" || stableIdentity) {
+        const existingColumns = ["id", ...identityColumns,...(invitationBoundary&&config.name==='event_invitation_links'?['sync_identity']:[])].map(key =>
           targetColumns.find(column => column.table_name === config.name && column.column_name === key)
         );
         const existing = await target.unsafe(`SELECT ${existingColumns.map(selectColumn).join(", ")} FROM ${table}`);
@@ -124,6 +151,8 @@ export async function transferTables(
             throw new Error(`Cloud sync identity conflict in ${config.name} for source ID ${row.id}: unique identifiers match different destination records.`);
           }
           const sourceId = row.id;
+          if(stableIdentity && !matches.length && usedIds.has(Number(sourceId))) throw new Error(`Cloud sync identity conflict in ${config.name}: numeric IDs cannot establish invitation provenance. Arrange explicit identity repair. No transfer was committed.`);
+          if(invitationBoundary && config.name==='event_invitation_links' && matches[0] && matches[0].sync_identity!==undefined && matches[0].sync_identity!==row.sync_identity) throw new Error('Invitation identity conflict. Arrange explicit provenance repair before publication.');
           row.id = matches[0]?.id ?? (usedIds.has(Number(sourceId)) ? nextId++ : sourceId);
           mapping.set(sourceId, row.id);
           usedIds.add(Number(row.id));

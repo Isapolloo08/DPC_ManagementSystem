@@ -1,4 +1,6 @@
 import type { InvitationOverview, InvitationLink } from "./services/eventInvitations";
+import type {InvitationSyncState,SubmissionPreview,PullOutcome} from './services/invitationSync';
+import {checkedSyncState} from './services/invitationSync';
 import type { BibleStudySessionDetail } from "./types";
 import type { ListPage } from "./hooks/useListPagination";
 import { isGuideSandbox } from "./components/help/sandbox/runtime";
@@ -583,6 +585,13 @@ export const api = {
     method: "DELETE"
   }),
   getEventInvitations: (eventId: number) => request<InvitationOverview>(`/event-invitations/events/${eventId}`),
+  getInvitationSyncState: () => request<InvitationSyncState>('/invitation-sync/state').then(checkedSyncState),
+  refreshInvitationSync: () => request<InvitationSyncState>('/invitation-sync/refresh',{method:'POST',body:'{}'},0).then(checkedSyncState),
+  inspectInvitationSource: (body:{url:string;username:string;password:string}) => request<{source:string;origin:string}>('/invitation-sync/inspect',{method:'POST',body:JSON.stringify(body)},0),
+  pairInvitationSource: (body:{url:string;username:string;password:string;expected_source:string}) => request<InvitationSyncState>('/invitation-sync/pair',{method:'POST',body:JSON.stringify(body)},0),
+  previewOnlineSubmission: (submission:string) => request<SubmissionPreview>('/invitation-sync/preview',{method:'POST',body:JSON.stringify({submission})},0),
+  pullOnlineSubmissions: (event_id:number,submissions:string[]) => request<{results:PullOutcome[];unprocessed:string[]}>('/invitation-sync/pull',{method:'POST',body:JSON.stringify({event_id,submissions})},0),
+  getInvitationEvent: (id:number) => request<EventItem>(`/events/${id}`),
   getEventInvitationMembers: (eventId: number, search: string) => request<Member[]>(`/event-invitations/events/${eventId}/members?search=${encodeURIComponent(search)}`),
   createEventInvitation: (eventId: number, body: {member_id?: number; deadline?: string}) => request<InvitationLink>(`/event-invitations/events/${eventId}`, {method: 'POST', body: JSON.stringify(body)}),
   setEventInvitationEnabled: (eventId: number, linkId: number, enabled: boolean) => request(`/event-invitations/events/${eventId}/links/${linkId}`, {method: 'PATCH', body: JSON.stringify({enabled})}),

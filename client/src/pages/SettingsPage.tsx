@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useSocketEvent } from "../socket";
 import { BackupManagementSection } from "../components/settings/BackupManagementSection";
+import { InvitationSyncSettings } from '../components/settings/InvitationSyncSettings';
 
 type SettingsTab =
   | "bible_study_categories"
@@ -1127,7 +1128,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToUsers, i
         {/* 6.5. DATABASE BACKUP & DATA MANAGEMENT */}
         {/* ==================================================== */}
         {activeTab === "backup_restore" && (user?.role_name === "Admin" || user?.role_name === "IT Admin") && (
-          <BackupManagementSection onShowToast={showToast} />
+          <><InvitationSyncSettings/><BackupManagementSection onShowToast={showToast} /></>
         )}
 
         {/* ==================================================== */}

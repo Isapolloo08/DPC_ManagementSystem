@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
+    "test:isolated": "npm run build && node scripts/test-isolated.cjs",
     "test:email": "npm run build && node --test dist/services/emailDelivery.test.js",
     "test:cloud-sync": "npm run build && node --test dist/db/cloudSyncTransfer.test.js",
     "test:planned-visits": "npm run build && node --test dist/routes/plannedVisits.test.js",

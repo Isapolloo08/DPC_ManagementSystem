@@ -159,7 +159,7 @@ const MainLayout: React.FC<{ initialTab?: NavTab; initialGuide?: TaskGuide; init
       case "dishwashing":
         return <DishwashingPage />;
       case "events":
-        return <EventsPage onNavigate={setCurrentTab} />;
+        return <EventsPage onNavigate={setCurrentTab} initialInvitationEventId={navigationRefId} onInvitationOpened={()=>setNavigationRefId(null)} />;
       case "sundaycycle":
         return <SundayEventsCyclePage />;
       case "communications":

@@ -17,6 +17,8 @@ import familyTreeRouter from "./routes/familyTree";
 import attendanceRouter from "./routes/attendance";
 import eventsRouter from "./routes/events";
 import eventInvitationsRouter from "./routes/eventInvitations";
+import invitationSyncRouter from './routes/invitationSync';
+import { startInvitationSyncJobs } from './services/invitationSync';
 import communicationsRouter from "./routes/communications";
 import groupsRouter from "./routes/groups";
 import studyTopicsRouter from "./routes/studyTopics";
@@ -168,6 +170,7 @@ app.use("/api/households", householdsRouter);
 app.use("/api/family", familyTreeRouter);
 app.use("/api/attendance", attendanceRouter);
 app.use("/api/event-invitations", eventInvitationsRouter);
+app.use('/api/invitation-sync',invitationSyncRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/communications", communicationsRouter);
 app.use("/api/groups", groupsRouter);
@@ -227,7 +230,9 @@ async function start() {
 
   try {
     await initSchema();
+    if(process.env.INVITATION_SYNC_ROLE==='source') await db.run('UPDATE invitation_sync_node SET source_enabled=true WHERE id=1');
     startNotificationJobs();
+    startInvitationSyncJobs();
     console.log("✅ Database schema initialized successfully");
   } catch (err: any) {
     console.error("⚠️ Database schema initialization error (will retry or serve health endpoint):", err.message);

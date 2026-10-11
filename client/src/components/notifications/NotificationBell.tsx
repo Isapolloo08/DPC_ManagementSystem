@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { useToast } from "../../context/ToastContext";
 import { useSocketEvent } from "../../socket";
 import { AppNotification } from "../../types";
+import {useInvitationSyncSession} from '../../services/useInvitationSyncSession';
 
 interface NotificationBellProps {
   onNavigate: (tab: string, refId?: number | null) => void;
@@ -19,6 +20,7 @@ function relativeTime(value: string): string {
 }
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }) => {
+  const syncAuthorized=useInvitationSyncSession();
   const { showToast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -43,6 +45,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useSocketEvent('notification:updated',()=>void load());
   useEffect(() => {
     const close = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
@@ -77,7 +80,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNavigate }
     <div className="relative" ref={containerRef}>
       <button
         type="button"
-        onClick={() => { setOpen(value => !value); if (!open) void load(); }}
+        onClick={() => { setOpen(value => !value); if (!open) {void load();if(syncAuthorized)void api.getInvitationSyncState().then(state=>state.source_id?api.refreshInvitationSync().then(()=>load()):undefined).catch(()=>undefined);} }}
         className="relative p-2 rounded-full hover:bg-gray-100 text-muted hover:text-charcoal cursor-pointer transition-colors"
         aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
         aria-expanded={open}

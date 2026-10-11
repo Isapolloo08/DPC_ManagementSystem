@@ -6,8 +6,11 @@ import { api } from '../../api';
 import type { EventItem, Member } from '../../types';
 import { invitationUrl, type InvitationOverview, type InvitationLink } from '../../services/eventInvitations';
 import './event-invitations.css';
+import {useAuth} from '../../context/AuthContext';
+import {PendingOnlineSubmissions} from './PendingOnlineSubmissions';
 
 export function EventInvitationsModal({ event, onClose }: { event: EventItem; onClose: () => void }) {
+  const {user}=useAuth();
   const [data, setData] = useState<InvitationOverview | null>(null), [error, setError] = useState('');
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [message, setMessage] = useState('');
   const [mode, setMode] = useState('general'), [query, setQuery] = useState(''), [memberId, setMemberId] = useState('');
@@ -63,6 +66,7 @@ export function EventInvitationsModal({ event, onClose }: { event: EventItem; on
     <div data-modal-body className="event-invitations-body">
       {error && <p role="alert" className="event-invitations-error">{error}</p>}
       {message && <p role="status" className="event-invitations-message">{message}</p>}
+      {['Admin','IT Admin'].includes(user?.role_name||'')&&<PendingOnlineSubmissions eventId={event.id} onImported={()=>void load()}/>}
       <section className="event-invitations-generator">
         <h3>Generate invitation link</h3>
         <label className="ui-field">Invitation website URL<input className="ui-input" type="url" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://your-church-website.com/" /></label>

@@ -1,5 +1,6 @@
 import { EventMinistryPicker } from "../components/events/EventMinistryPicker";
 import { EventInvitationsModal } from "../components/events/EventInvitationsModal";
+import {useToast} from '../context/ToastContext';
 import { FilterPanel } from "../components/common/FilterPanel";
 import { Pagination } from "../components/common/Pagination";
 import { useListPagination } from "../hooks/useListPagination";
@@ -141,9 +142,12 @@ const isActivityOnDate = (act: UnifiedActivity, dateStr: string): boolean => {
 
 export interface EventsPageProps {
   onNavigate?: (tab: any) => void;
+  initialInvitationEventId?:number|null;
+  onInvitationOpened?:()=>void;
 }
 
-export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
+export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate,initialInvitationEventId,onInvitationOpened }) => {
+  const {showToast}=useToast();
   const { user, ministries, allowedMinistries, isRestricted, selectedMinistryId } = useAuth();
 
   // Raw data collections
@@ -170,6 +174,12 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate }) => {
 
   // Inspector & Modals state
   const [invitationEvent, setInvitationEvent] = useState<EventItem | null>(null);
+  useEffect(()=>{
+    if(!initialInvitationEventId) return;
+    let active=true;
+    api.getInvitationEvent(initialInvitationEventId).then(event=>{if(active){setInvitationEvent(event);onInvitationOpened?.();}}).catch(()=>{if(active)showToast('The event invitation is unavailable. Check its local counterpart.','error');});
+    return()=>{active=false;};
+  },[initialInvitationEventId]);
   const [selectedActivity, setSelectedActivity] = useState<UnifiedActivity | null>(null);
   const [selectedScheduleKey, setSelectedScheduleKey] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
