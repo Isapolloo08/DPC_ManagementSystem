@@ -1,5 +1,6 @@
 import { EventMinistryPicker } from "../components/events/EventMinistryPicker";
 import { EventInvitationsModal } from "../components/events/EventInvitationsModal";
+import { EventRsvpModal } from "../components/events/EventRsvpModal";
 import {useToast} from '../context/ToastContext';
 import { FilterPanel } from "../components/common/FilterPanel";
 import { Pagination } from "../components/common/Pagination";
@@ -184,6 +185,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate,initialInvita
   const [selectedScheduleKey, setSelectedScheduleKey] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [attendanceModalEvent, setAttendanceModalEvent] = useState<EventItem | null>(null);
+  const [rsvpEventId,setRsvpEventId]=useState<number|null>(null);
   const [selectedBirthday, setSelectedBirthday] = useState<BirthdayCelebrant | null>(null);
   const [dayPopover, setDayPopover] = useState<{
     dateStr: string;
@@ -403,17 +405,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate,initialInvita
     }
   };
 
-  const handleRsvp = async (eventId: number) => {
-    try {
-      await api.rsvpEvent(eventId);
-      loadAllMasterData();
-      if (selectedActivity && selectedActivity.type === "church_event" && selectedActivity.raw_data.id === eventId) {
-        setSelectedActivity(prev => prev ? { ...prev, rsvp_count: (prev.rsvp_count || 0) + 1 } : null);
-      }
-    } catch (err: any) {
-      showAlert("RSVP Failed", err.message || "RSVP failed", "danger");
-    }
-  };
+  const handleRsvp = (eventId: number) => setRsvpEventId(eventId);
 
   const handleOpenBirthdayModal = (celebrant: BirthdayCelebrant) => {
     setSelectedBirthday(celebrant);
@@ -1892,6 +1884,7 @@ export const EventsPage: React.FC<EventsPageProps> = ({ onNavigate,initialInvita
       />
 
       {invitationEvent && <EventInvitationsModal event={invitationEvent} onClose={() => setInvitationEvent(null)} />}
+      {rsvpEventId!==null&&<EventRsvpModal eventId={rsvpEventId} onClose={()=>setRsvpEventId(null)} onSaved={()=>{void loadAllMasterData();showToast('RSVP saved','success');}}/>}
       {/* Event Attendance & Check-In Modal */}
       <EventAttendanceModal
         event={attendanceModalEvent}

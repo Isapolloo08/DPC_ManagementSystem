@@ -486,47 +486,37 @@ router.post("/", authMiddleware, requireRoles("Admin", "Pastor", "Coordinator"),
   }
 });
 
-// RSVP / Register for event
+// RSVP records planned participation; actual attendance uses check-in.
 router.post("/:id/rsvp", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const eventId = req.params.id;
+    const eventId = Number(req.params.id);
     const { member_id, status = "registered" } = req.body;
-
-    // If member_id isn't provided, try to find linked member from current user
-    let targetMemberId = member_id;
-    if (!targetMemberId) {
-      const linkedMember = await db.get("SELECT id FROM members WHERE user_id = $1", [req.user!.id]);
-      if (linkedMember) {
-        targetMemberId = linkedMember.id;
-      } else {
-        return res.status(400).json({ error: "member_id is required" });
-      }
+    if (!Number.isSafeInteger(eventId) || eventId < 1 || !['registered','cancelled','pending'].includes(status) ||
+        (member_id !== undefined && (!Number.isSafeInteger(member_id) || member_id < 1))) {
+      return res.status(400).json({ error: 'Choose a valid event, member and planned RSVP status.' });
     }
-
-    const existing = await db.get(`
-      SELECT * FROM event_registrations WHERE event_id = $1 AND member_id = $2
-    `, [eventId, targetMemberId]);
-
-    if (existing) {
-      await db.run(`
-        UPDATE event_registrations SET status = $1 WHERE id = $2
-      `, [status, existing.id]);
-
-      emitRealtimeEvent("events:changed", { action: "rsvp", id: Number(eventId) });
-
-      return res.json({ message: "RSVP updated", status });
+    const event = await db.get(`SELECT e.*,${eventMinistryIdsSql('e')} AS ministry_ids FROM events e WHERE e.id=$1`,[eventId]);
+    if (!event) return res.status(404).json({error:'Event not found.'});
+    const linked = await db.get('SELECT id FROM members WHERE user_id=$1',[req.user!.id]);
+    const targetMemberId = member_id ?? linked?.id;
+    if (!targetMemberId) return res.status(400).json({error:'Select a member to RSVP. Your account is not linked to a member profile.'});
+    const user = req.user!;
+    const managesEvent = ['Admin','IT Admin','Pastor'].includes(user.role_name) ||
+      (user.role_name === 'Coordinator' && (event.created_by === user.id || event.ministry_ids.some((id:number)=>user.ministry_ids.includes(id))));
+    if (targetMemberId !== linked?.id && !managesEvent) return res.status(403).json({error:'You can only RSVP for your own linked member profile.'});
+    const member = await db.get('SELECT id,status,ministry_id FROM members WHERE id=$1',[targetMemberId]);
+    if (!member) return res.status(404).json({error:'Selected member no longer exists.'});
+    if (member.status !== 'active' || (event.ministry_ids.length && !event.ministry_ids.includes(member.ministry_id))) {
+      return res.status(400).json({error:'Choose an active member belonging to this event’s target ministry.'});
     }
-
-    await db.run(`
-      INSERT INTO event_registrations (event_id, member_id, status)
-      VALUES ($1, $2, $3)
-    `, [eventId, targetMemberId, status]);
-
-    emitRealtimeEvent("events:changed", { action: "rsvp", id: Number(eventId) });
-
-    res.status(201).json({ message: "RSVP confirmed successfully" });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    const saved = await db.get(`INSERT INTO event_registrations(event_id,member_id,status) VALUES($1,$2,$3)
+      ON CONFLICT(event_id,member_id) DO UPDATE SET status=CASE
+        WHEN event_registrations.status IN ('attended','checked_in') THEN event_registrations.status ELSE EXCLUDED.status END
+      RETURNING status`,[eventId,targetMemberId,status]);
+    emitRealtimeEvent('events:changed',{action:'rsvp',id:eventId});
+    res.json({message:'RSVP saved',status:saved.status});
+  } catch {
+    res.status(500).json({error:'Unable to save RSVP. Please try again.'});
   }
 });
 

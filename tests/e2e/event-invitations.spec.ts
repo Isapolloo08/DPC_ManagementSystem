@@ -58,6 +58,26 @@ async function navigate(page: Page, label: string) {
 }
 
 const token = 'a'.repeat(64);
+test('unlinked Admin chooses a member before saving an RSVP',async({page})=>{
+  await prepare(page);
+  const payloads:any[]=[];
+  await page.route('**/api/events*',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    if(path==='/api/events')return route.fulfill({json:[{id:501,title:'RSVP fixture',start_time:'2026-10-10T09:00:00+08:00',end_time:'2026-10-10T12:00:00+08:00',ministry_id:null,ministry_ids:[],rsvp_count:0}]});
+    return route.fallback();
+  });
+  await page.route('**/api/event-invitations/events/501/members?*',route=>route.fulfill({json:[{id:502,first_name:'Juan',last_name:'Santos'}]}));
+  await page.route('**/api/events/501/rsvp',route=>{payloads.push(route.request().postDataJSON());return route.fulfill({json:{message:'RSVP saved',status:'registered'}});});
+  await navigate(page,'Calendar');
+  await page.getByRole('button',{name:/RSVP \(0\)/}).first().click();
+  const dialog=page.getByRole('dialog',{name:'Confirm RSVP'});
+  await expect(dialog).toBeVisible();await expect(dialog.getByRole('button',{name:'Save RSVP'})).toBeDisabled();
+  expect(payloads).toHaveLength(0);
+  await dialog.getByLabel('Search member').fill('Juan');
+  await dialog.getByRole('button',{name:'Juan Santos'}).click();
+  await dialog.getByRole('button',{name:'Save RSVP'}).click();
+  await expect(dialog).not.toBeVisible();expect(payloads).toEqual([{member_id:502,status:'registered'}]);
+});
 for (const theme of ['light', 'dark']) test(`public event invitation needs no login and preserves one response (${theme})`, async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(theme => localStorage.setItem('dpc_theme_mode', theme), theme);
