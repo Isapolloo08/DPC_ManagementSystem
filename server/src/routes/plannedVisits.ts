@@ -7,8 +7,11 @@ import { validDate, validateVisit, visitStatuses, manilaToday, uuidPattern } fro
 import { logger } from '../utils/logger';
 import { queueVisitConfirmation, visitFollowUp, VisitReceiptRow } from '../services/visitConfirmation';
 import { processEmailOutbox } from '../services/emailOutboxWorker';
+import visitManagementRouter from './visitManagement';
+import {visitManagementUrl} from '../services/visitConfirmation';
 
 const router = Router();
+router.use('/manage',visitManagementRouter);
 export const visitSubmissionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many visit requests. Please try again in 15 minutes.' } });
 router.post('/', visitSubmissionLimiter, async (req, res) => {
   const body = req.body;
@@ -20,14 +23,14 @@ router.post('/', visitSubmissionLimiter, async (req, res) => {
   const hash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
   try {
     const outcome = await db.transaction(async client => {
-      const existing = await client.query<VisitReceiptRow>('SELECT receipt_id, payload_hash, created_at FROM planned_visits WHERE submission_token = $1', [body.submission_token]);
+      const existing = await client.query<VisitReceiptRow>('SELECT receipt_id, payload_hash, created_at,management_token FROM planned_visits WHERE submission_token = $1', [body.submission_token]);
       let result = existing.rows[0];
       if (!result && data.visit_date < manilaToday()) return { kind: 'past' as const };
       if (!result) result = (await client.query<VisitReceiptRow>(`
       INSERT INTO planned_visits (receipt_id, submission_token, payload_hash, visit_date, party, bringing_children, child_age_groups, full_name, email, phone, questions)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       ON CONFLICT (submission_token) DO UPDATE SET submission_token = EXCLUDED.submission_token
-      RETURNING receipt_id, payload_hash, created_at
+      RETURNING receipt_id, payload_hash, created_at,management_token
     `, [randomUUID(), body.submission_token, hash, data.visit_date, data.party, data.bringing_children, data.child_age_groups, data.full_name, data.email, data.phone, data.questions])).rows[0];
       if (result.payload_hash !== hash) return { kind: 'conflict' as const };
       const confirmation_email = await queueVisitConfirmation(client, data, result);
@@ -37,7 +40,7 @@ router.post('/', visitSubmissionLimiter, async (req, res) => {
     if (outcome.kind === 'conflict') return res.status(409).json({ error: 'This submission token was already used for different details. Please submit again.' });
     // Start delivery after commit without making the visitor wait for SMTP.
     if (outcome.confirmation_email === 'queued' || outcome.confirmation_email === 'failed') void processEmailOutbox();
-    return res.status(201).json({ receipt_id: outcome.result.receipt_id, message: 'We’ve received your visit plan. We look forward to welcoming you.', confirmation_email: outcome.confirmation_email, follow_up: visitFollowUp(data.visit_date, outcome.result.created_at) });
+    return res.status(201).json({ receipt_id: outcome.result.receipt_id, management_url:visitManagementUrl(outcome.result.management_token), message: 'We’ve received your visit plan. We look forward to welcoming you.', confirmation_email: outcome.confirmation_email, follow_up: visitFollowUp(data.visit_date, outcome.result.created_at) });
   } catch {
     logger.error('Failed to save planned visit');
     return res.status(503).json({ error: 'We couldn’t save your visit plan. Please try again. Your guide is still available.' });
@@ -87,7 +90,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   if (!/^\d+$/.test(req.params.id) || !Number.isSafeInteger(Number(req.params.id))) return res.status(400).json({ error: 'Invalid visit ID.' });
   try {
-    const item = await db.get(`SELECT id, receipt_id, to_char(visit_date, 'YYYY-MM-DD') AS visit_date, party, bringing_children, child_age_groups, full_name, email, phone, questions, consent_at, status, staff_notes, created_at, updated_at FROM planned_visits WHERE id = $1`, [Number(req.params.id)]);
+    const item = await db.get(`SELECT id, receipt_id, to_char(visit_date, 'YYYY-MM-DD') AS visit_date, party, bringing_children, child_age_groups, full_name, email, phone, questions, consent_at, status, staff_notes, created_at, updated_at,visitor_reply FROM planned_visits WHERE id = $1`, [Number(req.params.id)]);
     if (!item) return res.status(404).json({ error: 'Visit not found.' });
     res.json(item);
   } catch { res.status(500).json({ error: 'Unable to load this visit.' }); }

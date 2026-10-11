@@ -15,8 +15,8 @@ router.use(authMiddleware);
 router.get("/unread-count", async (req: AuthRequest, res: Response) => {
   try {
     const row = await db.get<{ count: string }>(
-      "SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE AND ($2 OR type<>'online_invitation_submission')",
-      [req.user!.id,['Admin','IT Admin'].includes(req.user!.role_name)]
+      "SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE AND ($2 OR type<>'online_invitation_submission') AND ($3 OR type<>'online_planned_visit')",
+      [req.user!.id,['Admin','IT Admin'].includes(req.user!.role_name),['Admin','IT Admin','Pastor'].includes(req.user!.role_name)]
     );
     res.json({ count: Number(row?.count || 0) });
   } catch (error) {
@@ -202,6 +202,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     const params: unknown[] = [];
     const whereClauses: string[] = [];
     if(!['Admin','IT Admin'].includes(req.user!.role_name)) whereClauses.push("n.type <> 'online_invitation_submission'");
+    if(!isPrivileged)whereClauses.push("n.type <> 'online_planned_visit'");
 
     if (!isPrivileged || req.query.mine === "true") {
       params.push(req.user!.id);

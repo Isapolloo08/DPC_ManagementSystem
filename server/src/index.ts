@@ -34,6 +34,8 @@ import attendanceLogRouter from "./routes/attendanceLog";
 import servicesRouter from "./routes/services";
 import notificationsRouter from "./routes/notifications";
 import plannedVisitsRouter from "./routes/plannedVisits";
+import plannedVisitSyncRouter from './routes/plannedVisitSync';
+import {startPlannedVisitSyncJobs} from './services/plannedVisitSync';
 import { startNotificationJobs } from "./services/emailOutboxWorker";
 
 import { logger, httpLogger } from "./utils/logger";
@@ -187,6 +189,7 @@ app.use("/api/attendance-log", attendanceLogRouter);
 app.use("/api/services", servicesRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/planned-visits", plannedVisitsRouter);
+app.use('/api/planned-visit-sync',plannedVisitSyncRouter);
 
 // Sentry error handler (must be before any other error middleware)
 setupSentryErrorHandler(app);
@@ -233,6 +236,7 @@ async function start() {
     if(process.env.INVITATION_SYNC_ROLE==='source') await db.run('UPDATE invitation_sync_node SET source_enabled=true WHERE id=1');
     startNotificationJobs();
     startInvitationSyncJobs();
+    startPlannedVisitSyncJobs();
     console.log("✅ Database schema initialized successfully");
   } catch (err: any) {
     console.error("⚠️ Database schema initialization error (will retry or serve health endpoint):", err.message);

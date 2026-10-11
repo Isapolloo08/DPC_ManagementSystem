@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { db, sql } from "../db/schema";
 import { restoreFamilyGraph } from '../utils/familyBackup';
-import { restoreInvitationSync } from '../utils/invitationSyncBackup';
+import { restoreInvitationSync,restorePlannedVisitSync } from '../utils/invitationSyncBackup';
 import { authMiddleware, AuthRequest, requireRoles } from "../middleware/auth";
 import { emitRealtimeEvent } from "../socket";
 
@@ -361,6 +361,8 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
         tables.event_attendance_sessions = await read('SELECT * FROM event_attendance_sessions ORDER BY event_id');
         tables.invitation_sync_node = await read('SELECT id,identity,source_enabled,source_id,source_url FROM invitation_sync_node');
         tables.invitation_sync_receipts = await read('SELECT * FROM invitation_sync_receipts ORDER BY submission,revision');
+        tables.planned_visits=await read('SELECT * FROM planned_visits ORDER BY id');
+        tables.visit_sync_receipts=await read('SELECT * FROM visit_sync_receipts ORDER BY submission,revision');
         tables.events = events;
         tables.recurring_sunday_events = await read('SELECT * FROM recurring_sunday_events ORDER BY id');
         tables.recurring_event_ministries = await read('SELECT * FROM recurring_event_ministries ORDER BY recurring_event_id, ministry_id');
@@ -482,7 +484,7 @@ router.post("/preview", async (req: Request, res: Response) => {
       "events", "recurring_sunday_events", "event_ministries", "recurring_event_ministries", "event_invitation_links", "event_invitation_responses", "event_guest_attendance", "event_attendance_sessions", "event_registrations", "attendance", "announcements",
       "bible_study_topics", "bible_study_groups",
       "bible_study_members", "duty_teams", "duty_team_members",
-        "duty_schedules", "dishwashing_roster", "audit_logs", "invitation_sync_node", "invitation_sync_receipts"
+        "duty_schedules", "dishwashing_roster", "audit_logs", "invitation_sync_node", "invitation_sync_receipts", "planned_visits", "visit_sync_receipts"
     ];
 
     const samplePreviews: Record<string, any[]> = {};
@@ -540,6 +542,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
     const syncNode=await db.get('SELECT source_enabled FROM invitation_sync_node WHERE id=1');
     if(syncNode?.source_enabled) return res.status(409).json({error:'Online source restore requires a separately verified source backup procedure; Local Master restore is blocked.'});
     if(payload.invitation_sync_receipts?.length && !payload.invitation_sync_node?.length) return res.status(400).json({error:'Receiver identity is required to restore synchronization receipts.'});
+    if(payload.visit_sync_receipts?.length&&(!payload.invitation_sync_node?.length||!Array.isArray(payload.planned_visits)))return res.status(400).json({error:'Visit receipts require the complete Local Master identity and visit records.'});
     if(payload.invitation_sync_node && data.backupType && data.backupType!=='Full_Database') return res.status(400).json({error:'Synchronization history requires a complete Local Master backup.'});
     const restoredCounts: Record<string, number> = {};
 
@@ -551,6 +554,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
       if (mode === "replace") {
         await tx.unsafe(`
           TRUNCATE TABLE 
+            ${Array.isArray(payload.planned_visits)?'planned_visits,visit_sync_receipts,visit_sync_pending,':''}
             family_relationships,
             family_people,
             attendance,
@@ -591,7 +595,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
 
           const columns = keys.map(k => `"${k}"`).join(", ");
           const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
-          const values = keys.map(k => typeof row[k] === 'object' && row[k] !== null && !(row[k] instanceof Date) ? JSON.stringify(row[k]) : row[k]);
+          const values = keys.map(k => tableName==='planned_visits'&&k==='child_age_groups'?row[k]:typeof row[k] === 'object' && row[k] !== null && !(row[k] instanceof Date) ? JSON.stringify(row[k]) : row[k]);
 
           let conflictClause = "ON CONFLICT DO NOTHING";
 
@@ -653,7 +657,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
         "recurring_event_ministries",
         "event_ministries",
         "event_invitation_links",
-        "event_invitation_responses", "event_guest_attendance", "event_attendance_sessions",
+        "event_invitation_responses", "event_guest_attendance", "event_attendance_sessions", "planned_visits",
         "event_registrations",
         "attendance",
         "announcements",
@@ -699,13 +703,14 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
 
       // Synchronize all sequence counters
       await restoreInvitationSync(tx,payload,mode);
+      await restorePlannedVisitSync(tx,payload);
       const sequenceTables = [
         "roles", "ministries", "system_lookups", "users", "user_ministries",
         "households", "members", "family_people", "family_relationships", "events", "recurring_sunday_events",
         "event_invitation_links", "event_invitation_responses", "event_registrations", "attendance", "announcements",
         "bible_study_topics", "bible_study_groups", "bible_study_members",
         "duty_teams", "duty_team_members", "duty_schedules", "dishwashing_roster",
-        "audit_logs"
+        "audit_logs", "planned_visits"
       ];
 
       for (const t of sequenceTables) {

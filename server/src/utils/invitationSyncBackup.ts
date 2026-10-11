@@ -21,3 +21,14 @@ export async function restoreInvitationSync(tx:{unsafe:Function},payload:Record<
   }
   // Cached metadata is rebuilt from retained online revisions after authorized reconnection.
 }
+
+export async function restorePlannedVisitSync(tx:{unsafe:Function},payload:Record<string,any[]>) {
+  const node=(await tx.unsafe('SELECT identity,source_id FROM invitation_sync_node WHERE id=1'))[0];
+  for(const r of payload.visit_sync_receipts||[]) {
+    if(r.source!==node.source_id||r.receiver!==node.identity)throw new Error('Visit receipt source or receiver does not match this restored Master.');
+    const visit=(await tx.unsafe('SELECT id,sync_revision::text FROM planned_visits WHERE receipt_id=$1',[r.submission]))[0];
+    if(!visit||BigInt(visit.sync_revision)<BigInt(r.revision))throw new Error('Restored visit receipt lacks its local visit revision.');
+    await tx.unsafe(`INSERT INTO visit_sync_receipts(source,receiver,submission,revision,visit_id,payload_hash,confirmed) VALUES($1,$2,$3,$4,$5,$6,false) ON CONFLICT DO NOTHING`,[r.source,r.receiver,r.submission,r.revision,visit.id,r.payload_hash]);
+  }
+  await tx.unsafe("UPDATE visit_sync_state SET state='Not checked',last_check=NULL WHERE id=1");
+}

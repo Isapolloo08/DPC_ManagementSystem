@@ -1,4 +1,5 @@
 import type { InvitationOverview, InvitationLink } from "./services/eventInvitations";
+import type {VisitSyncState,VisitPreview,VisitPullResult} from './services/plannedVisitSync';
 import type {InvitationSyncState,SubmissionPreview,PullOutcome,EventVerification} from './services/invitationSync';
 import {checkedSyncState} from './services/invitationSync';
 import type { BibleStudySessionDetail } from "./types";
@@ -227,6 +228,7 @@ export interface PlannedVisitSummary {
   status: 'New' | 'Contacted' | 'Visited' | 'Cancelled'; created_at: string;
 }
 export interface PlannedVisit extends PlannedVisitSummary {
+  visitor_reply?:'Pending'|'Confirmed'|'Cancelled';
   receipt_id: string; bringing_children: boolean; child_age_groups: string[];
   email: string | null; phone: string | null; questions: string;
   consent_at: string; staff_notes: string; updated_at: string;
@@ -258,6 +260,10 @@ export const api = {
     return request<{ items: PlannedVisitSummary[]; total: number; page: number; totalPages: number }>(`/planned-visits?${query}`);
   },
   getPlannedVisit: (id: number) => request<PlannedVisit>(`/planned-visits/${id}`),
+  getVisitSyncState:()=>request<VisitSyncState>('/planned-visit-sync/state'),
+  refreshVisitSync:()=>request<VisitSyncState>('/planned-visit-sync/refresh',{method:'POST'}),
+  previewOnlineVisit:(submission:string)=>request<VisitPreview>('/planned-visit-sync/preview',{method:'POST',body:JSON.stringify({submission})}),
+  pullOnlineVisits:(submissions:string[])=>request<{results:VisitPullResult[];unprocessed:string[]}>('/planned-visit-sync/pull',{method:'POST',body:JSON.stringify({submissions})}),
   updatePlannedVisit: (id: number, data: { status: PlannedVisit['status']; staff_notes: string }) => request<{ message: string }>(`/planned-visits/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Auth
   getSetupStatus: () => request<{ hasUsers: boolean; totalUsers: number; hasAdmin: boolean; totalAdmins: number; isFirstUser: boolean; demoModeEnabled: boolean }>("/auth/setup-status"),

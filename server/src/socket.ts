@@ -78,6 +78,18 @@ export async function getActiveAdminIds(): Promise<number[]> {
   return (await db.all<{id:number}>(`SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=ANY($1::integer[]) AND r.name IN ('Admin','IT Admin')`,[ids])).map(u=>u.id);
 }
 
+export async function getActiveVisitStaffIds(): Promise<number[]> {
+  const ids=[...new Set([...io?.sockets.sockets.values() || []].filter(s=>s.data.expiresAt>Date.now()).map(s=>Number(s.data.userId)))];
+  if(!ids.length) return [];
+  return (await db.all<{id:number}>(`SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=ANY($1::integer[]) AND r.name IN ('Admin','IT Admin','Pastor')`,[ids])).map(u=>u.id);
+}
+
+export async function emitVisitStaffEvent(userId:number,event:string,payload:unknown) {
+  const user=await db.get<{name:string}>('SELECT r.name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=$1',[userId]);
+  if(!user||!['Admin','IT Admin','Pastor'].includes(user.name)) return;
+  for(const socket of io?.sockets.sockets.values()||[]) if(socket.data.userId===userId&&socket.data.expiresAt>Date.now()) socket.emit(event,payload);
+}
+
 export async function emitAuthorizedAdminEvent(userId:number,event:string,payload:unknown) {
   const user=await db.get<{name:string}>('SELECT r.name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=$1',[userId]);
   if(!user||!['Admin','IT Admin'].includes(user.name)) return;

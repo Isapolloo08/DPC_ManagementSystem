@@ -2,7 +2,13 @@ import type { PoolClient } from 'pg';
 import { manilaToday, validateVisit } from './plannedVisits';
 
 type VisitDetails = ReturnType<typeof validateVisit>['data'];
-export interface VisitReceiptRow { receipt_id: string; payload_hash: string; created_at: Date | string; }
+export interface VisitReceiptRow { receipt_id: string; payload_hash: string; created_at: Date | string; management_token?:string; }
+export function visitManagementUrl(token?:string) {
+  if(!token||!/^[a-f0-9]{64}$/.test(token))return null;
+  const origin=new URL(process.env.PUBLIC_VISIT_WEBSITE_URL||'https://daetpresbyterianchurch.vercel.app');
+  if(origin.protocol!=='https:'||origin.username||origin.password||origin.search||origin.hash)throw new Error('Configure a public HTTPS visit website URL.');
+  return origin.origin+'/#/visit/'+token;
+}
 
 export function visitFollowUp(visitDate: string, submittedAt: Date | string) {
   const saturday = new Date(`${visitDate}T00:00:00Z`);
@@ -25,6 +31,7 @@ function escapeHtml(value: string) {
 
 export function visitConfirmationEmail(data: VisitDetails, receipt: VisitReceiptRow) {
   const followUp = visitFollowUp(data.visit_date, receipt.created_at);
+  const managementUrl=visitManagementUrl(receipt.management_token);
   return {
     subject: `Your Sunday visit to DPC · ${formatVisitDate(data.visit_date)}`,
     html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#18303c;max-width:560px;margin:auto">
@@ -41,6 +48,7 @@ export function visitConfirmationEmail(data: VisitDetails, receipt: VisitReceipt
       <p>No registration is needed to attend. Come as you are; there’s a seat for you.</p>
       <p style="font-size:12px">Reference: ${escapeHtml(receipt.receipt_id)}</p>
       <p>Daet Presbyterian Church</p>
+      ${managementUrl?`<p><a href="${escapeHtml(managementUrl)}">Confirm, cancel or reschedule your visit</a></p><p>Keep this private link; anyone with it can update your visit.</p>`:''}
     </div>`,
   };
 }

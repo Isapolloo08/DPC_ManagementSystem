@@ -56,6 +56,8 @@ test('HTTP submission, PostgreSQL persistence, retries, staff permissions and au
   const base = `http://127.0.0.1:${(server.address() as any).port}/api/planned-visits`;
   try {
     await store.query(fs.readFileSync(path.join(__dirname, '../db/migrations/014_planned_visits.sql'), 'utf8'));
+    await store.query('CREATE TABLE invitation_sync_node(id integer PRIMARY KEY,source_enabled boolean DEFAULT false); INSERT INTO invitation_sync_node(id) VALUES(1)');
+    await store.query(fs.readFileSync(path.join(__dirname,'../db/migrations/026_planned_visit_sync.sql'),'utf8'));
     const notifications = fs.readFileSync(path.join(__dirname, '../db/migrations/007_notifications.sql'), 'utf8');
     await store.query(notifications.slice(notifications.indexOf('-- Email is queued'), notifications.indexOf('-- Initial recipient')));
     await store.query(`CREATE TABLE roles (id INT, name TEXT); CREATE TABLE users (id INT, name TEXT, email TEXT, role_id INT); CREATE TABLE user_ministries (user_id INT, ministry_id INT); CREATE TABLE audit_logs (user_id INT, action TEXT, target_table TEXT, target_id INT, details TEXT); INSERT INTO roles VALUES (1,'Admin'),(2,'Pastor'),(3,'Coordinator'),(4,'Leader'); INSERT INTO users VALUES (1,'Admin','admin@example.test',1),(2,'Pastor','pastor@example.test',2),(3,'Coordinator','coordinator@example.test',3),(4,'Leader','leader@example.test',4);`);
@@ -78,7 +80,7 @@ test('HTTP submission, PostgreSQL persistence, retries, staff permissions and au
     const payload = valid();
     const first = await post(payload); assert.equal(first.status, 201); const receipt = await first.json() as { receipt_id: string; confirmation_email: string; follow_up: { date: string } };
     assert.equal(delivery.mock.callCount(), 1, 'delivery starts immediately after a saved submission');
-    assert.deepEqual(Object.keys(receipt).sort(), ['confirmation_email', 'follow_up', 'message', 'receipt_id']);
+    assert.deepEqual(Object.keys(receipt).sort(), ['confirmation_email', 'follow_up', 'management_url', 'message', 'receipt_id']);
     assert.equal(receipt.confirmation_email, 'queued'); assert.equal(receipt.follow_up.date, '2099-01-03');
     const duplicate = await post(payload); assert.equal((await duplicate.json() as { receipt_id: string }).receipt_id, receipt.receipt_id);
     const concurrentPayload = valid();

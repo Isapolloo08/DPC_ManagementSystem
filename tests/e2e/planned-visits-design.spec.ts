@@ -60,7 +60,7 @@ for (const theme of ['light', 'dark']) {
       await expect(page.locator(mobile ? '.visit-mobile-card' : '.visit-table tbody tr')).toHaveCount(1);
       await filters.getByLabel('Filter visits by date', { exact: true }).fill('2026-10-12');
       await expect(page.getByText('No planned visits match these filters.', { exact: true })).toBeVisible();
-      await filters.getByRole('button', { name: 'Clear filters' }).click();
+      await filters.getByRole('button', { name: 'Reset / refresh' }).click();
       await expect(page.locator(mobile ? '.visit-mobile-card' : '.visit-table tbody tr')).toHaveCount(4);
       await expect(page.getByLabel('planned visits rows per page')).toHaveValue('20');
       expect(errors).toEqual([]); expect(writes).toEqual([]);

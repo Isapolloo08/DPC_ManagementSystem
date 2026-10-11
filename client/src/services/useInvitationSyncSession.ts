@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import {isJwtExpired,useAuth} from '../context/AuthContext';
 
 /** Privacy boundary also runs while the general expiration dialog is still open. */
-export function useInvitationSyncSession() {
+export function useInvitationSyncSession(roles:readonly string[]=['Admin','IT Admin']) {
   const {token,user}=useAuth();
   const [expired,setExpired]=useState(()=>isJwtExpired(token));
   useEffect(()=>{
@@ -13,5 +13,5 @@ export function useInvitationSyncSession() {
     const timer=setInterval(check,1000);
     return()=>{clearInterval(timer);window.removeEventListener('auth:session-expired',expire);};
   },[token]);
-  return !expired&&['Admin','IT Admin'].includes(user?.role_name||'');
+  return !expired&&roles.includes(user?.role_name||'');
 }

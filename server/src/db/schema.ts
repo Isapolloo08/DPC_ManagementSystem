@@ -911,6 +911,9 @@ export async function initSchema() {
       const invitationArchivePath=getMigrationFilePath('025_invitation_link_archive.sql');
       if(!invitationArchivePath)throw new Error('Missing invitation link archive migration 025');
       await sql.unsafe(fs.readFileSync(invitationArchivePath,'utf-8'));
+      const visitSyncPath=getMigrationFilePath('026_planned_visit_sync.sql');
+      if(!visitSyncPath) throw new Error('Missing planned visit synchronization migration 026');
+      await sql.unsafe(fs.readFileSync(visitSyncPath,'utf-8'));
       await db.transaction(client => syncRecordedHouseholdChildren(client));
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {

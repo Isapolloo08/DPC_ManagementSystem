@@ -5,6 +5,7 @@ import { invitationSync, SyncError, uuid, revision, digest } from '../services/i
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import {visitPayloadColumns} from '../services/plannedVisitSync';
 const router = Router();
 const handle=(fn:RequestHandler):RequestHandler => (req,res,next)=>Promise.resolve(fn(req,res,next)).catch(error=>{
   const status=error instanceof SyncError?error.status:503;
@@ -58,6 +59,25 @@ const integration:RequestHandler=handle(async(req,res,next)=>{
   res.locals.receiver=receiver;res.locals.source=node.identity;next();
 });
 router.use('/source',integration);
+router.get('/source/visits/metadata',handle(async(req,res)=>{
+  if(req.query.cursor!==undefined&&!uuid(req.query.cursor))throw new SyncError('Invalid visit cursor.',400);
+  const items=await db.all(`SELECT receipt_id AS submission,sync_revision::text AS revision,visit_date::text,updated_at
+    FROM planned_visits WHERE ($1::uuid IS NULL OR receipt_id>$1::uuid) ORDER BY receipt_id LIMIT 101`,[req.query.cursor||null]);
+  res.json({source:res.locals.source,items:items.slice(0,100),next:items.length>100?items[99].submission:null});
+}));
+router.get('/source/visits/submissions/:id',handle(async(req,res)=>{
+  if(!uuid(req.params.id))throw new SyncError('Invalid visit identity.',400);
+  const visit=await db.get(`SELECT ${visitPayloadColumns} FROM planned_visits WHERE receipt_id=$1`,[req.params.id]);
+  if(!visit)throw new SyncError('Online visit unavailable.',409);
+  res.json({source:res.locals.source,...visit});
+}));
+router.post('/source/visits/confirm',handle(async(req,res)=>{
+  if(!uuid(req.body.submission)||!revision(req.body.revision))throw new SyncError('Invalid visit confirmation.',400);
+  const visit=await db.get('SELECT sync_revision::text AS revision FROM planned_visits WHERE receipt_id=$1',[req.body.submission]);
+  if(!visit||BigInt(req.body.revision)>BigInt(visit.revision))throw new SyncError('Visit revision does not exist.',409);
+  await db.run('INSERT INTO visit_sync_confirmations(receiver,submission,revision) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[res.locals.receiver,req.body.submission,req.body.revision]);
+  res.json({source:res.locals.source,confirmed:true,submission:req.body.submission,revision:req.body.revision});
+}));
 router.get('/source/events/:id',handle(async(req,res)=>{
   if(!uuid(req.params.id)) throw new SyncError('Invalid event identity.',400);
   const event=await db.get('SELECT sync_identity,title,start_time,end_time,location FROM events WHERE sync_identity=$1',[req.params.id]);

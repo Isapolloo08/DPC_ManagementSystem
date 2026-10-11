@@ -8,6 +8,7 @@ import { AnimatedNumber } from '../components/common/AnimatedNumber';
 import { Button } from '../components/common/Button';
 import { ListSkeleton, AttendanceTableSkeleton } from '../components/common/SkeletonLoader';
 import './plannedVisits.css';
+import {PendingOnlineVisits} from '../components/visits/PendingOnlineVisits';
 
 const statuses = ['New', 'Contacted', 'Visited', 'Cancelled'] as const;
 const dateLabel = (date: string) => new Date(date + 'T00:00:00Z').toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
@@ -78,6 +79,7 @@ export function PlannedVisitsPage() {
       </div>
     </section>
     </FilterPanel>
+    <PendingOnlineVisits onImported={()=>setRefresh(value=>value+1)}/>
     {detailLoading && <ListSkeleton count={3} label="Loading visit details..." />}
     {detailError && <p role="alert" className="text-red-700">{detailError}</p>}
     {selected && <section aria-label="Visit details" className="visit-detail visit-enter">
@@ -86,7 +88,7 @@ export function PlannedVisitsPage() {
         <button type="button" disabled={saving} className="ui-button ui-button--secondary ui-button--icon shrink-0" aria-label="Close details" onClick={() => { requestId.current++; setSelected(null); setDetailError(''); }}><X size={17} /></button>
       </div>
       <dl className="visit-detail-grid grid gap-4 sm:grid-cols-2 text-sm break-words">
-        <div><dt className="font-semibold">Visit</dt><dd>{dateLabel(selected.visit_date)} · {selected.party}</dd></div>
+        <div><dt className="font-semibold">Visit</dt><dd>{dateLabel(selected.visit_date)} · {selected.party}{selected.visitor_reply&&<p>Visitor reply: {selected.visitor_reply}</p>}</dd></div>
         <div><dt className="font-semibold">Contact</dt><dd>{selected.email || 'No email'}<br />{selected.phone || 'No phone'}</dd></div>
         <div><dt className="font-semibold">Children</dt><dd>{selected.bringing_children ? (selected.child_age_groups.join(', ') || 'Bringing children; ages not provided') : 'No children this visit'}</dd></div>
         <div><dt className="font-semibold">Submitted / consent recorded</dt><dd>{submittedLabel(selected.created_at)}<br />{submittedLabel(selected.consent_at)}</dd></div>

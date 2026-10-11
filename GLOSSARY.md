@@ -1,6 +1,17 @@
 # DPC Management System
 
 Language for church event invitations and the proposed online-to-local submission workflow.
+Planned visit requests use the same manual discovery/import boundary, with distinct permissions and receipts.
+
+## Planned visits
+
+**Visit plan**: A visitor's optional request to attend Sunday worship, including contact consent and intended visit date.
+
+**Visitor confirmation**: The visitor's Confirmed, Cancelled or Pending intention for a visit plan. It does not establish actual arrival.
+
+**Visit management link**: A private bearer link allowing a visitor to confirm, cancel or reschedule their own visit plan.
+
+**Visit submission revision**: A version of the same receipt after the visitor changes its date or reply. Importing it requires another explicit Pull; local staff notes are maintained separately.
 
 ## Event invitations
 
