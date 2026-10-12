@@ -9,6 +9,7 @@ import { db } from '../db/schema';
 import * as settingsModule from './notificationSettings';
 import * as deliveryModule from './emailDelivery';
 import { processEmailOutbox } from './emailOutboxWorker';
+import { logger } from '../utils/logger';
 
 const settings: settingsModule.NotificationEmailSettings = { smtpHost: 'smtp.example.test', smtpPort: 587, smtpSecure: false, smtpUser: 'sender@example.test', smtpPassword: 'test-only', fromName: 'DPC', fromEmail: 'sender@example.test', pastorEmail: '' };
 const message: deliveryModule.QueuedEmail = { id: 1, to_email: 'visitor@example.test', subject: 'Your visit', body_html: '<p>Welcome</p>', created_at: new Date('2026-10-08T09:00:00Z') };
@@ -111,6 +112,41 @@ test('outbox persists delivery, backs off retries, and respects another backend 
   } finally {
     t.mock.restoreAll(); await store.end(); await local.query(`DROP SCHEMA ${schema} CASCADE`); await local.end();
   }
+});
+
+test('outbox backs off database outages and resumes normal polling after recovery', async t => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const log = t.mock.method(logger, 'error', () => {});
+  const send = t.mock.method(deliveryModule, 'sendQueuedEmail', async () => {});
+  const connect = t.mock.method(db.pool, 'connect', async () => {
+    throw Object.assign(new Error('connect ENETUNREACH'), { code: 'ENETUNREACH' });
+  });
+  await processEmailOutbox();
+  assert.equal(connect.mock.callCount(), 1);
+  now += 2000;
+  await processEmailOutbox();
+  assert.equal(connect.mock.callCount(), 1, 'does not reconnect every two seconds during an outage');
+  now += 13000;
+  await processEmailOutbox();
+  assert.equal(connect.mock.callCount(), 2);
+  now += 15000;
+  await processEmailOutbox();
+  assert.equal(connect.mock.callCount(), 2, 'subsequent failures increase the delay');
+  now += 15000;
+  const release = t.mock.fn();
+  connect.mock.mockImplementation(async () => ({
+    query: async (sql: string) => ({ rows: sql.includes('pg_try_advisory_lock') ? [{ locked: true }] : [] }),
+    release,
+  }) as any);
+  await processEmailOutbox();
+  assert.equal(connect.mock.callCount(), 3);
+  assert.equal(release.mock.callCount(), 1);
+  now += 2000;
+  await processEmailOutbox();
+  assert.equal(connect.mock.callCount(), 4, 'successful recovery restores normal polling');
+  assert.equal(send.mock.callCount(), 0, 'database failures do not attempt delivery');
+  assert.equal(log.mock.callCount(), 2);
 });
 
 after(async () => { deliveryModule.closeEmailTransport(); await db.pool.end(); });

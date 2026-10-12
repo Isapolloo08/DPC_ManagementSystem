@@ -43,12 +43,16 @@ export function visitConfirmationEmail(data: VisitDetails, receipt: VisitReceipt
       <p><strong>${formatVisitDate(data.visit_date)}</strong><br>Sunday worship: 10:00 AM–11:30 AM (Philippine time)<br>Arrive around 9:30 AM so our greeters can help you settle in.</p>
       <p>Purok 2, Brgy. Cobangbang, Daet, Camarines Norte. In front of Bicol CATV, near Mary’s Bright Montessori.</p>
       <p><a href="https://maps.google.com/?q=14.108300,122.959450">Open directions to DPC</a></p>
+      ${managementUrl ? `<h2>Confirm or update your visit</h2>
+      <p>Open your personal visit link to confirm your attendance, cancel your visit, or choose another Sunday.</p>
+      <p><a href="${escapeHtml(managementUrl)}" style="display:inline-block;padding:12px 20px;background:#18303c;color:#ffffff;text-decoration:none;border-radius:6px">Confirm, cancel or reschedule your visit</a></p>
+      <p>If the button does not open, copy and paste this link into your browser:<br><a href="${escapeHtml(managementUrl)}" style="overflow-wrap:anywhere;word-break:break-all">${escapeHtml(managementUrl)}</a></p>
+      <p style="font-size:12px">Keep this personal link private; anyone with it can update your visit.</p>` : ''}
       <h2>When to expect a follow-up</h2>
       <p>${escapeHtml(followUp.message)}</p>
       <p>No registration is needed to attend. Come as you are; there’s a seat for you.</p>
       <p style="font-size:12px">Reference: ${escapeHtml(receipt.receipt_id)}</p>
       <p>Daet Presbyterian Church</p>
-      ${managementUrl?`<p><a href="${escapeHtml(managementUrl)}">Confirm, cancel or reschedule your visit</a></p><p>Keep this private link; anyone with it can update your visit.</p>`:''}
     </div>`,
   };
 }

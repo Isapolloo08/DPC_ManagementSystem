@@ -78,7 +78,7 @@ test('HTTP submission, PostgreSQL persistence, retries, staff permissions and au
     const auth = (id: number) => ({ Authorization: `Bearer ${jwt.sign({ id }, JWT_SECRET)}` });
     const post = async (body: object, reset = true) => { if (reset) visitSubmissionLimiter.resetKey('127.0.0.1'); return fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); };
     const payload = valid();
-    const first = await post(payload); assert.equal(first.status, 201); const receipt = await first.json() as { receipt_id: string; confirmation_email: string; follow_up: { date: string } };
+    const first = await post(payload); assert.equal(first.status, 201); const receipt = await first.json() as { receipt_id: string; management_url: string; confirmation_email: string; follow_up: { date: string } };
     assert.equal(delivery.mock.callCount(), 1, 'delivery starts immediately after a saved submission');
     assert.deepEqual(Object.keys(receipt).sort(), ['confirmation_email', 'follow_up', 'management_url', 'message', 'receipt_id']);
     assert.equal(receipt.confirmation_email, 'queued'); assert.equal(receipt.follow_up.date, '2099-01-03');
@@ -90,6 +90,10 @@ test('HTTP submission, PostgreSQL persistence, retries, staff permissions and au
     assert.equal(Number((await store.query('SELECT COUNT(*) FROM email_outbox')).rows[0].count), 2);
     const queued = (await store.query('SELECT * FROM email_outbox ORDER BY id LIMIT 1')).rows[0];
     assert.equal(queued.to_email, payload.email); assert.match(queued.body_html, /Saturday, January 3, 2099/);
+    const savedVisit = (await store.query('SELECT management_token FROM planned_visits WHERE receipt_id=$1', [receipt.receipt_id])).rows[0];
+    assert.ok(receipt.management_url.endsWith('/#/visit/' + savedVisit.management_token));
+    assert.ok(queued.body_html.includes(`href="${receipt.management_url}"`), 'email links to the recipient\'s saved visit');
+    assert.ok(queued.body_html.includes(`>${receipt.management_url}</a>`), 'email includes a copyable visit link');
     await store.query("UPDATE email_outbox SET status='sent' WHERE id=$1", [queued.id]);
     const statusRequest = (token: string = payload.submission_token) => fetch(base + '/confirmation-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submission_token: token, receipt_id: receipt.receipt_id }) });
     const emailStatus = await statusRequest(); assert.equal(emailStatus.status, 200);

@@ -13,9 +13,16 @@ const MAX_ATTEMPTS = 5;
 const WORKER_INTERVAL_MS = 2 * 1000;
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let processing = false;
+let workerFailures = 0;
+let nextWorkerAttemptAt = 0;
+
+function resetWorkerBackoff() {
+  workerFailures = 0;
+  nextWorkerAttemptAt = 0;
+}
 
 export async function processEmailOutbox(): Promise<void> {
-  if (processing) return;
+  if (processing || Date.now() < nextWorkerAttemptAt) return;
   processing = true;
   let client: PoolClient | undefined;
   let locked = false;
@@ -25,7 +32,7 @@ export async function processEmailOutbox(): Promise<void> {
     // A session lock keeps separate processes from sending the same message.
     const lock = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(4476995, 1) AS locked");
     locked = lock.rows[0].locked;
-    if (!locked) return;
+    if (!locked) { resetWorkerBackoff(); return; }
     const messages = (await client.query<EmailOutboxRow>(`
       SELECT id, notification_log_id, to_email, subject, body_html, attempts, created_at
       FROM email_outbox
@@ -33,7 +40,7 @@ export async function processEmailOutbox(): Promise<void> {
       ORDER BY (status = 'pending') DESC, next_attempt_at ASC, created_at ASC
       LIMIT 10
     `, [MAX_ATTEMPTS])).rows;
-    if (!messages.length) return;
+    if (!messages.length) { resetWorkerBackoff(); return; }
     const settings = await getNotificationEmailSettings();
     const configurationError = emailConfigurationError(settings);
     if (configurationError) {
@@ -53,6 +60,7 @@ export async function processEmailOutbox(): Promise<void> {
             next_attempt_at = CURRENT_TIMESTAMP + INTERVAL '1 minute'
         WHERE status IN ('pending', 'failed') AND attempts < $1
       `, [MAX_ATTEMPTS, configurationError]);
+      resetWorkerBackoff();
       return;
     }
 
@@ -91,8 +99,12 @@ export async function processEmailOutbox(): Promise<void> {
     for (let offset = 0; offset < messages.length; offset += 2) {
       await Promise.all(messages.slice(offset, offset + 2).map(deliver));
     }
+    resetWorkerBackoff();
   } catch (error) {
-    logger.error({ error }, "Email outbox worker failed");
+    const retryInMs = Math.min(15000 * 2 ** Math.min(workerFailures, 4), 120000);
+    workerFailures++;
+    nextWorkerAttemptAt = Date.now() + retryInMs;
+    logger.error({ error, retryInMs }, "Email outbox worker failed; backing off before retry");
   } finally {
     if (client) {
       let releaseError: Error | undefined;
