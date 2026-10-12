@@ -122,7 +122,7 @@ const cases = [
   { name: 'Audit inspection', path: 'pages/AuditPage.tsx', exportName: 'AuditPage', selector: '[data-guide="audit-inspect"]' },
   { name: 'Celebration editing', path: 'pages/SundayEventsCyclePage.tsx', exportName: 'SundayEventsCyclePage', button: 'Add Event / Celebration' },
   { name: 'Celebration scheduling', path: 'pages/SundayEventsCyclePage.tsx', exportName: 'SundayEventsCyclePage', selector: '[data-guide="celebration-sync"]' },
-  { name: 'Walk-in attendance', path: 'components/attendance/EventAttendanceCheckInView.tsx', exportName: 'EventAttendanceCheckInView', props: { initialEventId: 7 }, button: '+ Add Walk-In' },
+  { name: 'Walk-in attendance', path: 'components/attendance/EventAttendanceCheckInView.tsx', exportName: 'EventAttendanceCheckInView', props: { initialEventId: 7 }, button: 'Add member walk-in' },
 ];
 
 for (const item of cases) {
@@ -131,7 +131,7 @@ for (const item of cases) {
     const host = await stage(page, item.path, item.exportName, item.props);
     if (item.button) await host.getByRole('button', { name: item.button, exact: true }).click();
     if (item.selector) await host.locator(item.selector).first().click();
-    const overlay = page.locator('[data-viewport-overlay]');
+    const overlay = page.locator('[data-viewport-overlay], .ui-dialog-backdrop');
     await fullViewport(page, overlay);
     await host.evaluate(element => { element.scrollTop = 200; });
     await fullViewport(page, overlay);

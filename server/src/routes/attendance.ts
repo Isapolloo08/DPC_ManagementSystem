@@ -65,6 +65,7 @@ router.get("/roster", async (req: Request, res: Response) => {
              m.household_id, h.name as household_name, h.primary_contact_phone as parent_phone,
              a.id as attendance_id, a.checked_in_at, a.checked_out_at, a.security_code,
              a.notes as attendance_notes, u.name as checked_in_by_name,
+             source_event.title as reflected_from_event_title,
              CASE 
                WHEN a.id IS NOT NULL AND (a.notes ILIKE '%[ABSENT]%' OR a.notes ILIKE '%[EXCUSED]%') THEN 0
                WHEN a.id IS NOT NULL THEN 1 
@@ -81,6 +82,7 @@ router.get("/roster", async (req: Request, res: Response) => {
       LEFT JOIN ministries min ON m.ministry_id = min.id
       LEFT JOIN households h ON m.household_id = h.id
       LEFT JOIN attendance a ON a.member_id = m.id AND a.event_id IS NULL AND DATE(a.checked_in_at) = ${targetDate ? "$1" : "CURRENT_DATE"}
+      LEFT JOIN events source_event ON source_event.id = a.reflected_from_event_id
       LEFT JOIN users u ON a.checked_in_by = u.id
       WHERE m.status = 'active'
     `;

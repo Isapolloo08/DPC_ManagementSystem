@@ -1525,6 +1525,7 @@ export const CheckInPage: React.FC<{initialEventId?:number|null;onEventOpened?:(
 
                         {/* Status & Time */}
                         <td className="py-3.5 px-4">
+                          {item.reflected_from_event_title&&<p className="text-[12px] text-muted">Reflected from {item.reflected_from_event_title}</p>}
                           {isPresent ? (
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1.5">

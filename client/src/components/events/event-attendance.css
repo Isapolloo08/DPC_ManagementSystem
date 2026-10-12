@@ -1,0 +1,17 @@
+.event-attendance-directory { border: 1px solid var(--border); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+.event-attendance-directory-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 20px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.event-attendance-icon { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 14px; background: var(--status-info-bg); color: var(--status-info-text); }
+.event-attendance-table-wrap { max-width: 100%; overflow-x: auto; }
+.event-attendance-table { width: 100%; min-width: 860px; border-collapse: collapse; text-align: left; font-size: 12px; }
+.event-attendance-table th, .event-attendance-table td { padding: 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.event-attendance-table thead th { color: var(--text-muted); background: var(--surface-2); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 500; }
+.event-attendance-table th[scope="row"] { font-weight: 500; min-width: 220px; }
+.event-attendance-table td:last-child { width: 330px; }
+.event-attendance-table tbody tr[data-status="attended"] { background: color-mix(in srgb, var(--status-success-bg) 35%, var(--surface)); }
+.event-attendance-avatar { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 12px; background: var(--status-info-bg); color: var(--status-info-text); font-size: 11px; }
+.event-attendance-status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); background: var(--surface-2); white-space: nowrap; font-size: 11px; }
+.event-attendance-status--attended { color: var(--status-success-text); background: var(--status-success-bg); border-color: var(--status-success-border); }
+.event-attendance-status--absent { color: var(--status-danger-text); background: var(--status-danger-bg); border-color: var(--status-danger-border); }
+.event-attendance-status--excused { color: var(--status-warning-text); background: var(--status-warning-bg); border-color: var(--status-warning-border); }
+.event-attendance input[type="checkbox"] { accent-color: var(--navy); width: 16px; height: 16px; }
+@media(max-width:640px) { .event-attendance-directory-heading { padding: 16px; } }

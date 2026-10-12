@@ -1,5 +1,5 @@
 import type { FamilyPerson, FamilyRelationship } from "../../types";
-export const familyTreeCardSize = { width: 224, height: 216 };
+export const familyTreeCardSize = { width: 300, height: 156 };
 export function relativeLabel(
   person: number,
   focus: number,
@@ -93,10 +93,10 @@ export function familyTreeLayout(
     rows.get(rank)!.push(person);
   }
   const ordered = [...rows.entries()].sort((a, b) => a[0] - b[0]);
-  const columnWidth = familyTreeCardSize.width + 32;
-  const rowHeight = familyTreeCardSize.height + 64;
+  const columnWidth = familyTreeCardSize.width + 48;
+  const rowHeight = familyTreeCardSize.height + 96;
   const width = Math.max(
-    480,
+    820,
     ...ordered.map(([, row]) => row.length * columnWidth + 32),
   );
   const positions = new Map<number, { x: number; y: number }>();
@@ -105,7 +105,7 @@ export function familyTreeLayout(
     row.forEach((person, column) =>
       positions.set(person.id, {
         x: (width - row.length * columnWidth) / 2 + column * columnWidth + 16,
-        y: index * rowHeight + 24,
+        y: index * rowHeight + 48,
       }),
     );
   });

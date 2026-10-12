@@ -33,10 +33,16 @@ _Avoid_: Invitation response, RSVP
 A Cannot attend answer with the recipient's reason. It appears as Absent from RSVP until an attendance decision is recorded.
 
 **No-show**:
-An expected participant with no confirmed arrival when the organizer closes event attendance. A no-show is recorded as Absent with a reason.
+An event participant or invitation respondent with no confirmed arrival when the organizer finalizes remaining absences. A no-show is recorded as Absent with a reason, including a respondent who previously answered Not yet sure.
 
 **Closed event attendance**:
 Attendance finalized by the organizer after the scheduled event ends. Corrections require reopening it; reopening preserves previously recorded decisions.
+
+**Event attendance day**:
+A Philippine calendar date within the event’s scheduled dates on which staff may record or reset actual attendance. Reopening attendance does not extend these dates.
+
+**Sunday reflection**:
+An event’s optional link to Sunday Worship attendance. Confirmed member arrivals can also establish Sunday Present. The organizer may explicitly include remaining event participants in Sunday absences when finalizing. Existing Sunday decisions are preserved; guests remain event-only.
 
 ## Online-to-local submissions
 

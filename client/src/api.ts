@@ -1177,14 +1177,16 @@ export const api = {
   // Event Attendance Roster & Marking
   getEventAttendanceRoster: (eventId: number) =>
     request<EventAttendanceRosterResponse>(`/events/${eventId}/attendance-roster`),
-  markEventParticipant: (eventId:number,body:{member_id?:number;response_id?:number;status:string;reason?:string}) => request(`/events/${eventId}/participation/mark`,{method:'POST',body:JSON.stringify(body)},0),
-  closeEventAttendance: (eventId:number,reopen=false) => request<{closed:boolean;no_shows:number;declined:number}>(`/events/${eventId}/participation/${reopen?'reopen':'close'}`,{method:'POST',body:'{}'},0),
+  setEventSundayReflection: (eventId:number,sunday_service_date:string|null) => request(`/events/${eventId}/participation/sunday-reflection`,{method:'PUT',body:JSON.stringify({sunday_service_date})}),
+  markEventParticipant: (eventId:number,body:{member_id?:number;response_id?:number;status:string;reason?:string;expected_sunday_service_date?:string|null}) => request(`/events/${eventId}/participation/mark`,{method:'POST',body:JSON.stringify(body)},0),
+  previewEventClose: (eventId:number,reflectSunday=false) => request<import('./types').EventClosePreview>(`/events/${eventId}/participation/close-preview?sunday=${reflectSunday?'1':'0'}`),
+  closeEventAttendance: (eventId:number,reopen=false,options:{reflect_sunday_absences?:boolean;preview_token?:string;expected_sunday_service_date?:string|null}={}) => request<{closed:boolean;no_shows:number;declined:number;sunday_absent?:number;preserved_sunday?:number}>(`/events/${eventId}/participation/${reopen?'reopen':'close'}`,{method:'POST',body:JSON.stringify(options)},0),
   markEventAttendance: (eventId: number, data: { member_ids?: number[]; member_id?: number; status?: string; notes?: string; reason?: string }) =>
     request<{ success: boolean; message: string; count: number; status: string }>(`/events/${eventId}/attendance/mark`, {
       method: "POST",
       body: JSON.stringify(data)
     }),
-  batchMarkEventAttendance: (eventId: number, data: { present_ids?: number[]; absent_ids?: number[]; notes?: string }) =>
+  batchMarkEventAttendance: (eventId: number, data: { present_ids?: number[]; absent_ids?: number[]; notes?: string; expected_sunday_service_date?:string|null }) =>
     request<{ success: boolean; message: string; stats?: { present: number; absent: number } }>(`/events/${eventId}/attendance/batch-mark`, {
       method: "POST",
       body: JSON.stringify(data)

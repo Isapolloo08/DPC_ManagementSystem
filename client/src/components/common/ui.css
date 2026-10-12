@@ -53,6 +53,9 @@
   .page-header {
     position: relative;
     isolation: isolate;
+    /* Header popovers must clear sibling cards, sticky rows and their entrance animations.
+       Navigation (50) and portalled dialogs/menus (100+) remain above this layer. */
+    z-index: 30;
     background-color: var(--ui-surface);
     background-image: radial-gradient(ellipse at top right, rgb(var(--surface-indigo-100) / .5), transparent 65%);
     color: var(--ui-text);

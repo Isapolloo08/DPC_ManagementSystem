@@ -359,6 +359,7 @@ export interface AttendanceRosterItem {
   checked_out_at: string | null;
   security_code: string | null;
   attendance_notes: string | null;
+  reflected_from_event_title?: string | null;
   checked_in_by_name?: string | null;
   is_present: number;
   attendance_status?: "present" | "absent" | "excused" | "checked_out" | "unmarked";
@@ -1271,6 +1272,8 @@ export interface EventAttendeeItem {
 }
 
 export interface EventAttendanceRosterResponse {
+  attendance_window?:{open:boolean;first_date:string;last_date:string;today:string;message:string};
+  can_manage_sunday_reflection?:boolean;
   attendance_closed_at?:string|null;
   guests?: {response_id:number;name:string;answer:'yes'|'no'|'maybe';invitation_reason:string;status:string;reason:string;attendance_confirmed:boolean;recorded_at:string|null}[];
   event: {
@@ -1279,6 +1282,7 @@ export interface EventAttendanceRosterResponse {
     start_time: string;
     end_time: string;
     location?: string | null;
+    sunday_service_date?: string | null;
   };
   summary: {
     total_registered: number;
@@ -1288,4 +1292,13 @@ export interface EventAttendanceRosterResponse {
     total_active_members: number;
   };
   attendees: EventAttendeeItem[];
+}
+
+export interface EventClosePreview {
+  event_members:{member_id:number;name:string;answer:string|null;reason:string|null}[];
+  event_guests:{response_id:number;name:string;answer:string;reason:string|null}[];
+  sunday_members:{member_id:number;name:string}[];
+  preserved_sunday:number;
+  sunday_service_date:string|null;
+  preview_token:string;
 }

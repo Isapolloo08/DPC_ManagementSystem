@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from 'node:fs/promises';
 import {
   familyTreeLayout,
   relativeLabel,
@@ -291,6 +292,93 @@ test('household tree starts local and optionally includes linked parents',async(
   await expect(dialog.getByRole('button').filter({hasText:'Papa Santos'})).toHaveCount(0);
   await expect(summary).not.toContainText('Parents household');
 });
+test('lineage actions export the full tree, prepare a child and open a real member profile',async({page})=>{
+  const state=await prepare(page);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  const dialog=await openTree(page);
+  await expect(dialog.locator('[data-family-person="3"]')).toContainText('Age: 41 yrs');
+  expect(await dialog.locator('.family-tree-node').first().evaluate(el=>getComputedStyle(el).animationName)).toBe('family-node-enter');
+  await page.emulateMedia({reducedMotion:'reduce'});
+  expect(await dialog.locator('.family-tree-node').first().evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
+  const downloaded=page.waitForEvent('download');
+  await dialog.getByRole('button',{name:'Export Tree PDF',exact:true}).click();
+  const file=await downloaded;
+  expect(file.suggestedFilename()).toBe('Adult household-family-tree.pdf');
+  const bytes=await readFile((await file.path())!);
+  expect(bytes.subarray(0,4).toString()).toBe('%PDF');
+  for(const person of people)expect(bytes.toString('latin1')).toContain(person.name);
+  await dialog.getByRole('button',{name:/Add Child \/ Dependent/}).click();
+  await expect(dialog.getByRole('combobox',{name:'Add their',exact:true})).toHaveValue('child');
+  await dialog.getByRole('button',{name:'View profile of Adult Santos',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'Adult Santos',exact:true})).toBeVisible();
+  expect(state.writes).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+test('compact couple and child view keeps the add-child tile inside the dotted canvas',async({page},info)=>{
+  await prepare(page);
+  await page.route('**/api/family/households/2/tree**',route=>route.fulfill({json:{
+    household:{id:2,name:'Adult household'},
+    people:people.slice(0,3).map(person=>({...person,household_id:2,household_name:'Adult household'})),
+    relationships:edges.filter(edge=>edge.to_person_id<=3),
+    legacy_suggestions:{family_members:[
+      {name:'Papa Santos',member_id:1,relationship:'Husband'},
+      {name:'Mama Santos',member_id:2,relationship:'Wife'},
+      {name:'Adult Santos',member_id:3,relationship:'Child'},
+    ]},
+  }}));
+  const dialog=await openTree(page,false);
+  const canvas=dialog.getByLabel('Scrollable family tree',{exact:true});
+  await expect(canvas.getByRole('button',{name:/Add Child \/ Dependent/})).toBeVisible();
+  expect(await canvas.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  await dialog.screenshot({path:info.outputPath('family-tree-reference-preview.png')});
+  await canvas.getByRole('button',{name:/Add Child \/ Dependent/}).click();
+  await expect(dialog.getByRole('combobox',{name:'Add their',exact:true})).toHaveValue('child');
+});
+test('canvas pans by dragging and Ctrl-wheel zoom stays anchored to the cursor',async({page})=>{
+  const state=await prepare(page);
+  const dialog=await openTree(page);
+  const canvas=dialog.getByLabel('Scrollable family tree',{exact:true});
+  const stage=canvas.locator('.family-tree-stage');
+  const box=(await canvas.boundingBox())!;
+  const before=(await stage.boundingBox())!;
+  await page.mouse.move(box.x+25,box.y+15);
+  await page.mouse.down();
+  await page.mouse.move(box.x+125,box.y+85,{steps:8});
+  await expect(canvas).toHaveAttribute('data-panning','true');
+  await page.mouse.up();
+  const moved=(await stage.boundingBox())!;
+  expect(moved.x-before.x).toBeCloseTo(100,0);
+  expect(moved.y-before.y).toBeCloseTo(70,0);
+  await expect(canvas).not.toHaveAttribute('data-panning','true');
+  const cursor={x:box.x+350,y:box.y+230};
+  const world={x:cursor.x-moved.x,y:cursor.y-moved.y};
+  await page.mouse.move(cursor.x,cursor.y);
+  await page.keyboard.down('Control');
+  await page.mouse.wheel(0,-100);
+  await expect(dialog.getByText('122%',{exact:true})).toBeVisible();
+  const enlarged=(await stage.boundingBox())!;
+  expect(enlarged.x+world.x*1.22).toBeCloseTo(cursor.x,0);
+  expect(enlarged.y+world.y*1.22).toBeCloseTo(cursor.y,0);
+  await page.mouse.wheel(0,100);
+  await expect(dialog.getByText('100%',{exact:true})).toBeVisible();
+  await page.keyboard.up('Control');
+  await dialog.getByRole('button',{name:'Reset view',exact:true}).click();
+  const reset=(await stage.boundingBox())!;
+  expect(reset.x).toBeCloseTo(before.x,0);expect(reset.y).toBeCloseTo(before.y,0);
+  // Dragging from a card pans the canvas without selecting that person.
+  const card=(await dialog.locator('[data-family-person="1"]').boundingBox())!;
+  await page.mouse.move(card.x+100,card.y+65);
+  await page.mouse.down();
+  await page.mouse.move(card.x+160,card.y+100,{steps:6});
+  await page.mouse.up();
+  await expect(dialog.locator('[data-family-person="1"]')).toHaveAttribute('aria-pressed','false');
+  await dialog.getByRole('button',{name:'Reset view',exact:true}).click();
+  // A normal card click still selects the person after a drag gesture.
+  await dialog.locator('[data-family-person="1"]').click();
+  await expect(dialog.locator('[data-family-person="1"]')).toHaveAttribute('aria-pressed','true');
+  expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
+});
 for (const theme of ["light", "dark"])
   test(`tree is readable, fullscreen and responsive (${theme})`, async ({
     page,
@@ -331,7 +419,7 @@ for (const theme of ["light", "dark"])
     await dialog.getByRole("button", { name: "Close", exact: true }).focus();
     await page.keyboard.press("Tab");
     await expect(
-      dialog.getByRole("button", { name: "Close family tree" }),
+      dialog.getByRole("button", { name: "Print", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);

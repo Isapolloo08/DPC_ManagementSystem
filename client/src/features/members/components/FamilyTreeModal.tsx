@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   GitBranch,
+  Heart,
+  Info,
+  Download,
+  Printer,
+  ArrowRight,
   House,
   List,
   Minus,
@@ -25,6 +30,9 @@ import { ViewportOverlay } from "../../../components/common/ViewportOverlay";
 import { useDialogFocus } from "../../../hooks/useDialogFocus";
 import { familyTreeCardSize, familyTreeLayout, relativeLabel } from "../familyTreeLayout";
 import { useSocketEvent } from "../../../socket";
+import { exportFamilyTree } from '../exportFamilyTree';
+import { useFamilyTreeNavigation } from '../useFamilyTreeNavigation';
+import './family-tree.css';
 
 const edgeLabel = (edge: FamilyRelationship) =>
   edge.kind === "parent"
@@ -37,11 +45,13 @@ export function FamilyTreeModal({
   members,
   households,
   onClose,
+  onViewMember,
 }: {
   household: Household;
   members: Member[];
   households: Household[];
   onClose: () => void;
+  onViewMember?: (member: Member) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null),
     canvas = useRef<HTMLDivElement>(null);
@@ -51,7 +61,6 @@ export function FamilyTreeModal({
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const [attempt, setAttempt] = useState(0),
-    [zoom, setZoom] = useState(1),
     [list, setList] = useState(false),
     [manage, setManage] = useState(false);
   const [extended, setExtended] = useState(false);
@@ -141,6 +150,12 @@ export function FamilyTreeModal({
   );
   const disconnected = people.filter((p) => !connected.includes(p));
   const layout = familyTreeLayout(connected, edges);
+  const navigation = useFamilyTreeNavigation(canvas, !list && connected.length > 0);
+  const { zoom, pan, reset } = navigation;
+  const lastRowY = Math.max(0, ...Array.from(layout.positions.values(), pos=>pos.y));
+  const lastRow = Array.from(layout.positions.values()).filter(pos=>pos.y===lastRowY);
+  const addChildPosition = lastRow.length===1 && layout.width-lastRow[0].x-familyTreeCardSize.width>=220
+    ? {x:lastRow[0].x+familyTreeCardSize.width+28,y:lastRowY} : null;
   const activePerson = people.find((p) => p.id === selected);
   const legacyNames = [
     data?.legacy_suggestions?.father_name,
@@ -153,11 +168,17 @@ export function FamilyTreeModal({
   const pendingNames = [...new Set(legacyNames)].filter(
     (name) => !people.some((person) => person.name === name),
   );
-  const reset = () => {
-    setZoom(1);
-    canvas.current?.scrollTo({ left: 0, top: 0 });
+  const exportTree = async (print = false) => {
+    const printWindow = print ? window.open('', '_blank') : null;
+    if(print && !printWindow) {setError('Allow pop-ups to open the printable family tree.');return;}
+    if(printWindow)printWindow.opener=null;
+    setBusy(true);
+    try { await exportFamilyTree(household.name, people, edges, printWindow); }
+    catch { printWindow?.close();setError('Could not export the family tree. Please try again.'); }
+    finally { setBusy(false); }
   };
   const personCard = (person: FamilyPerson) => {
+    const member = members.find(m => m.id === person.member_id);
     const roles = [
       ...new Set(
         edges
@@ -178,7 +199,9 @@ export function FamilyTreeModal({
           ),
       ),
     ];
+    const role = recordedHouseholdRole(person) || relativeLabel(person.id, selected, edges) || roles.join(" · ") || "Relationship not recorded";
     return (
+      <div className="family-card-shell">
       <button
         type="button"
         disabled={busy}
@@ -193,14 +216,17 @@ export function FamilyTreeModal({
         data-family-person={person.id}
         data-household-id={person.household_id ?? "none"}
         style={{ minHeight: familyTreeCardSize.height }}
-        className={`w-full h-full flex flex-col text-left p-3 rounded-2xl bg-white border-2 ${selected === person.id ? "border-indigo-400 ring-2 ring-indigo-200" : person.household_id === household.id ? "border-indigo-200" : person.household_id === null ? "border-gray-200" : "border-amber-200"} text-charcoal hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2`}
+        className={`family-person-card ${selected === person.id ? 'is-selected' : ''} ${person.household_id !== household.id ? 'is-relative' : ''}`}
       >
-        <span className={`inline-flex self-start items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold ${householdStyle(person.household_id)}`}>
+        <span className="family-card-top">
+        <span title={householdGroups.find(group => group.id === person.household_id)?.name} className={`family-home-badge ${householdStyle(person.household_id)}`}>
           <House aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />
-          {householdLabel(person.household_id)}
+          <span>{householdLabel(person.household_id)} · {householdGroups.find(group => group.id === person.household_id)?.name}</span>
         </span>
-        <div className="flex items-center gap-2 mt-2 min-h-10">
-          <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 shrink-0 overflow-hidden flex items-center justify-center">
+        <span className={`family-role ${roles.includes('Child') || roles.includes('Dependent') ? 'is-child' : ''}`}>{role}</span>
+        </span>
+        <span className="family-card-person">
+          <span className={`family-avatar family-avatar--${person.id % 4}`}>
             {person.photo_url ? (
               <img
                 src={person.photo_url}
@@ -216,29 +242,22 @@ export function FamilyTreeModal({
                   .join("")}
               </span>
             )}
-          </div>
+          {member?.status === 'active' && <span className="family-active-dot" title="Active member" />}
+          </span>
+          <span className="family-card-identity">
           <span
             title={person.name}
             className="text-sm font-semibold break-words min-w-0 line-clamp-2"
           >
             {person.name}
           </span>
-        </div>
-        <p className="text-xs text-indigo-700 capitalize mt-2 truncate w-full">
-          {recordedHouseholdRole(person) || relativeLabel(person.id, selected, edges) ||
-            roles.join(" · ") ||
-            "Relationship not recorded"}
-        </p>
-        <p
-          className="text-sm font-semibold mt-1 break-words line-clamp-2"
-          title={householdGroups.find(group => group.id === person.household_id)?.name}
-        >
-          {householdGroups.find(group => group.id === person.household_id)?.name}
-        </p>
-        <p className="text-xs text-muted mt-auto pt-2">
-          {person.member_id ? "Registered member" : "Unregistered relative"}
-        </p>
+          <span className="family-member-caption">{member?.baptism_status === 'baptized' ? 'Baptized member' : person.member_id ? 'Registered member' : 'Unregistered relative'}{member?.ministry_name ? ` · ${member.ministry_name}` : ''}</span>
+          </span>
+        </span>
+        <span className="family-card-bottom">{member?.age !== undefined ? `Age: ${member.age} yrs` : person.member_id ? 'Member record linked' : 'Family connection'}</span>
       </button>
+      {member && onViewMember && <button type="button" className="family-profile-link" disabled={busy} onClick={()=>onViewMember(member)} aria-label={`View profile of ${person.name}`}>View Profile <ArrowRight size={12} aria-hidden="true" /></button>}
+      </div>
     );
   };
   const save = () => {
@@ -275,6 +294,7 @@ export function FamilyTreeModal({
     setRelation(edge.kind === "parent" ? edge.parent_role! : edge.kind);
     setManage(true);
   };
+  const addChildCard = () => <button type="button" disabled={busy} className="family-add-child" onClick={()=>{setManage(true);setEditing(undefined);setRelation('child');setOther('');setName('');}}><span><Plus size={20} aria-hidden="true" /></span><strong>Add Child / Dependent</strong><small>Link to the selected family member</small></button>;
   return (
     <ViewportOverlay className="z-[120] bg-slate-950/70 backdrop-blur-sm p-3 sm:p-5 flex items-center justify-center">
       <div
@@ -284,24 +304,27 @@ export function FamilyTreeModal({
         aria-modal="true"
         aria-labelledby="family-tree-title"
         data-modal-panel
-        className="bg-white text-charcoal rounded-3xl border border-indigo-100 shadow-2xl w-full max-w-6xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden"
+        className="family-tree-dialog bg-white text-charcoal rounded-3xl border border-indigo-100 shadow-2xl w-full max-w-6xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden"
       >
         <header
           data-modal-header
           className="p-4 sm:p-5 border-b border-gray-200 flex items-center gap-3 shrink-0"
         >
-          <GitBranch aria-hidden="true" className="w-6 h-6 text-indigo-700" />
+          <span className="family-tree-brand"><GitBranch aria-hidden="true" className="w-6 h-6" /></span>
           <div className="flex-1 min-w-0">
             <h2
               id="family-tree-title"
               className="font-semibold text-lg text-indigo-950"
             >
               Family Tree
+              <span className="family-title-subtitle" aria-hidden="true"> Lineage</span>
+              <span className="family-title-badge" aria-hidden="true">{household.name} ({people.filter(p=>p.household_id===household.id).length} members)</span>
             </h2>
             <p className="ui-help break-words">
               {household.name} · {extended ? "Linked family across households" : "This household only"}
             </p>
           </div>
+          <Button size="sm" variant="ghost" disabled={busy || !people.length} onClick={()=>void exportTree(true)}><Printer className="w-4 h-4" aria-hidden="true" />Print</Button>
           <Button
             variant="ghost"
             size="icon"
@@ -312,15 +335,19 @@ export function FamilyTreeModal({
             <X aria-hidden="true" className="w-5 h-5" />
           </Button>
         </header>
-        <div className="p-4 border-b border-gray-200 flex flex-wrap gap-2 shrink-0">
+        <div className="family-tree-toolbar p-4 border-b border-gray-200 flex flex-wrap gap-2 shrink-0">
           <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-sm cursor-pointer">
-            <input type="checkbox" checked={extended} disabled={busy} onChange={event => {setExtended(event.target.checked);setZoom(1);setEditing(undefined);setRemove(null);}} className="accent-indigo-700 w-4 h-4" />
+            <input type="checkbox" checked={extended} disabled={busy} onChange={event => {setExtended(event.target.checked);reset();setEditing(undefined);setRemove(null);}} className="accent-indigo-700 w-4 h-4" />
             Include linked parents & relatives
           </label>
-          <Button aria-pressed={list} onClick={() => setList(!list)}>
+          <div className="family-view-switch">
+          <Button aria-pressed={!list} onClick={()=>setList(false)}><GitBranch className="w-4 h-4" aria-hidden="true" />Tree View</Button>
+          <Button aria-label="List view" aria-pressed={list} onClick={() => setList(true)}>
             <List aria-hidden="true" className="w-4 h-4" />
-            {list ? "Show tree" : "List view"}
+            List Roster
           </Button>
+          </div>
+          <span className="family-toolbar-spacer" />
           <Button aria-pressed={manage} onClick={() => setManage(!manage)}>
             <Settings2 aria-hidden="true" className="w-4 h-4" />
             Manage Relationships
@@ -330,8 +357,8 @@ export function FamilyTreeModal({
               <Button
                 size="icon"
                 aria-label="Zoom out"
-                disabled={zoom <= 0.5}
-                onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
+                disabled={zoom <= 0.4}
+                onClick={() => navigation.zoomBy(-0.1)}
               >
                 <Minus aria-hidden="true" className="w-4 h-4" />
               </Button>
@@ -341,19 +368,18 @@ export function FamilyTreeModal({
               <Button
                 size="icon"
                 aria-label="Zoom in"
-                disabled={zoom >= 1.5}
-                onClick={() => setZoom((z) => Math.min(1.5, z + 0.1))}
+                disabled={zoom >= 2.5}
+                onClick={() => navigation.zoomBy(0.1)}
               >
                 <Plus aria-hidden="true" className="w-4 h-4" />
               </Button>
-              <Button onClick={reset}>
+              <Button size="icon" aria-label="Reset view" title="Reset view" onClick={reset}>
                 <RotateCcw aria-hidden="true" className="w-4 h-4" />
-                Reset view
               </Button>
             </>
           )}
         </div>
-        <div data-modal-body className="min-h-0 overflow-y-auto p-4 space-y-4">
+        <div data-modal-body className="family-tree-body min-h-0 overflow-y-auto p-4 space-y-4">
           {error && (
             <div
               role="alert"
@@ -389,14 +415,14 @@ export function FamilyTreeModal({
                 className="min-w-0 space-y-4"
                 aria-label="Family connections"
               >
-                <section aria-label="Households in this view" className="space-y-2">
+                <section aria-label="Households in this view" className="family-household-legend">
                   <div>
                     <h3 className="text-sm font-semibold text-indigo-950">Households in this view</h3>
-                    <p className="ui-help">Each person’s badge shows where they belong. Family lines connect relatives across households.</p>
+                    <p className="ui-help">Badges show resident households & family ties.</p>
                   </div>
                   <ul className="flex flex-wrap gap-2">
                     {householdGroups.map(group => (
-                      <li key={group.id ?? "none"} className={`flex items-start gap-2 rounded-xl border px-3 py-2 min-w-0 max-w-full ${householdStyle(group.id)}`}>
+                      <li key={group.id ?? "none"} className={`family-legend-badge flex items-start gap-2 rounded-xl border px-3 py-2 min-w-0 max-w-full ${householdStyle(group.id)}`}>
                         <House aria-hidden="true" className="w-4 h-4 mt-0.5 shrink-0" />
                         <div className="min-w-0">
                           <p className="text-xs">{householdLabel(group.id)} · {group.people.length} {group.people.length === 1 ? "person" : "people"}</p>
@@ -405,6 +431,7 @@ export function FamilyTreeModal({
                       </li>
                     ))}
                   </ul>
+                  <span className="family-status-key"><span className="family-status-dot" />Active member</span>
                 </section>
                 {!connected.length && (
                   <div className="p-6 border border-gray-200 rounded-2xl text-center">
@@ -445,7 +472,9 @@ export function FamilyTreeModal({
                       ref={canvas}
                       tabIndex={0}
                       aria-label="Scrollable family tree"
-                      className="overflow-auto max-h-[55vh] bg-gray-50 border border-gray-200 rounded-2xl"
+                      {...navigation.handlers}
+                      data-panning={navigation.dragging || undefined}
+                      className="family-tree-canvas overflow-auto max-h-[55vh] bg-gray-50 border border-gray-200 rounded-2xl"
                     >
                       <div
                         style={{
@@ -455,11 +484,11 @@ export function FamilyTreeModal({
                         }}
                       >
                         <div
-                          className="relative"
+                          className="family-tree-stage relative"
                           style={{
                             width: layout.width,
                             height: layout.height,
-                            transform: `scale(${zoom})`,
+                            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                             transformOrigin: "top left",
                           }}
                         >
@@ -477,16 +506,20 @@ export function FamilyTreeModal({
                               if (!a || !b) return null;
                               const spouse = edge.kind === "spouse";
                               const x1 = a.x + familyTreeCardSize.width / 2,
-                                y1 = a.y + (spouse ? familyTreeCardSize.height / 2 : familyTreeCardSize.height),
+                                y1 = a.y + familyTreeCardSize.height,
                                 x2 = b.x + familyTreeCardSize.width / 2,
-                                y2 = b.y + (spouse ? familyTreeCardSize.height / 2 : 0);
+                                y2 = b.y + (spouse ? familyTreeCardSize.height : 0);
+                              // Share the couple junction only when both spouses are recorded parents.
+                              const partner = !spouse && edge.kind === 'parent' ? edges.find(e=>e.kind==='spouse' && [e.from_person_id,e.to_person_id].includes(edge.from_person_id) && edges.some(parent=>parent.kind==='parent' && parent.to_person_id===edge.to_person_id && parent.from_person_id===(e.from_person_id===edge.from_person_id?e.to_person_id:e.from_person_id))) : undefined;
+                              const partnerPos = partner ? layout.positions.get(partner.from_person_id===edge.from_person_id?partner.to_person_id:partner.from_person_id) : undefined;
+                              const junctionX = partnerPos && partnerPos.y===a.y ? (x1+partnerPos.x+familyTreeCardSize.width/2)/2 : x1;
                               return (
+                                <g key={edge.id} className="family-connection">
                                 <path
-                                  key={edge.id}
                                   d={
                                     spouse
-                                      ? `M ${x1} ${y1} L ${x2} ${y2}`
-                                      : `M ${x1} ${y1} V ${(y1 + y2) / 2} H ${x2} V ${y2}`
+                                      ? `M ${x1} ${y1} V ${y1+40} H ${x2} V ${y2}`
+                                      : `M ${junctionX} ${partnerPos && partnerPos.y===a.y ? y1+40 : y1} V ${y1+64} H ${x2} V ${y2}`
                                   }
                                   fill="none"
                                   stroke="currentColor"
@@ -495,6 +528,8 @@ export function FamilyTreeModal({
                                     edge.kind === "guardian" ? "6 4" : undefined
                                   }
                                 />
+                                {spouse && <g transform={`translate(${(x1+x2)/2},${y1+40})`}><circle r="13" className="family-couple-junction" /><Heart x="-6" y="-6" width="12" height="12" fill="currentColor" strokeWidth="0" /></g>}
+                                </g>
                               );
                             })}
                           </svg>
@@ -503,7 +538,7 @@ export function FamilyTreeModal({
                             return (
                               <div
                                 key={person.id}
-                                className="absolute"
+                                className="family-tree-node absolute"
                                 style={{
                                   left: pos.x,
                                   top: pos.y,
@@ -515,11 +550,13 @@ export function FamilyTreeModal({
                               </div>
                             );
                           })}
+                          {addChildPosition && <div className="family-add-node absolute" style={{left:addChildPosition.x,top:addChildPosition.y,width:190,height:familyTreeCardSize.height}}>{addChildCard()}</div>}
                         </div>
                       </div>
                     </div>
                   )
                 )}
+                {!list && people.length>0 && !addChildPosition && addChildCard()}
                 {(list || manage) && edges.length > 0 && (
                   <ul
                     className="space-y-2 text-xs"
@@ -613,7 +650,7 @@ export function FamilyTreeModal({
               {manage && (
                 <section
                   aria-label="Manage family relationships"
-                  className="space-y-4 p-4 border border-indigo-100 rounded-2xl self-start"
+                  className="family-manager space-y-4 p-4 border border-indigo-100 rounded-2xl self-start"
                 >
                   <h3 className="font-semibold text-indigo-950 flex items-center gap-2">
                     <UserRound aria-hidden="true" className="w-4 h-4" />
@@ -844,8 +881,10 @@ export function FamilyTreeModal({
         </div>
         <footer
           data-modal-footer
-          className="p-4 border-t border-gray-200 flex justify-end shrink-0"
+          className="family-tree-footer p-4 border-t border-gray-200 flex justify-end shrink-0"
         >
+          <p className="family-tree-tip"><Info size={14} aria-hidden="true" /><span>Drag to move · Ctrl + scroll to zoom · Select a member to explore relationships.</span></p>
+          <Button variant="primary" disabled={busy || !people.length} onClick={()=>void exportTree()}><Download className="w-4 h-4" aria-hidden="true" />Export Tree PDF</Button>
           <Button disabled={busy} onClick={onClose}>
             Close
           </Button>

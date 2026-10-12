@@ -1,6 +1,8 @@
 import {useEffect,useState} from 'react';
 import {api} from '../../api';
 import {Button} from '../common/Button';
+import {PageHeader} from '../common/PageHeader';
+import {CalendarDays} from 'lucide-react';
 import {EventAttendancePanel} from '../events/EventAttendancePanel';
 import type {EventItem} from '../../types';
 import '../events/event-invitations.css';
@@ -13,10 +15,10 @@ export function EventAttendanceCheckInView({initialEventId}:{initialEventId?:num
   useEffect(()=>{if(initialEventId)setSelected(initialEventId);},[initialEventId]);
   const event=events.find(e=>e.id===selected);
   return <div className="space-y-5">
-    <div><h1 className="text-xl font-semibold">Special event attendance</h1><p className="text-sm text-muted">Check actual arrivals for an event. Invitation acceptance never marks anyone Present.</p></div>
+    <PageHeader icon={<CalendarDays/>} title="Special Event Attendance" description="Track event arrivals, record absences and excuses, and manage the attendance roster." actions={loading?<p role="status">Loading events…</p>:<label className="ui-field">Select special event<select className="ui-input" value={selected||''} onChange={e=>setSelected(e.target.value?Number(e.target.value):null)}><option value="">Choose an event</option>{events.map(e=><option value={e.id} key={e.id}>{e.title} · {new Date(e.start_time).toLocaleDateString()}</option>)}</select></label>}>
+      {event&&<p className="text-sm text-muted">{new Date(event.start_time).toLocaleString()} – {new Date(event.end_time).toLocaleString()} · {event.location||'Location to follow'}</p>}
+    </PageHeader>
     {error&&<p role="alert" className="event-invitations-error">{error}<Button onClick={()=>void load()}>Retry events</Button></p>}
-    {loading?<p role="status">Loading events…</p>:<label className="ui-field">Select special event<select className="ui-input" value={selected||''} onChange={e=>setSelected(e.target.value?Number(e.target.value):null)}><option value="">Choose an event</option>{events.map(e=><option value={e.id} key={e.id}>{e.title} · {new Date(e.start_time).toLocaleDateString()}</option>)}</select></label>}
-    {event&&<p className="text-sm text-muted">{new Date(event.start_time).toLocaleString()} – {new Date(event.end_time).toLocaleString()} · {event.location||'Location to follow'}</p>}
     {selected&&!loading&&<EventAttendancePanel key={selected} eventId={selected}/>}
   </div>;
 }

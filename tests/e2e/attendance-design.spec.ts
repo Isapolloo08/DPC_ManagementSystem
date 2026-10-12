@@ -48,7 +48,7 @@ async function prepare(page: Page, theme = 'light') {
     else if (path.endsWith('/members/baptism-candidates/qualified')) json = { candidates: [], counts: {} };
     else if (path.endsWith('/attendance/roster')) json = roster;
     else if (path.endsWith('/events')) json = [{ id: 1, title: 'Church Anniversary', start_time: '2026-10-11T10:00:00+08:00', end_time: '2026-10-11T12:00:00+08:00', location: 'DPC' }];
-    else if (path.endsWith('/events/1/attendance-roster')) json = { attendees: roster.map(item => ({ ...item, status: 'registered' })) };
+    else if (path.endsWith('/events/1/attendance-roster')) json = { event:{id:1,title:'Church Anniversary',start_time:'2026-10-11T10:00:00+08:00',end_time:'2026-10-11T12:00:00+08:00',location:'DPC'}, guests:[], attendees: roster.map(item => ({ ...item, status: 'registered' })) };
     else if (path.endsWith('/attendance-log')) {
       if (state.failLog) return route.fulfill({ status: 503, json: { error: 'Attendance history unavailable' } });
       const status = new URL(route.request().url()).searchParams.get('status') || 'present';
@@ -71,6 +71,44 @@ async function navigate(page: Page, title: string) {
 async function noOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
+
+test('Sunday roster shows the source of reflected event attendance',async({page})=>{
+  await prepare(page);
+  await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[{...roster[0],attendance_id:42,checked_in_at:'2026-10-11T01:30:00Z',is_present:1,attendance_status:'present',attendance_notes:'Sunday Divine Worship',reflected_from_event_title:'Sunday Fellowship'}]}));
+  await navigate(page,'Attendance Live');
+  await expect(page.getByText('Reflected from Sunday Fellowship',{exact:true})).toBeVisible();
+});
+
+for(const theme of ['light','dark']) for(const mobile of [false,true])
+test(`Sunday service dropdown stays above summary cards and ministry chips (${theme}, ${mobile?'mobile':'desktop'})`,async({page})=>{
+  if(mobile)await page.setViewportSize({width:390,height:844});
+  await prepare(page,theme);
+  await navigate(page,'Attendance Live');
+  await expect(page.getByLabel('Attendance summary',{exact:true})).toBeVisible();
+  await page.locator('[data-guide="attendance-service"]').click();
+  const popup=page.getByText('Recent Past Services',{exact:true}).locator('..').locator('..');
+  const covered=await popup.evaluate(element=>{
+    const rect=element.getBoundingClientRect();
+    const points=[];
+    for(let y=rect.top+10;y<Math.min(rect.bottom,innerHeight)-10;y+=20){
+      const x=rect.left+rect.width/2;
+      const top=document.elementFromPoint(x,y);
+      if(top&&!element.contains(top))points.push(top.className);
+    }
+    return points;
+  });
+  expect(covered,'every visible part of the dropdown must receive clicks above page content').toEqual([]);
+  await page.locator('[data-guide="attendance-service"]').click();
+  await expect(page.getByText('Recent Past Services',{exact:true})).toHaveCount(0);
+  // Also check while normal entry animations are enabled.
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.locator('[data-guide="attendance-service"]').click();
+  expect(await popup.evaluate(element=>{
+    const box=element.getBoundingClientRect();
+    const top=document.elementFromPoint(box.left+box.width/2,Math.min(box.top+150,innerHeight-20));
+    return !!top&&element.contains(top);
+  })).toBe(true);
+});
 
 for (const theme of ['light', 'dark']) {
   for (const mobile of [false, true]) {
@@ -111,10 +149,10 @@ for (const theme of ['light', 'dark']) {
 
       state.hold('/api/events');
       await main.locator('[data-guide="attendance-event"]').click();
-      await expect(main.getByText('Loading church events...', { exact: true })).toHaveCount(1);
+      await expect(main.getByText('Loading events…', { exact: true })).toHaveCount(1);
       await page.screenshot({ path: info.outputPath('event-loading.png') });
       state.release('/api/events');
-      await expect(main.locator('[data-guide="event-attendance-event"]')).toHaveValue('1');
+      await expect(main.getByRole('combobox', {name:'Select special event',exact:true})).toHaveValue('1');
       await expect(main.locator('.skeleton-box')).toHaveCount(0);
       await noOverflow(page);
       await page.screenshot({ path: info.outputPath('event-loaded.png') });

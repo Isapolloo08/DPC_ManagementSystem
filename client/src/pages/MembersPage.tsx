@@ -2273,7 +2273,7 @@ export const MembersPage: React.FC = () => {
       {activeTab === "households" && <Pagination label="households" page={householdPage.page} pageSize={householdPage.pageSize} total={householdTotal} onPageChange={householdPage.setPage} onPageSizeChange={householdPage.setPageSize} loading={householdLoading} />}
 
       {/* Member Details Centered Modal */}
-      {treeHousehold && <FamilyTreeModal household={treeHousehold} households={households} members={allChurchMembers.length?allChurchMembers:members} onClose={()=>setTreeHousehold(null)}/>}
+      {treeHousehold && <FamilyTreeModal household={treeHousehold} households={households} members={allChurchMembers.length?allChurchMembers:members} onClose={()=>setTreeHousehold(null)} onViewMember={member=>{setTreeHousehold(null);setSelectedMember(member);}}/>}
       {selectedMember && createPortal(
         <div className="fixed inset-0 z-[100] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4">
           <ModalPanel data-modal-panel className="directory-design w-full max-w-2xl lg:max-w-3xl bg-white rounded-3xl shadow-2xl p-6 sm:p-8 overflow-y-auto max-h-[90vh] space-y-5 border border-indigo-100 animate-in fade-in zoom-in duration-200">
