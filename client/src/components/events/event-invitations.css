@@ -30,7 +30,7 @@
 
 .event-participant {display:flex;justify-content:space-between;align-items:center;gap:16px;border:1px solid var(--border);border-radius:12px;padding:16px;flex-wrap:wrap;}
 .online-submissions-table-wrap {max-width:100%;overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:12px 0;}
-.online-submissions-table {width:100%;min-width:650px;border-collapse:collapse;text-align:left;font-size:12px;}
+.online-submissions-table {width:100%;min-width:950px;border-collapse:collapse;text-align:left;font-size:12px;}
 .online-submissions-table th,.online-submissions-table td {padding:12px;vertical-align:top;border-bottom:1px solid var(--border);}
 .online-submissions-table thead {background:var(--surface-2);}
 .online-submissions-table tr:last-child td,.online-submissions-table tr:last-child th {border-bottom:0;}
@@ -39,3 +39,6 @@
 .event-workspace .event-invitations-body {grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;}
 .event-workspace .event-invitations-online,.event-workspace .event-invitations-body>section:last-child {grid-column:1/-1;}
 @media(max-width:900px){.event-workspace .event-invitations-body{grid-template-columns:minmax(0,1fr);}}
+
+.online-submission-contact { min-width: 160px; max-width: 240px; overflow-wrap: anywhere; }
+.online-submissions-table th[scope="row"] { min-width: 160px; max-width: 240px; overflow-wrap: anywhere; }

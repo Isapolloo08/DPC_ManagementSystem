@@ -6,6 +6,7 @@ import {api} from '../../api';
 import {useSocketEvent} from '../../socket';
 import type {InvitationSyncState,SubmissionPreview,PullOutcome} from '../../services/invitationSync';
 import {useInvitationSyncSession} from '../../services/useInvitationSyncSession';
+import {useOnlineSubmissionDetails} from '../../hooks/useOnlineSubmissionDetails';
 
 export function PendingOnlineSubmissions({eventId,onImported}:{eventId:number;onImported:()=>void}) {
   const authorized=useInvitationSyncSession();
@@ -28,6 +29,7 @@ export function PendingOnlineSubmissions({eventId,onImported}:{eventId:number;on
   const pendingIds=new Set(pending.map(p=>p.submission));
   const selection=selected.filter(id=>pendingIds.has(id));
   const pages=useListPagination(items,String(eventId),10);
+  const details=useOnlineSubmissionDetails(pages.items,`${state?.source_id||''}:${eventId}:${state?.last_check||''}`,authorized,api.previewOnlineSubmission);
   const pageIds=pages.items.filter(p=>p.status==='Pending').map(p=>p.submission);
   const pageSelected=pageIds.filter(id=>selection.includes(id)).length;
   const choosePage=(checked:boolean)=>setSelected(old=>checked?[...new Set([...old,...pageIds])]:old.filter(id=>!pageIds.includes(id)));
@@ -62,13 +64,17 @@ export function PendingOnlineSubmissions({eventId,onImported}:{eventId:number;on
         <Button variant="primary" disabled={busy||!selection.length} onClick={()=>void pull(selection)}>{busy?'Working...':`Pull Selected (${selection.length})`}</Button>
       </div>
       <p className="text-xs text-muted">{selection.length} selected across all pages. Pull processes up to 25 per batch and stops if a request is interrupted.</p>
+      <p className="text-xs text-muted">Details shown below are online previews. Only Pull imports them locally.</p>
+      {pages.items.some(p=>details.rows[p.submission]?.status==='Unavailable')&&<div className="flex gap-2 items-center"><p className="text-xs text-muted">Some details are unavailable or changed online. Check online to refresh revisions.</p><Button size="sm" disabled={busy} onClick={details.retry}>Retry details</Button></div>}
       <p className="text-xs text-muted sm:hidden">Swipe the table sideways to see Status and Actions.</p>
       <div className="online-submissions-table-wrap" tabIndex={0} role="region" aria-label="Scrollable submissions table">
         <table className="online-submissions-table"><caption className="sr-only">Online submissions for this event</caption>
-          <thead><tr><th><input type="checkbox" aria-label="Select pending submissions on this page" disabled={busy||!pageIds.length} checked={pageIds.length>0&&pageSelected===pageIds.length} ref={node=>{if(node)node.indeterminate=pageSelected>0&&pageSelected<pageIds.length;}} onChange={e=>choosePage(e.target.checked)}/></th><th scope="col">Submission</th><th scope="col">Updated</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
-          <tbody>{pages.items.map((p,index)=>{const number=(pages.page-1)*pages.pageSize+index+1;const outcome=outcomes.find(r=>r.submission===p.submission);return <tr key={p.submission}>
+          <thead><tr><th><input type="checkbox" aria-label="Select pending submissions on this page" disabled={busy||!pageIds.length} checked={pageIds.length>0&&pageSelected===pageIds.length} ref={node=>{if(node)node.indeterminate=pageSelected>0&&pageSelected<pageIds.length;}} onChange={e=>choosePage(e.target.checked)}/></th><th scope="col">Respondent</th><th scope="col">Contact</th><th scope="col">RSVP / reason</th><th scope="col">Updated</th><th scope="col">Sync status</th><th scope="col">Actions</th></tr></thead>
+          <tbody>{pages.items.map((p,index)=>{const number=(pages.page-1)*pages.pageSize+index+1;const outcome=outcomes.find(r=>r.submission===p.submission),detail=details.rows[p.submission],data=detail?.data;return <tr key={p.submission}>
             <td><input type="checkbox" aria-label={`Select submission ${number}`} disabled={busy||p.status!=='Pending'} checked={selection.includes(p.submission)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,p.submission])]:old.filter(id=>id!==p.submission))}/></td>
-            <th scope="row">Submission {number}<span className="block text-xs text-muted font-normal">{p.submission.slice(0,8)}</span></th>
+            <th scope="row"><span className="block">{data?.name||(detail?.status==='Unavailable'?'Details unavailable':'Loading details…')}</span><span className="block text-xs text-muted font-normal">{data?.member_identity?'Member':data?.member_identity===null?'Guest':''}{data?' · ':''}{p.submission.slice(0,8)}</span></th>
+            <td className="online-submission-contact">{data?data.contact||'No contact provided':'—'}</td>
+            <td>{data?data.answer==='yes'?'Attending':data.answer==='no'?'Cannot attend':'Not yet sure':'—'}{data?.reason&&<p className="text-xs text-muted mt-1 line-clamp-2">{data.reason}</p>}</td>
             <td>{new Date(p.updated_at).toLocaleString()}</td><td>{outcome?.status||p.status}{outcome?.error&&<p className="text-xs text-muted mt-1">{outcome.error}</p>}</td>
             <td><div className="flex flex-wrap gap-2"><Button size="sm" disabled={busy} onClick={()=>void inspect(p.submission)} aria-label={`Preview submission ${number}`}>Preview</Button><Button size="sm" variant="primary" disabled={busy||p.status!=='Pending'} onClick={()=>void pull([p.submission])} aria-label={`Pull submission ${number}`}>Pull</Button></div></td>
           </tr>;})}</tbody>

@@ -6,6 +6,7 @@ export interface InvitationSyncState {
   state:string; source_url:string|null; source_id:string|null; receiver:string; last_check:string|null; pending:PendingSubmission[];
 }
 export interface SubmissionPreview {
+  member_identity?:string|null;
   submission:string; revision:string; name:string; contact:string; answer:'yes'|'no'|'maybe'; reason:string; blocked:string|null;
 }
 export interface PullOutcome {submission:string;revision?:string;status:string;error?:string;already_imported?:boolean}

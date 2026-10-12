@@ -30,3 +30,9 @@
 .planned-visits .visit-row { animation: visit-reveal 360ms ease-out backwards; }
 @keyframes visit-reveal { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .planned-visits .visit-enter, .planned-visits .visit-row { animation: none; } .planned-visits .visit-view, .planned-visits .visit-table tbody tr { transition: none; } }
+
+.online-visits-table { min-width: 1050px; }
+.planned-visits .online-visits-table tbody th { background: transparent; text-transform: none; text-align: left; font-size: .875rem; font-weight: 600; color: var(--ui-heading); letter-spacing: normal; border-bottom: 1px solid var(--ui-border); min-width: 180px; max-width: 260px; overflow-wrap: anywhere; }
+.online-visits-table .online-submission-contact { min-width: 170px; max-width: 240px; overflow-wrap: anywhere; }
+
+.planned-visits .online-visits-table tbody tr:last-child th { border-bottom: 0; }

@@ -19,7 +19,7 @@ async function fixture(page:Page,theme:string,role='Admin') {
     else if(path.endsWith('/notifications'))json={items:role==='Admin'?[{id:1,type:'online_invitation_submission',title:'Online invitation submissions',message:'2 pending responses require manual Pull.',is_read:unread===0,link_tab:'events',link_ref_id:11,created_at:'2026-10-11T09:00:00Z'}]:[],total:1,unread_count:unread,totalPages:1};
     else if(path.includes('/notifications/')&&method!=='GET'){unread=0;json={};}
     else if(path.endsWith('/invitation-sync/state'))json=state;
-    else if(path.endsWith('/invitation-sync/preview'))json={submission:first,revision:'1',name:'Guest Online',contact:'guest@example.test',answer:'yes',reason:'',blocked:null};
+    else if(path.endsWith('/invitation-sync/preview'))json={submission:route.request().postDataJSON().submission,revision:'1',member_identity:null,name:'Guest Online',contact:'guest@example.test',answer:'yes',reason:'',blocked:null};
     else if(path.endsWith('/invitation-sync/pull')){
       pulls.push(route.request().postDataJSON());state.pending[0].status='Imported locally · Confirmation pending';
       json={results:[{submission:first,status:'Imported locally · Confirmation pending'},{submission:second,status:'Blocked',error:'Member counterpart cannot be verified.'}],unprocessed:[]};
@@ -75,21 +75,23 @@ for(const theme of ['light','dark'])test(`Admin bell preview and explicit select
   await expect(page.getByRole('heading',{name:'Event invitations & responses'})).toBeVisible();
   const panel=page.getByRole('region',{name:'Pending online submissions'});
   await expect(panel.getByRole('heading',{name:'Pending online submissions (2)'})).toBeVisible();
+  await expect(panel.getByRole('table').getByText('Guest Online',{exact:true})).toHaveCount(2);
+  await expect(panel.getByRole('table').getByText('guest@example.test',{exact:true})).toHaveCount(2);
   expect(f.pulls).toHaveLength(0);
   await panel.getByRole('button',{name:'Preview submission 1',exact:true}).click();
-  await expect(panel.getByText('Guest Online', {exact:true})).toBeVisible();expect(f.pulls).toHaveLength(0);
+  await expect(panel.getByLabel('Submission preview').getByText('Guest Online', {exact:true})).toBeVisible();expect(f.pulls).toHaveLength(0);
   await panel.getByLabel('Select submission 1').check();await panel.getByLabel('Select submission 2').check();
   await page.screenshot({path:info.outputPath('online-submissions-'+theme+'.png'),fullPage:true});
   await panel.getByRole('button',{name:'Pull Selected (2)',exact:true}).click();
   expect(f.pulls).toEqual([{event_id:11,submissions:[first,second]}]);
   await expect(panel.getByLabel('Pull results')).toContainText('Confirmation pending');
   await expect(panel.getByLabel('Pull results')).toContainText('Member counterpart cannot be verified');
-  await expect(panel.getByText('Guest Online',{exact:true})).toHaveCount(0);
+  await expect(panel.getByLabel('Submission preview').getByText('Guest Online',{exact:true})).toHaveCount(0);
   await expect(panel.getByRole('heading',{name:'Pending online submissions (1)'})).toBeVisible();
   await panel.getByRole('button',{name:'Check online',exact:true}).click();
   await expect(panel).toContainText('Offline · Retrying');expect(f.pulls).toHaveLength(1);
   await panel.getByRole('button',{name:'Preview submission 1',exact:true}).click();
-  await expect(panel.getByText('Guest Online',{exact:true})).toBeVisible();
+  await expect(panel.getByLabel('Submission preview').getByText('Guest Online',{exact:true})).toBeVisible();
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('auth:session-expired',{detail:{message:'Fixture expired'}})));
   await expect(page.getByText('Guest Online',{exact:true})).toHaveCount(0);
   await expect(panel).toContainText('Administrator session expired');
@@ -133,4 +135,25 @@ for(const theme of ['light','dark'])test(`paginated bulk Pull keeps selection an
   await expect(panel.getByRole('button',{name:'Pull Selected (0)',exact:true})).toBeDisabled();
   expect(f.pulls.map(p=>p.submissions.length)).toEqual([25,2,2]);
   expect(f.pulls[2].submissions).toEqual(f.pulls[1].submissions);
+});
+
+
+test('visible details recover from offline and reject stale revisions without import',async({page})=>{
+ const f=await fixture(page,'light');let retry=false;
+ await page.route('**/api/invitation-sync/preview',route=>{
+  const id=route.request().postDataJSON().submission;
+  if(!retry&&id===first)return route.fulfill({status:503,json:{error:'Offline'}});
+  return route.fulfill({json:{submission:id,revision:retry?'1':'2',member_identity:null,name:'Recovered Guest',contact:'recovered@example.test',answer:'no',reason:'Away',blocked:null}});
+ });
+ await page.getByRole('button',{name:'Notifications, 1 unread',exact:true}).click();
+ await page.getByRole('button',{name:/Online invitation submissions/}).click();
+ const panel=page.getByRole('region',{name:'Pending online submissions'});
+ await expect(panel.getByRole('table').getByText('Details unavailable',{exact:true})).toHaveCount(2);
+ await expect(panel.getByText('Recovered Guest',{exact:true})).toHaveCount(0);
+ expect(f.pulls).toHaveLength(0);
+ retry=true;await panel.getByRole('button',{name:'Retry details'}).click();
+ await expect(panel.getByRole('table').getByText('Recovered Guest',{exact:true})).toHaveCount(2);
+ await expect(panel.getByRole('table').getByRole('cell',{name:'Cannot attend Away',exact:true})).toHaveCount(2);
+ expect(f.pulls).toHaveLength(0);
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('recovered@example.test');
 });

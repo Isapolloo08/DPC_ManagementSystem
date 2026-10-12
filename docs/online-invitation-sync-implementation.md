@@ -54,3 +54,9 @@ Reviewed against the repository instructions and approved test seams. Fixed a mi
 ### Specification review
 
 Fixed registration field protection to retain actual arrival transfers, cleared sensitive preview state on expired sessions, restricted notification delivery to currently authorized sockets, reconciled availability when opening the bell/panel, and broadcast background connection failures so open panels update promptly. No remaining material transaction, receipt, confirmation or broad-transfer finding was reported after these fixes.
+
+## Pending table details
+
+The current page loads respondent details through existing authenticated preview endpoints, with at most three concurrent requests. Invitation rows show name, member/guest where available, contact, RSVP and a short reason. Planned visits show name, email and phone, date, party and visitor reply. Preview provides longer details. Viewing never imports records; manual Pull remains required.
+
+Details live in transient React state, never availability metadata, storage or local records. Page, source, revision and session changes discard previous details and ignore late responses. Changed revisions are withheld until Check online refreshes availability. Offline rows offer Retry details. Notification discovery stays metadata-only.
