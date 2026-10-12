@@ -239,7 +239,7 @@ async function start() {
     startPlannedVisitSyncJobs();
     console.log("✅ Database schema initialized successfully");
   } catch (err: any) {
-    console.error("⚠️ Database schema initialization error (will retry or serve health endpoint):", err.message);
+    console.error("⚠️ Database schema initialization failed; background jobs were not started. Check DATABASE_URL and restart the server:", err.message);
   }
 }
 

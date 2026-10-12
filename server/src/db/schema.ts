@@ -925,8 +925,10 @@ export async function initSchema() {
         port: err?.port,
         stack: err?.stack
       });
+      throw err;
     }
   } catch (outerError: any) {
-    console.error("Unuthorized  Error initializing Schema", outerError);
+    // Let startup report the failure and keep background jobs stopped.
+    throw outerError;
   }
 }
