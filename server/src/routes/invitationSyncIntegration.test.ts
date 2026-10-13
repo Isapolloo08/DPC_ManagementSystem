@@ -41,7 +41,7 @@ test('online guest discovery and preview never import; manual Pull is atomic and
   const call=(side:number,route:string,body?:any)=>fetch(origins[side]+'/api/invitation-sync/'+route,{headers:auth,method:body===undefined?'GET':'POST',body:body===undefined?undefined:JSON.stringify(body)});
   try {
     for(const pool of pools) {
-      for(const name of ['001_init_postgres.sql','007_notifications.sql','015_cloud_sync_columns.sql','017_family_tree.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql','025_invitation_link_archive.sql']) await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',name),'utf8'));
+      for(const name of ['001_init_postgres.sql','007_notifications.sql','014_planned_visits.sql','015_cloud_sync_columns.sql','017_family_tree.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql','025_invitation_link_archive.sql','026_planned_visit_sync.sql','027_event_sunday_reflection.sql','028_event_attendance_ministry_sessions.sql']) await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',name),'utf8'));
       await pool.query("ALTER TABLE users ADD COLUMN temp_password TEXT; INSERT INTO roles(id,name) VALUES(501,'Admin'),(502,'Pastor')");
       await pool.query("INSERT INTO users(id,name,email,password_hash,role_id) VALUES(501,'Admin','admin@example.test',$1,501),(502,'Pastor','pastor@example.test',$1,502)",[await bcrypt.hash('fixture-password',4)]);
     }
@@ -138,18 +138,22 @@ test('online guest discovery and preview never import; manual Pull is atomic and
     const guestResponse=(await pools[1].query('SELECT id FROM event_invitation_responses WHERE sync_identity=$1',[id])).rows[0].id;
     await pools[1].query("INSERT INTO event_guest_attendance(response_id,status,recorded_by) VALUES($1,'attended',501)",[guestResponse]);
     await pools[1].query('INSERT INTO event_attendance_sessions(event_id,closed_by) VALUES(701,501)');
+    await pools[1].query("INSERT INTO ministries(id,name) VALUES(501,'Backup Ministry'); INSERT INTO event_attendance_ministry_sessions(event_id,ministry_id,closed_by) VALUES(701,501,501)");
     const exported=await fetch(origins[1]+'/api/backup/export',{method:'POST',headers:auth,body:JSON.stringify({year:'all',password:'fixture-password'})});
     assert.equal(exported.status,200,await exported.clone().text());const backup=await exported.json() as any;
     assert.equal(backup.data.invitation_sync_node[0].credential,undefined);
     assert.equal(backup.data.invitation_sync_receipts.length,3);
     assert.equal(backup.data.event_guest_attendance.length,1);
     assert.equal(backup.data.event_attendance_sessions.length,1);
+    assert.equal(backup.data.event_attendance_ministry_sessions.length,1);
     await pools[1].query("UPDATE event_guest_attendance SET status='absent',reason='Changed after export'");
     await pools[1].query('DELETE FROM event_attendance_sessions');
+    await pools[1].query('DELETE FROM event_attendance_ministry_sessions');
     const restored=await fetch(origins[1]+'/api/backup/restore',{method:'POST',headers:auth,body:JSON.stringify({data:backup,mode:'replace',password:'fixture-password'})});
     assert.equal(restored.status,200,await restored.clone().text());
     assert.equal((await pools[1].query('SELECT status FROM event_guest_attendance WHERE response_id=$1',[guestResponse])).rows[0].status,'attended');
     assert.equal((await pools[1].query('SELECT closed_by FROM event_attendance_sessions WHERE event_id=701')).rows[0].closed_by,501);
+    assert.equal((await pools[1].query('SELECT closed_by FROM event_attendance_ministry_sessions WHERE event_id=701 AND ministry_id=501')).rows[0].closed_by,501);
     const restoredState=await call(1,'refresh',{});assert.equal((await restoredState.json() as any).pending[0].status,'Pending');
     assert.equal((await pools[1].query('SELECT answer FROM event_invitation_responses')).rows[0].answer,'maybe');
     // Member provenance differs from numeric IDs; a failed registration rolls back the response too.

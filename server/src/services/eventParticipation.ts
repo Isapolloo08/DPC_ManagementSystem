@@ -9,6 +9,19 @@ export class ParticipationError extends Error {constructor(message:string,public
 const privileged=(u:AuthenticatedUser)=>['Admin','IT Admin','Pastor'].includes(u.role_name);
 const organizer=(u:AuthenticatedUser,e:any)=>privileged(u)||(u.role_name==='Coordinator'&&(e.created_by===u.id||e.ministry_ids.some((id:number)=>u.ministry_ids.includes(id))));
 const localDate=attendanceDate;
+// Null is the explicit privileged all-ministry scope; [] never means unrestricted.
+function attendanceScope(user:AuthenticatedUser,event:any,selection:unknown):number[]|null {
+  if(selection!==undefined&&selection!==null&&selection!=='all') {
+    const ids=Array.isArray(selection)?selection:[typeof selection==='string'?Number(selection):selection];
+    if(!ids.length||ids.length>100||ids.some(id=>!Number.isSafeInteger(id)||id<1))throw new ParticipationError('Select at least one valid attendance ministry.');
+    if(ids.some(id=>!memberFitsEvent(id,event)||(!privileged(user)&&!user.ministry_ids.includes(id))))throw new ParticipationError('This ministry is outside your attendance assignment.',403);
+    return [...new Set<number>(ids)].sort((a,b)=>a-b);
+  }
+  if(privileged(user))return null;
+  const ids=user.ministry_ids.filter(id=>memberFitsEvent(id,event));
+  if(!ids.length)throw new ParticipationError('You have no assigned ministry for this event.',403);
+  return ids.sort((a,b)=>a-b);
+}
 function validateServiceDate(value:unknown,event:any) {
   if(value===null)return;
   if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new ParticipationError('Choose a valid Sunday service date.');
@@ -25,7 +38,7 @@ export async function setEventSundayReflection(id:number,value:unknown,user:Auth
     const staff=(await c.query('SELECT r.name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=$1',[user.id])).rows[0];
     const scope=(await c.query('SELECT ministry_id FROM user_ministries WHERE user_id=$1',[user.id])).rows.map(row=>row.ministry_id);
     if(!staff||staff.name!==user.role_name||!organizer({...user,ministry_ids:scope},event))throw new ParticipationError('Only this event’s organizers can change Sunday reflection.',403);
-    if((await c.query('SELECT 1 FROM event_attendance_sessions WHERE event_id=$1',[id])).rowCount)throw new ParticipationError('Reopen attendance before changing Sunday reflection.',409);
+    if((await c.query('SELECT 1 FROM event_attendance_sessions WHERE event_id=$1 UNION ALL SELECT 1 FROM event_attendance_ministry_sessions WHERE event_id=$1',[id])).rowCount)throw new ParticipationError('Reopen all attendance scopes before changing Sunday reflection.',409);
     validateServiceDate(value,event);
     await c.query('UPDATE events SET sunday_service_date=$1 WHERE id=$2',[value,id]);
     await c.query("INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'EVENT_SUNDAY_REFLECTION','events',$2,$3)",[user.id,id,JSON.stringify({sunday_service_date:value})]);
@@ -38,11 +51,12 @@ async function eventFor(id:number) {
   if(!event)throw new ParticipationError('Event not found.',404);
   return event;
 }
-export async function eventParticipation(id:number,user:AuthenticatedUser) {
+export async function eventParticipation(id:number,user:AuthenticatedUser,selection?:unknown) {
   const event=await eventFor(id);
-  const all=organizer(user,event);
+  user={...user,ministry_ids:(await db.all('SELECT ministry_id FROM user_ministries WHERE user_id=$1',[user.id])).map(r=>r.ministry_id)};
+  const scope=attendanceScope(user,event,selection),all=scope===null;
   const attendees=await db.all(`SELECT m.id AS member_id,m.first_name,m.last_name,m.ministry_id,
-    COALESCE(min.name,'Unassigned') AS ministry_name,min.color AS ministry_color,
+    COALESCE(min.name,'Unassigned') AS ministry_name,min.color AS ministry_color,h.name AS household_name,
     r.answer AS invitation_answer,r.reason AS invitation_reason,
     CASE WHEN att.notes ILIKE '%[ABSENT]%' THEN 'absent' WHEN att.notes ILIKE '%[EXCUSED]%' THEN 'excused'
       WHEN att.id IS NOT NULL OR er.status IN ('attended','checked_in') THEN 'attended'
@@ -51,12 +65,14 @@ export async function eventParticipation(id:number,user:AuthenticatedUser) {
     COALESCE(att.notes,CASE WHEN r.answer='no' THEN '[RSVP DECLINED] '||r.reason END) AS attendance_notes,
     att.id AS attendance_id,att.checked_in_at,er.created_at AS registered_at,
     (att.id IS NOT NULL OR er.status IN ('attended','checked_in','absent','excused')) AS attendance_confirmed
-    FROM members m LEFT JOIN ministries min ON min.id=m.ministry_id
+    FROM members m LEFT JOIN ministries min ON min.id=m.ministry_id LEFT JOIN households h ON h.id=m.household_id
     LEFT JOIN event_registrations er ON er.event_id=$1 AND er.member_id=m.id
     LEFT JOIN event_invitation_responses r ON r.event_id=$1 AND r.member_id=m.id
     LEFT JOIN attendance att ON att.event_id=$1 AND att.member_id=m.id
-    WHERE (er.member_id IS NOT NULL OR r.id IS NOT NULL OR att.id IS NOT NULL)
-      AND ($2::boolean OR m.ministry_id=ANY($3::integer[])) ORDER BY lower(m.last_name),lower(m.first_name)`,[id,all,user.ministry_ids]);
+    WHERE (m.status='active' OR er.member_id IS NOT NULL OR r.id IS NOT NULL OR att.id IS NOT NULL)
+      AND ($2::boolean OR m.ministry_id=ANY($3::integer[]))
+      AND (cardinality($4::integer[])=0 OR m.ministry_id=ANY($4::integer[]))
+      ORDER BY lower(m.last_name),lower(m.first_name)`,[id,all,scope||[],event.ministry_ids]);
   const guests=all?await db.all(`SELECT r.id AS response_id,r.name,r.answer,r.reason AS invitation_reason,
     COALESCE(a.status,CASE WHEN r.answer='no' THEN 'absent' ELSE 'unconfirmed' END) AS status,
     COALESCE(a.reason,CASE WHEN r.answer='no' THEN r.reason END,'') AS reason,
@@ -65,7 +81,14 @@ export async function eventParticipation(id:number,user:AuthenticatedUser) {
     WHERE r.event_id=$1 AND r.member_id IS NULL ORDER BY lower(r.name),r.id`,[id]):[];
   const statuses=[...attendees,...guests];
   const session=await db.get('SELECT closed_at FROM event_attendance_sessions WHERE event_id=$1',[id]);
-  return {event,attendance_window:eventAttendanceWindow(event),can_manage_sunday_reflection:all,attendance_closed_at:session?.closed_at||null,attendees,guests,summary:{total_registered:attendees.filter(a=>a.status==='registered').length,
+  const sessions=await db.all('SELECT ministry_id,closed_at FROM event_attendance_ministry_sessions WHERE event_id=$1',[id]);
+  const ministries=await db.all(`SELECT id,name FROM ministries WHERE ($1::boolean OR id=ANY($2::integer[])) AND (cardinality($3::integer[])=0 OR id=ANY($3::integer[])) ORDER BY name`,[privileged(user),user.ministry_ids,event.ministry_ids]);
+  const eligibleMinistries=await db.all('SELECT id FROM ministries WHERE cardinality($1::integer[])=0 OR id=ANY($1::integer[])',[event.ministry_ids]);
+  const unresolved=await db.get(`SELECT (SELECT count(*) FROM event_invitation_responses r WHERE r.event_id=$1 AND r.member_id IS NULL AND NOT EXISTS(SELECT 1 FROM event_guest_attendance a WHERE a.response_id=r.id)) +
+    (SELECT count(*) FROM members m WHERE m.status='active' AND m.ministry_id IS NULL AND cardinality($2::integer[])=0 AND NOT EXISTS(SELECT 1 FROM attendance a WHERE a.event_id=$1 AND a.member_id=m.id) AND NOT EXISTS(SELECT 1 FROM event_registrations er WHERE er.event_id=$1 AND er.member_id=m.id AND er.status IN ('attended','checked_in','absent','excused'))) AS count`,[id,event.ministry_ids]);
+  const fullyClosed=!!session||(eligibleMinistries.length>0&&eligibleMinistries.every(m=>sessions.some(s=>s.ministry_id===m.id))&&Number(unresolved?.count)===0);
+  const scopedClosed=scope?.length&&scope.every(id=>sessions.some(s=>s.ministry_id===id))?sessions.find(s=>scope.includes(s.ministry_id))?.closed_at:null;
+  return {event,attendance_window:eventAttendanceWindow(event),can_manage_sunday_reflection:organizer(user,event),can_finalize_attendance:privileged(user)||['Coordinator','Volunteer'].includes(user.role_name),can_reopen_attendance:!session||privileged(user),attendance_fully_closed:fullyClosed,scope_ministries:ministries.map(m=>({...m,closed:!!session||sessions.some(s=>s.ministry_id===m.id)})),attendance_closed_at:session?.closed_at||scopedClosed||(scope===null&&fullyClosed?sessions[0]?.closed_at:null)||null,attendees:attendees.map(a=>({...a,attendance_closed:!!session||sessions.some(s=>s.ministry_id===a.ministry_id)})),guests,summary:{total_registered:attendees.filter(a=>a.status==='registered').length,
     total_attended:statuses.filter(a=>a.status==='attended').length,total_absent:statuses.filter(a=>a.status==='absent').length,
     total_excused:statuses.filter(a=>a.status==='excused').length,total_active_members:attendees.length}};
 }
@@ -102,10 +125,10 @@ export async function markEventParticipants(id:number,bodies:any[],user:Authenti
   });
 }
 
-async function writeParticipant(c:PoolClient,event:any,user:AuthenticatedUser,body:any) {
+async function writeParticipant(c:PoolClient,event:any,user:AuthenticatedUser,body:any,finalizing=false) {
   const id=event.id,guest=body.response_id!==undefined,target=guest?body.response_id:body.member_id;
     if(guest) {
-      if(!organizer(user,event))throw new ParticipationError('Only this event’s organizers can confirm guests.',403);
+      if(!privileged(user))throw new ParticipationError('Only Admin and Pastor can record guests without a ministry assignment.',403);
       const response=(await c.query('SELECT id FROM event_invitation_responses WHERE id=$1 AND event_id=$2 AND member_id IS NULL FOR UPDATE',[target,id])).rows[0];
       if(!response)throw new ParticipationError('Guest response is not part of this event.',404);
       if(body.status==='pending')await c.query('DELETE FROM event_guest_attendance WHERE response_id=$1',[target]);
@@ -114,8 +137,9 @@ async function writeParticipant(c:PoolClient,event:any,user:AuthenticatedUser,bo
     } else {
       const member=(await c.query('SELECT id,ministry_id,status FROM members WHERE id=$1',[target])).rows[0];
       if(!member)throw new ParticipationError('Member not found.',404);
-      if(!organizer(user,event)&&!user.ministry_ids.includes(member.ministry_id))throw new ParticipationError('You cannot record attendance for this member.',403);
+      if(!privileged(user)&&!user.ministry_ids.includes(member.ministry_id))throw new ParticipationError('You cannot record attendance for this member.',403);
       if(!memberFitsEvent(member.ministry_id,event))throw new ParticipationError('Member is outside this event’s target ministries.',403);
+      if(!finalizing&&(await c.query('SELECT 1 FROM event_attendance_ministry_sessions WHERE event_id=$1 AND ministry_id=$2',[id,member.ministry_id])).rowCount)throw new ParticipationError('This ministry’s attendance is closed. Reopen it before making corrections.',409);
       const current=(await c.query('SELECT id FROM attendance WHERE event_id=$1 AND member_id=$2 FOR UPDATE',[id,target])).rows;
       if(current.length>1)throw new ParticipationError('Duplicate attendance records require repair before recording this participant.',409);
       if(body.status==='pending') {
@@ -149,19 +173,24 @@ async function writeParticipant(c:PoolClient,event:any,user:AuthenticatedUser,bo
     await c.query("INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'EVENT_ATTENDANCE','events',$2,$3)",[user.id,id,JSON.stringify({kind:guest?'guest':'member',participant:target,status:body.status})]);
 }
 
-type CloseOptions={reflect_sunday_absences?:unknown;preview_token?:unknown;expected_sunday_service_date?:unknown};
+async function validateScope(c:PoolClient,scope:number[]|null) {
+  if(scope!==null&&(await c.query('SELECT id FROM ministries WHERE id=ANY($1::integer[])',[scope])).rowCount!==scope.length)throw new ParticipationError('A selected ministry no longer exists. Refresh the attendance roster.');
+}
 
-async function closePlan(c:PoolClient,event:any,reflectSunday:boolean) {
+type CloseOptions={reflect_sunday_absences?:unknown;preview_token?:unknown;expected_sunday_service_date?:unknown;ministry_id?:unknown;ministry_ids?:unknown};
+
+async function closePlan(c:PoolClient,event:any,reflectSunday:boolean,scope:number[]|null) {
   const members=(await c.query(`SELECT m.id AS member_id,m.first_name||' '||m.last_name AS name,r.answer,r.reason FROM members m
     LEFT JOIN event_invitation_responses r ON r.member_id=m.id AND r.event_id=$1
     LEFT JOIN event_registrations er ON er.member_id=m.id AND er.event_id=$1
-    WHERE (r.id IS NOT NULL OR er.status IN ('registered','pending'))
+    WHERE (m.status='active' OR r.id IS NOT NULL OR er.status IN ('registered','pending'))
       AND (er.status IS NULL OR er.status NOT IN ('attended','checked_in','absent','excused'))
       AND NOT EXISTS(SELECT 1 FROM attendance a WHERE a.member_id=m.id AND a.event_id=$1)
-      AND (cardinality($2::integer[])=0 OR m.ministry_id=ANY($2::integer[])) ORDER BY m.id`,[event.id,event.ministry_ids])).rows;
-  const guests=(await c.query(`SELECT r.id AS response_id,r.name,r.answer,r.reason FROM event_invitation_responses r
+      AND (cardinality($2::integer[])=0 OR m.ministry_id=ANY($2::integer[]))
+      AND ($3::boolean OR m.ministry_id=ANY($4::integer[])) ORDER BY m.id`,[event.id,event.ministry_ids,scope===null,scope||[]])).rows;
+  const guests=scope===null?(await c.query(`SELECT r.id AS response_id,r.name,r.answer,r.reason FROM event_invitation_responses r
     WHERE r.event_id=$1 AND r.member_id IS NULL
-      AND NOT EXISTS(SELECT 1 FROM event_guest_attendance a WHERE a.response_id=r.id) ORDER BY r.id`,[event.id])).rows;
+      AND NOT EXISTS(SELECT 1 FROM event_guest_attendance a WHERE a.response_id=r.id) ORDER BY r.id`,[event.id])).rows:[];
   let sundayMembers:any[]=[],preservedSunday=0;
   if(reflectSunday) {
     if(!event.sunday_service_date)throw new ParticipationError('Enable a linked Sunday service before marking Sunday absences.');
@@ -175,12 +204,13 @@ async function closePlan(c:PoolClient,event:any,reflectSunday:boolean) {
       WHERE (m.id=ANY($2::integer[]) OR a.notes ILIKE '%[ABSENT]%' OR er.status='absent')
         AND (a.id IS NULL OR a.notes ILIKE '%[ABSENT]%')
         AND (er.status IS NULL OR er.status NOT IN ('attended','checked_in','excused'))
-        AND (cardinality($4::integer[])=0 OR m.ministry_id=ANY($4::integer[])) ORDER BY m.id`,[event.id,members.map(m=>m.member_id),event.sunday_service_date,event.ministry_ids])).rows;
+        AND (cardinality($4::integer[])=0 OR m.ministry_id=ANY($4::integer[]))
+        AND ($5::boolean OR m.ministry_id=ANY($6::integer[])) ORDER BY m.id`,[event.id,members.map(m=>m.member_id),event.sunday_service_date,event.ministry_ids,scope===null,scope||[]])).rows;
     sundayMembers=candidates.filter(m=>!m.sunday_attendance_id);
     preservedSunday=new Set(candidates.filter(m=>m.sunday_attendance_id).map(m=>m.member_id)).size;
   }
   const plan={event_members:members,event_guests:guests,sunday_members:sundayMembers,preserved_sunday:preservedSunday,sunday_service_date:event.sunday_service_date||null};
-  const preview_token=createHash('sha256').update(JSON.stringify({id:event.id,end:event.end_time,reflectSunday,...plan})).digest('hex');
+  const preview_token=createHash('sha256').update(JSON.stringify({id:event.id,end:event.end_time,reflectSunday,scope,...plan})).digest('hex');
   return {...plan,preview_token};
 }
 
@@ -188,33 +218,41 @@ async function organizerEvent(c:PoolClient,id:number,user:AuthenticatedUser) {
   const event=(await c.query(`SELECT e.*,to_char(e.sunday_service_date,'YYYY-MM-DD') AS sunday_service_date,${eventMinistryIdsSql('e')} AS ministry_ids FROM events e WHERE e.id=$1 FOR UPDATE`,[id])).rows[0];
   const role=(await c.query('SELECT r.name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=$1',[user.id])).rows[0]?.name;
   const ministries=(await c.query('SELECT ministry_id FROM user_ministries WHERE user_id=$1',[user.id])).rows.map(row=>row.ministry_id);
-  if(!event||role!==user.role_name||!organizer({...user,ministry_ids:ministries},event))throw new ParticipationError('Only this event’s organizers can finalize attendance.',403);
+  if(!event||role!==user.role_name||!['Admin','IT Admin','Pastor','Coordinator','Volunteer'].includes(role))throw new ParticipationError('You cannot finalize event attendance.',403);
   return {event,ministries};
 }
 
-export async function previewEventClose(id:number,user:AuthenticatedUser,reflectSunday=false) {
+export async function previewEventClose(id:number,user:AuthenticatedUser,reflectSunday=false,selection?:unknown) {
   await eventFor(id);
   return db.transaction(async c=>{
     await c.query('SELECT pg_advisory_xact_lock(237024)');
-    const {event}=await organizerEvent(c,id,user);
-    return closePlan(c,event,reflectSunday);
+    const {event,ministries}=await organizerEvent(c,id,user);
+    const scope=attendanceScope({...user,ministry_ids:ministries},event,selection);
+    await validateScope(c,scope);
+    return closePlan(c,event,reflectSunday,scope);
   });
 }
 
 export async function closeEventAttendance(id:number,user:AuthenticatedUser,reopen=false,options:CloseOptions={}) {
+  if(options.ministry_ids!==undefined&&!Array.isArray(options.ministry_ids))throw new ParticipationError('Choose a valid list of attendance ministries.');
   if(options.reflect_sunday_absences!==undefined&&typeof options.reflect_sunday_absences!=='boolean')throw new ParticipationError('Choose whether to include Sunday absences.');
   await eventFor(id);
   return db.transaction(async c=>{
     await c.query('SELECT pg_advisory_xact_lock(237024)');
     const {event,ministries}=await organizerEvent(c,id,user);
+    const scope=attendanceScope({...user,ministry_ids:ministries},event,options.ministry_ids??options.ministry_id);
+    await validateScope(c,scope);
     if(reopen) {
-      await c.query('DELETE FROM event_attendance_sessions WHERE event_id=$1',[id]);
+      if(scope!==null&&(await c.query('SELECT 1 FROM event_attendance_sessions WHERE event_id=$1',[id])).rowCount)throw new ParticipationError('Admin or Pastor must reopen the all-ministry closure first.',409);
+      if(scope===null)await c.query('DELETE FROM event_attendance_sessions WHERE event_id=$1',[id]);
+      await c.query('DELETE FROM event_attendance_ministry_sessions WHERE event_id=$1 AND ($2::boolean OR ministry_id=ANY($3::integer[]))',[id,scope===null,scope||[]]);
       await c.query("INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'REOPEN_EVENT_ATTENDANCE','events',$2,'Reopened for corrections')",[user.id,id]);
       return {closed:false,no_shows:0,declined:0};
     }
     if(new Date(event.end_time).getTime()>Date.now())throw new ParticipationError('Close attendance after the scheduled event ends.',409);
     if((await c.query('SELECT 1 FROM event_attendance_sessions WHERE event_id=$1',[id])).rowCount)return {closed:true,no_shows:0,declined:0};
-    const plan=await closePlan(c,event,options.reflect_sunday_absences===true);
+    if(scope!==null&&(await c.query('SELECT ministry_id FROM event_attendance_ministry_sessions WHERE event_id=$1 AND ministry_id=ANY($2::integer[])',[id,scope])).rowCount===scope.length)return {closed:true,no_shows:0,declined:0};
+    const plan=await closePlan(c,event,options.reflect_sunday_absences===true,scope);
     if(options.expected_sunday_service_date!==undefined&&options.expected_sunday_service_date!==(event.sunday_service_date||null))throw new ParticipationError('The linked Sunday service changed. Review the remaining absences again.',409);
     if(options.preview_token!==undefined&&options.preview_token!==plan.preview_token)throw new ParticipationError('Attendance changed. Review the remaining absences again before confirming.',409);
     if(options.reflect_sunday_absences===true&&!options.preview_token)throw new ParticipationError('Review the event and Sunday absence list before confirming.');
@@ -222,7 +260,7 @@ export async function closeEventAttendance(id:number,user:AuthenticatedUser,reop
     let no_shows=0,declined=0;
     for(const participant of [...members,...guests]) {
       const reason=participant.answer==='no'?participant.reason||'Cannot attend — invitation declined':'No-show — arrival was not confirmed when attendance closed';
-      await writeParticipant(c,event,{...user,ministry_ids:ministries},{...participant,status:'absent',reason});
+      await writeParticipant(c,event,{...user,ministry_ids:ministries},{...participant,status:'absent',reason},true);
       if(participant.answer==='no')declined++;else no_shows++;
     }
     for(const person of plan.sunday_members) {
@@ -231,8 +269,9 @@ export async function closeEventAttendance(id:number,user:AuthenticatedUser,reop
         VALUES($1,$2,$3,$4::timestamptz,'[ABSENT] No attendance confirmed in the linked event and Sunday worship',$5) RETURNING id`,[person.member_id,person.ministry_id,user.id,`${event.sunday_service_date}T09:30:00+08:00`,id]);
       await c.query("INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'REFLECT_EVENT_ABSENCE','attendance',$2,$3)",[user.id,saved.rows[0].id,JSON.stringify({event_id:id,member_id:person.member_id,service_date:event.sunday_service_date})]);
     }
-    await c.query('INSERT INTO event_attendance_sessions(event_id,closed_by) VALUES($1,$2)',[id,user.id]);
-    await c.query("INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'CLOSE_EVENT_ATTENDANCE','events',$2,$3)",[user.id,id,JSON.stringify({no_shows,declined})]);
+    if(scope===null)await c.query('INSERT INTO event_attendance_sessions(event_id,closed_by) VALUES($1,$2)',[id,user.id]);
+    else await c.query('INSERT INTO event_attendance_ministry_sessions(event_id,ministry_id,closed_by) SELECT $1,unnest($2::integer[]),$3 ON CONFLICT(event_id,ministry_id) DO NOTHING',[id,scope,user.id]);
+    await c.query("INSERT INTO audit_logs(user_id,action,target_table,target_id,details) VALUES($1,'CLOSE_EVENT_ATTENDANCE','events',$2,$3)",[user.id,id,JSON.stringify({scope,no_shows,declined})]);
     return {closed:true,no_shows,declined,sunday_absent:plan.sunday_members.length,preserved_sunday:plan.preserved_sunday};
   });
 }

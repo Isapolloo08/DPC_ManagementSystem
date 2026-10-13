@@ -75,3 +75,5 @@ _Avoid_: Import failed, not imported
 
 **Local Master**:
 The DPC installation that owns the authoritative local database shared by its LAN clients. Online submissions are pulled into that shared database.
+
+**Event attendance scope**: Eligible event members in the selected ministry or, for Volunteer and Coordinator, their current assigned ministries intersected with the event targets. Includes active members without RSVP or registration. Admin and Pastor may choose all event ministries and guests. Ministry closures are independent; existing Present and Excused decisions are preserved during manual absence finalization.

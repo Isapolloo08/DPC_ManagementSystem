@@ -917,6 +917,9 @@ export async function initSchema() {
       const sundayReflectionPath=getMigrationFilePath('027_event_sunday_reflection.sql');
       if(!sundayReflectionPath) throw new Error('Missing event Sunday reflection migration 027');
       await sql.unsafe(fs.readFileSync(sundayReflectionPath,'utf-8'));
+      const scopedAttendancePath=getMigrationFilePath('028_event_attendance_ministry_sessions.sql');
+      if(!scopedAttendancePath) throw new Error('Missing event attendance ministry sessions migration 028');
+      await sql.unsafe(fs.readFileSync(scopedAttendancePath,'utf-8'));
       await db.transaction(client => syncRecordedHouseholdChildren(client));
     } catch (err: any) {
       console.error("⚠️ PostgreSQL auto-init error:", {

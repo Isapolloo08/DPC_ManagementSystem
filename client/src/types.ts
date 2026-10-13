@@ -1253,6 +1253,8 @@ export interface MemberComprehensiveAttendanceSummary {
 }
 
 export interface EventAttendeeItem {
+  household_name?:string|null;
+  attendance_closed?:boolean;
   invitation_answer?: 'yes'|'no'|'maybe'|null;
   invitation_reason?:string|null;
   attendance_confirmed?:boolean;
@@ -1272,6 +1274,10 @@ export interface EventAttendeeItem {
 }
 
 export interface EventAttendanceRosterResponse {
+  can_finalize_attendance?:boolean;
+  attendance_fully_closed?:boolean;
+  can_reopen_attendance?:boolean;
+  scope_ministries?:{id:number;name:string;closed?:boolean}[];
   attendance_window?:{open:boolean;first_date:string;last_date:string;today:string;message:string};
   can_manage_sunday_reflection?:boolean;
   attendance_closed_at?:string|null;

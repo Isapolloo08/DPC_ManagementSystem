@@ -1,0 +1,73 @@
+/* Special-event kiosk: use the church theme while keeping the roster compact. */
+.event-check-in-hero { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: linear-gradient(115deg, var(--surface) 45%, color-mix(in srgb, var(--status-info-bg) 50%, var(--surface))); box-shadow: var(--shadow-card); }
+.event-check-in .event-check-in-header { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 24px 24px 16px; }
+.event-check-in-header .page-header-title { font-size: 22px; line-height: 1.3; }
+.event-check-in-header .page-header-description { max-width: 520px; font-size: 12px; }
+.event-check-in-header .page-header-icon { width: 48px; height: 48px; border-radius: 14px; }
+.event-check-in-header .page-header-actions { width: 340px; max-width: 100%; }
+.event-check-in-header .page-header-actions .ui-field { width: 100%; font-size: 11px; }
+.event-check-in-header .page-header-content { margin-top: 18px; padding-top: 16px; }
+.event-check-in-details { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-muted); font-size: 12px; }
+.event-check-in-details > span { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; background: var(--surface-2); border-radius: 8px; color: var(--text); }
+.event-check-in-details svg { flex-shrink: 0; color: var(--text-muted); }
+.event-check-in-details small { font-size: 11px; }
+.event-check-in-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.event-check-in-hero .event-check-in-actions { padding: 0 24px 20px; }
+.event-check-in-actions h2 { font-size: 12px; }
+.event-check-in-actions p { font-size: 12px; max-width: 620px; }
+.event-check-in-actions > div:last-child { flex-wrap: wrap; }
+.event-check-in-actions .ui-button { min-height: 36px; font-size: 12px; }
+.event-check-in-session-badge { margin: 0 24px 12px; }
+.event-check-in-hero > p[role="status"] { margin: 0 24px 16px; background: var(--surface-2); font-size: 12px; }
+.event-attendance-controls { display: grid; grid-template-columns: minmax(240px,1fr) minmax(0,2fr); gap: 16px; align-items: stretch; }
+.event-attendance-scope, .event-sunday-reflection { padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.event-attendance-scope > .ui-field { font-size: 12px; font-weight: 600; }
+.event-attendance-scope .ui-help { font-size: 11px; font-weight: 400; line-height: 1.65; }
+.event-sunday-reflection { background: color-mix(in srgb, var(--status-info-bg) 25%, var(--surface)); }
+.event-sunday-reflection-heading { display: flex; gap: 10px; align-items: flex-start; }
+.event-sunday-reflection-heading > svg { color: var(--status-info-text); flex-shrink: 0; margin-top: 1px; }
+.event-sunday-reflection-heading h3 { font-size: 12px; }
+.event-sunday-reflection-heading p { font-size: 12px; line-height: 1.65; }
+.event-sunday-reflection > label { font-size: 12px; }
+.event-sunday-reflection-help { color: var(--text-muted); font-size: 11px; }
+.event-sunday-reflection-help summary { cursor: pointer; width: fit-content; }
+.event-sunday-reflection-help p { margin-top: 8px; line-height: 1.7; }
+.event-attendance-metrics .stat-card { padding: 18px; border-radius: 16px; }
+.event-attendance-metrics .stat-card-label { font-size: 11px; }
+.event-attendance-metrics .stat-card-icon { width: 30px; height: 30px; border-radius: 10px; }
+.event-attendance-metrics .stat-card-icon svg { width: 16px; height: 16px; }
+.event-attendance-metrics .stat-card-value { font-size: 30px; }
+.event-attendance-metrics .stat-card-description { font-size: 11px; }
+.event-attendance-session { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--status-warning-border); border-radius: 14px; background: color-mix(in srgb, var(--status-warning-bg) 45%, var(--surface)); }
+.event-attendance-session > svg { color: var(--status-warning-text); flex-shrink: 0; }
+.event-attendance-session p { flex: 1; font-size: 12px; line-height: 1.6; }
+.event-attendance-session .ui-button { font-size: 12px; flex-shrink: 0; }
+.event-attendance-session.is-closed { border-color: var(--border); background: var(--surface-2); }
+.event-attendance-filters.filter-panel { border-radius: 16px; }
+.event-attendance-filters .filter-panel-toggle strong { font-size: 12px; }
+.event-attendance-filters .filter-panel-summary { font-size: 11px; }
+.event-attendance-filters .ui-button { border-radius: 999px; min-height: 32px; font-size: 11px; padding: 5px 12px; }
+.event-filter-count { font-variant-numeric: tabular-nums; opacity: .8; }
+.event-attendance-search-field { position: relative; display: block; }
+.event-attendance-search-field > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+.event-attendance-search-field .ui-input { padding-left: 36px; font-size: 12px; }
+.event-check-in .event-attendance-directory { border-radius: 16px; }
+.event-check-in .event-attendance-directory-heading { padding: 16px 18px; gap: 12px; }
+.event-check-in .event-attendance-table { min-width: 1080px; }
+.event-check-in .event-attendance-table th, .event-check-in .event-attendance-table td { padding: 14px 12px; }
+.event-check-in .event-attendance-table th[scope="row"] { min-width: 190px; max-width: 230px; }
+.event-check-in .event-attendance-table th[scope="row"] strong { overflow-wrap: anywhere; }
+.event-check-in .event-attendance-table th[scope="row"] p { font-size: 11px; }
+.event-check-in .event-attendance-table td:last-child { width: 245px; }
+.event-check-in .event-attendance-table .ui-button { min-height: 32px; font-size: 11px; padding: 5px 9px; }
+.event-check-in .event-attendance-avatar { border-radius: 50%; }
+.event-attendance-registration { font-size: 11px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; }
+.event-attendance-registration::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.event-attendance-checkin-time { font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.event-check-in .event-attendance-status { border-radius: 999px; }
+.event-check-in .event-attendance-table tbody tr { transition: background-color 150ms ease; }
+@media(min-width:1000px) { .event-sunday-reflection { position: relative; padding-right: 175px; } .event-sunday-reflection > .ui-button { position: absolute; right: 18px; top: 18px; font-size: 11px; } }
+@media(max-width:1000px) { .event-attendance-controls { grid-template-columns: 1fr 1.6fr; } .event-check-in-header .page-header-actions { width: 100%; } .event-attendance-session { flex-wrap: wrap; } .event-attendance-session .ui-button { margin-left: 29px; } }
+@media(max-width:640px) { .event-attendance-controls { grid-template-columns: 1fr; } .event-check-in .event-check-in-header { padding: 18px 16px 12px; } .event-check-in-header .page-header-title { font-size: 19px; } .event-check-in-hero .event-check-in-actions { padding: 0 16px 16px; } .event-check-in-session-badge { margin: 0 16px 12px; } .event-check-in-hero > p[role="status"] { margin: 0 16px 12px; } .event-attendance-metrics { gap: 10px; } .event-attendance-metrics .stat-card { padding: 14px; } .event-attendance-session .ui-button { margin-left: 0; max-width: 100%; white-space: normal; } .event-check-in-details > span { font-size: 11px; } }
+@media(prefers-reduced-motion:reduce) { .event-check-in .event-attendance-table tbody tr { transition: none; } }
+@media(max-width:640px) { .event-check-in .event-check-in-actions .ui-button, .event-check-in .event-attendance-table .ui-button, .event-attendance-filters .ui-button { min-height: 40px; } }

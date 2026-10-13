@@ -23,7 +23,7 @@ test('RSVP selects a real member, rejects missing selection, and preserves atten
   await new Promise<void>(r=>server.once('listening',r));
   const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}/events/501/rsvp`;
   try {
-    for(const file of ['001_init_postgres.sql','007_notifications.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql','025_invitation_link_archive.sql','027_event_sunday_reflection.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',file),'utf8'));
+    for(const file of ['001_init_postgres.sql','007_notifications.sql','020_event_invitations.sql','021_invitation_member_responses.sql','022_event_ministries.sql','023_invitation_sync.sql','024_event_guest_attendance.sql','025_invitation_link_archive.sql','027_event_sunday_reflection.sql','028_event_attendance_ministry_sessions.sql'])await pool.query(fs.readFileSync(path.join(__dirname,'../db/migrations',file),'utf8'));
     await pool.query("INSERT INTO roles(id,name) VALUES(501,'Admin'),(502,'Member'); INSERT INTO users(id,name,email,password_hash,role_id) VALUES(501,'Admin','admin@fixture.test','fixture',501),(502,'Member','member@fixture.test','fixture',502)");
     await pool.query("INSERT INTO events(id,title,start_time,end_time) VALUES(501,'RSVP fixture','2099-01-01','2099-01-02'); INSERT INTO members(id,first_name,last_name,birthdate,status,user_id) VALUES(501,'Linked','Member','2000-01-01','active',502),(502,'Other','Member','2000-01-01','active',NULL)");
     db.get=(async(q:string,p:any[]) => (await pool.query(q,p)).rows[0]) as any;
@@ -63,7 +63,8 @@ test('RSVP selects a real member, rejects missing selection, and preserves atten
     assert.equal((await fetch(url.replace('/rsvp','/participation/mark'),{method:'POST',headers:volunteerHeaders,body:JSON.stringify({response_id:503,status:'attended'})})).status,403);
     assert.equal((await fetch(url.replace('/rsvp','/participation/close'),{method:'POST',headers:volunteerHeaders,body:'{}'})).status,403);
     assert.equal((await fetch(url.replace('/events/501/rsvp','/attendance/check-in'),{method:'POST',headers,body:JSON.stringify({member_id:501,event_id:501})})).status,400);
-    const planned=await roster();assert.equal(planned.attendees.length,2);
+    await pool.query("INSERT INTO households(id,name) VALUES(501,'Fixture Family'); UPDATE members SET household_id=501 WHERE id=501");
+    const planned=await roster();assert.equal(planned.attendees.length,3);assert.equal(planned.attendees.find((m:any)=>m.member_id===501).household_name,'Fixture Family');
     assert.equal(planned.attendees.find((m:any)=>m.member_id===501).status,'registered');
     assert.equal(planned.attendees.find((m:any)=>m.member_id===502).status,'absent');
     assert.match(planned.attendees.find((m:any)=>m.member_id===502).attendance_notes,/Working/);
@@ -94,7 +95,7 @@ test('RSVP selects a real member, rejects missing selection, and preserves atten
     assert.equal((await pool.query('SELECT count(*)::int n FROM attendance WHERE member_id=502')).rows[0].n,0);
     await pool.query('DROP TRIGGER fail_fixture_guest ON event_guest_attendance');
     const closed=await close();assert.equal(closed.status,200,await closed.clone().text());
-    const outcome=await closed.json() as any;assert.equal(outcome.no_shows,1);assert.equal(outcome.declined,2);
+    const outcome=await closed.json() as any;assert.equal(outcome.no_shows,2);assert.equal(outcome.declined,2);
     assert.equal((await roster()).attendees.find((m:any)=>m.member_id===501).status,'attended');
     assert.match((await roster()).guests.find((g:any)=>g.response_id===503).reason,/No-show/);
     assert.equal((await mark({response_id:503,status:'attended'})).status,409);
@@ -176,6 +177,73 @@ test('RSVP selects a real member, rejects missing selection, and preserves atten
     assert.equal(await countSunday(509),1);assert.match((await pool.query('SELECT notes FROM attendance WHERE member_id=509 AND event_id IS NULL')).rows[0].notes,/\[ABSENT\]/);
     assert.equal((await pool.query('SELECT notes FROM attendance WHERE member_id=510 AND event_id IS NULL')).rows[0].notes,'[EXCUSED] Travel');
     assert.equal((await finish(plan)).status,200);assert.equal(await countSunday(509),1);
+    // Full active-member roll call and closures are enforced per assigned ministry.
+    await pool.query(`INSERT INTO ministries(id,name) VALUES(502,'Second Fixture');
+      INSERT INTO roles(id,name) VALUES(504,'Coordinator'),(505,'Pastor');
+      INSERT INTO users(id,name,email,password_hash,role_id) VALUES(504,'Coordinator','coord@fixture.test','fixture',504),(505,'Pastor','pastor@fixture.test','fixture',505);
+      INSERT INTO user_ministries(user_id,ministry_id) VALUES(503,501),(504,501);
+      INSERT INTO events(id,title,start_time,end_time,created_by,sunday_service_date) VALUES(502,'Scoped Fixture','2026-10-11T01:00:00Z','2026-10-11T04:00:00Z',504,'2026-10-11');
+      INSERT INTO members(id,first_name,last_name,birthdate,status,ministry_id) VALUES(511,'Second','Active','2000-01-01','active',502),(512,'Second','Inactive','2000-01-01','inactive',502);`);
+    const scopedUrl=url.replace('/501/rsvp','/502');
+    const coordHeaders={...headers,Authorization:'Bearer '+jwt.sign({id:504},JWT_SECRET,{expiresIn:'1h'})};
+    const pastorHeaders={...headers,Authorization:'Bearer '+jwt.sign({id:505},JWT_SECRET,{expiresIn:'1h'})};
+    const scopedGet=(suffix:string,auth=headers)=>fetch(scopedUrl+suffix,{headers:auth});
+    const scopedPost=(suffix:string,body:any,auth=headers)=>fetch(scopedUrl+suffix,{method:'POST',headers:auth,body:JSON.stringify(body)});
+    const restricted=await scopedGet('/attendance-roster',coordHeaders);assert.equal(restricted.status,200);
+    const restrictedRoster=await restricted.json() as any;
+    assert(restrictedRoster.attendees.some((m:any)=>m.member_id===503)); // No invitation or registration.
+    assert(!restrictedRoster.attendees.some((m:any)=>m.member_id===511)); // Even the creator stays assigned-only.
+    assert.equal(restrictedRoster.can_finalize_attendance,true);
+    assert.equal((await scopedGet('/attendance-roster?ministry_id=502',coordHeaders)).status,403);
+    for(const auth of [coordHeaders,volunteerHeaders]) {
+      assert.equal((await scopedPost('/participation/mark',{member_id:511,status:'attended'},auth)).status,403);
+      assert.equal((await scopedPost('/attendance/batch-mark',{present_ids:[501,511]},auth)).status,403);
+      assert.equal((await scopedPost('/participation/close',{ministry_id:502},auth)).status,403);
+    }
+    assert.equal((await scopedPost('/participation/mark',{member_id:501,status:'attended'},volunteerHeaders)).status,200);
+    assert.equal((await scopedPost('/participation/mark',{member_id:502,status:'excused',reason:'Illness'},coordHeaders)).status,200);
+    const youthPreview=await scopedGet('/participation/close-preview?sunday=1',volunteerHeaders);
+    assert.equal(youthPreview.status,200);const youthPlan=await youthPreview.json() as any;
+    assert(youthPlan.event_members.some((m:any)=>m.member_id===503));
+    assert(!youthPlan.event_members.some((m:any)=>[501,502,511,512].includes(m.member_id)));
+    const youthFinish=await scopedPost('/participation/close',{reflect_sunday_absences:true,preview_token:youthPlan.preview_token,expected_sunday_service_date:'2026-10-11'},volunteerHeaders);
+    assert.equal(youthFinish.status,200,await youthFinish.clone().text());
+    assert.match((await pool.query('SELECT notes FROM attendance WHERE event_id=502 AND member_id=503')).rows[0].notes,/ABSENT/);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM attendance WHERE event_id=502 AND member_id=511')).rows[0].n,0);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM attendance WHERE event_id IS NULL AND member_id=511')).rows[0].n,0);
+    assert.equal((await scopedPost('/participation/mark',{member_id:503,status:'attended',finalizing:true},volunteerHeaders)).status,409);
+    assert.equal((await scopedPost('/participation/mark',{member_id:511,status:'attended'},pastorHeaders)).status,200); // Other scope is still open.
+    const second=await scopedGet('/attendance-roster?ministry_id=502');assert.equal(second.status,200);
+    const secondRoster=await second.json() as any;assert.equal(secondRoster.attendees.length,1);assert.equal(secondRoster.attendance_closed_at,null);
+    assert.equal((await scopedPost('/participation/close',{ministry_id:'502'},pastorHeaders)).status,200);
+    assert.equal((await scopedPost('/participation/reopen',{},volunteerHeaders)).status,200);
+    assert.equal((await scopedGet('/attendance-roster?ministry_id=502').then(r=>r.json()) as any).attendance_closed_at!==null,true);
+    assert.equal((await scopedPost('/participation/close',{},headers)).status,200);
+    assert.equal((await scopedPost('/participation/reopen',{},volunteerHeaders)).status,409); // Cannot reopen someone else's global closure.
+    assert.equal((await scopedGet('/attendance-roster',volunteerHeaders).then(r=>r.json()) as any).can_reopen_attendance,false);
+    await pool.query('INSERT INTO event_ministries(event_id,ministry_id) VALUES(502,501)');
+    const targeted=await scopedGet('/attendance-roster');assert.equal(targeted.status,200);
+    assert(!(await targeted.json() as any).attendees.some((m:any)=>m.member_id===511));
+    assert.equal((await scopedGet('/attendance-roster?ministry_id=502',pastorHeaders)).status,403);
+    await pool.query("INSERT INTO ministries(id,name) VALUES(503,'Third Fixture'); INSERT INTO members(id,first_name,last_name,status,birthdate,ministry_id) VALUES(513,'Third','Active','active','2000-01-01',503); INSERT INTO events(id,title,start_time,end_time) VALUES(503,'Multiple Ministries','2026-10-11T01:00:00Z','2026-10-11T04:00:00Z')");
+    const multiUrl=scopedUrl.replace('/502','/503');
+    const multiPost=(suffix:string,body:any,auth=headers)=>fetch(multiUrl+suffix,{method:'POST',headers:auth,body:JSON.stringify(body)});
+    assert.equal((await multiPost('/participation/mark',{member_id:501,status:'attended'})).status,200);
+    assert.equal((await multiPost('/participation/close',{ministry_ids:[]})).status,400);
+    assert.equal((await multiPost('/participation/close',{ministry_ids:null})).status,400);
+    assert.equal((await multiPost('/participation/close',{ministry_ids:[999]})).status,400);
+    for(const auth of [coordHeaders,volunteerHeaders])assert.equal((await multiPost('/participation/close',{ministry_ids:[501,502]},auth)).status,403);
+    const selectedPreview=await fetch(multiUrl+'/participation/close-preview?ministry_ids=501,502',{headers});assert.equal(selectedPreview.status,200);
+    const selectedPlan=await selectedPreview.json() as any;assert(selectedPlan.event_members.some((m:any)=>m.member_id===511));assert(!selectedPlan.event_members.some((m:any)=>m.member_id===513));
+    assert.equal((await multiPost('/participation/close',{ministry_ids:[501],preview_token:selectedPlan.preview_token})).status,409);
+    assert.equal((await multiPost('/participation/close',{ministry_ids:[502,501],preview_token:selectedPlan.preview_token})).status,200);
+    const partial=await fetch(multiUrl+'/attendance-roster',{headers}).then(r=>r.json()) as any;assert.equal(partial.attendance_fully_closed,false);assert.equal(partial.attendance_closed_at,null);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM attendance WHERE event_id=503 AND member_id=513')).rows[0].n,0);
+    assert.equal((await multiPost('/participation/mark',{member_id:513,status:'attended'},pastorHeaders)).status,200);
+    assert.equal((await multiPost('/participation/close',{ministry_ids:[503]},pastorHeaders)).status,200);
+    const complete=await fetch(multiUrl+'/attendance-roster',{headers}).then(r=>r.json()) as any;assert.equal(complete.attendance_fully_closed,true);assert(complete.attendance_closed_at);
+    assert.equal((await multiPost('/participation/reopen',{ministry_ids:[501]},volunteerHeaders)).status,200);
+    assert.equal((await fetch(multiUrl+'/attendance-roster',{headers}).then(r=>r.json()) as any).attendance_fully_closed,false);
   }finally{
     clock.mock.restore();
     Object.assign(db,original);await new Promise<void>(r=>server.close(()=>r()));await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();

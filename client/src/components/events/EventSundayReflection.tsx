@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import {Church} from 'lucide-react';
 import {Button} from '../common/Button';
 import {api} from '../../api';
 import type {EventAttendanceRosterResponse} from '../../types';
@@ -19,13 +20,13 @@ export function EventSundayReflection({data,busy,onBusyChange,onSaved,onError}:{
     catch(error){onError(error instanceof Error?error.message:'Sunday reflection was not saved.');}
     finally{setSaving(false);onBusyChange(false);}
   };
-  return <div className="rounded-xl border border-line bg-surface p-4 space-y-3" aria-label="Sunday worship reflection">
-    <div><h3 className="font-semibold text-sm">Sunday Worship attendance</h3><p className="text-sm text-muted mt-1">{savedDate?`Enabled for ${savedDate}. New confirmed member arrivals also mark Sunday Worship Present.`:'Off. Event check-ins are recorded separately from Sunday Worship.'}</p></div>
+  return <div className="event-sunday-reflection space-y-3" aria-label="Sunday worship reflection">
+    <div className="event-sunday-reflection-heading"><Church size={18} aria-hidden="true"/><div><h3 className="font-semibold text-sm">Sunday Worship attendance integration</h3><p className="text-sm text-muted mt-1">{savedDate?`Enabled for ${savedDate}. New confirmed member arrivals also mark Sunday Worship Present.`:'Off. Event check-ins are recorded separately from Sunday Worship.'}</p></div></div>
     {data.can_manage_sunday_reflection&&<>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={enabled} disabled={locked} onChange={e=>setEnabled(e.target.checked)}/>Also mark Present in Sunday Worship</label>
       {enabled&&<label className="ui-field">Sunday service date<input type="date" className="ui-input max-w-xs" value={date} min={firstDate} max={lastDate} disabled={locked} onChange={e=>setDate(e.target.value)}/>{!validSunday&&<span className="ui-help">Choose a Sunday within the event’s scheduled dates.</span>}</label>}
       <Button size="sm" disabled={locked||!dirty||enabled&&!validSunday} onClick={()=>void save()}>{saving?'Saving…':'Save Sunday reflection'}</Button>
     </>}
-    <p className="text-xs text-muted">Applies to future individual and batch confirmations only. Confirm the member attended worship too. Existing Sunday records, guests, and Absent / Excused decisions stay unchanged. Resetting event attendance does not undo Sunday attendance.</p>
+    <details className="event-sunday-reflection-help"><summary>How Sunday reflection works</summary><p className="text-xs text-muted">Applies to future individual and batch confirmations only. Confirm the member attended worship too. Existing Sunday records, guests, and Absent / Excused decisions stay unchanged. Resetting event attendance does not undo Sunday attendance.</p></details>
   </div>;
 }

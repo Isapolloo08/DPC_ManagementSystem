@@ -48,7 +48,7 @@ async function prepare(page: Page, theme = 'light', role = 'Admin') {
     await route.fulfill({ json });
   });
   await page.goto('/');
-  await expect(page.locator(role === 'Admin' ? 'main .church-overview' : role === 'Coordinator' ? 'main' : 'main [data-page-header]')).toBeVisible();
+  await expect(page.locator(role === 'Admin' ? 'main .church-overview' : 'main')).toBeVisible();
   return state;
 }
 
@@ -64,7 +64,7 @@ test('future event attendance stays read-only until the Philippine event day',as
   const roster={event,can_manage_sunday_reflection:true,summary:{},attendees:[{member_id:7,first_name:'Maria',last_name:'Reyes',ministry_name:'Youth',status:'registered',attendance_confirmed:false}],guests:[{response_id:8,name:'Guest Visitor',answer:'yes',status:'unconfirmed',attendance_confirmed:false}]};
   await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
   await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
-  await page.route('**/api/events/33/attendance-roster',route=>route.fulfill({json:roster}));
+  await page.route('**/api/events/33/attendance-roster*',route=>route.fulfill({json:roster}));
   await navigate(page,'Attendance Live');await page.getByRole('button',{name:'Special Event Check-In',exact:true}).click();
   await expect(page.getByText(/Attendance can only be marked on 2026-10-10/)).toBeVisible();
   for(const person of ['Maria Reyes','Guest Visitor'])for(const name of ['Confirm present','Record absent','Record excused'])await expect(page.getByRole('row',{name:person,exact:true}).getByRole('button',{name,exact:true})).toBeDisabled();
@@ -88,7 +88,7 @@ for(const theme of ['light','dark'])test(`one manual finish action reviews event
   let fail=true;const writes:any[]=[];
   await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
   await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
-  await page.route('**/api/events/34/attendance-roster',route=>route.fulfill({json:roster}));
+  await page.route('**/api/events/34/attendance-roster*',route=>route.fulfill({json:roster}));
   await page.route('**/api/events/34/participation/close-preview*',route=>{
     const sunday=new URL(route.request().url()).searchParams.get('sunday')==='1';
     return route.fulfill({json:{event_members:[{member_id:8,name:'Juan Santos',answer:'no',reason:'Working'},{member_id:9,name:'Pedro Cruz',answer:'maybe',reason:''}],event_guests:[{response_id:11,name:'Guest Visitor',answer:'yes',reason:''}],sunday_members:sunday?[{member_id:9,name:'Pedro Cruz'}]:[],preserved_sunday:sunday?1:0,sunday_service_date:event.sunday_service_date,preview_token:sunday?'both-rosters':'event-only'}});
@@ -109,12 +109,12 @@ for(const theme of ['light','dark'])test(`one manual finish action reviews event
   await page.screenshot({path:info.outputPath(`finish-attendance-${theme}.png`),fullPage:true});
   await dialog.getByRole('button',{name:'Mark remaining Absent & close',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('No partial result');
   fail=false;await dialog.getByRole('button',{name:'Mark remaining Absent & close',exact:true}).click();
-  await expect(dialog).toHaveCount(0);expect(writes).toEqual([{reflect_sunday_absences:true,preview_token:'both-rosters',expected_sunday_service_date:'2026-10-11'},{reflect_sunday_absences:true,preview_token:'both-rosters',expected_sunday_service_date:'2026-10-11'}]);
+  await expect(dialog).toHaveCount(0);expect(writes).toEqual([{reflect_sunday_absences:true,preview_token:'both-rosters',expected_sunday_service_date:'2026-10-11',ministry_id:'all'},{reflect_sunday_absences:true,preview_token:'both-rosters',expected_sunday_service_date:'2026-10-11',ministry_id:'all'}]);
   await expect(page.getByRole('row',{name:'Maria Reyes',exact:true}).getByText('Present',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Absent / Excused',exact:true}).click();await expect(page.getByRole('row',{name:'Ana Excused',exact:true}).getByText('Excused',{exact:true})).toBeVisible();
   expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
-for(const theme of ['light','dark']) test(`Sunday reflection is opt-in and visible in individual and batch confirmations (${theme})`,async({page})=>{
+for(const theme of ['light','dark']) test(`Sunday reflection is opt-in and visible in individual and batch confirmations (${theme})`,async({page},info)=>{
   if(theme==='dark')await page.setViewportSize({width:390,height:844});
   const state=await prepare(page,theme,'Coordinator');
   await page.clock.setFixedTime(new Date('2026-10-25T14:00:00+08:00'));
@@ -123,7 +123,7 @@ for(const theme of ['light','dark']) test(`Sunday reflection is opt-in and visib
   const settings:(string|null)[]=[],marks:any[]=[];
   await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
   await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
-  await page.route('**/api/events/32/attendance-roster',route=>route.fulfill({json:roster}));
+  await page.route('**/api/events/32/attendance-roster*',route=>route.fulfill({json:roster}));
   await page.route('**/api/events/32/participation/sunday-reflection',route=>{
     event.sunday_service_date=route.request().postDataJSON().sunday_service_date;settings.push(event.sunday_service_date);
     return route.fulfill({json:{sunday_service_date:event.sunday_service_date}});
@@ -133,6 +133,8 @@ for(const theme of ['light','dark']) test(`Sunday reflection is opt-in and visib
   const panel=page.getByLabel('Sunday worship reflection',{exact:true});
   await expect(panel).toContainText('Off.');
   await expect(panel.getByRole('checkbox')).not.toBeChecked();
+  await page.locator('main').evaluate(el=>el.scrollTo({top:0}));
+  await page.screenshot({path:info.outputPath(`event-integration-layout-${theme}.png`),fullPage:true});
   await panel.getByRole('checkbox').check();expect(settings).toEqual([]);
   await expect(panel.getByLabel('Sunday service date')).toHaveValue('2026-10-25');
   await panel.getByRole('button',{name:'Save Sunday reflection'}).click();
@@ -165,12 +167,12 @@ for(const theme of ['light','dark']) test(`special event batch roll call reviews
   const roster={event,attendance_closed_at:null,summary:{},attendees:[
     {member_id:7,first_name:'Maria',last_name:'Reyes',ministry_name:'Youth',status:'registered',invitation_answer:'yes',attendance_confirmed:false},
     {member_id:9,first_name:'Pedro',last_name:'Cruz',ministry_name:'Youth',status:'registered',invitation_answer:'yes',attendance_confirmed:false},
-    {member_id:11,first_name:'Already',last_name:'Present',ministry_name:'Youth',status:'attended',attendance_confirmed:true},
+    {member_id:11,first_name:'Already',last_name:'Present',ministry_name:'Youth',status:'attended',attendance_confirmed:true,checked_in_at:'2026-10-25T01:15:00Z'},
   ],guests:[{response_id:10,name:'Guest Visitor',answer:'yes',status:'unconfirmed',attendance_confirmed:false}]};
   const writes:any[]=[];let fail=true;
   await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
   await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
-  await page.route('**/api/events/31/attendance-roster',route=>route.fulfill({json:roster}));
+  await page.route('**/api/events/31/attendance-roster*',route=>route.fulfill({json:roster}));
   await page.route('**/api/events/31/attendance/batch-mark',route=>{
     const body=route.request().postDataJSON();writes.push(body);
     if(fail)return route.fulfill({status:503,json:{error:'Batch attendance was not saved.'}});
@@ -181,6 +183,9 @@ for(const theme of ['light','dark']) test(`special event batch roll call reviews
   await page.getByRole('button',{name:'Special Event Check-In',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Special Event Attendance',exact:true})).toBeVisible();
   await expect(page.getByLabel('Event attendance summary',{exact:true})).toBeVisible();
+  await expect(page.getByRole('columnheader',{name:'Registration',exact:true})).toBeVisible();
+  await expect(page.getByRole('row',{name:'Maria Reyes',exact:true})).toContainText('RSVP confirmed');
+  await expect(page.getByRole('row',{name:'Already Present',exact:true})).toContainText('9:15 AM');
   await page.getByRole('button',{name:'Batch Roll Call',exact:true}).click();
   await expect(page.getByLabel('Select Guest Visitor',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Select Already Present',{exact:true})).toHaveCount(0);
@@ -204,6 +209,8 @@ for(const theme of ['light','dark']) test(`special event batch roll call reviews
   await page.getByRole('button',{name:'Exit Batch Roll Call',exact:true}).click();
   await page.locator('main').evaluate(el=>el.scrollTo({top:0}));
   await page.screenshot({path:info.outputPath(`special-event-attendance-${theme}.png`),fullPage:true});
+  await page.locator('.event-attendance-directory-heading').scrollIntoViewIfNeeded();
+  await page.screenshot({path:info.outputPath(`special-event-directory-${theme}.png`),fullPage:true});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(state.errors).toEqual([]);expect(state.writes).toEqual([]);
 });
@@ -414,7 +421,7 @@ for (const theme of ['light', 'dark']) test(`event workspace requires actual arr
   await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
   await page.route('**/api/event-invitations/events/**',route=>route.fulfill({json:{links:[],responses:[],counts:{yes:0,no:0,maybe:0,pending:0},limit:1000}}));
   await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
-  await page.route('**/api/events/21/attendance-roster',route=>route.fulfill({json:roster}));
+  await page.route('**/api/events/21/attendance-roster*',route=>route.fulfill({json:roster}));
   await page.route('**/api/events/21/participation/*',route=>{
     const path=new URL(route.request().url()).pathname;
     if(route.request().method()==='GET')return route.fulfill({json:{event_members:roster.attendees.filter((m:any)=>!m.attendance_confirmed).map((m:any)=>({...m,name:`${m.first_name} ${m.last_name}`,answer:m.invitation_answer,reason:m.invitation_reason||''})),event_guests:[],sunday_members:[],preserved_sunday:0,sunday_service_date:null,preview_token:'fixture-preview'}});
@@ -473,4 +480,140 @@ for (const theme of ['light', 'dark']) test(`event workspace requires actual arr
   await expect(page.getByRole('row',{name:'Maria Reyes'}).getByText('Present',{exact:true})).toBeVisible();
   expect(actions.map(a=>a.path.split('/').pop())).toEqual(['mark','mark','close','reopen']);
   expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
+});
+
+for(const role of ['Admin','Pastor','Coordinator','Volunteer'])test(`event absence finalization uses selected attendance scope for ${role}`,async({page})=>{
+  const state=await prepare(page,'light',role);
+  await page.clock.setFixedTime(new Date('2026-10-11T14:00:00+08:00'));
+  const unrestricted=['Admin','Pastor'].includes(role),event={id:35,title:'Scoped attendance',start_time:'2026-10-11T09:00:00+08:00',end_time:'2026-10-11T12:00:00+08:00'};
+  const members=[{member_id:7,first_name:'Youth',last_name:'Present',ministry_id:2,ministry_name:'Youth',status:'attended',attendance_confirmed:true},{member_id:8,first_name:'Youth',last_name:'No RSVP',ministry_id:2,ministry_name:'Youth',status:'unregistered',attendance_confirmed:false},{member_id:9,first_name:'Adult',last_name:'No RSVP',ministry_id:3,ministry_name:'Young Adult',status:'unregistered',attendance_confirmed:false}];
+  const scopes=unrestricted?[{id:2,name:'Youth'},{id:3,name:'Young Adult'}]:[{id:2,name:'Youth'}];
+  const closed=new Set<number>(),writes:any[]=[];
+  await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
+  await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
+  await page.route('**/api/events/35/attendance-roster*',route=>{
+    const selection=new URL(route.request().url()).searchParams.get('ministry_id');
+    const attendees=members.filter(m=>(unrestricted||m.ministry_id===2)&&(selection==='all'||String(m.ministry_id)===selection)).map(m=>({...m,attendance_closed:closed.has(m.ministry_id)}));
+    return route.fulfill({json:{event,can_finalize_attendance:true,can_manage_sunday_reflection:false,scope_ministries:scopes,attendees,guests:[],summary:{},attendance_closed_at:selection==='2'&&closed.has(2)?'2026-10-11T06:00:00Z':null}});
+  });
+  await page.route('**/api/events/35/participation/close-preview*',route=>{
+    expect(new URL(route.request().url()).searchParams.get('ministry_id')).toBe('2');
+    return route.fulfill({json:{event_members:[{member_id:8,name:'Youth No RSVP',answer:null,reason:null}],event_guests:[],sunday_members:[],preserved_sunday:0,sunday_service_date:null,preview_token:'youth-only'}});
+  });
+  await page.route('**/api/events/35/participation/close',route=>{
+    writes.push(route.request().postDataJSON());closed.add(2);members[1].status='absent';members[1].attendance_confirmed=true;
+    return route.fulfill({json:{closed:true,no_shows:1,declined:0}});
+  });
+  await navigate(page,'Attendance Live');await page.getByRole('button',{name:'Special Event Check-In',exact:true}).click();
+  const scope=page.getByLabel('Attendance scope',{exact:true});
+  await expect(scope).toContainText(unrestricted?'All event ministries & guests':'Assigned event ministries');
+  if(!unrestricted){await expect(scope).not.toContainText('Young Adult');await expect(page.getByRole('row',{name:'Adult No RSVP',exact:true})).toHaveCount(0);}
+  await scope.selectOption('2');await expect(page.getByRole('row',{name:'Youth Present',exact:true})).toBeVisible();await expect(page.getByRole('row',{name:'Youth No RSVP',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Close attendance & mark remaining Absent',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Finalize remaining absences'});await expect(dialog).toContainText('Scope: Youth');await expect(dialog).toContainText('Youth No RSVP');await expect(dialog).not.toContainText('Adult No RSVP');
+  await dialog.getByRole('button',{name:'Mark remaining Absent & close',exact:true}).click();await expect(dialog).toHaveCount(0);
+  expect(writes).toEqual([{reflect_sunday_absences:false,preview_token:'youth-only',expected_sunday_service_date:null,ministry_id:'2'}]);
+  await page.getByRole('button',{name:'Absent / Excused',exact:true}).click();await expect(page.getByRole('row',{name:'Youth No RSVP',exact:true}).getByText('Absent',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Reopen attendance',exact:true})).toBeVisible();
+  if(unrestricted){await scope.selectOption('3');await page.getByRole('button',{name:'All participants',exact:true}).click();await expect(page.getByRole('row',{name:'Adult No RSVP',exact:true}).getByRole('button',{name:'Confirm present',exact:true})).toBeEnabled();}
+  expect(state.errors).toEqual([]);expect(state.writes).toEqual([]);
+});
+
+for(const theme of ['light','dark'])test(`absence review handles 80 names with searchable list and pinned actions (${theme})`,async({page},info)=>{
+  if(theme==='dark')await page.setViewportSize({width:390,height:844});
+  const state=await prepare(page,theme);await page.clock.setFixedTime(new Date('2026-10-13T21:30:00+08:00'));
+  const event={id:36,title:'Ministry gathering',start_time:'2026-10-13T09:00:00+08:00',end_time:'2026-10-13T12:00:00+08:00'};
+  const people=Array.from({length:80},(_,i)=>({member_id:i+1,name:i===0?'Rieza Lyn E. Domencil':i===1?'A very long member name that should wrap without covering the badge':'Ministry Member '+(i+1),answer:i===0?'no':null,reason:i===0?'Working':''}));
+  await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
+  await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
+  await page.route('**/api/events/36/attendance-roster*',route=>route.fulfill({json:{event,can_finalize_attendance:true,scope_ministries:[{id:2,name:'Youth'}],attendees:[],guests:[],summary:{}}}));
+  await page.route('**/api/events/36/participation/close-preview*',route=>route.fulfill({json:{event_members:people,event_guests:[],sunday_members:[],preserved_sunday:0,sunday_service_date:null,preview_token:'design-preview'}}));
+  await navigate(page,'Attendance Live');await page.getByRole('button',{name:'Special Event Check-In',exact:true}).click();await page.getByRole('button',{name:'Close attendance & mark remaining Absent',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Finalize remaining absences'}),search=dialog.getByLabel('Search remaining participants');
+  await expect(dialog).toContainText('80 remaining event participants');
+  await search.fill('Rieza');await expect(dialog.locator('.event-close-list li')).toHaveCount(1);await expect(dialog).toContainText('1 of 80 shown');
+  await search.fill('not-a-member');await expect(dialog).toContainText('No names match your search.');await search.fill('');
+  await expect(dialog.locator('.event-close-list li')).toHaveCount(80);
+  expect(await dialog.locator('.event-close-list').evaluate(el=>el.scrollHeight>el.clientHeight)).toBe(true);
+  await dialog.locator('[data-modal-body]').evaluate(el=>el.scrollTop=0);
+  await expect(dialog.getByRole('button',{name:'Mark remaining Absent & close',exact:true})).toBeInViewport();
+  expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  await dialog.screenshot({path:info.outputPath(`absence-review-${theme}.png`)});
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();await expect(dialog).toHaveCount(0);
+  expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
+});
+
+test('expected event directory shows accepted RSVPs and arrivals while close review retains nonrespondents',async({page})=>{
+  const state=await prepare(page);await page.clock.setFixedTime(new Date('2026-10-11T14:00:00+08:00'));
+  const event={id:37,title:'RSVP directory',start_time:'2026-10-11T09:00:00+08:00',end_time:'2026-10-11T12:00:00+08:00'};
+  const attendees=[{member_id:1,first_name:'Accepted',last_name:'Member',status:'registered',invitation_answer:'yes',attendance_confirmed:false},{member_id:2,first_name:'No RSVP',last_name:'Member',status:'unregistered',invitation_answer:null,attendance_confirmed:false},{member_id:3,first_name:'Maybe',last_name:'Member',status:'unregistered',invitation_answer:'maybe',attendance_confirmed:false},{member_id:4,first_name:'Declined',last_name:'Member',status:'absent',invitation_answer:'no',attendance_confirmed:false},{member_id:5,first_name:'Walk-in',last_name:'Member',status:'registered',invitation_answer:null,attendance_confirmed:false},{member_id:6,first_name:'Actual',last_name:'Arrival',status:'attended',invitation_answer:'no',attendance_confirmed:true}];
+  await page.route('**/api/events*',route=>route.fulfill({json:[event]}));
+  await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
+  await page.route('**/api/events/37/attendance-roster*',route=>route.fulfill({json:{event,can_finalize_attendance:true,summary:{},attendees,guests:[{response_id:8,name:'Accepted Guest',answer:'yes',status:'unconfirmed',attendance_confirmed:false},{response_id:9,name:'Maybe Guest',answer:'maybe',status:'unconfirmed',attendance_confirmed:false}]}}));
+  await page.route('**/api/events/37/participation/close-preview*',route=>route.fulfill({json:{event_members:[{member_id:2,name:'No RSVP Member',answer:null,reason:null}],event_guests:[],sunday_members:[],preserved_sunday:0,sunday_service_date:null,preview_token:'directory-test'}}));
+  await navigate(page,'Attendance Live');await page.getByRole('button',{name:'Special Event Check-In',exact:true}).click();
+  for(const name of ['Accepted Member','Walk-in Member','Actual Arrival','Accepted Guest'])await expect(page.getByRole('row',{name,exact:true})).toBeVisible();
+  for(const name of ['No RSVP Member','Maybe Member','Declined Member','Maybe Guest'])await expect(page.getByRole('row',{name,exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Batch Roll Call',exact:true}).click();await expect(page.getByLabel('Select No RSVP Member',{exact:true})).toHaveCount(0);await expect(page.getByLabel('Select Accepted Member',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Exit Batch Roll Call',exact:true}).click();await page.getByRole('button',{name:'Close attendance & mark remaining Absent',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Finalize remaining absences'});await expect(dialog).toContainText('No RSVP Member');await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.getByRole('button',{name:'All participants',exact:true}).click();await expect(page.getByRole('row',{name:'No RSVP Member',exact:true})).toBeVisible();
+  expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);
+});
+
+for(const theme of ['light','dark'])test(`event roll call matches Sunday targets and selections across pages and households (${theme})`,async({page},info)=>{
+  if(theme==='dark')await page.setViewportSize({width:390,height:844});
+  const state=await prepare(page,theme);await page.clock.setFixedTime(new Date('2026-10-11T14:00:00+08:00'));
+  const event={id:38,title:'Family fellowship',start_time:'2026-10-11T09:00:00+08:00',end_time:'2026-10-11T12:00:00+08:00'};
+  const attendees=Array.from({length:30},(_,i)=>({member_id:i+1,first_name:'Person',last_name:String(i+1),household_name:i<15?'Remot':'Santos',ministry_name:'Youth',status:'registered',invitation_answer:'yes',attendance_confirmed:false}));
+  attendees.push({member_id:99,first_name:'Recorded',last_name:'Present',household_name:'Remot',ministry_name:'Youth',status:'attended',invitation_answer:'yes',attendance_confirmed:true});
+  const writes:any[]=[];
+  await page.route('**/api/events*',route=>route.fulfill({json:[event]}));await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
+  await page.route('**/api/events/38/attendance-roster*',route=>route.fulfill({json:{event,attendees,guests:[],summary:{}}}));
+  await page.route('**/api/events/38/attendance/batch-mark',route=>{writes.push(route.request().postDataJSON());return route.fulfill({json:{success:true}});});
+  await navigate(page,'Attendance Live');await page.getByRole('button',{name:'Special Event Check-In',exact:true}).click();await page.getByRole('button',{name:'Batch Roll Call',exact:true}).click();
+  await expect(page.getByText('Batch Mode Active',{exact:true})).toBeVisible();
+  await expect(page.getByRole('columnheader',{name:'Roll Call Target',exact:true})).toBeVisible();
+  await expect(page.getByRole('row',{name:'Person 1',exact:true}).getByRole('button')).toHaveCount(0);
+  await page.getByLabel('Select all matching event members',{exact:true}).check();await expect(page.getByRole('button',{name:'Clear (30)',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Clear (30)',exact:true}).click();
+  const search=page.locator('[data-guide="attendance-search"]');await search.fill('Person 30');await page.getByRole('button',{name:'Select All (1)',exact:true}).click();await search.fill('');
+  await page.getByRole('button',{name:'Save Attendance Changes',exact:true}).click();const review=page.getByRole('dialog',{name:'Review batch roll call'});await expect(review).toContainText('Person 30');await expect(review).toContainText('1 Present · 0 Absent');await review.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.locator('[data-guide="attendance-method-present"]').click();await search.fill('Person 30');await page.getByLabel('Select Person 30',{exact:true}).check();await search.fill('');
+  const row=page.getByRole('row',{name:'Person 1',exact:true});await expect(row).toContainText('Will Mark Absent (Default)');await expect(row).toHaveAttribute('data-batch-target','absent-default');
+  await page.getByRole('button',{name:'Save Attendance Changes',exact:true}).click();await expect(review).toContainText('1 Present · 29 Absent');await review.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.locator('.event-attendance-directory-heading').scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath(`event-roll-call-${theme}.png`),fullPage:true});
+  await page.locator('[data-guide="attendance-batch-household"]').selectOption('Remot');await page.locator('[data-guide="attendance-method-absent"]').click();
+  await page.getByRole('row',{name:'Person 1',exact:true}).locator('th[scope="row"]').click();await expect(page.getByLabel('Select Person 1',{exact:true})).toBeChecked();
+  await expect(page.getByRole('row',{name:'Person 1',exact:true})).toContainText('Will Mark Absent');await expect(page.getByRole('row',{name:'Person 2',exact:true})).toContainText('Will Mark Present (Default)');
+  await expect(page.getByRole('row',{name:'Recorded Present',exact:true})).toContainText('Recorded · Unchanged');await expect(page.getByLabel('Select Recorded Present',{exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Save Attendance Changes',exact:true}).click();await expect(review).toContainText('14 Present · 1 Absent');await review.getByLabel('Batch absence reason').fill('Confirmed no arrival');await review.getByRole('button',{name:'Confirm batch attendance',exact:true}).click();await expect(review).toHaveCount(0);
+  expect(writes).toEqual([{present_ids:Array.from({length:14},(_,i)=>i+2),absent_ids:[1],notes:'Confirmed no arrival',expected_sunday_service_date:null}]);
+  expect(state.writes).toEqual([]);expect(state.errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+for(const role of ['Admin','Pastor','Coordinator','Volunteer'])test(`close review selects multiple ministries and keeps remaining scope open (${role})`,async({page},info)=>{
+  if(role==='Pastor')await page.setViewportSize({width:390,height:844});
+  const state=await prepare(page,'light',role);await page.clock.setFixedTime(new Date('2026-10-11T14:00:00+08:00'));
+  const unrestricted=['Admin','Pastor'].includes(role),event={id:39,title:'Scoped close',start_time:'2026-10-11T09:00:00+08:00',end_time:'2026-10-11T12:00:00+08:00'};
+  const ministries=unrestricted?[{id:2,name:'Youth'},{id:3,name:'Young Adult'},{id:4,name:'Old Adult'}]:[{id:2,name:'Youth'},{id:3,name:'Young Adult'}];
+  let finished=false;const writes:any[]=[];
+  await page.route('**/api/events*',route=>route.fulfill({json:[event]}));await page.route('**/api/attendance/roster*',route=>route.fulfill({json:[]}));
+  await page.route('**/api/events/39/attendance-roster*',route=>route.fulfill({json:{event,can_finalize_attendance:true,scope_ministries:ministries.map(m=>({...m,closed:finished&&m.id!==4})),attendees:[],guests:[],summary:{},attendance_closed_at:null,attendance_fully_closed:false}}));
+  await page.route('**/api/events/39/participation/close-preview*',route=>{
+    const ids=new URL(route.request().url()).searchParams.get('ministry_ids');
+    return route.fulfill({json:{event_members:(ids?ids.split(',').map(Number):ministries.map(m=>m.id)).map(id=>({member_id:id,name:ministries.find(m=>m.id===id)!.name+' Member',answer:null,reason:null})),event_guests:[],sunday_members:[],preserved_sunday:0,sunday_service_date:null,preview_token:'selected-'+ids}});
+  });
+  await page.route('**/api/events/39/participation/close',route=>{writes.push(route.request().postDataJSON());finished=true;return route.fulfill({json:{closed:true,no_shows:2,declined:0}});});
+  await navigate(page,'Attendance Live');await page.getByRole('button',{name:'Special Event Check-In',exact:true}).click();await page.getByRole('button',{name:'Close attendance & mark remaining Absent',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Finalize remaining absences'});await dialog.getByRole('radio',{name:'Choose ministries',exact:true}).check();
+  if(unrestricted)await dialog.getByRole('checkbox',{name:'Old Adult',exact:true}).uncheck();else await expect(dialog.getByRole('checkbox',{name:'Old Adult',exact:true})).toHaveCount(0);
+  await expect(dialog).toContainText('2 remaining event participants');await expect(dialog.locator('.event-close-list')).not.toContainText('Old Adult Member');
+  await dialog.locator('[data-modal-body]').evaluate(el=>el.scrollTop=0);await dialog.screenshot({path:info.outputPath(`ministry-close-${role}.png`)});expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  await dialog.getByRole('checkbox',{name:'Youth',exact:true}).uncheck();await dialog.getByRole('checkbox',{name:'Young Adult',exact:true}).uncheck();await expect(dialog.getByRole('button',{name:'Close selected ministries',exact:true})).toBeDisabled();
+  await dialog.getByRole('checkbox',{name:'Youth',exact:true}).check();await dialog.getByRole('checkbox',{name:'Young Adult',exact:true}).check();await expect(dialog).toContainText('2 remaining event participants');
+  await dialog.getByRole('button',{name:'Close selected ministries',exact:true}).click();await expect(dialog).toHaveCount(0);expect(writes[0].ministry_ids).toEqual([2,3]);
+  await expect(page.getByRole('button',{name:'Close attendance & mark remaining Absent',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Close attendance & mark remaining Absent',exact:true}).click();await dialog.getByRole('radio',{name:'Choose ministries',exact:true}).check();await expect(dialog.getByRole('checkbox',{name:'Youth · Closed',exact:true})).toBeDisabled();await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  expect(state.errors).toEqual([]);expect(state.writes).toEqual([]);
 });

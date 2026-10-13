@@ -1175,12 +1175,12 @@ export const api = {
   },
 
   // Event Attendance Roster & Marking
-  getEventAttendanceRoster: (eventId: number) =>
-    request<EventAttendanceRosterResponse>(`/events/${eventId}/attendance-roster`),
+  getEventAttendanceRoster: (eventId: number,ministryId='all') =>
+    request<EventAttendanceRosterResponse>(`/events/${eventId}/attendance-roster?ministry_id=${encodeURIComponent(ministryId)}`),
   setEventSundayReflection: (eventId:number,sunday_service_date:string|null) => request(`/events/${eventId}/participation/sunday-reflection`,{method:'PUT',body:JSON.stringify({sunday_service_date})}),
   markEventParticipant: (eventId:number,body:{member_id?:number;response_id?:number;status:string;reason?:string;expected_sunday_service_date?:string|null}) => request(`/events/${eventId}/participation/mark`,{method:'POST',body:JSON.stringify(body)},0),
-  previewEventClose: (eventId:number,reflectSunday=false) => request<import('./types').EventClosePreview>(`/events/${eventId}/participation/close-preview?sunday=${reflectSunday?'1':'0'}`),
-  closeEventAttendance: (eventId:number,reopen=false,options:{reflect_sunday_absences?:boolean;preview_token?:string;expected_sunday_service_date?:string|null}={}) => request<{closed:boolean;no_shows:number;declined:number;sunday_absent?:number;preserved_sunday?:number}>(`/events/${eventId}/participation/${reopen?'reopen':'close'}`,{method:'POST',body:JSON.stringify(options)},0),
+  previewEventClose: (eventId:number,reflectSunday=false,ministryId='all',ministryIds?:number[]) => request<import('./types').EventClosePreview>(`/events/${eventId}/participation/close-preview?sunday=${reflectSunday?'1':'0'}&${ministryIds===undefined?`ministry_id=${encodeURIComponent(ministryId)}`:`ministry_ids=${ministryIds.join(',')}`}`),
+  closeEventAttendance: (eventId:number,reopen=false,options:{reflect_sunday_absences?:boolean;preview_token?:string;expected_sunday_service_date?:string|null;ministry_id?:string;ministry_ids?:number[]}={}) => request<{closed:boolean;no_shows:number;declined:number;sunday_absent?:number;preserved_sunday?:number}>(`/events/${eventId}/participation/${reopen?'reopen':'close'}`,{method:'POST',body:JSON.stringify(options)},0),
   markEventAttendance: (eventId: number, data: { member_ids?: number[]; member_id?: number; status?: string; notes?: string; reason?: string }) =>
     request<{ success: boolean; message: string; count: number; status: string }>(`/events/${eventId}/attendance/mark`, {
       method: "POST",

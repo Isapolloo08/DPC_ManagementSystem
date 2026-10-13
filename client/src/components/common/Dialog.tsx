@@ -6,6 +6,8 @@ import { Button } from "./Button";
 import { useDialogFocus } from "../../hooks/useDialogFocus";
 
 interface Props {
+  className?: string;
+  icon?: React.ReactNode;
   title: string;
   accessibleName?: string;
   description?: React.ReactNode;
@@ -16,7 +18,7 @@ interface Props {
   footer?: React.ReactNode;
 }
 
-export function Dialog({ title, accessibleName, description, closeLabel = "Close dialog", onClose, busy = false, children, footer }: Props) {
+export function Dialog({ title, accessibleName, description, className = "", icon, closeLabel = "Close dialog", onClose, busy = false, children, footer }: Props) {
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -27,10 +29,10 @@ export function Dialog({ title, accessibleName, description, closeLabel = "Close
     <ModalPanel ref={panelRef} role="dialog" aria-modal="true" tabIndex={-1}
       aria-label={accessibleName} aria-labelledby={accessibleName ? undefined : titleId}
       aria-describedby={description ? descriptionId : undefined} aria-busy={busy || undefined}
-      className="ui-dialog p-5 space-y-4 w-full max-w-lg">
+      className={`ui-dialog p-5 space-y-4 w-full max-w-lg ${className}`}>
       <div data-modal-header className="flex items-start justify-between gap-3">
-        <div className="min-w-0"><h2 id={titleId} className="ui-dialog-title">{title}</h2>
-          {description && <p id={descriptionId} className="ui-help mt-1">{description}</p>}</div>
+        <div className="flex items-center gap-3 min-w-0">{icon}<div className="min-w-0"><h2 id={titleId} className="ui-dialog-title">{title}</h2>
+          {description && <p id={descriptionId} className="ui-help mt-1">{description}</p>}</div></div>
         <Button variant="ghost" size="icon" disabled={busy} aria-label={closeLabel} onClick={onClose}>
           <X aria-hidden="true" className="w-4 h-4" />
         </Button>

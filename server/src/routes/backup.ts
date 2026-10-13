@@ -358,6 +358,7 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
         tables.event_invitation_links = await read('SELECT * FROM event_invitation_links ORDER BY id');
         tables.event_invitation_responses = await read('SELECT * FROM event_invitation_responses ORDER BY id');
         tables.event_guest_attendance = await read('SELECT * FROM event_guest_attendance ORDER BY response_id');
+        tables.event_attendance_ministry_sessions = await read('SELECT * FROM event_attendance_ministry_sessions ORDER BY event_id,ministry_id');
         tables.event_attendance_sessions = await read('SELECT * FROM event_attendance_sessions ORDER BY event_id');
         tables.invitation_sync_node = await read('SELECT id,identity,source_enabled,source_id,source_url FROM invitation_sync_node');
         tables.invitation_sync_receipts = await read('SELECT * FROM invitation_sync_receipts ORDER BY submission,revision');
@@ -406,6 +407,7 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
 
       tables.events = events;
       tables.event_invitation_links = await db.all('SELECT i.* FROM event_invitation_links i JOIN events e ON e.id=i.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1 ORDER BY i.id', [targetYear]);
+      tables.event_attendance_ministry_sessions = await db.all('SELECT a.* FROM event_attendance_ministry_sessions a JOIN events e ON e.id=a.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1',[targetYear]);
       tables.event_attendance_sessions = await db.all('SELECT a.* FROM event_attendance_sessions a JOIN events e ON e.id=a.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1',[targetYear]);
       tables.event_guest_attendance = await db.all('SELECT a.* FROM event_guest_attendance a JOIN event_invitation_responses r ON r.id=a.response_id JOIN events e ON e.id=r.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1', [targetYear]);
       tables.event_invitation_responses = await db.all('SELECT r.* FROM event_invitation_responses r JOIN event_invitation_links i ON i.id=r.invitation_id JOIN events e ON e.id=i.event_id WHERE EXTRACT(YEAR FROM e.start_time)=$1 ORDER BY r.id', [targetYear]);
@@ -481,7 +483,7 @@ router.post("/preview", async (req: Request, res: Response) => {
     const knownTables = [
       "roles", "ministries", "system_lookups", "system_settings", "users",
       "user_ministries", "households", "members", "family_people", "family_relationships",
-      "events", "recurring_sunday_events", "event_ministries", "recurring_event_ministries", "event_invitation_links", "event_invitation_responses", "event_guest_attendance", "event_attendance_sessions", "event_registrations", "attendance", "announcements",
+      "events", "recurring_sunday_events", "event_ministries", "recurring_event_ministries", "event_invitation_links", "event_invitation_responses", "event_guest_attendance", "event_attendance_sessions", "event_attendance_ministry_sessions", "event_registrations", "attendance", "announcements",
       "bible_study_topics", "bible_study_groups",
       "bible_study_members", "duty_teams", "duty_team_members",
         "duty_schedules", "dishwashing_roster", "audit_logs", "invitation_sync_node", "invitation_sync_receipts", "planned_visits", "visit_sync_receipts"
@@ -562,6 +564,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
             recurring_event_ministries,
             recurring_sunday_events,
             event_attendance_sessions,
+            event_attendance_ministry_sessions,
             event_guest_attendance,
             event_invitation_responses,
             event_invitation_links,
@@ -657,7 +660,7 @@ router.post("/restore", async (req: AuthRequest, res: Response) => {
         "recurring_event_ministries",
         "event_ministries",
         "event_invitation_links",
-        "event_invitation_responses", "event_guest_attendance", "event_attendance_sessions", "planned_visits",
+        "event_invitation_responses", "event_guest_attendance", "event_attendance_sessions", "event_attendance_ministry_sessions", "planned_visits",
         "event_registrations",
         "attendance",
         "announcements",

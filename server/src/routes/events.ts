@@ -523,7 +523,7 @@ router.post("/:id/rsvp", authMiddleware, async (req: AuthRequest, res: Response)
 
 // Get Event Attendance Roster & Check-In status
 router.get("/:id/attendance-roster",authMiddleware,requireRoles('Admin','Pastor','Coordinator','Leader','Volunteer'),async(req:AuthRequest,res)=>{
-  try{res.json(await eventParticipation(Number(req.params.id),req.user!));}
+  try{res.json(await eventParticipation(Number(req.params.id),req.user!,req.query.ministry_id));}
   catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Unable to load event attendance.'});}
 });
 router.post('/:id/participation/mark',authMiddleware,requireRoles('Admin','Pastor','Coordinator','Leader','Volunteer'),async(req:AuthRequest,res)=>{
@@ -535,13 +535,13 @@ router.put('/:id/participation/sunday-reflection',authMiddleware,requireRoles('A
   try{res.json(await setEventSundayReflection(Number(req.params.id),req.body.sunday_service_date,req.user!));emitRealtimeEvent('events:changed',{id:Number(req.params.id)});}
   catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Sunday reflection was not saved.'});}
 });
-router.post('/:id/participation/:action',authMiddleware,requireRoles('Admin','Pastor','Coordinator'),async(req:AuthRequest,res)=>{
+router.post('/:id/participation/:action',authMiddleware,requireRoles('Admin','Pastor','Coordinator','Volunteer'),async(req:AuthRequest,res)=>{
   if(!['close','reopen'].includes(req.params.action))return res.status(404).json({error:'Unknown attendance action.'});
   try{const result=await closeEventAttendance(Number(req.params.id),req.user!,req.params.action==='reopen',req.body);emitRealtimeEvent('events:changed',{id:Number(req.params.id)});emitRealtimeEvent('attendance:changed',{event_id:Number(req.params.id)});res.json(result);}
   catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Attendance closing failed. No partial result was committed.'});}
 });
-router.get('/:id/participation/close-preview',authMiddleware,requireRoles('Admin','Pastor','Coordinator'),async(req:AuthRequest,res)=>{
-  try{res.json(await previewEventClose(Number(req.params.id),req.user!,req.query.sunday==='1'));}
+router.get('/:id/participation/close-preview',authMiddleware,requireRoles('Admin','Pastor','Coordinator','Volunteer'),async(req:AuthRequest,res)=>{
+  try{res.json(await previewEventClose(Number(req.params.id),req.user!,req.query.sunday==='1',req.query.ministry_ids===undefined?req.query.ministry_id:String(req.query.ministry_ids).split(',').map(Number)));}
   catch(error){res.status(error instanceof ParticipationError?error.status:503).json({error:error instanceof ParticipationError?error.message:'Unable to review remaining absences.'});}
 });
 
